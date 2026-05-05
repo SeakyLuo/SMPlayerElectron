@@ -1,0 +1,102 @@
+:root {
+  --text-strong: #1f252b;
+  --text-muted: #5f625f;
+  --text-soft: #7f7267;
+  --text-subtle: #908478;
+  --surface: #f6efe7;
+  --panel: rgba(252, 248, 242, 0.74);
+  --panel-strong: rgba(250, 244, 236, 0.76);
+  --panel-border: rgba(255, 255, 255, 0.64);
+  --panel-shadow: 0 26px 70px rgba(141, 118, 96, 0.16);
+  --accent: #5b87b6;
+  --accent-rgb: 91, 135, 182;
+  --accent-strong: #4a739c;
+  --accent-soft: rgba(91, 135, 182, 0.14);
+  --accent-surface: rgba(91, 135, 182, 0.22);
+  --accent-shadow: rgba(91, 135, 182, 0.26);
+  --focus: rgba(91, 135, 182, 0.82);
+  color: var(--text-muted);
+  background: var(--surface);
+  font-family: 'Segoe UI Variable Display', 'Aptos', 'Segoe UI', sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at top left, rgba(237, 206, 160, 0.7), transparent 32%),
+    radial-gradient(circle at bottom left, rgba(237, 198, 146, 0.52), transparent 24%),
+    radial-gradient(circle at 80% 82%, rgba(181, 144, 128, 0.28), transparent 24%),
+    linear-gradient(180deg, #f8f2ea 0%, #efe6da 100%);
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 18% 16%, rgba(255, 255, 255, 0.48), transparent 16%),
+    radial-gradient(circle at 74% 20%, rgba(255, 255, 255, 0.22), transparent 20%),
+    radial-gradient(circle at 42% 78%, rgba(255, 255, 255, 0.14), transparent 18%);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+h1,
+h2,
+h3 {
+  color: var(--text-strong);
+  font-weight: 650;
+}
+
+h1 {
+  font-size: clamp(2.6rem, 5vw, 4.4rem);
+  letter-spacing: -0.06em;
+}
+
+h2 {
+  font-size: clamp(2rem, 3vw, 3rem);
+  letter-spacing: -0.05em;
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: inherit;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+input {
+  width: 100%;
+  padding: 13px 16px;
+  border-radius: 16px;
+}
+
+button:focus-visible,
+input:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
