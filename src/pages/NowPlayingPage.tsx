@@ -9,6 +9,7 @@ import { MultiSelectCommandBar } from '../components/MultiSelectCommandBar'
 import { PlaylistControlItem } from '../components/PlaylistControlItem'
 import type { LibraryPlaylist, LibrarySong } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
+import { useLibraryStore } from '../state/useLibraryStore'
 
 const QUICK_PLAY_LIMIT = 100
 const NOW_PLAYING_ROW_HEIGHT = 46
@@ -82,6 +83,9 @@ export function NowPlayingPage({
   const [scrollTop, setScrollTop] = useState(0)
   const [viewportHeight, setViewportHeight] = useState(640)
   const navigate = useNavigate()
+  const hideMultiSelectCommandBarAfterOperation = useLibraryStore(
+    (state) => state.snapshot.settings.hideMultiSelectCommandBarAfterOperation,
+  )
 
   const visibleSongs = useMemo(
     () => songs.filter((song) => matchesSearch(song, searchQuery)),
@@ -136,6 +140,10 @@ export function NowPlayingPage({
         t,
         onAddToPlaylist: (playlistId) => {
           onAddSongsToPlaylist(playlistId, addToMenu.songIds)
+          if (hideMultiSelectCommandBarAfterOperation) {
+            setMultiSelect(false)
+            setSelectedSongIds(new Set())
+          }
         },
       })
     : null

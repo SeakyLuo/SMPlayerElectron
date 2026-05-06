@@ -16,6 +16,7 @@ export interface MenuFlyoutItem {
   pendingText?: string
   icon?: IconName
   disabled?: boolean
+  separator?: boolean
   onClick?: () => void | Promise<void>
   submenu?: MenuFlyoutItem[]
 }

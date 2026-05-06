@@ -1,0 +1,188 @@
+.library-context-menu-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 230;
+  background: transparent;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.library-context-menu {
+  position: fixed;
+  z-index: 240;
+  display: flex;
+  flex-direction: column;
+  min-width: 206px;
+  max-width: min(280px, calc(100vw - 16px));
+  max-height: calc(var(--menu-boundary-height, 100vh) - 16px);
+  overflow: visible;
+  padding: 6px;
+  border: 1px solid rgba(126, 139, 154, 0.2);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 18px 44px rgba(38, 51, 68, 0.18);
+  color: var(--text-strong);
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.library-context-menu button,
+.library-context-submenu > span {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+}
+
+.library-context-menu button > span,
+.library-context-submenu > span > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library-context-submenu > span {
+  grid-template-columns: 20px minmax(0, 1fr) 14px;
+}
+
+.library-context-menu button {
+  cursor: pointer;
+}
+
+.library-context-menu button:disabled {
+  cursor: default;
+  opacity: 0.46;
+}
+
+.library-context-menu button:hover,
+.library-context-submenu:hover > span {
+  background: rgba(var(--accent-rgb), 0.1);
+  color: var(--accent-strong);
+}
+
+.library-context-menu button:disabled:hover {
+  background: transparent;
+  color: inherit;
+}
+
+.library-context-menu-separator {
+  height: 1px;
+  margin: 5px 8px;
+  background: rgba(91, 105, 122, 0.16);
+}
+
+.library-context-menu svg {
+  width: 16px;
+  height: 16px;
+}
+
+.library-context-submenu {
+  position: relative;
+}
+
+.library-context-submenu-panel {
+  position: fixed;
+  top: var(--submenu-top);
+  left: var(--submenu-left);
+  z-index: 250;
+  display: flex;
+  flex-direction: column;
+  min-width: 260px;
+  max-width: min(380px, calc(100vw - 16px));
+  max-height: var(--submenu-max-height);
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid rgba(126, 139, 154, 0.2);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 18px 44px rgba(38, 51, 68, 0.18);
+  opacity: 0;
+  pointer-events: none;
+  scrollbar-color: rgba(91, 105, 122, 0.42) transparent;
+  scrollbar-width: thin;
+  visibility: hidden;
+}
+
+.library-context-submenu:hover .library-context-submenu-panel,
+.library-context-submenu:focus-within .library-context-submenu-panel {
+  opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
+}
+
+.artist-group-context-menu {
+  min-width: 220px;
+  max-height: none;
+  overflow: visible;
+  padding: 8px;
+}
+
+.table-action-button {
+  min-width: 68px;
+  height: 32px;
+  border: none;
+  border-radius: 999px;
+  padding: 0 12px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    transform 140ms ease,
+    background-color 140ms ease;
+}
+
+.table-action-button.subtle {
+  background: rgba(108, 117, 128, 0.1);
+  color: var(--text-strong);
+}
+
+.table-action-button.is-selected {
+  background: var(--accent-surface);
+  color: var(--accent-strong);
+}
+
+.table-action-button:hover {
+  transform: translateY(-1px);
+  background: var(--accent-surface);
+}
+
+.table-action-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  transform: none;
+}
+
+.playlist-rename-form {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 8px 0 6px;
+}
+
+.playlist-rename-form input {
+  min-width: 220px;
+  border: 1px solid var(--panel-border);
+  border-radius: 16px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.56);
+  color: var(--text-strong);
+  font: inherit;
+}

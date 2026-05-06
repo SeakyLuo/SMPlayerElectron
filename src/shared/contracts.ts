@@ -17,6 +17,8 @@ export type MusicLibrarySortCriterion =
   | 'play-count'
   | 'date-added'
 
+export type PlaylistSortCriterion = MusicLibrarySortCriterion
+
 export interface LibrarySong {
   id: number
   path: string
@@ -41,6 +43,7 @@ export interface LibraryPlaylist {
   name: string
   songCount: number
   songIds: number[]
+  sortCriterion: PlaylistSortCriterion
   isBuiltIn: boolean
 }
 
@@ -130,6 +133,7 @@ export interface SettingsSnapshot {
   autoPlay: boolean
   saveMusicProgress: boolean
   hideMultiSelectCommandBarAfterOperation: boolean
+  quitOnClose: boolean
   lastPage: string
   lastPlaylistId: number
 }
@@ -225,6 +229,7 @@ export interface AppSettingsUpdate {
   autoPlay?: boolean
   saveMusicProgress?: boolean
   hideMultiSelectCommandBarAfterOperation?: boolean
+  quitOnClose?: boolean
 }
 
 export interface ViewStateUpdate {
@@ -239,9 +244,13 @@ export interface SmplayerApi {
   getLyrics: (songId: number, mode?: LyricsRequestMode) => Promise<LyricsSnapshot>
   saveInternetLyricsToFile: (songId: number) => Promise<LyricsSaveResult>
   revealItemInFolder: (path: string) => Promise<void>
+  startWindowDrag: () => Promise<void>
+  stopWindowDrag: () => Promise<void>
+  createLocalFolder: (rootPath: string, relativePath: string, name: string) => Promise<void>
   revealSystemLogs: () => Promise<void>
   showTrackNotification: (track: TrackNotificationPayload) => Promise<void>
   getSongArtwork: (songId: number) => Promise<string>
+  pickAlbumArtwork: (albumName: string) => Promise<void>
   deleteSongFromDisk: (songId: number) => Promise<void>
   pickLibraryRoot: () => Promise<ChooseLibraryRootResult>
   scanLibrary: (rootPath?: string) => Promise<ScanLibraryResult>
@@ -250,7 +259,7 @@ export interface SmplayerApi {
   sendFeedbackEmail: () => Promise<void>
   openFeedbackInBrowser: () => Promise<void>
   setSongFavorite: (songId: number, favorite: boolean) => Promise<void>
-  createPlaylist: (name: string) => Promise<void>
+  createPlaylist: (name: string, songIds?: number[]) => Promise<void>
   deletePlaylist: (playlistId: number) => Promise<void>
   renamePlaylist: (playlistId: number, name: string) => Promise<void>
   reorderPlaylists: (playlistIds: number[]) => Promise<void>
@@ -258,7 +267,7 @@ export interface SmplayerApi {
   addSongsToPlaylist: (playlistId: number, songIds: number[]) => Promise<void>
   removeSongFromPlaylist: (playlistId: number, songId: number) => Promise<void>
   removeSongsFromPlaylist: (playlistId: number, songIds: number[]) => Promise<void>
-  reorderPlaylistSongs: (playlistId: number, songIds: number[]) => Promise<void>
+  reorderPlaylistSongs: (playlistId: number, songIds: number[], sortCriterion?: PlaylistSortCriterion) => Promise<void>
   replaceNowPlaying: (songIds: number[]) => Promise<void>
   removeSongFromNowPlaying: (songId: number) => Promise<void>
   clearNowPlaying: () => Promise<void>
@@ -271,6 +280,7 @@ export interface SmplayerApi {
   clearRecentPlayed: () => Promise<void>
   updateSettings: (update: AppSettingsUpdate) => Promise<void>
   updatePreferenceSettings: (update: PreferenceSettingsUpdate) => Promise<void>
+  addPreferenceItem: (type: PreferenceEntityType, itemId: string, name: string, level?: PreferenceLevel) => Promise<void>
   updatePreferenceItem: (itemId: number, update: PreferenceItemUpdate) => Promise<void>
   removePreferenceItem: (itemId: number) => Promise<void>
   clearInvalidPreferenceItems: (type: PreferenceEntityType) => Promise<void>

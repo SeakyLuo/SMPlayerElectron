@@ -1,0 +1,107 @@
+diff --git a/Controls/MusicInfoControl.xaml.cs b/Controls/MusicInfoControl.xaml.cs
+--- a/Controls/MusicInfoControl.xaml.cs
++++ b/Controls/MusicInfoControl.xaml.cs
+@@ -152,6 +152,7 @@ namespace SMPlayer.Controls
+                     if (uint.TryParse(YearTextBox.Text, out uint Year))
+                         Properties.Year = Year;
+                     await Properties.SavePropertiesAsync();
++                    await SaveTagPropertiesAsync(newMusic, Properties.AlbumArtist, Properties.TrackNumber, Properties.Year);
+                     MusicService.MusicModified(CurrentMusic, newMusic);
+                     CurrentMusic.CopyFrom(newMusic);
+                 }
+@@ -170,6 +171,25 @@ namespace SMPlayer.Controls
+             }
+         }
+ 
++        private async Task SaveTagPropertiesAsync(Music music, string albumArtist, uint trackNumber, uint year)
++        {
++            using (var tagFile = (await music.GetStorageFileAsync()).CreateTagFile())
++            {
++                tagFile.Tag.Title = music.Name;
++                tagFile.Tag.Performers = ToTagValues(music.Artist);
++                tagFile.Tag.Album = music.Album;
++                tagFile.Tag.AlbumArtists = ToTagValues(albumArtist);
++                tagFile.Tag.Track = trackNumber;
++                tagFile.Tag.Year = year;
++                tagFile.Save();
++            }
++        }
++
++        private string[] ToTagValues(string value)
++        {
++            return string.IsNullOrWhiteSpace(value) ? new string[0] : new[] { value };
++        }
++
+         private void SetControlEnability(bool isEnabled)
+         {
+             SaveMusicPropertiesButton.IsEnabled = ResetMusicPropertiesButton.IsEnabled 
+diff --git a/ArtistsPage.xaml.cs b/ArtistsPage.xaml.cs
+--- a/ArtistsPage.xaml.cs
++++ b/ArtistsPage.xaml.cs
+@@ -433,39 +433,43 @@ namespace SMPlayer
+                             break;
+                         case MusicEventType.Modify:
+                             Music before = music, after = args.ModifiedMusic;
+-                            bool isSelected = artist.Equals(ArtistMasterDetailsView.SelectedItem);
+-                            if (artist.Equals(ArtistMasterDetailsView.SelectedItem) || !artist.NotLoaded)
+-                                artist.ReloadMusic(music);
+-                            if (SuggestionList.Contains(after.Artist))
++                            if (before.Artist == after.Artist)
+                             {
+-                                if (before.Artist != after.Artist)
+-                                {
+-                                    var newArtist = Artists.First(a => a.Name == after.Artist);
+-                                    if (newArtist.Equals(ArtistMasterDetailsView.SelectedItem))
+-                                    {
+-                                        newArtist.Load();
+-                                        FindMusicAndSetPlaying(after);
+-                                    }
+-                                    else if (!newArtist.NotLoaded)
+-                                    {
+-                                        newArtist.Load();
+-                                    }
+-                                }
++                                if (artist != null && (artist.Equals(ArtistMasterDetailsView.SelectedItem) || !artist.NotLoaded))
++                                    artist.ReloadMusic(after);
++                                break;
++                            }
++                            if (artist != null)
++                            {
++                                artist.Load();
++                                if (artist.Songs.IsEmpty())
++                                {
++                                    SuggestionList.Remove(artist.Name);
++                                    Artists.Remove(artist);
++                                }
++                            }
++                            if (SuggestionList.Contains(after.Artist))
++                            {
++                                var newArtist = Artists.First(a => a.Name == after.Artist);
++                                if (newArtist.Equals(ArtistMasterDetailsView.SelectedItem))
++                                {
++                                    newArtist.Load();
++                                    FindMusicAndSetPlaying(after);
++                                }
++                                else if (!newArtist.NotLoaded)
++                                {
++                                    newArtist.Load();
++                                }
+                             }
+                             else
+                             {
+                                 int index = SuggestionList.FindSortedListInsertIndex(after.Artist);
+                                 SuggestionList.Insert(index, after.Artist);
+                                 Artists.Insert(index, new ArtistView(after.ToVO()));
+                             }
+-                            if (before.Artist != after.Artist && artist.Songs.IsEmpty())
+-                            {
+-                                SuggestionList.Remove(artist.Name);
+-                                Artists.Remove(artist);
+-                            }
+                             break;
+                     }
+-                } 
++                }
+                 catch (Exception e)
+                 {
+                     Log.Warn($"ArtistsPage IMusicEventListener.Execute failed {e}");

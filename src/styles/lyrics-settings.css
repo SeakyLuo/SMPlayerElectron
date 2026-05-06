@@ -1,0 +1,207 @@
+.lyrics-action-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.lyrics-progress-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(126, 139, 154, 0.14);
+}
+
+.lyrics-progress-header,
+.lyrics-progress-stats {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.lyrics-progress-header strong {
+  color: var(--text-strong);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.lyrics-progress-bar {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(126, 139, 154, 0.16);
+}
+
+.lyrics-progress-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 180ms ease;
+}
+
+.lyrics-progress-current {
+  min-height: 18px;
+  color: var(--text-strong);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lyrics-progress-stats {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 38px;
+  color: var(--text-strong);
+}
+
+.settings-row-with-control {
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.settings-row-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.settings-row-copy strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.settings-hint-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  color: var(--text-muted);
+  line-height: 1;
+  vertical-align: -3px;
+}
+
+.settings-hint-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.settings-row-copy small {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.settings-switch {
+  appearance: none;
+  width: 48px;
+  height: 26px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(83, 94, 106, 0.32);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  position: relative;
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease;
+}
+
+.settings-switch::before {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #767c83;
+  transition:
+    transform 140ms ease,
+    background-color 140ms ease;
+}
+
+.settings-switch:checked {
+  border-color: transparent;
+  background: var(--accent);
+}
+
+.settings-switch:checked::before {
+  transform: translateX(22px);
+  background: #fff;
+}
+
+.settings-select {
+  min-width: 190px;
+  height: 38px;
+  border: 1px solid rgba(126, 139, 154, 0.22);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--text-strong);
+  font: inherit;
+  padding: 0 12px;
+}
+
+.settings-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.settings-info-grid > div {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(247, 249, 252, 0.74);
+  border: 1px solid rgba(204, 213, 224, 0.5);
+}
+
+.settings-info-grid span,
+.settings-quick-actions span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.settings-info-grid strong,
+.settings-quick-actions strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-strong);
+  font-size: 14px;
+  word-break: break-word;
+}
+
+.settings-quick-actions {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0;
+}
+
+.settings-quick-actions > div {
+  min-width: 0;
+  padding: 10px 12px;
+  text-align: center;
+  border-left: 1px solid rgba(126, 139, 154, 0.18);
+}
+
+.settings-quick-actions > div:first-child {
+  border-left: 0;
+}

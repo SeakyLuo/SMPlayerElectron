@@ -1,0 +1,123 @@
+.workspace {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+  gap: 0;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  border-radius: 0;
+  background: rgba(250, 252, 255, 0.74);
+  box-shadow: 0 22px 56px rgba(47, 66, 92, 0.18);
+  backdrop-filter: blur(24px);
+  overflow: hidden;
+}
+
+.workspace-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  min-height: 92px;
+  padding: 24px 142px 16px 24px;
+  -webkit-app-region: drag;
+}
+
+.workspace.is-immersive-route .workspace-header,
+.workspace.is-headerless-route .workspace-header {
+  display: none;
+}
+
+.workspace.is-immersive-route {
+  padding: 0;
+  background:
+    radial-gradient(circle at 86% 16%, rgba(127, 207, 209, 0.24), transparent 40%),
+    radial-gradient(circle at 22% 12%, rgba(239, 168, 158, 0.2), transparent 42%),
+    rgba(246, 249, 252, 0.58);
+}
+
+.workspace.is-immersive-route .workspace-content {
+  overflow: hidden;
+  scrollbar-gutter: auto;
+}
+
+.workspace.is-headerless-route .workspace-content {
+  overflow: hidden;
+  scrollbar-gutter: auto;
+}
+
+.workspace-header * {
+  -webkit-app-region: no-drag;
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+}
+
+.workspace-header h1 {
+  margin: 0;
+  font-size: clamp(1.9rem, 3vw, 2.7rem);
+  font-weight: 760;
+  letter-spacing: -0.02em;
+}
+
+.status-pills {
+  display: none;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.status-pills span {
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.48);
+  border: 1px solid var(--panel-border);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.workspace-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 0;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.workspace-content::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.workspace-content::-webkit-scrollbar:hover {
+  width: 10px;
+  height: 10px;
+}
+
+.workspace-content:hover {
+  scrollbar-color: rgba(91, 105, 122, 0.48) transparent;
+}
+
+.workspace-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.workspace-content::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: transparent;
+}
+
+.workspace-content:hover::-webkit-scrollbar-thumb {
+  background: rgba(91, 105, 122, 0.48);
+}

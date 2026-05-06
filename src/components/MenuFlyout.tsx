@@ -15,75 +15,133 @@ export function MenuFlyout({
 }) {
   const menuRef = useRef<HTMLDivElement | null>(null)
   const [resolvedPosition, setResolvedPosition] = useState({ left: position.x, top: position.y })
-  const [submenuOpensLeft, setSubmenuOpensLeft] = useState(false)
-  const [submenuOpensUp, setSubmenuOpensUp] = useState(false)
   const [menuBoundaryHeight, setMenuBoundaryHeight] = useState(window.innerHeight)
 
   useLayoutEffect(() => {
-    const menuElement = menuRef.current
-    if (!menuElement) {
-      return
-    }
+    const menuElement = menuRef.current as HTMLDivElement
 
     const margin = 8
-    const playerBar = document.querySelector('.player-bar')
-    const boundaryBottom = playerBar instanceof HTMLElement
-      ? playerBar.getBoundingClientRect().top - margin
-      : window.innerHeight - margin
+    const boundaryBottom = getMenuBoundaryBottom(margin)
     const rect = menuElement.getBoundingClientRect()
     setResolvedPosition({
       left: Math.max(margin, Math.min(position.x, window.innerWidth - rect.width - margin)),
       top: Math.max(margin, Math.min(position.y, boundaryBottom - rect.height)),
     })
     setMenuBoundaryHeight(boundaryBottom)
-    setSubmenuOpensLeft(position.x + rect.width + 280 > window.innerWidth - margin)
-    setSubmenuOpensUp(position.y + rect.height + 280 > boundaryBottom)
   }, [position.x, position.y, items.length])
 
   useEffect(() => {
-    window.addEventListener('click', onClose)
     window.addEventListener('resize', onClose)
 
     return () => {
-      window.removeEventListener('click', onClose)
       window.removeEventListener('resize', onClose)
     }
   }, [onClose])
 
   return createPortal(
-    <div
-      ref={menuRef}
-      className={`library-context-menu${submenuOpensLeft ? ' is-submenu-left' : ''}${submenuOpensUp ? ' is-submenu-up' : ''}`}
-      style={{
-        left: resolvedPosition.left,
-        top: resolvedPosition.top,
-        '--menu-boundary-height': `${menuBoundaryHeight}px`,
-      } as CSSProperties}
-      role="menu"
-      onClick={(event) => {
-        event.stopPropagation()
-      }}
-    >
-      {items.map((item) =>
-        item.submenu ? (
-          <div className="library-context-submenu" key={item.key}>
-            <span>
-              {item.icon ? <Icon name={item.icon} /> : <span />}
-              <span>{item.text}</span>
-              <Icon name="chevronRight" />
-            </span>
-            <div className="library-context-submenu-panel">
-              {item.submenu.map((subitem) => (
-                <MenuFlyoutButton item={subitem} key={subitem.key} onClose={onClose} />
-              ))}
-            </div>
-          </div>
-        ) : (
-          <MenuFlyoutButton item={item} key={item.key} onClose={onClose} />
-        ),
-      )}
-    </div>,
+    <>
+      <div className="library-context-menu-overlay" onClick={onClose} />
+      <div
+        ref={menuRef}
+        className="library-context-menu"
+        style={{
+          left: resolvedPosition.left,
+          top: resolvedPosition.top,
+          '--menu-boundary-height': `${menuBoundaryHeight}px`,
+        } as CSSProperties}
+        role="menu"
+        onClick={(event) => {
+          event.stopPropagation()
+        }}
+      >
+        {items.map((item) =>
+          item.separator ? (
+            <div className="library-context-menu-separator" key={item.key} role="separator" />
+          ) : item.submenu ? (
+            <MenuFlyoutSubmenu
+              item={item}
+              key={item.key}
+              menuBoundaryHeight={menuBoundaryHeight}
+              onClose={onClose}
+            />
+          ) : (
+            <MenuFlyoutButton item={item} key={item.key} onClose={onClose} />
+          ),
+        )}
+      </div>
+    </>,
     document.body,
+  )
+}
+
+function MenuFlyoutSubmenu({
+  item,
+  menuBoundaryHeight,
+  onClose,
+}: {
+  item: MenuFlyoutItem
+  menuBoundaryHeight: number
+  onClose: () => void
+}) {
+  const triggerRef = useRef<HTMLSpanElement | null>(null)
+  const panelRef = useRef<HTMLDivElement | null>(null)
+  const [layout, setLayout] = useState({
+    left: -10000,
+    top: 8,
+    maxHeight: Math.max(120, menuBoundaryHeight - 16),
+  })
+  const submenuLength = item.submenu!.length
+
+  const updateLayout = () => {
+    const triggerElement = triggerRef.current as HTMLSpanElement
+    const panelElement = panelRef.current as HTMLDivElement
+    const margin = 8
+    const triggerRect = triggerElement.getBoundingClientRect()
+    const panelWidth = panelElement.getBoundingClientRect().width
+    const fullPanelHeight = panelElement.scrollHeight
+    const boundaryBottom = getMenuBoundaryBottom(margin)
+    const availableHeight = Math.max(120, boundaryBottom - margin)
+    const panelHeight = Math.min(fullPanelHeight, availableHeight)
+
+    let left = triggerRect.right - 2
+    if (left + panelWidth > window.innerWidth - margin) {
+      left = triggerRect.left - panelWidth + 2
+    }
+    left = Math.max(margin, Math.min(left, window.innerWidth - panelWidth - margin))
+
+    const top = Math.max(margin, Math.min(triggerRect.top - 6, boundaryBottom - panelHeight))
+    setLayout({
+      left,
+      top,
+      maxHeight: Math.max(120, boundaryBottom - top - margin),
+    })
+  }
+
+  useLayoutEffect(() => {
+    updateLayout()
+  }, [submenuLength, menuBoundaryHeight])
+
+  return (
+    <div className="library-context-submenu" onFocus={updateLayout} onPointerEnter={updateLayout}>
+      <span ref={triggerRef}>
+        {item.icon ? <Icon name={item.icon} /> : <span />}
+        <span>{item.text}</span>
+        <Icon name="chevronRight" />
+      </span>
+      <div
+        ref={panelRef}
+        className="library-context-submenu-panel"
+        style={{
+          '--submenu-left': `${layout.left}px`,
+          '--submenu-top': `${layout.top}px`,
+          '--submenu-max-height': `${layout.maxHeight}px`,
+        } as CSSProperties}
+      >
+        {item.submenu!.map((subitem) => (
+          <MenuFlyoutButton item={subitem} key={subitem.key} onClose={onClose} />
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -113,4 +171,11 @@ function MenuFlyoutButton({ item, onClose }: { item: MenuFlyoutItem; onClose: ()
       <span>{busy ? item.pendingText ?? item.text : item.text}</span>
     </button>
   )
+}
+
+function getMenuBoundaryBottom(margin: number) {
+  const playerBar = document.querySelector('.player-bar')
+  return playerBar instanceof HTMLElement
+    ? playerBar.getBoundingClientRect().top - margin
+    : window.innerHeight - margin
 }

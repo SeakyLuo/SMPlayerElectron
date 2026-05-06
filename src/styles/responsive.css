@@ -1,0 +1,134 @@
+@media (max-width: 1200px) {
+  .app-shell {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+
+  .summary-grid,
+  .collection-grid,
+  .settings-runtime-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .playlist-layout,
+  .artists-page,
+  .settings-board,
+  .settings-grid,
+  .playlist-content-grid,
+  .now-playing-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .player-bar {
+    grid-template-columns: 1fr;
+  }
+
+  .player-utility {
+    justify-items: start;
+  }
+}
+
+@media (max-width: 860px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    order: 2;
+  }
+
+  .workspace {
+    order: 1;
+  }
+
+  .page-panel {
+    padding: 20px;
+  }
+
+  .artists-page {
+    padding: 0;
+  }
+
+  .artists-master {
+    max-height: 260px;
+    border-right: 0;
+    border-bottom: 1px solid rgba(86, 98, 113, 0.18);
+  }
+
+  .artists-detail {
+    padding: 18px;
+  }
+
+  .artist-album-header {
+    grid-template-columns: 64px minmax(0, 1fr) 36px;
+  }
+
+  .artist-album-artwork {
+    width: 64px;
+    height: 64px;
+  }
+
+  .summary-grid,
+  .collection-grid,
+  .settings-metrics,
+  .settings-board,
+  .settings-runtime-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-board {
+    padding: 0 0 20px;
+  }
+
+  .settings-row-with-control,
+  .settings-folder-row,
+  .lyrics-action-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-row-with-control {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .settings-select {
+    width: 100%;
+  }
+
+  .settings-quick-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workspace-header {
+    flex-direction: column;
+  }
+
+  .page-actions {
+    justify-content: flex-start;
+  }
+
+  .playlist-create-form {
+    width: 100%;
+  }
+
+  .playlist-create-form input {
+    flex: 1 1 220px;
+  }
+
+  .settings-toggle-row,
+  .settings-input-row,
+  .playlist-detail-header,
+  .detail-hero,
+  .now-playing-hero {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .detail-hero .page-actions {
+    margin-left: 0;
+  }
+
+  .now-playing-hero {
+    grid-template-columns: 1fr;
+  }
+}
+

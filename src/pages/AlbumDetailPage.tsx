@@ -1,5 +1,5 @@
 import { HeaderedPlaylistControl } from '../components/HeaderedPlaylistControl'
-import type { LibraryPlaylist, LibrarySong } from '../shared/contracts'
+import type { LibraryPlaylist, LibrarySong, PreferenceLevel } from '../shared/contracts'
 import { getSongArtists } from '../shared/artists'
 import { formatDuration } from '../shared/formatters'
 import type { Translator } from '../shared/i18n'
@@ -14,6 +14,8 @@ interface AlbumDetailPageProps {
   onAddSongToPlaylist: (playlistId: number, songId: number) => void
   onAddSongsToPlaylist: (playlistId: number, songIds: number[]) => void
   onToggleFavorite: (songId: number, favorite: boolean) => void
+  onSetAlbumPreferred: (albumName: string, level: PreferenceLevel) => void
+  onEditAlbumArtwork: (albumName: string) => void
 }
 
 export function AlbumDetailPage({
@@ -26,6 +28,8 @@ export function AlbumDetailPage({
   onAddSongToPlaylist,
   onAddSongsToPlaylist,
   onToggleFavorite,
+  onSetAlbumPreferred,
+  onEditAlbumArtwork,
 }: AlbumDetailPageProps) {
   const artworkUrl = songs.find((song) => song.artworkUrl)?.artworkUrl ?? ''
   const artists = [...new Set(songs.flatMap((song) => getSongArtists(song)))].sort(
@@ -52,10 +56,19 @@ export function AlbumDetailPage({
         showAlbum={false}
         showArtist
         canEditArtwork
+        canSetPreferred
+        preferenceType="album"
+        preferenceItemId={albumName}
         onPlayTrack={onPlayTrack}
         onAddSongToPlaylist={onAddSongToPlaylist}
         onAddSongsToPlaylist={onAddSongsToPlaylist}
         onToggleFavorite={onToggleFavorite}
+        onSetPreferred={(level) => {
+          onSetAlbumPreferred(albumName, level)
+        }}
+        onEditArtwork={() => {
+          onEditAlbumArtwork(albumName)
+        }}
       />
     </section>
   )

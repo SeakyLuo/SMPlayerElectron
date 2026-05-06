@@ -18,6 +18,7 @@ import type {
   LyricsSnapshot,
   LyricsSource,
   MusicLibrarySortCriterion,
+  PlaylistSortCriterion,
   PlaybackMode,
   PlaybackSettingsUpdate,
   PreferenceEntityType,
@@ -37,6 +38,7 @@ import { ACTIVE_STATE, AUDIO_EXTENSIONS, PLAYLIST_NAMES, SMPLAYER_DB_NAME } from
 import { initializeSchema } from './schema.ts'
 
 const LYRICS_REQUEST_TIMEOUT_MS = 10_000
+const RECENT_PLAYED_LIMIT = 1000
 
 interface SettingsRow {
   Id: number
@@ -62,6 +64,7 @@ interface SettingsRow {
   SaveMusicProgress: number
   ShowCount: number
   HideMultiSelectCommandBarAfterOperation: number
+  QuitOnClose: number
   LastPage: string
   LastPlaylist: number
 }
@@ -82,6 +85,7 @@ interface PlaylistRow {
   name: string
   songCount: number
   priority: number
+  criterion: number
 }
 
 interface PlaylistItemRow {
@@ -228,6 +232,7 @@ export class SmplayerDataStore {
         SaveMusicProgress,
         ShowCount,
         HideMultiSelectCommandBarAfterOperation,
+        QuitOnClose,
         LastPage,
         LastPlaylist
       FROM Settings
@@ -302,6 +307,7 @@ export class SmplayerDataStore {
         AutoPlay = ?,
         SaveMusicProgress = ?,
         HideMultiSelectCommandBarAfterOperation = ?,
+        QuitOnClose = ?,
         MusicProgress = ?
       WHERE Id = ?
     `)
@@ -475,6 +481,7 @@ export class SmplayerDataStore {
       SELECT
         Playlist.Id AS id,
         Playlist.Name AS name,
+        Playlist.Criterion AS criterion,
         Playlist.Priority AS priority,
         COUNT(Music.Id) AS songCount
       FROM Playlist
@@ -485,7 +492,7 @@ export class SmplayerDataStore {
         ON Music.Id = PlaylistItem.ItemId
        AND Music.State = ?
       WHERE Playlist.State = ?
-      GROUP BY Playlist.Id, Playlist.Name
+      GROUP BY Playlist.Id, Playlist.Name, Playlist.Criterion
       ORDER BY
         CASE
           WHEN Playlist.Id = ? THEN 0
@@ -606,6 +613,7 @@ export class SmplayerDataStore {
         AND RecentRecord.State = ?
         AND Music.State = ?
       ORDER BY RecentRecord.Id DESC
+      LIMIT ?
     `)
     this.getCountsStatement = this.db.prepare(`
       SELECT
@@ -686,6 +694,7 @@ export class SmplayerDataStore {
       autoPlay: Boolean(settings.AutoPlay),
       saveMusicProgress: Boolean(settings.SaveMusicProgress),
       hideMultiSelectCommandBarAfterOperation: Boolean(settings.HideMultiSelectCommandBarAfterOperation),
+      quitOnClose: Boolean(settings.QuitOnClose),
       lastPage: settings.LastPage || '/songs',
       lastPlaylistId: settings.LastPlaylist,
     }
@@ -721,6 +730,7 @@ export class SmplayerDataStore {
       ACTIVE_STATE.active,
       ACTIVE_STATE.active,
       ACTIVE_STATE.active,
+      RECENT_PLAYED_LIMIT,
     ) as unknown as StoredRecentLibrarySong[]
     const rawCounts = this.getCountsStatement.get(
       ACTIVE_STATE.active,
@@ -766,6 +776,7 @@ export class SmplayerDataStore {
         autoPlay: Boolean(settings.AutoPlay),
         saveMusicProgress: Boolean(settings.SaveMusicProgress),
         hideMultiSelectCommandBarAfterOperation: Boolean(settings.HideMultiSelectCommandBarAfterOperation),
+        quitOnClose: Boolean(settings.QuitOnClose),
         lastPage: settings.LastPage || '/songs',
         lastPlaylistId: settings.LastPlaylist,
       },
@@ -792,6 +803,7 @@ export class SmplayerDataStore {
           name: playlist.name,
           songCount: playlist.songCount,
           songIds: playlistSongIds.get(playlist.id) ?? [],
+          sortCriterion: this.mapPlaylistSort(playlist.criterion),
           isBuiltIn: playlist.id === settings.MyFavorites,
         })),
     }
@@ -800,6 +812,15 @@ export class SmplayerDataStore {
   async getSongArtwork(songId: number) {
     const artworkUrl = await this.getSongArtworkFileUrl(songId)
     return artworkUrl ? this.getSongArtworkUrl(songId) : ''
+  }
+
+  setAlbumArtwork(albumName: string, artworkPath: string) {
+    this.db.prepare(`
+      UPDATE Music
+      SET ArtworkPath = ?
+      WHERE Album = ?
+        AND State = ?
+    `).run(artworkPath, albumName, ACTIVE_STATE.active)
   }
 
   getSongFileUrl(songId: number) {
@@ -984,6 +1005,38 @@ export class SmplayerDataStore {
     )
   }
 
+  addPreferenceItem(type: PreferenceEntityType, itemId: string, name: string, level: PreferenceLevel = 'normal') {
+    this.getPreferenceSetting()
+    const entityValue = this.toPreferenceEntityValue(type)
+    const levelValue = this.toPreferenceLevelValue(level)
+    const result = this.db.prepare(`
+      UPDATE PreferenceItem
+      SET ItemName = ?, IsEnabled = 1, Level = ?
+      WHERE Type = ?
+        AND ItemId = ?
+        AND State = ?
+    `).run(
+      name,
+      levelValue,
+      entityValue,
+      itemId,
+      ACTIVE_STATE.active,
+    )
+
+    if (result.changes === 0) {
+      this.db.prepare(`
+        INSERT INTO PreferenceItem (Type, ItemId, ItemName, IsEnabled, Level, State)
+        VALUES (?, ?, ?, 1, ?, ?)
+      `).run(
+        entityValue,
+        itemId,
+        name,
+        levelValue,
+        ACTIVE_STATE.active,
+      )
+    }
+  }
+
   updatePreferenceItem(itemId: number, update: PreferenceItemUpdate) {
     const item = this.db.prepare(`
       SELECT IsEnabled AS isEnabled, Level AS level
@@ -1159,6 +1212,7 @@ export class SmplayerDataStore {
         update.hideMultiSelectCommandBarAfterOperation ??
           Boolean(settings.HideMultiSelectCommandBarAfterOperation),
       ),
+      Number(update.quitOnClose ?? Boolean(settings.QuitOnClose)),
       nextSaveMusicProgress ? settings.MusicProgress : 0,
       settings.Id,
     )
@@ -1187,7 +1241,7 @@ export class SmplayerDataStore {
     )
   }
 
-  createPlaylist(name: string) {
+  createPlaylist(name: string, songIds: number[] = []) {
     const nextName = this.validatePlaylistName(name)
     const settings = this.getSettings()
     const maxPriorityRow = this.getMaxCustomPlaylistPriorityStatement.get(
@@ -1197,7 +1251,18 @@ export class SmplayerDataStore {
     ) as { priority: number | null } | undefined
     const nextPriority = (maxPriorityRow?.priority ?? -1) + 1
 
-    this.insertPlaylistStatement.run(nextName, nextPriority, ACTIVE_STATE.active)
+    this.db.exec('BEGIN')
+    try {
+      const result = this.insertPlaylistStatement.run(nextName, nextPriority, ACTIVE_STATE.active)
+      const playlistId = Number(result.lastInsertRowid)
+      for (const songId of new Set(songIds.map(Number))) {
+        this.setPlaylistSongState(playlistId, songId, true)
+      }
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
   }
 
   deletePlaylist(playlistId: number) {
@@ -1308,7 +1373,7 @@ export class SmplayerDataStore {
     }
   }
 
-  reorderPlaylistSongs(playlistId: number, songIds: number[]) {
+  reorderPlaylistSongs(playlistId: number, songIds: number[], sortCriterion?: PlaylistSortCriterion) {
     const currentSongIds = (
       this.getPlaylistSongIdsStatement.all(
         playlistId,
@@ -1334,6 +1399,14 @@ export class SmplayerDataStore {
 
       for (const songId of songIds) {
         this.insertPlaylistItemStatement.run(playlistId, songId, ACTIVE_STATE.active)
+      }
+
+      if (sortCriterion) {
+        this.db.prepare(`
+          UPDATE Playlist
+          SET Criterion = ?
+          WHERE Id = ?
+        `).run(this.toPlaylistSortValue(sortCriterion), playlistId)
       }
 
       this.db.exec('COMMIT')
@@ -1890,6 +1963,10 @@ export class SmplayerDataStore {
     }
   }
 
+  private mapPlaylistSort(criterionValue: number): PlaylistSortCriterion {
+    return this.mapMusicLibrarySort(criterionValue)
+  }
+
   private toMusicLibrarySortValue(criterion: MusicLibrarySortCriterion) {
     switch (criterion) {
       case 'artist':
@@ -1905,6 +1982,10 @@ export class SmplayerDataStore {
       default:
         return 0
     }
+  }
+
+  private toPlaylistSortValue(criterion: PlaylistSortCriterion) {
+    return this.toMusicLibrarySortValue(criterion)
   }
 
   private toModeValue(mode: PlaybackMode) {

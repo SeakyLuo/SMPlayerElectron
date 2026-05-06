@@ -1,0 +1,392 @@
+.albums-page {
+  position: relative;
+  gap: 0;
+  height: 100%;
+  min-height: 0;
+  padding: 0 24px;
+  overflow: hidden;
+  background: transparent;
+}
+
+.albums-toolbar {
+  display: grid;
+  grid-template-columns: minmax(280px, 540px) minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  min-height: 44px;
+  margin-bottom: 14px;
+  padding-right: 0;
+}
+
+.albums-search {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 42px;
+  border: 1px solid rgba(83, 99, 121, 0.14);
+  border-radius: 10px;
+  background: rgba(13, 24, 38, 0.035);
+  color: var(--text-muted);
+  padding: 0 14px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.38);
+  transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
+}
+
+.albums-search svg {
+  align-self: center;
+  width: 17px;
+  height: 17px;
+}
+
+.albums-search input {
+  align-self: center;
+  min-width: 0;
+  width: 100%;
+  height: 40px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-strong);
+  font: inherit;
+  font-size: 14px;
+  line-height: 40px;
+  padding: 0;
+}
+
+.albums-search:focus-within {
+  border-color: rgba(var(--accent-rgb), 0.48);
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.1);
+}
+
+.albums-search input::placeholder {
+  color: rgba(61, 73, 88, 0.62);
+}
+
+.albums-command-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+
+.albums-command {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  border: 1px solid rgba(83, 99, 121, 0.14);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.56);
+  color: var(--text-strong);
+  padding: 0 14px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 720;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42);
+}
+
+.albums-command.is-active {
+  border-color: rgba(var(--accent-rgb), 0.34);
+  background: rgba(var(--accent-rgb), 0.12);
+  color: var(--accent);
+}
+
+.albums-command svg {
+  width: 17px;
+  height: 17px;
+}
+
+.albums-sort-menu {
+  position: relative;
+  margin-left: 0;
+}
+
+.albums-sort-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-width: 168px;
+  min-height: 42px;
+  border: 1px solid rgba(83, 99, 121, 0.14);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.56);
+  color: var(--text-strong);
+  padding: 0 14px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 720;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42);
+}
+
+.albums-sort-trigger:hover,
+.albums-command:hover,
+.albums-sort-trigger[aria-expanded='true'] {
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.albums-sort-trigger svg {
+  width: 17px;
+  height: 17px;
+}
+
+.albums-sort-trigger svg:last-child {
+  margin-left: auto;
+  color: var(--text-muted);
+}
+
+.albums-sort-options {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 12;
+  min-width: 210px;
+  padding: 6px;
+  border: 1px solid rgba(126, 139, 154, 0.18);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 18px 44px rgba(20, 27, 36, 0.18);
+}
+
+.albums-sort-options button {
+  width: 100%;
+  min-height: 36px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-strong);
+  padding: 0 10px;
+  text-align: left;
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.albums-sort-options button:hover {
+  background: rgba(var(--accent-rgb), 0.1);
+}
+
+.albums-sort-options button.is-selected {
+  background: var(--accent);
+  color: #fff;
+}
+
+.multi-select-command-bar {
+  position: fixed;
+  left: var(--multi-select-left);
+  bottom: calc(var(--multi-select-bottom) - 1px);
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  width: var(--multi-select-width);
+  height: 64px;
+  gap: 18px;
+  padding: 0 18px 0 26px;
+  border: 1px solid rgba(255, 255, 255, 0.62);
+  border-bottom: 0;
+  border-radius: 17px 17px 0 0;
+  background:
+    linear-gradient(180deg, rgba(249, 252, 255, 0.78), rgba(234, 241, 249, 0.58)),
+    rgba(246, 250, 255, 0.68);
+  box-shadow:
+    0 -16px 44px rgba(42, 54, 72, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(30px) saturate(165%);
+  -webkit-backdrop-filter: blur(30px) saturate(165%);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(16px);
+  transition:
+    left 160ms ease,
+    width 160ms ease,
+    bottom 160ms ease,
+    opacity 180ms ease,
+    transform 180ms ease;
+}
+
+.multi-select-command-anchor {
+  display: none;
+}
+
+.multi-select-command-bar.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.multi-select-command-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-right: auto;
+  color: var(--accent-strong);
+  min-width: 154px;
+  font-size: 13px;
+  font-weight: 660;
+  white-space: nowrap;
+}
+
+.multi-select-command-count strong {
+  font: inherit;
+  font-weight: 760;
+}
+
+.multi-select-command-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 9px;
+  min-width: 0;
+  margin-left: auto;
+}
+
+.multi-select-command-bar button,
+.multi-select-command-select {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 72px;
+  height: 36px;
+  border: 1px solid rgba(126, 139, 154, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--text-strong);
+  padding: 0 12px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 640;
+  box-shadow:
+    0 1px 2px rgba(24, 34, 48, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.multi-select-command-bar button {
+  cursor: pointer;
+}
+
+.multi-select-command-select {
+  position: relative;
+  min-width: 142px;
+  padding-right: 30px;
+}
+
+.multi-select-command-bar button span,
+.multi-select-command-select span {
+  min-width: 0;
+}
+
+.multi-select-command-select select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  opacity: 0;
+  outline: none;
+  cursor: pointer;
+}
+
+.multi-select-command-select::after {
+  content: '';
+  width: 8px;
+  height: 8px;
+  margin-left: 2px;
+  border-right: 1.8px solid currentColor;
+  border-bottom: 1.8px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+}
+
+.multi-select-command-bar button:hover:not(:disabled),
+.multi-select-command-select:hover:not(.is-disabled) {
+  border-color: rgba(var(--accent-rgb), 0.26);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--accent-strong);
+  box-shadow:
+    0 3px 10px rgba(58, 83, 118, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.78);
+}
+
+.multi-select-command-bar button:disabled,
+.multi-select-command-select.is-disabled {
+  cursor: default;
+  opacity: 0.46;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.62);
+}
+
+.multi-select-command-select.is-disabled select {
+  cursor: default;
+}
+
+.multi-select-command-bar svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
+.albums-grid {
+  position: relative;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 0 calc(var(--player-height) + 18px);
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.albums-grid-virtual {
+  position: relative;
+  min-width: 0;
+}
+
+.albums-grid-window {
+  position: absolute;
+  inset: 0 0 auto 0;
+  display: grid;
+  align-items: start;
+  justify-content: start;
+  column-gap: 18px;
+  row-gap: 18px;
+  will-change: transform;
+}
+
+.albums-grid:hover {
+  scrollbar-color: rgba(91, 105, 122, 0.42) transparent;
+}
+
+.albums-grid::-webkit-scrollbar,
+.artists-list::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.albums-grid::-webkit-scrollbar:hover,
+.artists-list::-webkit-scrollbar:hover {
+  width: 10px;
+  height: 10px;
+}
+
+.albums-grid::-webkit-scrollbar-track,
+.artists-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.albums-grid::-webkit-scrollbar-thumb,
+.artists-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: transparent;
+}
+
+.albums-grid:hover::-webkit-scrollbar-thumb,
+.artists-list:hover::-webkit-scrollbar-thumb {
+  background: rgba(91, 105, 122, 0.42);
+}

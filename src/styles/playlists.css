@@ -1,0 +1,178 @@
+.playlists-page {
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  padding-top: 24px;
+}
+
+.playlists-header {
+  margin: 0 0 22px;
+}
+
+.playlists-header h2 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: clamp(2.1rem, 4vw, 3.7rem);
+  font-weight: 780;
+  letter-spacing: 0;
+}
+
+.grid-view-holder-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 28px 34px;
+  padding: 4px 6px 120px;
+}
+
+.grid-view-holder {
+  position: relative;
+  display: grid;
+  grid-template-rows: 168px auto;
+  gap: 12px;
+  min-width: 0;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-strong);
+  padding: 10px;
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+  transition: background-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+
+.grid-view-holder:hover,
+.grid-view-holder:focus-visible,
+.grid-view-holder.is-selected {
+  background: rgba(var(--accent-rgb), 0.08);
+  box-shadow:
+    0 12px 26px rgba(30, 42, 58, 0.12),
+    inset 0 0 0 1px rgba(var(--accent-rgb), 0.16);
+}
+
+.grid-view-holder-cover {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 168px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 8px 18px rgba(32, 45, 63, 0.13);
+}
+
+.grid-view-holder-cover img {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  object-fit: cover;
+}
+
+.grid-view-holder-cover.artwork-count-2,
+.grid-view-holder-cover.artwork-count-3,
+.grid-view-holder-cover.artwork-count-4 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+}
+
+.grid-view-holder-cover.artwork-count-1 {
+  grid-template-columns: 1fr;
+}
+
+.grid-view-holder-cover.artwork-count-2 img:first-child {
+  grid-row: 1 / 3;
+}
+
+.grid-view-holder-cover.artwork-count-2 img:last-child {
+  grid-row: 1 / 3;
+}
+
+.grid-view-holder-cover.artwork-count-3 img:first-child {
+  grid-row: 1 / 3;
+}
+
+.grid-view-holder-cover-fallback {
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.86), rgba(var(--accent-rgb), 0.1)),
+    rgba(255, 255, 255, 0.74);
+}
+
+.grid-view-holder-cover-fallback svg {
+  width: 56px;
+  height: 56px;
+}
+
+.grid-view-holder-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+  padding: 0 2px 2px;
+}
+
+.grid-view-holder-copy strong {
+  overflow: hidden;
+  color: var(--text-strong);
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.grid-view-holder-copy small {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.grid-view-holder-actions {
+  position: absolute;
+  right: 16px;
+  bottom: 62px;
+  display: inline-flex;
+  gap: 8px;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.grid-view-holder:hover .grid-view-holder-actions,
+.grid-view-holder:focus-within .grid-view-holder-actions,
+.grid-view-holder.is-selected .grid-view-holder-actions {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.grid-view-holder-action {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 8px 16px rgba(var(--accent-rgb), 0.26);
+  cursor: pointer;
+}
+
+.grid-view-holder-action:hover {
+  background: var(--accent-strong);
+}
+
+.grid-view-holder-action[aria-disabled='true'] {
+  opacity: 0.42;
+  cursor: default;
+}
+
+.grid-view-holder-action svg {
+  width: 16px;
+  height: 16px;
+}

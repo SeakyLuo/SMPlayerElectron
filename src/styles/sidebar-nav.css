@@ -1,0 +1,370 @@
+.nav-section {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  gap: 4px;
+  min-height: 0;
+}
+
+.sidebar.is-collapsed .nav-section,
+.sidebar.is-collapsed .nav-links {
+  align-items: center;
+}
+
+.nav-section + .nav-section {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(108, 117, 128, 0.24);
+}
+
+.nav-section-label {
+  display: none;
+}
+
+.nav-links {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-link {
+  position: relative;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 10px 0 0;
+  border-radius: 16px;
+  color: var(--text-muted);
+  text-decoration: none;
+  border-left: 0;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.nav-link:hover {
+  transform: none;
+  background: rgba(var(--accent-rgb), 0.1);
+  color: var(--accent-strong);
+  box-shadow: none;
+}
+
+.nav-link > span:last-child,
+.playlist-nav-child > span:last-child {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  height: 40px;
+  line-height: 1;
+}
+
+.nav-link > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-link.active {
+  background: rgba(var(--accent-rgb), 0.1);
+  color: var(--accent-strong);
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.08);
+}
+
+.nav-link.active:hover {
+  color: var(--accent-strong);
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.12);
+}
+
+.sidebar.is-collapsed .nav-link:hover,
+.sidebar.is-collapsed .nav-link:focus-visible,
+.sidebar.is-collapsed .search-commit-button:hover,
+.sidebar.is-collapsed .search-commit-button:focus-visible,
+.sidebar.is-collapsed .sidebar-collapse-button:hover,
+.sidebar.is-collapsed .sidebar-collapse-button:focus-visible,
+.sidebar.is-collapsed .sidebar-back-button:hover,
+.sidebar.is-collapsed .sidebar-back-button:focus-visible {
+  background: rgba(var(--accent-rgb), 0.13);
+  color: var(--accent-strong);
+  box-shadow: none;
+}
+
+.sidebar.is-collapsed .nav-link.active:hover,
+.sidebar.is-collapsed .nav-link.active:focus-visible {
+  background: rgba(var(--accent-rgb), 0.13);
+  color: var(--accent-strong);
+  box-shadow: none;
+}
+
+.sidebar.is-collapsed .nav-link.active {
+  background: rgba(var(--accent-rgb), 0.13);
+  color: var(--accent-strong);
+  box-shadow: none;
+}
+
+.sidebar.is-collapsed .nav-link.active::before,
+.sidebar.is-collapsed .nav-link.active .nav-tag::before {
+  content: none;
+}
+
+.sidebar.is-collapsed [data-tooltip]::after,
+.sidebar.is-collapsed [data-tooltip]::before {
+  position: absolute;
+  left: calc(100% + 10px);
+  z-index: 40;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-4px);
+  transition: opacity 90ms ease, transform 90ms ease;
+}
+
+.sidebar.is-collapsed [data-tooltip]::after {
+  content: attr(data-tooltip);
+  top: 50%;
+  min-width: max-content;
+  max-width: 220px;
+  padding: 7px 10px;
+  border: 1px solid rgba(106, 119, 138, 0.2);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.98);
+  color: var(--text-strong);
+  box-shadow: 0 10px 24px rgba(30, 44, 64, 0.16);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.25;
+  white-space: nowrap;
+  transform: translate(-4px, -50%);
+}
+
+.sidebar.is-collapsed [data-tooltip]::before {
+  content: '';
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  border-left: 1px solid rgba(106, 119, 138, 0.2);
+  border-bottom: 1px solid rgba(106, 119, 138, 0.2);
+  background: rgba(255, 255, 255, 0.98);
+  transform: translate(-4px, -50%) rotate(45deg);
+}
+
+.sidebar.is-collapsed [data-tooltip]:hover::after,
+.sidebar.is-collapsed [data-tooltip]:hover::before,
+.sidebar.is-collapsed [data-tooltip]:focus-visible::after,
+.sidebar.is-collapsed [data-tooltip]:focus-visible::before {
+  opacity: 1;
+}
+
+.sidebar.is-collapsed [data-tooltip]:hover::after,
+.sidebar.is-collapsed [data-tooltip]:focus-visible::after {
+  transform: translate(0, -50%);
+}
+
+.sidebar.is-collapsed [data-tooltip]:hover::before,
+.sidebar.is-collapsed [data-tooltip]:focus-visible::before {
+  transform: translate(0, -50%) rotate(45deg);
+}
+
+.nav-tag {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: transparent;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.nav-tag svg {
+  display: block;
+  width: 19px;
+  height: 19px;
+  transform: translateY(-1px);
+}
+
+.nav-link.active .nav-tag {
+  background: transparent;
+  color: inherit;
+}
+
+.nav-link:hover .nav-tag {
+  background: transparent;
+}
+
+.nav-link:focus,
+.nav-link:focus-visible,
+.playlist-nav-child:focus,
+.playlist-nav-child:focus-visible {
+  outline: none;
+}
+
+.sidebar-footer {
+  z-index: 2;
+  margin-top: 4px;
+  padding: 4px 0 0;
+  border-radius: 0;
+  background: transparent;
+  border: 0;
+  width: 100%;
+  flex: 0 0 auto;
+}
+
+.playlist-nav-section {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  margin-top: 8px;
+  overflow: hidden;
+}
+
+.playlist-nav-heading {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px;
+  align-items: center;
+  gap: 6px;
+}
+
+.playlist-nav-heading .nav-link {
+  min-width: 0;
+}
+
+.playlist-nav-toggle {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.playlist-nav-toggle:hover {
+  background: rgba(var(--accent-rgb), 0.1);
+  color: var(--accent-strong);
+}
+
+.playlist-nav-toggle svg {
+  width: 16px;
+  height: 16px;
+}
+
+.playlist-nav-children {
+  flex: 0 0 auto;
+  min-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transition: opacity 120ms ease;
+}
+
+.playlist-nav-children.is-expanded {
+  flex: 1 1 auto;
+  opacity: 1;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(91, 105, 122, 0.42) transparent;
+}
+
+.playlist-nav-children > * {
+  min-height: 0;
+}
+
+.playlist-nav-child {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  margin: 2px 0 0;
+  padding: 0 10px 0 0;
+  border-radius: 16px;
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.playlist-nav-child:hover,
+.playlist-nav-child.active {
+  background: rgba(var(--accent-rgb), 0.1);
+  color: var(--accent-strong);
+}
+
+.playlist-nav-child-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+}
+
+.playlist-nav-child:hover .playlist-nav-child-icon,
+.playlist-nav-child.active .playlist-nav-child-icon {
+  background: transparent;
+}
+
+.playlist-nav-child-icon svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+  transform: translateY(-1px);
+}
+
+.sidebar.is-collapsed .nav-tag svg {
+  transform: none;
+}
+
+.nav-link[href='/favorites'] .nav-tag svg {
+  transform: translateY(-2px);
+}
+
+.sidebar.is-collapsed .nav-link[href='/favorites'] .nav-tag svg {
+  transform: translateY(-1px);
+}
+
+.sidebar.is-collapsed .playlist-nav-section {
+  margin-top: 10px;
+}
+
+.sidebar-footer .nav-link {
+  width: 100%;
+}
+
+.sidebar.is-collapsed .sidebar-footer {
+  width: var(--sidebar-collapsed-item-size);
+  display: block;
+}
+
+.sidebar.is-collapsed .sidebar-footer .nav-link {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: var(--sidebar-collapsed-item-size);
+  min-height: var(--sidebar-collapsed-item-size);
+  padding: 0;
+  border-left-width: 0;
+}
+
+.sidebar.is-collapsed .nav-link.active,
+.sidebar.is-collapsed .nav-link.active:hover,
+.sidebar.is-collapsed .nav-link.active:focus-visible {
+  background: rgba(var(--accent-rgb), 0.13) !important;
+  box-shadow: none !important;
+}
+
+.sidebar.is-collapsed .nav-link.active::before,
+.sidebar.is-collapsed .nav-link.active::after,
+.sidebar.is-collapsed .nav-link.active .nav-tag::before,
+.sidebar.is-collapsed .nav-link.active .nav-tag::after {
+  content: none !important;
+  display: none !important;
+}

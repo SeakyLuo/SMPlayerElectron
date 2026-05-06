@@ -10,6 +10,7 @@ import {
   ipcMain,
   net,
   protocol,
+  screen,
   shell,
 } from 'electron'
 import { copyFile, mkdir } from 'node:fs/promises'
@@ -18,7 +19,14 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import type { OpenDialogOptions, SaveDialogOptions } from 'electron'
-import type { AppInfo, GlobalMediaCommand, TrackNotificationPayload } from '../src/shared/contracts'
+import type {
+  AppInfo,
+  GlobalMediaCommand,
+  PlaylistSortCriterion,
+  PreferenceEntityType,
+  PreferenceLevel,
+  TrackNotificationPayload,
+} from '../src/shared/contracts'
 import { SmplayerDataStore } from './services/data-store'
 import { SMPLAYER_DB_NAME } from './services/constants'
 
@@ -28,6 +36,37 @@ let mainWindow: BrowserWindow | null = null
 let dataStore: SmplayerDataStore | null = null
 let appTray: Tray | null = null
 let isQuitting = false
+let windowDragInterval: NodeJS.Timeout | null = null
+
+function stopWindowDrag() {
+  if (windowDragInterval) {
+    clearInterval(windowDragInterval)
+    windowDragInterval = null
+  }
+}
+
+function startWindowDrag() {
+  if (!mainWindow || mainWindow.isDestroyed() || mainWindow.isMaximized()) {
+    return
+  }
+
+  stopWindowDrag()
+  const startCursor = screen.getCursorScreenPoint()
+  const [startX, startY] = mainWindow.getPosition()
+
+  windowDragInterval = setInterval(() => {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      stopWindowDrag()
+      return
+    }
+
+    const cursor = screen.getCursorScreenPoint()
+    mainWindow.setPosition(
+      Math.round(startX + cursor.x - startCursor.x),
+      Math.round(startY + cursor.y - startCursor.y),
+    )
+  }, 16)
+}
 let hasShownTrayHint = false
 
 app.commandLine.appendSwitch(
@@ -104,7 +143,7 @@ async function createWindow() {
     titleBarOverlay:
       process.platform === 'win32'
         ? {
-            color: '#f6f8fb',
+            color: '#00000000',
             symbolColor: '#111111',
             height: 44,
           }
@@ -125,6 +164,10 @@ async function createWindow() {
       return
     }
 
+    if (dataStore!.getSettingsSnapshot().quitOnClose) {
+      return
+    }
+
     event.preventDefault()
     hideMainWindow()
 
@@ -136,6 +179,9 @@ async function createWindow() {
         silent: true,
       }).show()
     }
+  })
+  mainWindow.on('closed', () => {
+    stopWindowDrag()
   })
 
   mainWindow.on('show', () => {
@@ -324,6 +370,23 @@ app.whenReady().then(async () => {
   ipcMain.handle('app:get-info', () => getAppInfo())
   ipcMain.handle('library:get-snapshot', () => dataStore!.getLibrarySnapshot())
   ipcMain.handle('library:get-artwork', (_event, songId: number) => dataStore!.getSongArtwork(songId))
+  ipcMain.handle('library:pick-album-artwork', async (_event, albumName: string) => {
+    const result = mainWindow
+      ? await dialog.showOpenDialog(mainWindow, {
+          title: 'Choose Album Artwork',
+          properties: ['openFile'],
+          filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp', 'bmp'] }],
+        })
+      : await dialog.showOpenDialog({
+          title: 'Choose Album Artwork',
+          properties: ['openFile'],
+          filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp', 'bmp'] }],
+        })
+
+    if (!result.canceled) {
+      dataStore!.setAlbumArtwork(albumName, result.filePaths[0]!)
+    }
+  })
   ipcMain.handle('library:delete-song-from-disk', async (_event, songId: number) => {
     await shell.trashItem(dataStore!.getSongPath(songId))
     dataStore!.deleteSong(songId)
@@ -335,6 +398,15 @@ app.whenReady().then(async () => {
   )
   ipcMain.handle('shell:reveal-item', (_event, itemPath: string) => {
     shell.showItemInFolder(itemPath)
+  })
+  ipcMain.handle('window:start-drag', () => {
+    startWindowDrag()
+  })
+  ipcMain.handle('window:stop-drag', () => {
+    stopWindowDrag()
+  })
+  ipcMain.handle('shell:create-local-folder', async (_event, rootPath: string, relativePath: string, name: string) => {
+    await mkdir(join(rootPath, relativePath, name), { recursive: true })
   })
   ipcMain.handle('shell:send-feedback-email', () => sendFeedbackEmail())
   ipcMain.handle('shell:open-feedback-browser', () => openFeedbackInBrowser())
@@ -446,7 +518,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('library:update-song-duration', (_event, songId: number, duration: number) =>
     dataStore!.updateSongDuration(songId, duration),
   )
-  ipcMain.handle('playlist:create', (_event, name: string) => dataStore!.createPlaylist(name))
+  ipcMain.handle('playlist:create', (_event, name: string, songIds?: number[]) => dataStore!.createPlaylist(name, songIds))
   ipcMain.handle('playlist:delete', (_event, playlistId: number) =>
     dataStore!.deletePlaylist(playlistId),
   )
@@ -468,8 +540,8 @@ app.whenReady().then(async () => {
   ipcMain.handle('playlist:remove-songs', (_event, playlistId: number, songIds: number[]) =>
     dataStore!.removeSongsFromPlaylist(playlistId, songIds),
   )
-  ipcMain.handle('playlist:reorder-songs', (_event, playlistId: number, songIds: number[]) =>
-    dataStore!.reorderPlaylistSongs(playlistId, songIds),
+  ipcMain.handle('playlist:reorder-songs', (_event, playlistId: number, songIds: number[], sortCriterion?: PlaylistSortCriterion) =>
+    dataStore!.reorderPlaylistSongs(playlistId, songIds, sortCriterion),
   )
   ipcMain.handle('queue:replace', (_event, songIds: number[]) => dataStore!.replaceNowPlaying(songIds))
   ipcMain.handle('queue:remove-song', (_event, songId: number) =>
@@ -492,6 +564,9 @@ app.whenReady().then(async () => {
   ipcMain.handle('settings:update', (_event, update) => dataStore!.updateSettings(update))
   ipcMain.handle('preferences:update-settings', (_event, update) =>
     dataStore!.updatePreferenceSettings(update),
+  )
+  ipcMain.handle('preferences:add-item', (_event, type: PreferenceEntityType, itemId: string, name: string, level?: PreferenceLevel) =>
+    dataStore!.addPreferenceItem(type, itemId, name, level),
   )
   ipcMain.handle('preferences:update-item', (_event, itemId: number, update) =>
     dataStore!.updatePreferenceItem(itemId, update),

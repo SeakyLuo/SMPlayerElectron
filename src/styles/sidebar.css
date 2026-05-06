@@ -1,0 +1,229 @@
+.sidebar {
+  position: relative;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  height: 100%;
+  max-height: 100%;
+  padding: 8px 12px var(--player-height);
+  border-radius: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  overflow: hidden;
+}
+
+.sidebar.is-collapsed {
+  align-items: center;
+  gap: 8px;
+  padding-left: 0;
+  padding-right: 0;
+  overflow: visible;
+  scrollbar-gutter: auto;
+}
+
+.sidebar.is-collapsed .nav-section {
+  width: 100%;
+}
+
+.sidebar.is-collapsed .nav-link {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: var(--sidebar-collapsed-item-size);
+  min-height: var(--sidebar-collapsed-item-size);
+  padding: 0;
+  border-left-width: 0;
+}
+
+.sidebar.is-collapsed .nav-link.active {
+  border-left-width: 0;
+  background: transparent;
+  color: #111;
+  box-shadow: none;
+}
+
+.sidebar.is-collapsed .nav-link.active::before {
+  content: none;
+}
+
+.sidebar.is-collapsed .nav-link.active .nav-tag::before {
+  content: none;
+}
+
+.sidebar-titlebar {
+  display: flex;
+  align-items: center;
+  min-height: 42px;
+  gap: 8px;
+  -webkit-app-region: drag;
+}
+
+.sidebar-titlebar * {
+  -webkit-app-region: no-drag;
+}
+
+.sidebar-app-name {
+  min-width: 0;
+  color: var(--text-strong);
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar.is-collapsed .sidebar-titlebar {
+  justify-content: center;
+  width: var(--sidebar-collapsed-item-size);
+  min-height: 42px;
+}
+
+.sidebar.is-collapsed .sidebar-app-name {
+  display: none;
+}
+
+.sidebar-collapse-button {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 16px;
+  background: transparent;
+  color: #222;
+  cursor: pointer;
+}
+
+.sidebar-back-button:focus,
+.sidebar-back-button:focus-visible,
+.sidebar-collapse-button:focus,
+.sidebar-collapse-button:focus-visible {
+  outline: none;
+}
+
+.sidebar.is-collapsed .sidebar-back-button,
+.sidebar.is-collapsed .sidebar-collapse-button {
+  display: grid;
+  place-items: center;
+  width: var(--sidebar-collapsed-item-size);
+  height: var(--sidebar-collapsed-item-size);
+  margin: 0;
+  padding: 0;
+  border-radius: 14px;
+}
+
+.sidebar-back-button:hover,
+.sidebar-collapse-button:hover {
+  background: rgba(var(--accent-rgb), 0.12);
+}
+
+.sidebar-collapse-button:hover {
+  color: var(--accent-strong);
+}
+
+.sidebar-back-button {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin: 0;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: #222;
+  cursor: pointer;
+}
+
+.sidebar-back-button svg,
+.sidebar-collapse-button svg {
+  width: 20px;
+  height: 20px;
+}
+
+.sidebar-back-button:hover {
+  color: var(--accent-strong);
+}
+
+.brand {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-height: 24px;
+}
+
+.brand-topline {
+  font-size: 12px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+}
+
+.brand-name {
+  padding: 0 8px 2px;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-strong);
+  letter-spacing: -0.04em;
+}
+
+.brand-copy {
+  display: none;
+}
+
+.sidebar.is-collapsed .brand,
+.sidebar.is-collapsed .nav-section-label,
+.sidebar.is-collapsed .nav-link span:last-child {
+  display: none;
+}
+
+.sidebar.is-collapsed .search-shell {
+  width: var(--sidebar-collapsed-item-size);
+  margin: 0;
+}
+
+.sidebar.is-collapsed .search-form {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr;
+  place-items: center;
+  width: var(--sidebar-collapsed-item-size);
+  height: var(--sidebar-collapsed-item-size);
+  padding: 0;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+
+.sidebar.is-collapsed .search-shell input {
+  display: none;
+}
+
+.sidebar.is-collapsed .search-clear-button {
+  display: none;
+}
+
+.sidebar.is-collapsed .search-commit-button {
+  width: var(--sidebar-collapsed-item-size);
+  height: var(--sidebar-collapsed-item-size);
+  min-height: var(--sidebar-collapsed-item-size);
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.sidebar.is-collapsed .search-commit-button:hover {
+  background: rgba(var(--accent-rgb), 0.12);
+  color: var(--accent-strong);
+}

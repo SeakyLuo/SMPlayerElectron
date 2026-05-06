@@ -1,0 +1,26 @@
+.app-shell {
+  --player-height: 116px;
+  --shell-padding: 14px;
+  --sidebar-player-gap: 0px;
+  --sidebar-width: 320px;
+  --sidebar-collapsed-item-size: 40px;
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  height: 100vh;
+  min-height: 0;
+  gap: 0;
+  padding: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  background: transparent;
+}
+
+.app-shell.nav-collapsed {
+  --sidebar-width: 64px;
+  grid-template-columns: 64px minmax(0, 1fr);
+}
+
+.app-shell:has(.workspace.is-immersive-route) {
+  --shell-padding: 0px;
+  padding: 0;
+}

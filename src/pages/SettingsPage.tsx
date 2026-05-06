@@ -538,6 +538,14 @@ export function SettingsPage({
           </SettingsCard>
 
           <SettingsCard title={t('settings.display')}>
+            <SelectSettingRow
+              label={t('settings.interfaceLanguage')}
+              value={snapshot.settings.preferredLanguage}
+              options={preferredLanguageOptions}
+              onChange={(value) => {
+                onUpdateSettings({ preferredLanguage: value })
+              }}
+            />
             <ToggleSettingRow
               label={t('settings.showCounts')}
               checked={snapshot.settings.showCount}
@@ -614,18 +622,14 @@ export function SettingsPage({
             </div>
           </SettingsCard>
 
-          <SettingsCard title={t('settings.language')}>
-            <SelectSettingRow
-              label={t('settings.interfaceLanguage')}
-              value={snapshot.settings.preferredLanguage}
-              options={preferredLanguageOptions}
-              onChange={(value) => {
-                onUpdateSettings({ preferredLanguage: value })
+          <SettingsCard title={t('settings.others')}>
+            <ToggleSettingRow
+              label={t('settings.quitOnClose')}
+              checked={snapshot.settings.quitOnClose}
+              onChange={(checked) => {
+                onUpdateSettings({ quitOnClose: checked })
               }}
             />
-          </SettingsCard>
-
-          <SettingsCard title={t('settings.others')}>
             <div className="settings-action-list">
               <SettingsActionButton
                 onClick={() => {

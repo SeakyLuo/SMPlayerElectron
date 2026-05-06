@@ -150,6 +150,15 @@ export function LibraryPage({
         <div
           className="table-shell library-table-shell"
           ref={tableShellRef}
+          onWheel={(event) => {
+            const horizontalDelta = event.shiftKey ? event.deltaY : event.deltaX
+            if (horizontalDelta === 0) {
+              return
+            }
+
+            event.currentTarget.scrollLeft += horizontalDelta
+            event.preventDefault()
+          }}
           onScroll={(event) => {
             setScrollTop(event.currentTarget.scrollTop)
           }}

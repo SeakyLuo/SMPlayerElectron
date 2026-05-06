@@ -1,0 +1,195 @@
+.immersive-detail-backdrop {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.immersive-detail-backdrop img {
+  width: 100%;
+  height: 340px;
+  object-fit: cover;
+  filter: blur(34px) saturate(130%);
+  opacity: 0.24;
+  transform: scale(1.08);
+}
+
+.immersive-detail-hero {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  align-items: center;
+  gap: 48px;
+  padding: 34px 0 28px;
+}
+
+.immersive-detail-hero .detail-artwork,
+.playlist-immersive-artwork {
+  width: min(260px, 22vw);
+  aspect-ratio: 1;
+  height: auto;
+  border-radius: 18px;
+  box-shadow:
+    0 26px 58px rgba(54, 68, 86, 0.22),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.62);
+}
+
+.playlist-immersive-artwork {
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.2), rgba(255, 255, 255, 0.62));
+  color: var(--accent);
+}
+
+.playlist-immersive-artwork svg {
+  width: 76px;
+  height: 76px;
+}
+
+.immersive-detail-copy {
+  min-width: 0;
+}
+
+.immersive-detail-copy h2 {
+  margin: 0 0 16px;
+  color: var(--text-strong);
+  font-size: clamp(32px, 4vw, 48px);
+  line-height: 1.08;
+  letter-spacing: 0;
+}
+
+.immersive-detail-copy p {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-size: 17px;
+  font-weight: 650;
+}
+
+.immersive-primary-actions,
+.immersive-secondary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+}
+
+.immersive-primary-actions {
+  margin-top: 34px;
+}
+
+.immersive-secondary-actions {
+  margin-top: 32px;
+}
+
+.immersive-primary-button,
+.immersive-action-button,
+.immersive-secondary-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 50px;
+  border: 1px solid rgba(118, 132, 151, 0.18);
+  border-radius: 13px;
+  padding: 0 22px;
+  color: var(--text-strong);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 750;
+  cursor: pointer;
+  box-shadow:
+    0 12px 30px rgba(45, 58, 76, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.62);
+}
+
+.immersive-primary-button {
+  border-color: rgba(var(--accent-rgb), 0.42);
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  color: #fff;
+}
+
+.immersive-action-button {
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.immersive-secondary-actions button {
+  min-height: 36px;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+  padding: 0 10px;
+}
+
+.immersive-primary-button:disabled,
+.immersive-action-button:disabled,
+.immersive-secondary-actions button:disabled {
+  cursor: default;
+  opacity: 0.48;
+}
+
+.immersive-primary-actions svg,
+.immersive-secondary-actions svg {
+  width: 19px;
+  height: 19px;
+}
+
+.immersive-song-card {
+  position: relative;
+  z-index: 1;
+  padding: 24px 16px;
+  border: 1px solid rgba(126, 139, 154, 0.14);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 20px 48px rgba(55, 70, 90, 0.12);
+  backdrop-filter: blur(18px) saturate(145%);
+  -webkit-backdrop-filter: blur(18px) saturate(145%);
+}
+
+.immersive-song-header,
+.immersive-song-list .playlist-control-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(160px, 0.8fr) 110px;
+}
+
+.playlist-song-card .immersive-song-header,
+.playlist-song-card .playlist-control-item {
+  grid-template-columns: minmax(0, 1.35fr) minmax(150px, 0.7fr) minmax(150px, 0.7fr) 105px;
+}
+
+.immersive-song-header {
+  align-items: center;
+  min-height: 42px;
+  padding: 0 28px;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.immersive-song-header span:first-child {
+  display: none;
+}
+
+.immersive-song-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.immersive-song-list .playlist-control-item {
+  min-height: 58px;
+  border-radius: 14px;
+  padding: 0 28px;
+  background: transparent;
+}
+
+.immersive-song-list .playlist-control-item:hover,
+.immersive-song-list .playlist-control-item.is-current {
+  background: rgba(234, 240, 249, 0.78);
+}
+
+.immersive-song-list .playlist-control-item:nth-child(odd) {
+  background: transparent;
+}

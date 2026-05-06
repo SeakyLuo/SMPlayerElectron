@@ -1,12 +1,16 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { ArtworkImage } from '../components/ArtworkImage'
+import { Icon } from '../components/icons'
 import type { LibrarySong } from '../shared/contracts'
 import { getDisplayArtists } from '../shared/artists'
 import { formatDuration } from '../shared/formatters'
 import type { Translator } from '../shared/i18n'
 import { buildLocalRoute } from './localBrowserPaths'
+
+type LocalSortMode = 'name' | 'folders' | 'songs'
+type LocalViewMode = 'grid' | 'list'
 
 interface LocalBrowserPageProps {
   songs: LibrarySong[]
@@ -22,12 +26,13 @@ interface LocalBrowserPageProps {
   onScanLibrary: () => void
   onPlayTrack: (trackId: number, queueSongIds: number[]) => void
   onRevealSong: (songPath: string) => void | Promise<void>
+  onCreateFolder: (relativePath: string, name: string) => void | Promise<void>
 }
 
 interface FolderNode {
   relativePath: string
   name: string
-  artworkUrl: string
+  artworkUrls: string[]
   childPaths: string[]
   directSongIds: number[]
   subtreeSongIds: number[]
@@ -65,10 +70,16 @@ function createFolderNode(relativePath: string, rootPath: string): FolderNode {
   return {
     relativePath,
     name: getFolderDisplayName(relativePath, rootPath),
-    artworkUrl: '',
+    artworkUrls: [],
     childPaths: [],
     directSongIds: [],
     subtreeSongIds: [],
+  }
+}
+
+function addArtwork(node: FolderNode, artworkUrl: string) {
+  if (artworkUrl && !node.artworkUrls.includes(artworkUrl) && node.artworkUrls.length < 4) {
+    node.artworkUrls.push(artworkUrl)
   }
 }
 
@@ -117,23 +128,21 @@ function buildFolderIndex(songs: LibrarySong[], rootPath: string) {
       }
 
       ancestorNode.subtreeSongIds.push(song.id)
-      if (!ancestorNode.artworkUrl && song.artworkUrl) {
-        ancestorNode.artworkUrl = song.artworkUrl
-      }
+      addArtwork(ancestorNode, song.artworkUrl)
     }
   }
 
   for (const node of nodes.values()) {
     node.childPaths.sort((left, right) => left.localeCompare(right))
     node.directSongIds.sort((left, right) => {
-      const leftSong = songsById.get(left)
-      const rightSong = songsById.get(right)
-      return (leftSong?.title ?? '').localeCompare(rightSong?.title ?? '')
+      const leftSong = songsById.get(left)!
+      const rightSong = songsById.get(right)!
+      return leftSong.title.localeCompare(rightSong.title)
     })
     node.subtreeSongIds.sort((left, right) => {
-      const leftSong = songsById.get(left)
-      const rightSong = songsById.get(right)
-      return (leftSong?.path ?? '').localeCompare(rightSong?.path ?? '')
+      const leftSong = songsById.get(left)!
+      const rightSong = songsById.get(right)!
+      return leftSong.path.localeCompare(rightSong.path)
     })
   }
 
@@ -152,6 +161,48 @@ function matchesSongSearch(song: LibrarySong, searchQuery: string) {
     .includes(normalizedSearchQuery)
 }
 
+function getParentPath(relativePath: string) {
+  const parts = relativePath.split('/').filter(Boolean)
+  return parts.slice(0, -1).join('/')
+}
+
+function sortFolders(folders: FolderNode[], mode: LocalSortMode) {
+  return folders.slice().sort((left, right) => {
+    if (mode === 'folders') {
+      return right.childPaths.length - left.childPaths.length || left.name.localeCompare(right.name)
+    }
+
+    if (mode === 'songs') {
+      return right.subtreeSongIds.length - left.subtreeSongIds.length || left.name.localeCompare(right.name)
+    }
+
+    return left.name.localeCompare(right.name)
+  })
+}
+
+function sortSongs(songs: LibrarySong[], mode: LocalSortMode) {
+  return songs.slice().sort((left, right) => {
+    if (mode === 'songs') {
+      return right.playCount - left.playCount || left.title.localeCompare(right.title)
+    }
+
+    return left.title.localeCompare(right.title)
+  })
+}
+
+function shuffleSongIds(songIds: number[]) {
+  const shuffledSongIds = songIds.slice()
+
+  for (let index = shuffledSongIds.length - 1; index > 0; index -= 1) {
+    const randomIndex = Math.floor(Math.random() * (index + 1))
+    const current = shuffledSongIds[index]
+    shuffledSongIds[index] = shuffledSongIds[randomIndex]
+    shuffledSongIds[randomIndex] = current
+  }
+
+  return shuffledSongIds
+}
+
 export function LocalBrowserPage({
   songs,
   t,
@@ -166,12 +217,20 @@ export function LocalBrowserPage({
   onScanLibrary,
   onPlayTrack,
   onRevealSong,
+  onCreateFolder,
 }: LocalBrowserPageProps) {
+  const [sortMode, setSortMode] = useState<LocalSortMode>('name')
+  const [viewMode, setViewMode] = useState<LocalViewMode>('grid')
+  const [multiSelect, setMultiSelect] = useState(false)
+  const [selectedFolderPaths, setSelectedFolderPaths] = useState<Set<string>>(new Set())
+  const [selectedSongIds, setSelectedSongIds] = useState<Set<number>>(new Set())
+  const [createdFolderPaths, setCreatedFolderPaths] = useState<Set<string>>(new Set())
   const { nodes, songsById } = useMemo(
     () => buildFolderIndex(songs, rootPath),
     [songs, rootPath],
   )
   const currentNode = nodes.get(currentRelativePath) ?? null
+
   const currentSongs = useMemo(() => {
     if (!currentNode) {
       return []
@@ -181,22 +240,29 @@ export function LocalBrowserPage({
       ? currentNode.subtreeSongIds
       : currentNode.directSongIds
 
-    return sourceSongIds
-      .map((songId) => songsById.get(songId) ?? null)
-      .filter((song): song is LibrarySong => song != null)
-      .filter((song) => matchesSongSearch(song, searchQuery))
-  }, [currentNode, searchQuery, songsById])
+    return sortSongs(
+      sourceSongIds
+        .map((songId) => songsById.get(songId)!)
+        .filter((song) => matchesSongSearch(song, searchQuery)),
+      sortMode,
+    )
+  }, [currentNode, searchQuery, songsById, sortMode])
   const childFolders = useMemo(() => {
     if (!currentNode) {
       return []
     }
 
     const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase()
+    const createdChildren = [...createdFolderPaths]
+      .filter((folderPath) => getParentPath(folderPath) === currentRelativePath)
+      .filter((folderPath) => !currentNode.childPaths.includes(folderPath))
+      .map((folderPath) => createFolderNode(folderPath, rootPath))
 
-    return currentNode.childPaths
-      .map((childPath) => nodes.get(childPath) ?? null)
-      .filter((child): child is FolderNode => child != null)
-      .filter((child) => {
+    return sortFolders(
+      [
+        ...currentNode.childPaths.map((childPath) => nodes.get(childPath)!),
+        ...createdChildren,
+      ].filter((child) => {
         if (!normalizedSearchQuery) {
           return true
         }
@@ -206,32 +272,77 @@ export function LocalBrowserPage({
         }
 
         return child.subtreeSongIds.some((songId) => {
-          const song = songsById.get(songId)
-          return song ? matchesSongSearch(song, searchQuery) : false
+          const song = songsById.get(songId)!
+          return matchesSongSearch(song, searchQuery)
         })
-      })
-  }, [currentNode, nodes, searchQuery, songsById])
+      }),
+      sortMode,
+    )
+  }, [createdFolderPaths, currentNode, currentRelativePath, nodes, rootPath, searchQuery, songsById, sortMode])
   const breadcrumbParts = currentRelativePath ? currentRelativePath.split('/') : []
   const queueSongIds = currentNode?.subtreeSongIds ?? []
+  const visibleSongIds = currentSongs.map((song) => song.id)
+  const effectiveSelectedFolderPaths = [...selectedFolderPaths].filter((folderPath) =>
+    childFolders.some((folder) => folder.relativePath === folderPath),
+  )
+  const effectiveSelectedSongIds = [...selectedSongIds].filter((songId) => visibleSongIds.includes(songId))
+  const selectedQueueSongIds = [
+    ...effectiveSelectedSongIds,
+    ...effectiveSelectedFolderPaths.flatMap((folderPath) => nodes.get(folderPath)?.subtreeSongIds ?? []),
+  ].filter((songId, index, all) => all.indexOf(songId) === index)
+
+  const playShuffled = () => {
+    const shuffledSongIds = shuffleSongIds(queueSongIds)
+    onPlayTrack(shuffledSongIds[0]!, shuffledSongIds)
+  }
+
+  const createFolder = async () => {
+    const name = window.prompt(t('local.newFolderPrompt'))
+    if (!name) {
+      return
+    }
+
+    await onCreateFolder(currentRelativePath, name)
+    const folderPath = currentRelativePath ? `${currentRelativePath}/${name}` : name
+    setCreatedFolderPaths((current) => new Set(current).add(folderPath))
+  }
+
+  const toggleFolderSelection = (folderPath: string) => {
+    setSelectedFolderPaths((current) => {
+      const next = new Set(current)
+      if (next.has(folderPath)) {
+        next.delete(folderPath)
+      } else {
+        next.add(folderPath)
+      }
+      return next
+    })
+  }
+
+  const toggleSongSelection = (songId: number) => {
+    setSelectedSongIds((current) => {
+      const next = new Set(current)
+      if (next.has(songId)) {
+        next.delete(songId)
+      } else {
+        next.add(songId)
+      }
+      return next
+    })
+  }
 
   if (!rootPath) {
     return (
-      <section className="page-panel">
-        <header className="page-header">
+      <section className="page-panel local-page">
+        <header className="local-topbar">
           <div>
-            <p className="eyebrow">{t('local.eyebrow')}</p>
             <h2>{t('common.local')}</h2>
-            <p className="page-copy">
-              {t(
-                'local.descriptionNoRoot',
-              )}
-            </p>
+            <p>{t('local.descriptionNoRoot')}</p>
           </div>
-          <div className="page-actions">
-            <button className="action-button secondary" type="button" onClick={onPickLibraryRoot}>
-              {t('library.chooseFolder')}
-            </button>
-          </div>
+          <button className="local-command" type="button" onClick={onPickLibraryRoot}>
+            <Icon name="folder" />
+            {t('library.chooseFolder')}
+          </button>
         </header>
         <div className="empty-state">
           <h3>{t('local.noRoot')}</h3>
@@ -243,167 +354,142 @@ export function LocalBrowserPage({
 
   if (!currentNode) {
     return (
-      <section className="page-panel">
-        <header className="page-header">
+      <section className="page-panel local-page">
+        <header className="local-topbar">
           <div>
-            <p className="eyebrow">{t('local.eyebrow')}</p>
             <h2>{t('local.folderNotFound')}</h2>
-            <p className="page-copy">
-              {t(
-                'local.folderNotFoundDescription',
-              )}
-            </p>
+            <p>{t('local.folderNotFoundDescription')}</p>
           </div>
-          <div className="page-actions">
-            <Link className="action-button secondary" to="/local">
-              {t('local.backToRoot')}
-            </Link>
-          </div>
+          <Link className="local-command" to="/local">
+            <Icon name="arrowLeft" />
+            {t('local.backToRoot')}
+          </Link>
         </header>
       </section>
     )
   }
 
   return (
-    <section className="page-panel">
-      <header className="page-header">
-        <div>
-          <p className="eyebrow">{t('local.eyebrow')}</p>
-          <h2>{currentNode.name}</h2>
-          <p className="page-copy">
-            {t(
-              'local.description',
-            )}
+    <section className="page-panel local-page">
+      <header className="local-topbar">
+        <div className="local-heading">
+          <nav className="local-title-breadcrumbs" aria-label={t('local.path')}>
+            <strong>{t('common.local')}</strong>
+            <span>/</span>
+            <Link to="/local">{getFolderDisplayName('', rootPath)}</Link>
+            {breadcrumbParts.map((part, index) => {
+              const relativePath = breadcrumbParts.slice(0, index + 1).join('/')
+
+              return (
+                <span key={relativePath} className="local-title-breadcrumb-item">
+                  <span>/</span>
+                  <Link to={buildLocalRoute(relativePath)}>{part}</Link>
+                </span>
+              )
+            })}
+          </nav>
+          <p>
+            {t('local.headerStats', {
+              folders: childFolders.length,
+              songs: currentSongs.length,
+            })}
           </p>
         </div>
-        <div className="page-actions">
-          <button className="action-button secondary" type="button" onClick={onPickLibraryRoot}>
-            {t('library.chooseFolder')}
+        <div className="local-commandbar">
+          <button className="local-command" type="button" disabled={queueSongIds.length === 0} onClick={playShuffled}>
+            <Icon name="shuffle" />
+            {t('nowPlaying.randomPlay')}
           </button>
-          <button
-            className="action-button"
-            type="button"
-            onClick={onScanLibrary}
-            disabled={scanning || !rootPath}
-          >
-            {scanning ? t('library.scanning') : t('local.rescan')}
+          <button className="local-command" type="button" onClick={onScanLibrary} disabled={scanning}>
+            <Icon name="recent" />
+            {scanning ? t('library.scanning') : t('local.updateFolder')}
           </button>
+          <label className="local-command local-select-command">
+            <Icon name="sort" />
+            <select
+              value={sortMode}
+              onChange={(event) => {
+                setSortMode(event.currentTarget.value as LocalSortMode)
+              }}
+            >
+              <option value="name">{t('local.sortName')}</option>
+              <option value="folders">{t('local.sortFolders')}</option>
+              <option value="songs">{t('local.sortSongs')}</option>
+            </select>
+          </label>
+          <button className="local-command" type="button" onClick={createFolder}>
+            <Icon name="folder" />
+            {t('local.newFolder')}
+          </button>
+          <label className="local-command local-select-command">
+            <Icon name="selectAll" />
+            <select
+              value={viewMode}
+              onChange={(event) => {
+                setViewMode(event.currentTarget.value as LocalViewMode)
+              }}
+            >
+              <option value="grid">{t('local.viewGrid')}</option>
+              <option value="list">{t('local.viewList')}</option>
+            </select>
+          </label>
           <button
-            className="action-button secondary"
+            className={multiSelect ? 'local-command is-active' : 'local-command'}
             type="button"
-            disabled={queueSongIds.length === 0}
             onClick={() => {
-              if (queueSongIds[0] != null) {
-                onPlayTrack(queueSongIds[0], queueSongIds)
-              }
+              setMultiSelect((current) => !current)
             }}
           >
-            {t('local.playFolder')}
+            <Icon name="check" />
+            {t('albums.multiSelect')}
           </button>
         </div>
       </header>
 
-      <div className="root-banner">
-        <span className="summary-label">{t('local.path')}</span>
-        <div className="local-breadcrumbs">
-          <Link className="table-link" to="/local">
-            {getFolderDisplayName('', rootPath)}
-          </Link>
-          {breadcrumbParts.map((part, index) => {
-            const relativePath = breadcrumbParts.slice(0, index + 1).join('/')
-
-            return (
-              <span key={relativePath} className="local-breadcrumb-item">
-                <span>/</span>
-                <Link className="table-link" to={buildLocalRoute(relativePath)}>
-                  {part}
-                </Link>
-              </span>
-            )
-          })}
-        </div>
-        {loading ? <span className="banner-hint">{t('library.refreshing')}</span> : null}
-      </div>
-
+      {loading ? <div className="root-banner">{t('library.refreshing')}</div> : null}
       {error ? <div className="error-banner">{error}</div> : null}
 
-      <div className="summary-grid">
-        <div className="summary-card">
-          <span className="summary-label">{t('local.childFolders')}</span>
-          <span className="summary-value">{currentNode.childPaths.length}</span>
-          <p>{t('local.childFoldersCopy')}</p>
+      {multiSelect ? (
+        <div className="local-selection-bar">
+          <strong>
+            {t('albums.selectedCount', {
+              count: effectiveSelectedFolderPaths.length + effectiveSelectedSongIds.length,
+            })}
+          </strong>
+          <button type="button" disabled={selectedQueueSongIds.length === 0} onClick={() => onPlayTrack(selectedQueueSongIds[0]!, selectedQueueSongIds)}>
+            <Icon name="play" />
+            {t('albums.playSelected')}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedFolderPaths(new Set(childFolders.map((folder) => folder.relativePath)))
+              setSelectedSongIds(new Set(visibleSongIds))
+            }}
+          >
+            <Icon name="selectAll" />
+            {t('albums.selectAll')}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedFolderPaths(new Set())
+              setSelectedSongIds(new Set())
+            }}
+          >
+            <Icon name="clearSelection" />
+            {t('albums.clearSelection')}
+          </button>
         </div>
-        <div className="summary-card">
-          <span className="summary-label">{t('local.directSongs')}</span>
-          <span className="summary-value">{currentNode.directSongIds.length}</span>
-          <p>{t('local.directSongsCopy')}</p>
-        </div>
-        <div className="summary-card">
-          <span className="summary-label">{t('local.subtreeSongs')}</span>
-          <span className="summary-value">{currentNode.subtreeSongIds.length}</span>
-          <p>{t('local.subtreeSongsCopy')}</p>
-        </div>
-        <div className="summary-card">
-          <span className="summary-label">{t('local.searchScope')}</span>
-          <span className="summary-value settings-mode-value">
-            {searchQuery.trim() ? t('local.scopeSubtree') : t('local.scopeCurrent')}
-          </span>
-          <p>{t('local.searchScopeCopy')}</p>
-        </div>
-      </div>
-
-      {childFolders.length > 0 ? (
-        <section className="detail-panel">
-          <div className="subpanel-header">
-            <span className="summary-label">{t('common.folders')}</span>
-            <strong>
-              {childFolders.length}
-              {searchQuery.trim() ? t('local.matching') : ''}
-            </strong>
-          </div>
-          <div className="collection-grid">
-            {childFolders.map((folder) => (
-              <Link
-                className="collection-card collection-card-link"
-                key={folder.relativePath || 'root'}
-                to={buildLocalRoute(folder.relativePath)}
-              >
-                <ArtworkImage
-                  className="collection-artwork"
-                  src={folder.artworkUrl}
-                  title={folder.name}
-                  renderFallback={() => (
-                    <div className="collection-artwork collection-artwork-fallback" aria-hidden="true">
-                      <span>{folder.name.slice(0, 2).toUpperCase()}</span>
-                    </div>
-                  )}
-                />
-                <h3>{folder.name}</h3>
-                <p className="collection-subtitle">
-                  {t('local.folderSongs', {
-                    count: folder.subtreeSongIds.length,
-                  })}
-                </p>
-                <p className="collection-detail">
-                  {t('local.childFolderCount', {
-                    count: folder.childPaths.length,
-                  })}
-                </p>
-              </Link>
-            ))}
-          </div>
-        </section>
       ) : null}
 
-      {currentSongs.length === 0 ? (
+      {childFolders.length === 0 && currentSongs.length === 0 ? (
         <div className="empty-state">
           <h3>
             {songs.length === 0
               ? t('local.noSongsScanned')
               : searchQuery.trim()
-                ? t('local.noSongsBranch', {
-                    query: searchQuery,
-                  })
+                ? t('local.noSongsBranch', { query: searchQuery })
                 : t('local.noDirectSongs')}
           </h3>
           <p>
@@ -414,8 +500,43 @@ export function LocalBrowserPage({
                 : t('local.openChildHelp')}
           </p>
         </div>
+      ) : viewMode === 'grid' ? (
+        <div className="local-scroll-shell">
+          {childFolders.length > 0 ? (
+            <div className="local-folder-grid">
+              {childFolders.map((folder) => (
+                <LocalFolderCard
+                  folder={folder}
+                  key={folder.relativePath}
+                  selected={selectedFolderPaths.has(folder.relativePath)}
+                  multiSelect={multiSelect}
+                  t={t}
+                  onToggleSelection={toggleFolderSelection}
+                />
+              ))}
+            </div>
+          ) : null}
+          {currentSongs.length > 0 ? (
+            <div className="local-song-grid">
+              {currentSongs.map((song) => (
+                <LocalSongCard
+                  key={song.id}
+                  song={song}
+                  selected={selectedSongIds.has(song.id)}
+                  current={song.id === selectedTrackId}
+                  multiSelect={multiSelect}
+                  queueSongIds={queueSongIds}
+                  t={t}
+                  onPlayTrack={onPlayTrack}
+                  onToggleSelection={toggleSongSelection}
+                  onRevealSong={onRevealSong}
+                />
+              ))}
+            </div>
+          ) : null}
+        </div>
       ) : (
-        <div className="table-shell">
+        <div className="table-shell local-table-shell">
           <table className="music-table">
             <thead>
               <tr>
@@ -428,15 +549,52 @@ export function LocalBrowserPage({
               </tr>
             </thead>
             <tbody>
+              {childFolders.map((folder) => (
+                <tr
+                  key={folder.relativePath}
+                  onClick={() => {
+                    if (multiSelect) {
+                      toggleFolderSelection(folder.relativePath)
+                    }
+                  }}
+                >
+                  <td>
+                    {multiSelect ? (
+                      <span className={selectedFolderPaths.has(folder.relativePath) ? 'local-check is-selected' : 'local-check'}>
+                        {selectedFolderPaths.has(folder.relativePath) ? <Icon name="check" /> : null}
+                      </span>
+                    ) : null}
+                    <Link className="table-link" to={buildLocalRoute(folder.relativePath)}>
+                      {folder.name}
+                    </Link>
+                  </td>
+                  <td>{t('common.folders')}</td>
+                  <td>{t('local.childFolderCount', { count: folder.childPaths.length })}</td>
+                  <td>{t('local.folderSongs', { count: folder.subtreeSongIds.length })}</td>
+                  <td className="local-path-cell">{folder.relativePath || t('local.libraryRoot')}</td>
+                  <td />
+                </tr>
+              ))}
               {currentSongs.map((song) => (
                 <tr
                   key={`${currentNode.relativePath}-${song.id}`}
                   className={song.id === selectedTrackId ? 'is-current' : ''}
                   onClick={() => {
-                    onPlayTrack(song.id, queueSongIds)
+                    if (multiSelect) {
+                      toggleSongSelection(song.id)
+                    } else {
+                      onPlayTrack(song.id, queueSongIds)
+                    }
                   }}
                 >
-                  <td>{song.title}</td>
+                  <td>
+                    {multiSelect ? (
+                      <span className={selectedSongIds.has(song.id) ? 'local-check is-selected' : 'local-check'}>
+                        {selectedSongIds.has(song.id) ? <Icon name="check" /> : null}
+                      </span>
+                    ) : null}
+                    {song.title}
+                  </td>
                   <td>{getDisplayArtists(song)}</td>
                   <td>{song.album || t('common.albumUnknown')}</td>
                   <td>{formatDuration(song.duration)}</td>
@@ -466,5 +624,147 @@ export function LocalBrowserPage({
         </div>
       )}
     </section>
+  )
+}
+
+function LocalFolderCard({
+  folder,
+  selected,
+  multiSelect,
+  t,
+  onToggleSelection,
+}: {
+  folder: FolderNode
+  selected: boolean
+  multiSelect: boolean
+  t: Translator
+  onToggleSelection: (folderPath: string) => void
+}) {
+  const content = (
+    <>
+      <FolderArtwork folder={folder} />
+      {multiSelect ? (
+        <span className={selected ? 'local-card-check is-selected' : 'local-card-check'}>
+          {selected ? <Icon name="check" /> : null}
+        </span>
+      ) : null}
+      <strong>{folder.name}</strong>
+      <span>
+        {folder.childPaths.length > 0
+          ? t('local.folderCardStats', { folders: folder.childPaths.length, songs: folder.subtreeSongIds.length })
+          : t('local.folderSongsShort', { count: folder.subtreeSongIds.length })}
+      </span>
+    </>
+  )
+
+  if (multiSelect) {
+    return (
+      <button
+        type="button"
+        className={selected ? 'local-folder-card is-selected' : 'local-folder-card'}
+        onClick={() => {
+          onToggleSelection(folder.relativePath)
+        }}
+      >
+        {content}
+      </button>
+    )
+  }
+
+  return (
+    <Link className="local-folder-card" to={buildLocalRoute(folder.relativePath)}>
+      {content}
+    </Link>
+  )
+}
+
+function FolderArtwork({ folder }: { folder: FolderNode }) {
+  if (folder.artworkUrls.length === 0) {
+    return (
+      <span className="local-folder-artwork local-folder-artwork-fallback">
+        <Icon name="folder" />
+      </span>
+    )
+  }
+
+  return (
+    <span className={`local-folder-artwork local-folder-artwork-${Math.min(folder.artworkUrls.length, 4)}`}>
+      {folder.artworkUrls.slice(0, 4).map((artworkUrl) => (
+        <ArtworkImage
+          className="local-folder-artwork-image"
+          key={artworkUrl}
+          src={artworkUrl}
+          title={folder.name}
+          renderFallback={() => <span className="local-folder-artwork-image" />}
+        />
+      ))}
+    </span>
+  )
+}
+
+function LocalSongCard({
+  song,
+  selected,
+  current,
+  multiSelect,
+  queueSongIds,
+  t,
+  onPlayTrack,
+  onToggleSelection,
+  onRevealSong,
+}: {
+  song: LibrarySong
+  selected: boolean
+  current: boolean
+  multiSelect: boolean
+  queueSongIds: number[]
+  t: Translator
+  onPlayTrack: (trackId: number, queueSongIds: number[]) => void
+  onToggleSelection: (songId: number) => void
+  onRevealSong: (songPath: string) => void | Promise<void>
+}) {
+  return (
+    <button
+      type="button"
+      className={selected ? 'local-song-card is-selected' : current ? 'local-song-card is-current' : 'local-song-card'}
+      onClick={() => {
+        if (multiSelect) {
+          onToggleSelection(song.id)
+        } else {
+          onPlayTrack(song.id, queueSongIds)
+        }
+      }}
+    >
+      <ArtworkImage
+        className="local-song-artwork"
+        src={song.artworkUrl}
+        title={song.title}
+        renderFallback={() => (
+          <span className="local-song-artwork local-song-artwork-fallback">
+            <Icon name="songs" />
+          </span>
+        )}
+      />
+      {multiSelect ? (
+        <span className={selected ? 'local-card-check is-selected' : 'local-card-check'}>
+          {selected ? <Icon name="check" /> : null}
+        </span>
+      ) : null}
+      <strong>{song.title}</strong>
+      <span>{getDisplayArtists(song)}</span>
+      <span className="local-song-card-actions">
+        <span>{formatDuration(song.duration)}</span>
+        <span
+          role="button"
+          tabIndex={0}
+          onClick={(event) => {
+            event.stopPropagation()
+            onRevealSong(song.path)
+          }}
+        >
+          {t('local.reveal')}
+        </span>
+      </span>
+    </button>
   )
 }

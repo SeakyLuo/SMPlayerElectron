@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-import type { AppSettingsUpdate, LibrarySnapshot, ViewStateUpdate } from '../shared/contracts'
+import type { AppSettingsUpdate, LibrarySnapshot, PlaylistSortCriterion, ViewStateUpdate } from '../shared/contracts'
 
 interface LibraryStoreState {
   snapshot: LibrarySnapshot
@@ -11,7 +11,7 @@ interface LibraryStoreState {
   pickLibraryRoot: () => Promise<void>
   scanLibrary: () => Promise<void>
   setSongFavorite: (songId: number, favorite: boolean) => Promise<void>
-  createPlaylist: (name: string) => Promise<void>
+  createPlaylist: (name: string, songIds?: number[]) => Promise<void>
   deletePlaylist: (playlistId: number) => Promise<void>
   renamePlaylist: (playlistId: number, name: string) => Promise<void>
   reorderPlaylists: (playlistIds: number[]) => Promise<void>
@@ -19,7 +19,7 @@ interface LibraryStoreState {
   addSongsToPlaylist: (playlistId: number, songIds: number[]) => Promise<void>
   removeSongFromPlaylist: (playlistId: number, songId: number) => Promise<void>
   removeSongsFromPlaylist: (playlistId: number, songIds: number[]) => Promise<void>
-  reorderPlaylistSongs: (playlistId: number, songIds: number[]) => Promise<void>
+  reorderPlaylistSongs: (playlistId: number, songIds: number[], sortCriterion?: PlaylistSortCriterion) => Promise<void>
   replaceNowPlaying: (songIds: number[]) => Promise<void>
   removeSongFromNowPlaying: (songId: number) => Promise<void>
   deleteSongFromDisk: (songId: number) => Promise<void>
@@ -58,6 +58,7 @@ const emptySnapshot: LibrarySnapshot = {
     autoPlay: false,
     saveMusicProgress: false,
     hideMultiSelectCommandBarAfterOperation: true,
+    quitOnClose: true,
     lastPage: '/songs',
     lastPlaylistId: 0,
   },
@@ -157,7 +158,7 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
       set({ error: getErrorMessage(error) })
     }
   },
-  createPlaylist: async (name) => {
+  createPlaylist: async (name, songIds) => {
     if (!window.smplayer) {
       return
     }
@@ -165,7 +166,7 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
     set({ error: null })
 
     try {
-      await window.smplayer.createPlaylist(name)
+      await window.smplayer.createPlaylist(name, songIds)
       await get().refresh()
     } catch (error) {
       set({ error: getErrorMessage(error) })
@@ -269,7 +270,7 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
       set({ error: getErrorMessage(error) })
     }
   },
-  reorderPlaylistSongs: async (playlistId, songIds) => {
+  reorderPlaylistSongs: async (playlistId, songIds, sortCriterion) => {
     if (!window.smplayer) {
       return
     }
@@ -277,7 +278,7 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
     set({ error: null })
 
     try {
-      await window.smplayer.reorderPlaylistSongs(playlistId, songIds)
+      await window.smplayer.reorderPlaylistSongs(playlistId, songIds, sortCriterion)
       await get().refresh()
     } catch (error) {
       set({ error: getErrorMessage(error) })

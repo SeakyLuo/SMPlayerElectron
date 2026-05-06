@@ -1,20 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 
 import { AlbumArtControl } from '../components/AlbumArtControl'
 import { Icon } from '../components/icons'
+import { MenuFlyout } from '../components/MenuFlyout'
+import { getAddToPlaylistMenuFlyoutItem, type MenuFlyoutItem, type MenuFlyoutPosition } from '../components/MenuFlyoutHelper'
 import { MultiSelectCommandBar } from '../components/MultiSelectCommandBar'
 import { getSongArtists } from '../shared/artists'
 import type { LibraryPlaylist, LibrarySong } from '../shared/contracts'
 import { formatDuration } from '../shared/formatters'
 import type { Translator } from '../shared/i18n'
+import { useLibraryStore } from '../state/useLibraryStore'
 
 type AlbumSortCriterion = 'default' | 'name' | 'artist' | 'reverse'
 
 const ALBUM_TILE_WIDTH = 160
-const ALBUM_COLUMN_GAP = 24
-const ALBUM_GRID_RIGHT_PADDING = 14
-const ALBUM_ROW_HEIGHT = 268
+const ALBUM_COLUMN_GAP = 18
+const ALBUM_GRID_RIGHT_PADDING = 0
+const ALBUM_ROW_HEIGHT = 250
 const ALBUM_OVERSCAN_ROWS = 2
 
 interface AlbumView {
@@ -31,6 +34,7 @@ interface AlbumsPageProps {
   t: Translator
   onPlayTrack: (trackId: number, queueSongIds: number[]) => void
   onAddSongsToPlaylist: (playlistId: number, songIds: number[]) => void
+  onCreatePlaylistWithSongs: (name: string, songIds: number[]) => void
 }
 
 export function AlbumsPage({
@@ -39,16 +43,24 @@ export function AlbumsPage({
   t,
   onPlayTrack,
   onAddSongsToPlaylist,
+  onCreatePlaylistWithSongs,
 }: AlbumsPageProps) {
+  const navigate = useNavigate()
   const [searchQuery, setSearchQuery] = useState('')
   const [sortCriterion, setSortCriterion] = useState<AlbumSortCriterion>('default')
   const [sortMenuOpen, setSortMenuOpen] = useState(false)
   const [multiSelect, setMultiSelect] = useState(false)
   const [selectedAlbumNames, setSelectedAlbumNames] = useState<Set<string>>(new Set())
+  const [albumContextMenu, setAlbumContextMenu] = useState<(MenuFlyoutPosition & { album: AlbumView }) | null>(null)
+  const [addToMenu, setAddToMenu] = useState<(MenuFlyoutPosition & { songIds: number[]; defaultPlaylistName: string }) | null>(null)
+  const [albumArtPreview, setAlbumArtPreview] = useState<AlbumView | null>(null)
   const albumGridRef = useRef<HTMLDivElement | null>(null)
   const [albumScrollTop, setAlbumScrollTop] = useState(0)
   const [albumViewportHeight, setAlbumViewportHeight] = useState(640)
   const [albumGridWidth, setAlbumGridWidth] = useState(960)
+  const hideMultiSelectCommandBarAfterOperation = useLibraryStore(
+    (state) => state.snapshot.settings.hideMultiSelectCommandBarAfterOperation,
+  )
 
   const albums = useMemo(() => buildAlbumViews(songs, t), [songs, t])
   const visibleAlbums = useMemo(
@@ -56,8 +68,8 @@ export function AlbumsPage({
     [albums, searchQuery, sortCriterion],
   )
   const selectedAlbums = useMemo(
-    () => albums.filter((album) => selectedAlbumNames.has(album.name)),
-    [albums, selectedAlbumNames],
+    () => visibleAlbums.filter((album) => selectedAlbumNames.has(album.name)),
+    [selectedAlbumNames, visibleAlbums],
   )
   const selectedSongIds = selectedAlbums.flatMap((album) => album.songs.map((song) => song.id))
   const customPlaylists = playlists.filter((playlist) => !playlist.isBuiltIn)
@@ -81,6 +93,13 @@ export function AlbumsPage({
 
   const clearSelection = () => {
     setSelectedAlbumNames(new Set())
+  }
+
+  const hideSelectionAfterOperation = () => {
+    if (hideMultiSelectCommandBarAfterOperation) {
+      setMultiSelect(false)
+      clearSelection()
+    }
   }
 
   const toggleAlbumSelection = (albumName: string) => {
@@ -172,8 +191,7 @@ export function AlbumsPage({
             type="button"
             className={multiSelect ? 'albums-command is-active' : 'albums-command'}
             onClick={() => {
-              setMultiSelect((current) => !current)
-              clearSelection()
+              setMultiSelect(true)
             }}
           >
             <Icon name="menu" />
@@ -220,18 +238,24 @@ export function AlbumsPage({
                   multiSelect={multiSelect}
                   selected={selectedAlbumNames.has(album.name)}
                   t={t}
+                  onOpenAlbum={() => {
+                    navigate(`/albums/${encodeURIComponent(album.name)}`)
+                  }}
                   onPlayAlbum={() => {
                     onPlayTrack(album.songs[0].id, album.songs.map((song) => song.id))
                   }}
-                  onAddAlbum={() => {
-                    const [playlist] = customPlaylists
-                    if (playlist) {
-                      onAddSongsToPlaylist(playlist.id, album.songs.map((song) => song.id))
-                    }
+                  onAddAlbum={(position) => {
+                    setAlbumContextMenu(null)
+                    setAddToMenu({ ...position, songIds: album.songs.map((song) => song.id), defaultPlaylistName: album.name })
                   }}
-                  canAddAlbum={customPlaylists.length > 0}
+                  canAddAlbum={customPlaylists.some((playlist) =>
+                    album.songs.some((song) => !playlist.songIds.includes(song.id)),
+                  )}
                   onToggleSelection={() => {
                     toggleAlbumSelection(album.name)
+                  }}
+                  onOpenContextMenu={(position) => {
+                    setAlbumContextMenu({ ...position, album })
                   }}
                 />
               ))}
@@ -242,12 +266,13 @@ export function AlbumsPage({
 
       <MultiSelectCommandBar
         visible={multiSelect}
-        selectedCount={selectedAlbumNames.size}
+        selectedCount={selectedAlbums.length}
         t={t}
         playlists={customPlaylists}
         onPlay={playSelected}
-        onAddToPlaylist={(playlistId) => {
-          onAddSongsToPlaylist(playlistId, selectedSongIds)
+        onAddToPlaylistMenuClick={(event) => {
+          const rect = event.currentTarget.getBoundingClientRect()
+          setAddToMenu({ x: rect.left, y: rect.top - 8, songIds: selectedSongIds, defaultPlaylistName: t('common.albums') })
         }}
         onSelectAll={() => {
           setSelectedAlbumNames(new Set(visibleAlbums.map((album) => album.name)))
@@ -259,8 +284,137 @@ export function AlbumsPage({
           clearSelection()
         }}
       />
+
+      {albumContextMenu ? (
+        <MenuFlyout
+          position={albumContextMenu}
+          onClose={() => {
+            setAlbumContextMenu(null)
+          }}
+          items={getAlbumContextMenuItems({
+            album: albumContextMenu.album,
+            playlists: customPlaylists,
+            t,
+            onPlay: () => {
+              onPlayTrack(albumContextMenu.album.songs[0].id, albumContextMenu.album.songs.map((song) => song.id))
+            },
+            onAddToPlaylist: (playlistId) => {
+              onAddSongsToPlaylist(playlistId, albumContextMenu.album.songs.map((song) => song.id))
+            },
+            onSelect: () => {
+              setMultiSelect(true)
+              setSelectedAlbumNames(new Set([albumContextMenu.album.name]))
+            },
+            onSeeAlbumArt: () => {
+              setAlbumArtPreview(albumContextMenu.album)
+            },
+          })}
+        />
+      ) : null}
+
+      {addToMenu ? (
+        <MenuFlyout
+          position={addToMenu}
+          onClose={() => {
+            setAddToMenu(null)
+          }}
+          items={getAddToPlaylistsMenuItems({
+            playlists: customPlaylists,
+            songIds: addToMenu.songIds,
+            defaultPlaylistName: addToMenu.defaultPlaylistName,
+            t,
+            onCreatePlaylist: (name) => {
+              onCreatePlaylistWithSongs(name, addToMenu.songIds)
+              hideSelectionAfterOperation()
+            },
+            onAddToPlaylist: (playlistId) => {
+              onAddSongsToPlaylist(playlistId, addToMenu.songIds)
+              hideSelectionAfterOperation()
+            },
+          })}
+        />
+      ) : null}
+
+      {albumArtPreview ? (
+        <div
+          className="album-art-preview-backdrop"
+          role="presentation"
+          onClick={() => {
+            setAlbumArtPreview(null)
+          }}
+        >
+          <section
+            className="album-art-preview-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-label={t('context.seeAlbumArt')}
+            onClick={(event) => {
+              event.stopPropagation()
+            }}
+          >
+            <button
+              type="button"
+              className="album-art-preview-close"
+              aria-label={t('common.close')}
+              onClick={() => {
+                setAlbumArtPreview(null)
+              }}
+            >
+              <Icon name="close" />
+            </button>
+            <AlbumArtControl title={albumArtPreview.name} artworkUrl={albumArtPreview.artworkUrl} />
+            <strong title={albumArtPreview.name}>{albumArtPreview.name}</strong>
+          </section>
+        </div>
+      ) : null}
     </section>
   )
+}
+
+function getAddToPlaylistsMenuItems({
+  playlists,
+  songIds,
+  defaultPlaylistName,
+  t,
+  onCreatePlaylist,
+  onAddToPlaylist,
+}: {
+  playlists: LibraryPlaylist[]
+  songIds: number[]
+  defaultPlaylistName: string
+  t: Translator
+  onCreatePlaylist: (name: string) => void
+  onAddToPlaylist: (playlistId: number) => void
+}) {
+  const items: MenuFlyoutItem[] = [
+    {
+      key: 'new-playlist',
+      text: t('playlists.newName'),
+      icon: 'plus',
+      onClick: () => {
+        const name = window.prompt(t('playlists.newName'), defaultPlaylistName)
+        const nextName = name?.trim()
+        if (nextName) {
+          onCreatePlaylist(nextName)
+        }
+      },
+    },
+  ]
+  const addablePlaylists = playlists.filter((playlist) => songIds.some((songId) => !playlist.songIds.includes(songId)))
+  if (addablePlaylists.length > 0) {
+    items.push({ key: 'separator-playlists', text: '', separator: true })
+  }
+  for (const playlist of addablePlaylists) {
+    items.push({
+      key: `playlist-${playlist.id}`,
+      text: playlist.name,
+      icon: 'playlists',
+      onClick: () => {
+        onAddToPlaylist(playlist.id)
+      },
+    })
+  }
+  return items
 }
 
 function AlbumSortMenu({
@@ -338,61 +492,120 @@ function AlbumTile({
   multiSelect,
   selected,
   t,
+  onOpenAlbum,
   onPlayAlbum,
   onAddAlbum,
   canAddAlbum,
   onToggleSelection,
+  onOpenContextMenu,
 }: {
   album: AlbumView
   multiSelect: boolean
   selected: boolean
   t: Translator
+  onOpenAlbum: () => void
   onPlayAlbum: () => void
-  onAddAlbum: () => void
+  onAddAlbum: (position: MenuFlyoutPosition) => void
   canAddAlbum: boolean
   onToggleSelection: () => void
+  onOpenContextMenu: (position: MenuFlyoutPosition) => void
 }) {
+  const summary = t('albums.albumSummary', { songs: album.songs.length, duration: formatDuration(album.duration) })
   const content = (
     <>
       <AlbumArtControl title={album.name} artworkUrl={album.artworkUrl} />
       <div className="album-tile-copy">
-        <strong>{album.name}</strong>
-        <span>{album.artist}</span>
-        <small>{t('albums.albumSummary', { songs: album.songs.length, duration: formatDuration(album.duration) })}</small>
+        <strong title={album.name}>{album.name}</strong>
+        <span title={album.artist}>{album.artist}</span>
+        <small title={summary}>{summary}</small>
       </div>
     </>
   )
 
-  if (multiSelect) {
-    return (
+  return (
+    <article
+      className={[
+        'album-tile',
+        multiSelect ? 'is-selection-mode' : '',
+        selected ? 'is-selected' : '',
+      ].filter(Boolean).join(' ')}
+      onContextMenu={(event) => {
+        event.preventDefault()
+        onOpenContextMenu({ x: event.clientX, y: event.clientY })
+      }}
+    >
       <button
         type="button"
-        className={selected ? 'album-tile is-selected' : 'album-tile'}
-        onClick={onToggleSelection}
+        className="album-tile-surface"
+        title={album.name}
+        onClick={multiSelect ? onToggleSelection : onOpenAlbum}
       >
-        <span className="album-select-mark" aria-hidden="true">
-          <Icon name="check" />
-        </span>
         {content}
       </button>
-    )
-  }
-
-  return (
-    <article className="album-tile">
-      <Link to={`/albums/${encodeURIComponent(album.name)}`}>{content}</Link>
       <div className="album-hover-actions">
-        <button type="button" onClick={onPlayAlbum} aria-label={t('detail.playAlbum')}>
+        <button type="button" onClick={onPlayAlbum} aria-label={t('detail.playAlbum')} title={t('detail.playAlbum')}>
           <Icon name="play" />
         </button>
         {canAddAlbum ? (
-          <button type="button" className="album-add-button" onClick={onAddAlbum} aria-label={t('albums.addSelectedTo')}>
+          <button
+            type="button"
+            className="album-add-button"
+            onClick={(event) => {
+              event.stopPropagation()
+              onAddAlbum({ x: event.clientX, y: event.clientY })
+            }}
+            aria-label={t('context.addToPlaylist')}
+            title={t('context.addToPlaylist')}
+          >
             <span aria-hidden="true" />
           </button>
         ) : null}
       </div>
+      <span className="album-select-mark" aria-hidden="true">
+        <Icon name="check" />
+      </span>
     </article>
   )
+}
+
+function getAlbumContextMenuItems({
+  album,
+  playlists,
+  t,
+  onPlay,
+  onAddToPlaylist,
+  onSelect,
+  onSeeAlbumArt,
+}: {
+  album: AlbumView
+  playlists: LibraryPlaylist[]
+  t: Translator
+  onPlay: () => void
+  onAddToPlaylist: (playlistId: number) => void
+  onSelect: () => void
+  onSeeAlbumArt: () => void
+}) {
+  const songIds = album.songs.map((song) => song.id)
+  const items: MenuFlyoutItem[] = [
+    { key: 'play', text: t('context.play'), icon: 'play', onClick: onPlay },
+  ]
+  const addToItem = getAddToPlaylistMenuFlyoutItem({
+    playlists,
+    songIds,
+    t,
+    onAddToPlaylist,
+  })
+  if (addToItem) {
+    items.push(addToItem)
+  }
+  items.push({ key: 'select', text: t('context.select'), icon: 'menu', onClick: onSelect })
+  items.push({
+    key: 'see-album-art',
+    text: t('context.seeAlbumArt'),
+    icon: 'albums',
+    onClick: onSeeAlbumArt,
+  })
+  return items
 }
 
 function buildAlbumViews(songs: LibrarySong[], t: Translator): AlbumView[] {

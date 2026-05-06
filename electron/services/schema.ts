@@ -59,7 +59,8 @@ export function initializeSchema(db: DatabaseSync) {
       RemotePlayPassword TEXT DEFAULT '',
       UseFilenameNotMusicName INTEGER DEFAULT 0,
       NotificationLyricsSource INTEGER DEFAULT 0,
-      SaveLyricsImmediately INTEGER DEFAULT 0
+      SaveLyricsImmediately INTEGER DEFAULT 0,
+      QuitOnClose INTEGER DEFAULT 1
     );
 
     CREATE TABLE IF NOT EXISTS Music (
@@ -189,6 +190,7 @@ export function initializeSchema(db: DatabaseSync) {
     ['UseFilenameNotMusicName', `UseFilenameNotMusicName INTEGER DEFAULT 0`],
     ['NotificationLyricsSource', `NotificationLyricsSource INTEGER DEFAULT 0`],
     ['SaveLyricsImmediately', `SaveLyricsImmediately INTEGER DEFAULT 0`],
+    ['QuitOnClose', `QuitOnClose INTEGER DEFAULT 1`],
   ]) {
     addColumnIfMissing(db, 'Settings', columnName, columnDefinition)
   }

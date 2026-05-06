@@ -1,0 +1,487 @@
+.preference-page {
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 18px 20px;
+}
+
+.preference-info {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 50px;
+  margin: 0 0 12px;
+  padding: 0 4px;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.preference-info span {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid rgba(14, 25, 39, 0.5);
+  border-radius: 50%;
+  font-family: Georgia, serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+.preference-info p {
+  margin: 0;
+}
+
+.preference-section {
+  margin: 0 0 14px;
+  border: 1px solid rgba(126, 139, 154, 0.18);
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: 0 16px 38px rgba(68, 88, 112, 0.07);
+}
+
+.preference-section-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 48px 142px 150px;
+  align-items: center;
+  gap: 14px;
+  min-height: 52px;
+  padding: 0 14px;
+  border-bottom: 1px solid rgba(126, 139, 154, 0.12);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.preference-section-title,
+.preference-section-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.preference-section-title {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+}
+
+.preference-section-actions {
+  display: contents;
+}
+
+.preference-header-spacer {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.preference-section-title strong {
+  color: var(--text-strong);
+  font-size: 15px;
+  font-weight: 680;
+}
+
+.preference-section-title span {
+  border-radius: 999px;
+  background: rgba(var(--accent-rgb), 0.1);
+  color: var(--accent);
+  padding: 3px 9px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.preference-section-actions button {
+  min-height: 28px;
+  border: 1px solid rgba(14, 25, 39, 0.08);
+  border-radius: 999px;
+  background: rgba(14, 25, 39, 0.07);
+  color: var(--text-strong);
+  padding: 0 10px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.preference-section-actions .preference-expand-button {
+  grid-column: 4;
+  grid-row: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-self: end;
+  gap: 6px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--accent);
+  padding: 0 6px;
+}
+
+.preference-expand-button span {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform 0.16s ease;
+  color: var(--accent);
+}
+
+.preference-expand-button span.is-expanded {
+  transform: rotate(225deg) translate(-2px, -2px);
+}
+
+.preference-clear-button:hover,
+.preference-remove:hover {
+  background: rgba(14, 25, 39, 0.11);
+}
+
+.preference-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.preference-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 48px 142px 150px;
+  align-items: center;
+  gap: 14px;
+  min-height: 48px;
+  padding: 0 10px 0 14px;
+  background: rgba(238, 242, 246, 0.78);
+  position: relative;
+}
+
+.preference-item:nth-child(odd) {
+  background: rgba(238, 242, 246, 0.78);
+}
+
+.preference-item:nth-child(even) {
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.preference-item:hover {
+  background: rgba(var(--accent-rgb), 0.08);
+}
+
+.preference-item-copy {
+  min-width: 0;
+}
+
+.preference-item-copy strong,
+.preference-item-copy span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preference-item-copy strong {
+  font-size: 14px;
+  font-weight: 560;
+}
+
+.preference-item-copy span {
+  margin-top: 2px;
+  color: #9d3440;
+  font-size: 12px;
+}
+
+.preference-empty,
+.preference-loading {
+  min-height: 44px;
+  padding: 14px;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.preference-item-switch,
+.preference-section-switch {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  color: var(--text-strong);
+}
+
+.preference-section-switch {
+  grid-column: 3;
+  grid-row: 1;
+  min-width: 132px;
+}
+
+.preference-item-switch input,
+.preference-section-switch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.preference-item-switch span,
+.preference-section-switch span {
+  position: relative;
+  width: 44px;
+  height: 20px;
+  border-radius: 999px;
+  background: rgba(126, 139, 154, 0.62);
+}
+
+.preference-item-switch span::after,
+.preference-section-switch span::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 4px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.16s ease;
+}
+
+.preference-item-switch input:checked + span,
+.preference-section-switch input:checked + span {
+  background: var(--accent);
+}
+
+.preference-item-switch input:checked + span::after,
+.preference-section-switch input:checked + span::after {
+  transform: translateX(22px);
+}
+
+.preference-item-switch em,
+.preference-section-switch em {
+  min-width: 48px;
+  font-style: normal;
+  font-size: 13px;
+  font-weight: 560;
+  color: var(--text-muted);
+}
+
+.preference-level-select {
+  position: relative;
+  min-width: 0;
+  grid-column: 4;
+}
+
+.preference-level-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  height: 34px;
+  border: 1px solid rgba(126, 139, 154, 0.24);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.84);
+  color: var(--text-strong);
+  padding: 0 10px 0 12px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 620;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(14, 25, 39, 0.04);
+}
+
+.preference-level-trigger:hover,
+.preference-level-trigger[aria-expanded='true'] {
+  border-color: rgba(var(--accent-rgb), 0.34);
+  background: rgba(255, 255, 255, 0.98);
+}
+
+.preference-level-trigger svg {
+  width: 15px;
+  height: 15px;
+  color: var(--text-muted);
+}
+
+.preference-level-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  width: 156px;
+  overflow: hidden;
+  border: 1px solid rgba(126, 139, 154, 0.18);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 18px 44px rgba(20, 27, 36, 0.18);
+  padding: 6px;
+}
+
+.preference-remove {
+  justify-self: end;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(14, 25, 39, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--text-muted);
+  padding: 0;
+  cursor: pointer;
+  opacity: 0;
+  transform: translateX(4px);
+  transition: opacity 140ms ease, transform 140ms ease, background 140ms ease, color 140ms ease;
+}
+
+.preference-item:hover .preference-remove,
+.preference-remove:focus-visible {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.preference-remove:hover {
+  background: rgba(157, 52, 64, 0.1);
+  color: #9d3440;
+}
+
+.preference-remove svg {
+  width: 14px;
+  height: 14px;
+}
+
+.preference-level-menu button {
+  width: 100%;
+  min-height: 32px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-strong);
+  padding: 0 9px;
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.preference-level-menu button:hover {
+  background: rgba(var(--accent-rgb), 0.1);
+}
+
+.preference-level-menu button.is-selected {
+  background: var(--accent);
+  color: #fff;
+}
+
+.preference-page {
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.sidebar:hover,
+.workspace-content:hover,
+.table-shell:hover,
+.albums-grid:hover,
+.artists-list:hover,
+.artists-detail:hover,
+.now-playing-list-shell:hover,
+.lyrics-scroll-shell:hover,
+.preference-page:hover {
+  scrollbar-color: rgba(91, 105, 122, 0.5) transparent;
+}
+
+.sidebar::-webkit-scrollbar,
+.workspace-content::-webkit-scrollbar,
+.table-shell::-webkit-scrollbar,
+.albums-grid::-webkit-scrollbar,
+.artists-list::-webkit-scrollbar,
+.artists-detail::-webkit-scrollbar,
+.now-playing-list-shell::-webkit-scrollbar,
+.lyrics-scroll-shell::-webkit-scrollbar,
+.preference-page::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+.sidebar:hover::-webkit-scrollbar,
+.workspace-content:hover::-webkit-scrollbar,
+.table-shell:hover::-webkit-scrollbar,
+.albums-grid:hover::-webkit-scrollbar,
+.artists-list:hover::-webkit-scrollbar,
+.artists-detail:hover::-webkit-scrollbar,
+.now-playing-list-shell:hover::-webkit-scrollbar,
+.lyrics-scroll-shell:hover::-webkit-scrollbar,
+.preference-page:hover::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+.sidebar::-webkit-scrollbar:hover,
+.workspace-content::-webkit-scrollbar:hover,
+.table-shell::-webkit-scrollbar:hover,
+.albums-grid::-webkit-scrollbar:hover,
+.artists-list::-webkit-scrollbar:hover,
+.artists-detail::-webkit-scrollbar:hover,
+.now-playing-list-shell::-webkit-scrollbar:hover,
+.lyrics-scroll-shell::-webkit-scrollbar:hover,
+.preference-page::-webkit-scrollbar:hover {
+  width: 9px;
+  height: 9px;
+}
+
+.sidebar::-webkit-scrollbar-track,
+.workspace-content::-webkit-scrollbar-track,
+.table-shell::-webkit-scrollbar-track,
+.albums-grid::-webkit-scrollbar-track,
+.artists-list::-webkit-scrollbar-track,
+.artists-detail::-webkit-scrollbar-track,
+.now-playing-list-shell::-webkit-scrollbar-track,
+.lyrics-scroll-shell::-webkit-scrollbar-track,
+.preference-page::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar::-webkit-scrollbar-thumb,
+.workspace-content::-webkit-scrollbar-thumb,
+.table-shell::-webkit-scrollbar-thumb,
+.albums-grid::-webkit-scrollbar-thumb,
+.artists-list::-webkit-scrollbar-thumb,
+.artists-detail::-webkit-scrollbar-thumb,
+.now-playing-list-shell::-webkit-scrollbar-thumb,
+.lyrics-scroll-shell::-webkit-scrollbar-thumb,
+.preference-page::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background: transparent;
+  background-clip: content-box;
+}
+
+.sidebar:hover::-webkit-scrollbar-thumb,
+.workspace-content:hover::-webkit-scrollbar-thumb,
+.table-shell:hover::-webkit-scrollbar-thumb,
+.albums-grid:hover::-webkit-scrollbar-thumb,
+.artists-list:hover::-webkit-scrollbar-thumb,
+.artists-detail:hover::-webkit-scrollbar-thumb,
+.now-playing-list-shell:hover::-webkit-scrollbar-thumb,
+.lyrics-scroll-shell:hover::-webkit-scrollbar-thumb,
+.preference-page:hover::-webkit-scrollbar-thumb {
+  border-width: 4px;
+  background: rgba(91, 105, 122, 0.5);
+}
+
+.sidebar.is-scrollbar-hovered::-webkit-scrollbar-thumb,
+.workspace-content.is-scrollbar-hovered::-webkit-scrollbar-thumb,
+.table-shell.is-scrollbar-hovered::-webkit-scrollbar-thumb,
+.albums-grid.is-scrollbar-hovered::-webkit-scrollbar-thumb,
+.artists-list.is-scrollbar-hovered::-webkit-scrollbar-thumb,
+.artists-detail.is-scrollbar-hovered::-webkit-scrollbar-thumb,
+.now-playing-list-shell.is-scrollbar-hovered::-webkit-scrollbar-thumb,
+.lyrics-scroll-shell.is-scrollbar-hovered::-webkit-scrollbar-thumb,
+.preference-page.is-scrollbar-hovered::-webkit-scrollbar-thumb {
+  border-width: 0;
+  background: rgba(67, 80, 96, 0.68);
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover,
+.workspace-content::-webkit-scrollbar-thumb:hover,
+.table-shell::-webkit-scrollbar-thumb:hover,
+.albums-grid::-webkit-scrollbar-thumb:hover,
+.artists-list::-webkit-scrollbar-thumb:hover,
+.artists-detail::-webkit-scrollbar-thumb:hover,
+.now-playing-list-shell::-webkit-scrollbar-thumb:hover,
+.lyrics-scroll-shell::-webkit-scrollbar-thumb:hover,
+.preference-page::-webkit-scrollbar-thumb:hover {
+  border-width: 1px;
+}

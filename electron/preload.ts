@@ -9,9 +9,13 @@ const api: SmplayerApi = {
   getLyrics: (songId, mode) => ipcRenderer.invoke('lyrics:get', songId, mode),
   saveInternetLyricsToFile: (songId) => ipcRenderer.invoke('lyrics:save-internet-to-file', songId),
   revealItemInFolder: (path) => ipcRenderer.invoke('shell:reveal-item', path),
+  startWindowDrag: () => ipcRenderer.invoke('window:start-drag'),
+  stopWindowDrag: () => ipcRenderer.invoke('window:stop-drag'),
+  createLocalFolder: (rootPath, relativePath, name) => ipcRenderer.invoke('shell:create-local-folder', rootPath, relativePath, name),
   revealSystemLogs: () => ipcRenderer.invoke('shell:reveal-system-logs'),
   showTrackNotification: (track) => ipcRenderer.invoke('shell:show-track-notification', track),
   getSongArtwork: (songId) => ipcRenderer.invoke('library:get-artwork', songId),
+  pickAlbumArtwork: (albumName) => ipcRenderer.invoke('library:pick-album-artwork', albumName),
   deleteSongFromDisk: (songId) => ipcRenderer.invoke('library:delete-song-from-disk', songId),
   pickLibraryRoot: () => ipcRenderer.invoke('library:pick-root'),
   scanLibrary: (rootPath?: string) => ipcRenderer.invoke('library:scan', rootPath),
@@ -21,7 +25,7 @@ const api: SmplayerApi = {
   openFeedbackInBrowser: () => ipcRenderer.invoke('shell:open-feedback-browser'),
   setSongFavorite: (songId, favorite) =>
     ipcRenderer.invoke('library:set-favorite', songId, favorite),
-  createPlaylist: (name) => ipcRenderer.invoke('playlist:create', name),
+  createPlaylist: (name, songIds) => ipcRenderer.invoke('playlist:create', name, songIds),
   deletePlaylist: (playlistId) => ipcRenderer.invoke('playlist:delete', playlistId),
   renamePlaylist: (playlistId, name) => ipcRenderer.invoke('playlist:rename', playlistId, name),
   reorderPlaylists: (playlistIds) => ipcRenderer.invoke('playlist:reorder', playlistIds),
@@ -33,8 +37,8 @@ const api: SmplayerApi = {
     ipcRenderer.invoke('playlist:remove-song', playlistId, songId),
   removeSongsFromPlaylist: (playlistId, songIds) =>
     ipcRenderer.invoke('playlist:remove-songs', playlistId, songIds),
-  reorderPlaylistSongs: (playlistId, songIds) =>
-    ipcRenderer.invoke('playlist:reorder-songs', playlistId, songIds),
+  reorderPlaylistSongs: (playlistId, songIds, sortCriterion) =>
+    ipcRenderer.invoke('playlist:reorder-songs', playlistId, songIds, sortCriterion),
   replaceNowPlaying: (songIds) => ipcRenderer.invoke('queue:replace', songIds),
   removeSongFromNowPlaying: (songId) => ipcRenderer.invoke('queue:remove-song', songId),
   clearNowPlaying: () => ipcRenderer.invoke('queue:clear'),
@@ -47,6 +51,7 @@ const api: SmplayerApi = {
   clearRecentPlayed: () => ipcRenderer.invoke('recent-played:clear'),
   updateSettings: (update) => ipcRenderer.invoke('settings:update', update),
   updatePreferenceSettings: (update) => ipcRenderer.invoke('preferences:update-settings', update),
+  addPreferenceItem: (type, itemId, name, level) => ipcRenderer.invoke('preferences:add-item', type, itemId, name, level),
   updatePreferenceItem: (itemId, update) => ipcRenderer.invoke('preferences:update-item', itemId, update),
   removePreferenceItem: (itemId) => ipcRenderer.invoke('preferences:remove-item', itemId),
   clearInvalidPreferenceItems: (type) => ipcRenderer.invoke('preferences:clear-invalid', type),

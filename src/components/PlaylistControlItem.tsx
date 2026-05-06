@@ -134,6 +134,9 @@ export function PlaylistControlItem({
             type="button"
             aria-label={current && isPlaying ? t('context.pause') : t('context.play')}
             title={current && isPlaying ? t('context.pause') : t('context.play')}
+            onPointerDown={(event) => {
+              event.stopPropagation()
+            }}
             onClick={(event) => {
               event.stopPropagation()
               toggleHoverPlay()
@@ -146,6 +149,9 @@ export function PlaylistControlItem({
               type="button"
               aria-label={t('context.addToPlaylist')}
               title={t('context.addToPlaylist')}
+              onPointerDown={(event) => {
+                event.stopPropagation()
+              }}
               onClick={(event) => {
                 event.stopPropagation()
                 onAddToPlaylistClick(song, event.clientX, event.clientY)
@@ -159,6 +165,9 @@ export function PlaylistControlItem({
               type="button"
               aria-label={t('context.removeFromList')}
               title={t('context.removeFromList')}
+              onPointerDown={(event) => {
+                event.stopPropagation()
+              }}
               onClick={(event) => {
                 event.stopPropagation()
                 onRemoveFromListClick?.(song)

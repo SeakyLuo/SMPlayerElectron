@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 
 import { Icon, type IconName } from './icons'
-import type { SearchHistoryEntry } from '../shared/contracts'
+import type { LibraryPlaylist, SearchHistoryEntry } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
 
 interface NavLinkItem {
@@ -22,7 +22,6 @@ const secondaryLinks: NavLinkItem[] = [
   { to: '/now-playing', labelKey: 'common.nowPlaying', label: 'Now Playing', icon: 'nowPlaying' },
   { to: '/recent', labelKey: 'common.recent', label: 'Recent', icon: 'recent' },
   { to: '/local', labelKey: 'common.local', label: 'Local', icon: 'local' },
-  { to: '/playlists', labelKey: 'common.playlists', label: 'Playlists', icon: 'playlists' },
   { to: '/favorites', labelKey: 'common.myFavorites', label: 'My Favorites', icon: 'heart' },
 ]
 
@@ -37,6 +36,7 @@ interface SidebarProps {
   t: Translator
   collapsed: boolean
   appName: string
+  playlists: LibraryPlaylist[]
   canGoBack: boolean
   searchQuery: string
   recentSearches: SearchHistoryEntry[]
@@ -46,12 +46,14 @@ interface SidebarProps {
   onRecentSearchesClear: () => void
   onSearchClear: () => void
   onToggleCollapsed: () => void
+  getRestoredNavTarget: (target: string) => string
 }
 
 export function Sidebar({
   t,
   collapsed,
   appName,
+  playlists,
   canGoBack,
   searchQuery,
   recentSearches,
@@ -61,13 +63,18 @@ export function Sidebar({
   onRecentSearchRemove,
   onRecentSearchesClear,
   onToggleCollapsed,
+  getRestoredNavTarget,
 }: SidebarProps) {
   const [isSearchFocused, setIsSearchFocused] = useState(false)
+  const [isPlaylistNavExpanded, setIsPlaylistNavExpanded] = useState(false)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const focusSearchAfterExpandRef = useRef(false)
   const navigate = useNavigate()
+  const location = useLocation()
 
   const visibleRecentSearches = recentSearches.slice(0, 10)
+  const customPlaylists = playlists.filter((playlist) => !playlist.isBuiltIn)
+  const isPlaylistRoute = location.pathname.startsWith('/playlists')
 
   const showRecentSearches = isSearchFocused && visibleRecentSearches.length > 0
 
@@ -82,6 +89,12 @@ export function Sidebar({
     })
   }, [collapsed])
 
+  useEffect(() => {
+    if (isPlaylistRoute && !collapsed) {
+      setIsPlaylistNavExpanded(true)
+    }
+  }, [collapsed, isPlaylistRoute])
+
   const expandAndFocusSearch = () => {
     focusSearchAfterExpandRef.current = true
     onToggleCollapsed()
@@ -89,30 +102,26 @@ export function Sidebar({
 
   return (
     <aside className={`sidebar${collapsed ? ' is-collapsed' : ''}`}>
-      {canGoBack || !collapsed ? (
-        <div className="sidebar-titlebar">
-          {canGoBack ? (
-            <button
-              className="sidebar-back-button"
-              type="button"
-              aria-label={t('sidebar.back')}
-              title={t('sidebar.back')}
-              data-tooltip={t('sidebar.back')}
-              onClick={() => {
-                navigate(-1)
-              }}
-            >
-              <Icon name="arrowLeft" />
-            </button>
-          ) : null}
-          <span className="sidebar-app-name">{appName}</span>
-        </div>
-      ) : null}
+      <div className="sidebar-titlebar">
+        {canGoBack ? (
+          <button
+            className="sidebar-back-button"
+            type="button"
+            aria-label={t('sidebar.back')}
+            data-tooltip={t('sidebar.back')}
+            onClick={() => {
+              navigate(-1)
+            }}
+          >
+            <Icon name="arrowLeft" />
+          </button>
+        ) : null}
+        {!collapsed ? <span className="sidebar-app-name">{appName}</span> : null}
+      </div>
       <button
         className="sidebar-collapse-button"
         type="button"
         aria-label={collapsed ? t('sidebar.expandNavigation') : t('sidebar.collapseNavigation')}
-        title={collapsed ? t('sidebar.expandNavigation') : t('sidebar.collapseNavigation')}
         data-tooltip={collapsed ? t('sidebar.expandNavigation') : t('sidebar.collapseNavigation')}
         onClick={onToggleCollapsed}
       >
@@ -137,7 +146,6 @@ export function Sidebar({
             <button
               className="search-commit-button"
               type="submit"
-              title={t('common.search')}
               data-tooltip={t('common.search')}
               onClick={(event) => {
                 if (!collapsed) {
@@ -243,7 +251,7 @@ export function Sidebar({
         <span className="nav-section-label">{t('sidebar.library')}</span>
         <div className="nav-links">
           {primaryLinks.map((item) => (
-            <NavItem key={item.to} {...item} label={t(item.labelKey)} />
+            <NavItem key={item.to} {...item} label={t(item.labelKey)} targetTo={getRestoredNavTarget(item.to)} />
           ))}
         </div>
       </nav>
@@ -252,13 +260,51 @@ export function Sidebar({
         <span className="nav-section-label">{t('sidebar.playback')}</span>
         <div className="nav-links">
           {secondaryLinks.map((item) => (
-            <NavItem key={item.to} {...item} label={t(item.labelKey)} />
+            <NavItem key={item.to} {...item} label={t(item.labelKey)} targetTo={getRestoredNavTarget(item.to)} />
           ))}
         </div>
       </nav>
 
+      <nav className="nav-section playlist-nav-section" aria-label={t('common.playlists')}>
+        {collapsed ? (
+          <NavItem to="/playlists" icon="playlists" label={t('common.playlists')} targetTo={getRestoredNavTarget('/playlists')} />
+        ) : (
+          <>
+            <div className="playlist-nav-heading">
+              <NavItem to="/playlists" icon="playlists" label={t('common.playlists')} targetTo={getRestoredNavTarget('/playlists')} />
+              <button
+                type="button"
+                className="playlist-nav-toggle"
+                aria-label={isPlaylistNavExpanded ? t('sidebar.collapseNavigation') : t('sidebar.expandNavigation')}
+                aria-expanded={isPlaylistNavExpanded}
+                onClick={() => {
+                  setIsPlaylistNavExpanded((current) => !current)
+                }}
+              >
+                <Icon name={isPlaylistNavExpanded ? 'chevronUp' : 'chevronDown'} />
+              </button>
+            </div>
+            <div className={`playlist-nav-children${isPlaylistNavExpanded ? ' is-expanded' : ''}`}>
+              {customPlaylists.map((playlist) => (
+                <NavLink
+                  key={playlist.id}
+                  className={({ isActive }) => `playlist-nav-child${isActive ? ' active' : ''}`}
+                  to={`/playlists/${playlist.id}`}
+                  title={playlist.name}
+                >
+                  <span className="playlist-nav-child-icon" aria-hidden="true">
+                    <Icon name="playlists" />
+                  </span>
+                  <span>{playlist.name}</span>
+                </NavLink>
+              ))}
+            </div>
+          </>
+        )}
+      </nav>
+
       <div className="sidebar-footer">
-        <NavItem {...settingsLink} label={t(settingsLink.labelKey)} />
+        <NavItem {...settingsLink} label={t(settingsLink.labelKey)} targetTo={getRestoredNavTarget(settingsLink.to)} />
       </div>
     </aside>
   )
@@ -266,16 +312,19 @@ export function Sidebar({
 
 interface NavItemProps {
   to: string
+  targetTo?: string
   label: string
   icon: IconName
 }
 
-function NavItem({ to, label, icon }: NavItemProps) {
+function NavItem({ to, targetTo = to, label, icon }: NavItemProps) {
+  const location = useLocation()
+  const isActive = location.pathname === to || location.pathname.startsWith(`${to}/`)
+
   return (
     <NavLink
-      className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}
-      to={to}
-      title={label}
+      className={() => `nav-link${isActive ? ' active' : ''}`}
+      to={targetTo}
       data-tooltip={label}
     >
       <span className="nav-tag" aria-hidden="true">
