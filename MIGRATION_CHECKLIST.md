@@ -15,7 +15,7 @@ This file tracks the Electron rewrite against the original UWP app and is intend
 - [x] Search persistence and recent searches
 - [x] Better rescan handling for deleted files and metadata edge cases
 - [x] Multi-artist metadata parsing and artist drilldowns
-- [ ] More complete migration audit of legacy settings and schema fields
+- [x] More complete migration audit of legacy settings and schema fields
 
 ## Playlists
 
@@ -52,27 +52,27 @@ This file tracks the Electron rewrite against the original UWP app and is intend
 - [x] Notification-related settings
 - [x] `AutoLyrics`
 - [x] Language-related settings
+- [x] Renderer i18n wiring for the primary UI surfaces
 
 ## Media Features
 
 - [x] Album artwork extraction and display
 - [x] Local / embedded lyrics integration
 - [x] Internet lyrics search / lyrics source switching
-- [ ] Better duration fallback handling
-- [ ] Advanced playback behavior review
+- [x] Better duration fallback handling
+- [x] Advanced playback behavior review
 
 ## Desktop Integration
 
 - [x] Tray support
 - [x] Native notifications
-- [ ] Better global media key integration
-- [ ] Packaging polish
-- [ ] Window visual polish closer to the UWP app
+- [x] Better global media key integration
+- [x] Packaging polish
+- [x] Window visual polish closer to the UWP app
 
 ## Current Execution Order
 
-1. More complete migration audit of legacy settings and schema fields
-2. Global media key integration review
-3. Packaging polish
-4. Better duration fallback handling
-5. Advanced playback behavior review
+1. Sort/view criteria migration
+2. Mini-player and remote-play decisions
+3. Preference collection surfaces
+4. Release notes gating decision

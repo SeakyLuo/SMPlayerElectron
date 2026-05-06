@@ -6,6 +6,16 @@ export interface AppInfo {
 }
 
 export type PlaybackMode = 'once' | 'repeat' | 'repeat-one' | 'shuffle'
+export type GlobalMediaCommand = 'play-pause' | 'next' | 'previous' | 'stop'
+export type NotificationSendMode = 'music-changed' | 'never'
+export type NotificationDisplayMode = 'reminder' | 'normal' | 'quick'
+export type MusicLibrarySortCriterion =
+  | 'title'
+  | 'artist'
+  | 'album'
+  | 'duration'
+  | 'play-count'
+  | 'date-added'
 
 export interface LibrarySong {
   id: number
@@ -51,8 +61,19 @@ export interface SearchSnapshot {
 }
 
 export type LyricsSource = 'none' | 'lrc-file' | 'text-file' | 'music-file' | 'internet'
-export type LyricsRequestMode = 'auto' | 'local' | 'internet'
-export type PreferredLanguage = 'system' | 'zh-CN' | 'en-US' | 'ja-JP'
+export type LyricsRequestMode = 'internet' | 'local' | 'embedded' | 'auto'
+export type PreferredLanguage = 'system' | 'en-US' | 'zh-CN'
+export type PreferenceEntityType =
+  | 'song'
+  | 'artist'
+  | 'album'
+  | 'playlist'
+  | 'folder'
+  | 'recent-added'
+  | 'my-favorites'
+  | 'most-played'
+  | 'least-played'
+export type PreferenceLevel = 'do-not-appear' | 'dislike' | 'normal' | 'high' | 'higher' | 'very-high'
 
 export interface LyricsLine {
   id: number
@@ -65,6 +86,12 @@ export interface LyricsSnapshot {
   isSynced: boolean
   rawText: string
   lines: LyricsLine[]
+}
+
+export type LyricsSaveStatus = 'saved' | 'missing' | 'failed' | 'skipped'
+
+export interface LyricsSaveResult {
+  status: LyricsSaveStatus
 }
 
 export interface TrackNotificationPayload {
@@ -86,12 +113,15 @@ export interface SettingsSnapshot {
   useFilenameNotMusicName: boolean
   showCount: boolean
   themeColor: string
+  notificationSend: NotificationSendMode
+  notificationDisplay: NotificationDisplayMode
   showNotifications: boolean
   autoLyrics: boolean
   showLyricsInNotification: boolean
   notificationLyricsSource: LyricsRequestMode
   saveLyricsImmediately: boolean
   preferredLanguage: PreferredLanguage
+  musicLibrarySort: MusicLibrarySortCriterion
   lastMusicIndex: number
   volume: number
   isMuted: boolean
@@ -99,6 +129,7 @@ export interface SettingsSnapshot {
   musicProgress: number
   autoPlay: boolean
   saveMusicProgress: boolean
+  hideMultiSelectCommandBarAfterOperation: boolean
   lastPage: string
   lastPlaylistId: number
 }
@@ -113,6 +144,47 @@ export interface LibrarySnapshot {
   search: SearchSnapshot
 }
 
+export interface PreferenceItemSnapshot {
+  id: number
+  type: PreferenceEntityType
+  itemId: string
+  name: string
+  tooltip: string
+  isEnabled: boolean
+  level: PreferenceLevel
+  isValid: boolean
+  canRemove: boolean
+}
+
+export interface PreferenceSettingsSnapshot {
+  enabled: {
+    songs: boolean
+    artists: boolean
+    albums: boolean
+    playlists: boolean
+    folders: boolean
+  }
+  songs: PreferenceItemSnapshot[]
+  artists: PreferenceItemSnapshot[]
+  albums: PreferenceItemSnapshot[]
+  playlists: PreferenceItemSnapshot[]
+  folders: PreferenceItemSnapshot[]
+  others: PreferenceItemSnapshot[]
+}
+
+export interface PreferenceSettingsUpdate {
+  songs?: boolean
+  artists?: boolean
+  albums?: boolean
+  playlists?: boolean
+  folders?: boolean
+}
+
+export interface PreferenceItemUpdate {
+  isEnabled?: boolean
+  level?: PreferenceLevel
+}
+
 export interface ChooseLibraryRootResult {
   rootPath: string | null
 }
@@ -122,6 +194,11 @@ export interface ScanLibraryResult {
   songCount: number
   folderCount: number
   elapsedMs: number
+}
+
+export interface DataTransferResult {
+  canceled: boolean
+  path: string | null
 }
 
 export interface PlaybackSettingsUpdate {
@@ -136,14 +213,18 @@ export interface AppSettingsUpdate {
   useFilenameNotMusicName?: boolean
   showCount?: boolean
   themeColor?: string
+  notificationSend?: NotificationSendMode
+  notificationDisplay?: NotificationDisplayMode
   showNotifications?: boolean
   autoLyrics?: boolean
   showLyricsInNotification?: boolean
   notificationLyricsSource?: LyricsRequestMode
   saveLyricsImmediately?: boolean
   preferredLanguage?: PreferredLanguage
+  musicLibrarySort?: MusicLibrarySortCriterion
   autoPlay?: boolean
   saveMusicProgress?: boolean
+  hideMultiSelectCommandBarAfterOperation?: boolean
 }
 
 export interface ViewStateUpdate {
@@ -154,11 +235,20 @@ export interface ViewStateUpdate {
 export interface SmplayerApi {
   getAppInfo: () => Promise<AppInfo>
   getLibrarySnapshot: () => Promise<LibrarySnapshot>
+  getPreferenceSettings: () => Promise<PreferenceSettingsSnapshot>
   getLyrics: (songId: number, mode?: LyricsRequestMode) => Promise<LyricsSnapshot>
+  saveInternetLyricsToFile: (songId: number) => Promise<LyricsSaveResult>
   revealItemInFolder: (path: string) => Promise<void>
+  revealSystemLogs: () => Promise<void>
   showTrackNotification: (track: TrackNotificationPayload) => Promise<void>
+  getSongArtwork: (songId: number) => Promise<string>
+  deleteSongFromDisk: (songId: number) => Promise<void>
   pickLibraryRoot: () => Promise<ChooseLibraryRootResult>
   scanLibrary: (rootPath?: string) => Promise<ScanLibraryResult>
+  exportData: () => Promise<DataTransferResult>
+  importData: () => Promise<DataTransferResult>
+  sendFeedbackEmail: () => Promise<void>
+  openFeedbackInBrowser: () => Promise<void>
   setSongFavorite: (songId: number, favorite: boolean) => Promise<void>
   createPlaylist: (name: string) => Promise<void>
   deletePlaylist: (playlistId: number) => Promise<void>
@@ -175,9 +265,18 @@ export interface SmplayerApi {
   saveSearchQuery: (query: string) => Promise<void>
   addRecentSearch: (query: string) => Promise<void>
   removeRecentSearch: (entryId: number) => Promise<void>
+  removeRecentSearches: (entryIds: number[]) => Promise<void>
   clearRecentSearches: () => Promise<void>
+  removeRecentPlayed: (songIds: number[]) => Promise<void>
+  clearRecentPlayed: () => Promise<void>
   updateSettings: (update: AppSettingsUpdate) => Promise<void>
+  updatePreferenceSettings: (update: PreferenceSettingsUpdate) => Promise<void>
+  updatePreferenceItem: (itemId: number, update: PreferenceItemUpdate) => Promise<void>
+  removePreferenceItem: (itemId: number) => Promise<void>
+  clearInvalidPreferenceItems: (type: PreferenceEntityType) => Promise<void>
   saveViewState: (update: ViewStateUpdate) => Promise<void>
   savePlaybackSettings: (update: PlaybackSettingsUpdate) => Promise<void>
   markSongPlayed: (songId: number) => Promise<void>
+  updateSongDuration: (songId: number, duration: number) => Promise<void>
+  onGlobalMediaCommand: (callback: (command: GlobalMediaCommand) => void) => () => void
 }

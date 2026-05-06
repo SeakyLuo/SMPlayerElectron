@@ -1,13 +1,16 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 
+import { ArtworkImage } from '../components/ArtworkImage'
 import type { LibrarySong } from '../shared/contracts'
 import { getDisplayArtists } from '../shared/artists'
 import { formatDuration } from '../shared/formatters'
+import type { Translator } from '../shared/i18n'
 import { buildLocalRoute } from './localBrowserPaths'
 
 interface LocalBrowserPageProps {
   songs: LibrarySong[]
+  t: Translator
   rootPath: string
   currentRelativePath: string
   searchQuery: string
@@ -18,7 +21,7 @@ interface LocalBrowserPageProps {
   onPickLibraryRoot: () => void
   onScanLibrary: () => void
   onPlayTrack: (trackId: number, queueSongIds: number[]) => void
-  onRevealSong: (songPath: string) => void
+  onRevealSong: (songPath: string) => void | Promise<void>
 }
 
 interface FolderNode {
@@ -151,6 +154,7 @@ function matchesSongSearch(song: LibrarySong, searchQuery: string) {
 
 export function LocalBrowserPage({
   songs,
+  t,
   rootPath,
   currentRelativePath,
   searchQuery,
@@ -215,22 +219,23 @@ export function LocalBrowserPage({
       <section className="page-panel">
         <header className="page-header">
           <div>
-            <p className="eyebrow">Local browser</p>
-            <h2>Local</h2>
+            <p className="eyebrow">{t('local.eyebrow')}</p>
+            <h2>{t('common.local')}</h2>
             <p className="page-copy">
-              This page now targets a real folder browser. Pick a library root first so the
-              Electron app can build a navigable local tree from scanned songs.
+              {t(
+                'local.descriptionNoRoot',
+              )}
             </p>
           </div>
           <div className="page-actions">
             <button className="action-button secondary" type="button" onClick={onPickLibraryRoot}>
-              Choose Folder
+              {t('library.chooseFolder')}
             </button>
           </div>
         </header>
         <div className="empty-state">
-          <h3>No library root configured</h3>
-          <p>Select a music folder in settings or from here, then run a scan.</p>
+          <h3>{t('local.noRoot')}</h3>
+          <p>{t('local.noRootCopy')}</p>
         </div>
       </section>
     )
@@ -241,15 +246,17 @@ export function LocalBrowserPage({
       <section className="page-panel">
         <header className="page-header">
           <div>
-            <p className="eyebrow">Local browser</p>
-            <h2>Folder Not Found</h2>
+            <p className="eyebrow">{t('local.eyebrow')}</p>
+            <h2>{t('local.folderNotFound')}</h2>
             <p className="page-copy">
-              The requested folder path does not exist in the current scanned library snapshot.
+              {t(
+                'local.folderNotFoundDescription',
+              )}
             </p>
           </div>
           <div className="page-actions">
             <Link className="action-button secondary" to="/local">
-              Back To Root
+              {t('local.backToRoot')}
             </Link>
           </div>
         </header>
@@ -261,16 +268,17 @@ export function LocalBrowserPage({
     <section className="page-panel">
       <header className="page-header">
         <div>
-          <p className="eyebrow">Local browser</p>
+          <p className="eyebrow">{t('local.eyebrow')}</p>
           <h2>{currentNode.name}</h2>
           <p className="page-copy">
-            Browse the scanned folder tree directly. This replaces the old placeholder folder
-            cards with a routeable local browser backed by imported library paths.
+            {t(
+              'local.description',
+            )}
           </p>
         </div>
         <div className="page-actions">
           <button className="action-button secondary" type="button" onClick={onPickLibraryRoot}>
-            Choose Folder
+            {t('library.chooseFolder')}
           </button>
           <button
             className="action-button"
@@ -278,7 +286,7 @@ export function LocalBrowserPage({
             onClick={onScanLibrary}
             disabled={scanning || !rootPath}
           >
-            {scanning ? 'Scanning...' : 'Rescan Library'}
+            {scanning ? t('library.scanning') : t('local.rescan')}
           </button>
           <button
             className="action-button secondary"
@@ -290,13 +298,13 @@ export function LocalBrowserPage({
               }
             }}
           >
-            Play Folder
+            {t('local.playFolder')}
           </button>
         </div>
       </header>
 
       <div className="root-banner">
-        <span className="summary-label">Path</span>
+        <span className="summary-label">{t('local.path')}</span>
         <div className="local-breadcrumbs">
           <Link className="table-link" to="/local">
             {getFolderDisplayName('', rootPath)}
@@ -314,43 +322,43 @@ export function LocalBrowserPage({
             )
           })}
         </div>
-        {loading ? <span className="banner-hint">Refreshing library...</span> : null}
+        {loading ? <span className="banner-hint">{t('library.refreshing')}</span> : null}
       </div>
 
       {error ? <div className="error-banner">{error}</div> : null}
 
       <div className="summary-grid">
         <div className="summary-card">
-          <span className="summary-label">Child Folders</span>
+          <span className="summary-label">{t('local.childFolders')}</span>
           <span className="summary-value">{currentNode.childPaths.length}</span>
-          <p>Immediate folders nested under the current location.</p>
+          <p>{t('local.childFoldersCopy')}</p>
         </div>
         <div className="summary-card">
-          <span className="summary-label">Direct Songs</span>
+          <span className="summary-label">{t('local.directSongs')}</span>
           <span className="summary-value">{currentNode.directSongIds.length}</span>
-          <p>Tracks stored directly inside this folder.</p>
+          <p>{t('local.directSongsCopy')}</p>
         </div>
         <div className="summary-card">
-          <span className="summary-label">Subtree Songs</span>
+          <span className="summary-label">{t('local.subtreeSongs')}</span>
           <span className="summary-value">{currentNode.subtreeSongIds.length}</span>
-          <p>Total playable tracks including descendant folders.</p>
+          <p>{t('local.subtreeSongsCopy')}</p>
         </div>
         <div className="summary-card">
-          <span className="summary-label">Search Scope</span>
+          <span className="summary-label">{t('local.searchScope')}</span>
           <span className="summary-value settings-mode-value">
-            {searchQuery.trim() ? 'Subtree' : 'Current folder'}
+            {searchQuery.trim() ? t('local.scopeSubtree') : t('local.scopeCurrent')}
           </span>
-          <p>Search expands songs to the whole subtree so nested matches stay visible.</p>
+          <p>{t('local.searchScopeCopy')}</p>
         </div>
       </div>
 
       {childFolders.length > 0 ? (
         <section className="detail-panel">
           <div className="subpanel-header">
-            <span className="summary-label">Folders</span>
+            <span className="summary-label">{t('common.folders')}</span>
             <strong>
               {childFolders.length}
-              {searchQuery.trim() ? ' matching' : ''}
+              {searchQuery.trim() ? t('local.matching') : ''}
             </strong>
           </div>
           <div className="collection-grid">
@@ -360,24 +368,26 @@ export function LocalBrowserPage({
                 key={folder.relativePath || 'root'}
                 to={buildLocalRoute(folder.relativePath)}
               >
-                {folder.artworkUrl ? (
-                  <img
-                    className="collection-artwork"
-                    src={folder.artworkUrl}
-                    alt={`${folder.name} artwork`}
-                  />
-                ) : (
-                  <div className="collection-artwork collection-artwork-fallback" aria-hidden="true">
-                    <span>{folder.name.slice(0, 2).toUpperCase()}</span>
-                  </div>
-                )}
+                <ArtworkImage
+                  className="collection-artwork"
+                  src={folder.artworkUrl}
+                  title={folder.name}
+                  renderFallback={() => (
+                    <div className="collection-artwork collection-artwork-fallback" aria-hidden="true">
+                      <span>{folder.name.slice(0, 2).toUpperCase()}</span>
+                    </div>
+                  )}
+                />
                 <h3>{folder.name}</h3>
                 <p className="collection-subtitle">
-                  {folder.subtreeSongIds.length} song{folder.subtreeSongIds.length === 1 ? '' : 's'} in
-                  this branch
+                  {t('local.folderSongs', {
+                    count: folder.subtreeSongIds.length,
+                  })}
                 </p>
                 <p className="collection-detail">
-                  {folder.childPaths.length} child folder{folder.childPaths.length === 1 ? '' : 's'}
+                  {t('local.childFolderCount', {
+                    count: folder.childPaths.length,
+                  })}
                 </p>
               </Link>
             ))}
@@ -389,17 +399,19 @@ export function LocalBrowserPage({
         <div className="empty-state">
           <h3>
             {songs.length === 0
-              ? 'No songs scanned yet'
+              ? t('local.noSongsScanned')
               : searchQuery.trim()
-                ? `No songs match "${searchQuery}" in this branch`
-                : 'No songs directly inside this folder'}
+                ? t('local.noSongsBranch', {
+                    query: searchQuery,
+                  })
+                : t('local.noDirectSongs')}
           </h3>
           <p>
             {songs.length === 0
-              ? 'Run a library scan to populate the folder browser.'
+              ? t('local.scanPopulate')
               : searchQuery.trim()
-                ? 'Try a broader keyword. Local search matches title, artist, album, and file path.'
-                : 'Open a child folder or use search to inspect the full subtree.'}
+                ? t('local.searchHelp')
+                : t('local.openChildHelp')}
           </p>
         </div>
       ) : (
@@ -407,12 +419,12 @@ export function LocalBrowserPage({
           <table className="music-table">
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Artist</th>
-                <th>Album</th>
-                <th>Duration</th>
-                <th>Location</th>
-                <th>Action</th>
+                <th>{t('common.name')}</th>
+                <th>{t('common.artist')}</th>
+                <th>{t('common.album')}</th>
+                <th>{t('common.duration')}</th>
+                <th>{t('local.location')}</th>
+                <th>{t('local.action')}</th>
               </tr>
             </thead>
             <tbody>
@@ -426,14 +438,14 @@ export function LocalBrowserPage({
                 >
                   <td>{song.title}</td>
                   <td>{getDisplayArtists(song)}</td>
-                  <td>{song.album || 'Unknown album'}</td>
+                  <td>{song.album || t('common.albumUnknown')}</td>
                   <td>{formatDuration(song.duration)}</td>
                   <td className="local-path-cell">
                     {normalizePath(song.path)
                       .replace(`${normalizePath(rootPath)}/`, '')
                       .split('/')
                       .slice(0, -1)
-                      .join('/') || 'Library root'}
+                      .join('/') || t('local.libraryRoot')}
                   </td>
                   <td>
                     <button
@@ -444,7 +456,7 @@ export function LocalBrowserPage({
                         onRevealSong(song.path)
                       }}
                     >
-                      Reveal
+                      {t('local.reveal')}
                     </button>
                   </td>
                 </tr>

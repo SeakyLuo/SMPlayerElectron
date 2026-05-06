@@ -2,6 +2,14 @@ import { startTransition, useCallback, useEffect, useLayoutEffect, useRef, useSt
 
 import type { LibrarySnapshot, LibrarySong, PlaybackMode } from '../shared/contracts'
 import { getDisplayArtists } from '../shared/artists'
+import {
+  currentIndex,
+  moveNext,
+  movePrev,
+  normalizeQueueSongIds,
+  samePlaylist,
+  shuffleOthers,
+} from '../shared/mediaHelper'
 
 interface PlaybackController {
   currentTrack: LibrarySong | null
@@ -17,9 +25,15 @@ interface PlaybackController {
   playNext: () => Promise<void>
   playPrevious: () => Promise<void>
   seekToRatio: (ratio: number) => void
+  seekToSeconds: (seconds: number) => void
+  beginSeek: () => void
+  endSeek: () => void
+  seekBySeconds: (offsetSeconds: number) => void
   setVolumeLevel: (volume: number) => void
   toggleMute: () => void
   toggleShuffle: () => void
+  toggleRepeat: () => void
+  toggleRepeatOne: () => void
   cycleRepeatMode: () => void
 }
 
@@ -32,40 +46,6 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
 }
 
-function getTrackIndex(songIds: number[], trackId: number | null) {
-  if (trackId == null) {
-    return -1
-  }
-
-  return songIds.findIndex((songId) => songId === trackId)
-}
-
-function getRandomIndex(length: number, currentIndex: number) {
-  if (length <= 1) {
-    return 0
-  }
-
-  let nextIndex = currentIndex
-  while (nextIndex === currentIndex) {
-    nextIndex = Math.floor(Math.random() * length)
-  }
-
-  return nextIndex
-}
-
-function areArraysEqual(left: number[], right: number[]) {
-  if (left.length !== right.length) {
-    return false
-  }
-
-  return left.every((value, index) => value === right[index])
-}
-
-function normalizeQueueSongIds(songIds: number[], songs: LibrarySong[]) {
-  const songIdsInLibrary = new Set(songs.map((song) => song.id))
-  return songIds.filter((songId) => songIdsInLibrary.has(songId))
-}
-
 export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackController {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const loadedTrackIdRef = useRef<number | null>(null)
@@ -74,6 +54,8 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
   const hydratedRef = useRef(false)
   const queueOverrideRef = useRef<number[] | null>(null)
   const queueSongIdsRef = useRef<number[]>([])
+  const persistedDurationByTrackRef = useRef(new Map<number, number>())
+  const wasPlayingBeforeSeekRef = useRef(false)
   const loadTrackRef = useRef<(trackId: number, options: LoadTrackOptions) => Promise<void>>(
     async () => {},
   )
@@ -107,9 +89,9 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
     isMutedRef.current = isMuted
     modeRef.current = mode
 
-    if (
+      if (
       queueOverrideRef.current &&
-      areArraysEqual(queueOverrideRef.current, snapshotQueueSongIds)
+      samePlaylist(queueOverrideRef.current, snapshotQueueSongIds)
     ) {
       queueOverrideRef.current = null
     }
@@ -149,7 +131,7 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
       }
 
       const lastMusicIndex =
-        override.lastMusicIndex ?? getTrackIndex(getPlaybackSongIds(), currentTrackIdRef.current)
+        override.lastMusicIndex ?? currentIndex(getPlaybackSongIds(), currentTrackIdRef.current)
       const shouldSaveProgress = snapshotRef.current.settings.saveMusicProgress
       const nextMusicProgress = shouldSaveProgress
         ? override.musicProgress ?? progressSecondsRef.current
@@ -165,6 +147,22 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
     },
     [getPlaybackSongIds],
   )
+
+  const persistResolvedDuration = useCallback((duration: number) => {
+    const trackId = currentTrackIdRef.current
+    const nextDuration = Math.round(duration)
+
+    if (!window.smplayer || trackId == null || !Number.isFinite(nextDuration) || nextDuration <= 0) {
+      return
+    }
+
+    if (persistedDurationByTrackRef.current.get(trackId) === nextDuration) {
+      return
+    }
+
+    persistedDurationByTrackRef.current.set(trackId, nextDuration)
+    void window.smplayer.updateSongDuration(trackId, nextDuration)
+  }, [])
 
   useLayoutEffect(() => {
     loadTrackRef.current = async (trackId: number, options: LoadTrackOptions) => {
@@ -203,7 +201,7 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
       }
 
       await persistPlaybackSettings({
-        lastMusicIndex: getTrackIndex(getPlaybackSongIds(), trackId),
+        lastMusicIndex: currentIndex(getPlaybackSongIds(), trackId),
         musicProgress: options.startAt,
       })
     }
@@ -225,6 +223,7 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
           : activeTrack?.duration ?? 0
 
       setDurationSeconds(nextDuration)
+      persistResolvedDuration(nextDuration)
 
       if (pendingStartSecondsRef.current > 0) {
         audio.currentTime = clamp(
@@ -254,6 +253,7 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
     const handleDurationChange = () => {
       if (Number.isFinite(audio.duration) && audio.duration > 0) {
         setDurationSeconds(audio.duration)
+        persistResolvedDuration(audio.duration)
       }
     }
 
@@ -268,7 +268,7 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
 
     const handleEnded = async () => {
       const playbackSongIds = getPlaybackSongIds()
-      const currentIndex = getTrackIndex(playbackSongIds, currentTrackIdRef.current)
+      const activeIndex = currentIndex(playbackSongIds, currentTrackIdRef.current)
       const activeTrack =
         currentTrackIdRef.current == null
           ? null
@@ -288,13 +288,7 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
         return
       }
 
-      if (modeRef.current === 'shuffle') {
-        const nextIndex = getRandomIndex(playbackSongIds.length, Math.max(currentIndex, 0))
-        await loadTrackRef.current(playbackSongIds[nextIndex], { autoplay: true, startAt: 0 })
-        return
-      }
-
-      const nextIndex = currentIndex + 1
+      const nextIndex = activeIndex + 1
       if (nextIndex < playbackSongIds.length) {
         await loadTrackRef.current(playbackSongIds[nextIndex], { autoplay: true, startAt: 0 })
         return
@@ -334,7 +328,7 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
       audio.removeEventListener('ended', handleEnded)
       audioRef.current = null
     }
-  }, [getPlaybackSongIds, persistPlaybackSettings])
+  }, [getPlaybackSongIds, persistPlaybackSettings, persistResolvedDuration])
 
   useEffect(() => {
     const audio = audioRef.current
@@ -440,13 +434,10 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
       return
     }
 
-    const currentIndex = getTrackIndex(playbackSongIds, currentTrackIdRef.current)
-    const nextIndex =
-      modeRef.current === 'shuffle'
-        ? getRandomIndex(playbackSongIds.length, Math.max(currentIndex, 0))
-        : (Math.max(currentIndex, 0) + 1) % playbackSongIds.length
-
-    await loadTrackRef.current(playbackSongIds[nextIndex], { autoplay: true, startAt: 0 })
+    const nextTrackId = moveNext(playbackSongIds, currentTrackIdRef.current, modeRef.current)
+    if (nextTrackId != null) {
+      await loadTrackRef.current(nextTrackId, { autoplay: true, startAt: 0 })
+    }
   }, [getPlaybackSongIds])
 
   const playPrevious = useCallback(async () => {
@@ -457,18 +448,11 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
       return
     }
 
-    if (audio.currentTime > 5) {
-      audio.currentTime = 0
-      setProgressSeconds(0)
-      await persistPlaybackSettings({ musicProgress: 0 })
-      return
+    const previousTrackId = movePrev(playbackSongIds, currentTrackIdRef.current, modeRef.current)
+    if (previousTrackId != null) {
+      await loadTrackRef.current(previousTrackId, { autoplay: true, startAt: 0 })
     }
-
-    const currentIndex = getTrackIndex(playbackSongIds, currentTrackIdRef.current)
-    const previousIndex = currentIndex <= 0 ? playbackSongIds.length - 1 : currentIndex - 1
-
-    await loadTrackRef.current(playbackSongIds[previousIndex], { autoplay: true, startAt: 0 })
-  }, [getPlaybackSongIds, persistPlaybackSettings])
+  }, [getPlaybackSongIds])
 
   const seekToRatio = useCallback(
     (ratio: number) => {
@@ -479,6 +463,60 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
       }
 
       const nextTime = clamp(ratio, 0, 1) * safeDuration
+      audio.currentTime = nextTime
+      setProgressSeconds(nextTime)
+      void persistPlaybackSettings({ musicProgress: nextTime })
+    },
+    [persistPlaybackSettings],
+  )
+
+  const seekToSeconds = useCallback(
+    (seconds: number) => {
+      const audio = audioRef.current
+      const safeDuration = durationSecondsRef.current
+      if (!audio || safeDuration <= 0) {
+        return
+      }
+
+      const nextTime = clamp(seconds, 0, safeDuration)
+      audio.currentTime = nextTime
+      setProgressSeconds(nextTime)
+      void persistPlaybackSettings({ musicProgress: nextTime })
+    },
+    [persistPlaybackSettings],
+  )
+
+  const beginSeek = useCallback(() => {
+    const audio = audioRef.current
+    if (!audio) {
+      return
+    }
+
+    wasPlayingBeforeSeekRef.current = !audio.paused
+    audio.pause()
+  }, [])
+
+  const endSeek = useCallback(() => {
+    const audio = audioRef.current
+    if (!audio || !wasPlayingBeforeSeekRef.current) {
+      return
+    }
+
+    void audio.play().catch(() => {
+      setIsPlaying(false)
+    })
+  }, [])
+
+  const seekBySeconds = useCallback(
+    (offsetSeconds: number) => {
+      const audio = audioRef.current
+      const safeDuration = durationSecondsRef.current
+
+      if (!audio || safeDuration <= 0) {
+        return
+      }
+
+      const nextTime = clamp(audio.currentTime + offsetSeconds, 0, safeDuration)
       audio.currentTime = nextTime
       setProgressSeconds(nextTime)
       void persistPlaybackSettings({ musicProgress: nextTime })
@@ -522,6 +560,23 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
 
   const toggleShuffle = useCallback(() => {
     const nextMode = modeRef.current === 'shuffle' ? 'once' : 'shuffle'
+    if (nextMode === 'shuffle') {
+      queueOverrideRef.current = shuffleOthers(getPlaybackSongIds(), currentTrackIdRef.current)
+      queueSongIdsRef.current = queueOverrideRef.current
+      void window.smplayer?.replaceNowPlaying(queueOverrideRef.current)
+    }
+    setMode(nextMode)
+    void persistPlaybackSettings({ mode: nextMode })
+  }, [getPlaybackSongIds, persistPlaybackSettings])
+
+  const toggleRepeat = useCallback(() => {
+    const nextMode = modeRef.current === 'repeat' ? 'once' : 'repeat'
+    setMode(nextMode)
+    void persistPlaybackSettings({ mode: nextMode })
+  }, [persistPlaybackSettings])
+
+  const toggleRepeatOne = useCallback(() => {
+    const nextMode = modeRef.current === 'repeat-one' ? 'once' : 'repeat-one'
     setMode(nextMode)
     void persistPlaybackSettings({ mode: nextMode })
   }, [persistPlaybackSettings])
@@ -593,6 +648,12 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
       const ratio = details.seekTime / durationSecondsRef.current
       seekToRatio(ratio)
     })
+    navigator.mediaSession.setActionHandler('seekbackward', (details) => {
+      seekBySeconds(-(details.seekOffset ?? 10))
+    })
+    navigator.mediaSession.setActionHandler('seekforward', (details) => {
+      seekBySeconds(details.seekOffset ?? 10)
+    })
 
     return () => {
       navigator.mediaSession.setActionHandler('play', null)
@@ -600,8 +661,93 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
       navigator.mediaSession.setActionHandler('previoustrack', null)
       navigator.mediaSession.setActionHandler('nexttrack', null)
       navigator.mediaSession.setActionHandler('seekto', null)
+      navigator.mediaSession.setActionHandler('seekbackward', null)
+      navigator.mediaSession.setActionHandler('seekforward', null)
     }
-  }, [playNext, playPrevious, seekToRatio, togglePlayPause])
+  }, [playNext, playPrevious, seekBySeconds, seekToRatio, togglePlayPause])
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target
+      const isEditableTarget =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target instanceof HTMLElement && target.isContentEditable)
+
+      if (isEditableTarget) {
+        return
+      }
+
+      if (event.code === 'Space') {
+        event.preventDefault()
+        void togglePlayPause()
+        return
+      }
+
+      if (event.altKey || event.metaKey) {
+        return
+      }
+
+      if (event.ctrlKey && event.key === 'ArrowRight') {
+        event.preventDefault()
+        void playNext()
+        return
+      }
+
+      if (event.ctrlKey && event.key === 'ArrowLeft') {
+        event.preventDefault()
+        void playPrevious()
+        return
+      }
+
+      if (event.key === 'ArrowRight') {
+        event.preventDefault()
+        seekBySeconds(event.shiftKey ? 30 : 5)
+        return
+      }
+
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault()
+        seekBySeconds(event.shiftKey ? -30 : -5)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [playNext, playPrevious, seekBySeconds, togglePlayPause])
+
+  useEffect(() => {
+    if (!window.smplayer) {
+      return
+    }
+
+    return window.smplayer.onGlobalMediaCommand((command) => {
+      if (command === 'play-pause') {
+        void togglePlayPause()
+        return
+      }
+
+      if (command === 'next') {
+        void playNext()
+        return
+      }
+
+      if (command === 'previous') {
+        void playPrevious()
+        return
+      }
+
+      const audio = audioRef.current
+      if (audio) {
+        audio.pause()
+        void persistPlaybackSettings({ musicProgress: audio.currentTime })
+      }
+    })
+  }, [persistPlaybackSettings, playNext, playPrevious, togglePlayPause])
 
   return {
     currentTrack,
@@ -617,9 +763,15 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
     playNext,
     playPrevious,
     seekToRatio,
+    seekToSeconds,
+    beginSeek,
+    endSeek,
+    seekBySeconds,
     setVolumeLevel,
     toggleMute,
     toggleShuffle,
+    toggleRepeat,
+    toggleRepeatOne,
     cycleRepeatMode,
   }
 }

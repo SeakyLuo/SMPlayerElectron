@@ -1,16 +1,22 @@
 import { useMemo, useState, type Dispatch, type SetStateAction } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 
-import type { LibrarySnapshot, LibrarySong } from '../shared/contracts'
+import { HeaderedPlaylistControl } from '../components/HeaderedPlaylistControl'
+import type { LibrarySnapshot } from '../shared/contracts'
 import { getDisplayArtists } from '../shared/artists'
 import { formatDuration } from '../shared/formatters'
+import type { Translator } from '../shared/i18n'
 
 interface PlaylistsPageProps {
   snapshot: LibrarySnapshot
+  t: Translator
   selectedTrackId: number | null
+  isPlaying: boolean
   searchQuery: string
   error: string | null
   initialPlaylistId: number
   onPlayTrack: (trackId: number, queueSongIds: number[]) => void
+  onTogglePlayPause: () => void
   onSelectPlaylist: (playlistId: number) => void
   onCreatePlaylist: (name: string) => void
   onDeletePlaylist: (playlistId: number) => void
@@ -18,7 +24,6 @@ interface PlaylistsPageProps {
   onReorderPlaylists: (playlistIds: number[]) => void
   onAddSongToPlaylist: (playlistId: number, songId: number) => void
   onAddSongsToPlaylist: (playlistId: number, songIds: number[]) => void
-  onRemoveSongFromPlaylist: (playlistId: number, songId: number) => void
   onRemoveSongsFromPlaylist: (playlistId: number, songIds: number[]) => void
   onReorderPlaylistSongs: (playlistId: number, songIds: number[]) => void
 }
@@ -30,23 +35,6 @@ function matchesSearch(searchQuery: string, ...parts: Array<string | number>) {
   }
 
   return parts.join(' ').toLocaleLowerCase().includes(normalizedSearchQuery)
-}
-
-function moveSong(songIds: number[], songId: number, offset: -1 | 1) {
-  const currentIndex = songIds.findIndex((value) => value === songId)
-  const nextIndex = currentIndex + offset
-
-  if (currentIndex < 0 || nextIndex < 0 || nextIndex >= songIds.length) {
-    return null
-  }
-
-  const nextSongIds = songIds.slice()
-  ;[nextSongIds[currentIndex], nextSongIds[nextIndex]] = [
-    nextSongIds[nextIndex],
-    nextSongIds[currentIndex],
-  ]
-
-  return nextSongIds
 }
 
 function movePlaylist(playlistIds: number[], playlistId: number, offset: -1 | 1) {
@@ -68,11 +56,14 @@ function movePlaylist(playlistIds: number[], playlistId: number, offset: -1 | 1)
 
 export function PlaylistsPage({
   snapshot,
+  t,
   selectedTrackId,
+  isPlaying,
   searchQuery,
   error,
   initialPlaylistId,
   onPlayTrack,
+  onTogglePlayPause,
   onSelectPlaylist,
   onCreatePlaylist,
   onDeletePlaylist,
@@ -80,26 +71,23 @@ export function PlaylistsPage({
   onReorderPlaylists,
   onAddSongToPlaylist,
   onAddSongsToPlaylist,
-  onRemoveSongFromPlaylist,
   onRemoveSongsFromPlaylist,
   onReorderPlaylistSongs,
 }: PlaylistsPageProps) {
+  const navigate = useNavigate()
+  const params = useParams()
+  const routePlaylistId = params.playlistId ? Number(params.playlistId) : null
   const [draftName, setDraftName] = useState('')
-  const [selectedPlaylistId, setSelectedPlaylistId] = useState<number | null>(null)
-  const [editingPlaylistId, setEditingPlaylistId] = useState<number | null>(null)
-  const [renameDraft, setRenameDraft] = useState('')
-  const [selectedPlaylistSongIds, setSelectedPlaylistSongIds] = useState<number[]>([])
   const [selectedAvailableSongIds, setSelectedAvailableSongIds] = useState<number[]>([])
-  const effectiveSelectedPlaylistId =
-    selectedPlaylistId != null &&
-    snapshot.playlists.some((playlist) => playlist.id === selectedPlaylistId)
-      ? selectedPlaylistId
+  const selectedPlaylistId =
+    routePlaylistId != null && snapshot.playlists.some((playlist) => playlist.id === routePlaylistId)
+      ? routePlaylistId
       : (snapshot.playlists.some((playlist) => playlist.id === initialPlaylistId)
           ? initialPlaylistId
           : snapshot.playlists[0]?.id ?? null)
 
   const selectedPlaylist =
-    snapshot.playlists.find((playlist) => playlist.id === effectiveSelectedPlaylistId) ?? null
+    snapshot.playlists.find((playlist) => playlist.id === selectedPlaylistId) ?? null
   const songsById = useMemo(
     () => new Map(snapshot.songs.map((song) => [song.id, song])),
     [snapshot.songs],
@@ -108,7 +96,7 @@ export function PlaylistsPage({
     () =>
       (selectedPlaylist?.songIds ?? [])
         .map((songId) => songsById.get(songId) ?? null)
-        .filter((song): song is LibrarySong => song != null),
+        .filter((song) => song != null),
     [selectedPlaylist?.songIds, songsById],
   )
   const playlistSongs = useMemo(
@@ -125,7 +113,7 @@ export function PlaylistsPage({
       ),
     [fullPlaylistSongs, searchQuery, selectedPlaylist?.name],
   )
-  const playlistQueueSongIds = fullPlaylistSongs.map((song) => song.id)
+  const playlistDuration = fullPlaylistSongs.reduce((total, song) => total + song.duration, 0)
   const selectedSongIds = useMemo(
     () => new Set(fullPlaylistSongs.map((song) => song.id)),
     [fullPlaylistSongs],
@@ -139,13 +127,7 @@ export function PlaylistsPage({
       ),
     [searchQuery, selectedSongIds, snapshot.songs],
   )
-  const isEditingSelectedPlaylist =
-    selectedPlaylist != null && editingPlaylistId === selectedPlaylist.id
-  const visiblePlaylistSongIds = playlistSongs.map((song) => song.id)
   const visibleAvailableSongIds = availableSongs.slice(0, 18).map((song) => song.id)
-  const effectiveSelectedPlaylistSongIds = selectedPlaylistSongIds.filter((songId) =>
-    playlistQueueSongIds.includes(songId),
-  )
   const effectiveSelectedAvailableSongIds = selectedAvailableSongIds.filter((songId) =>
     availableSongs.some((song) => song.id === songId),
   )
@@ -168,12 +150,9 @@ export function PlaylistsPage({
     <section className="page-panel">
       <header className="page-header">
         <div>
-          <p className="eyebrow">Custom and built-in playlists</p>
-          <h2>Playlists</h2>
-          <p className="page-copy">
-            This view now reads playlist membership from SQLite. Custom playlists can be
-            renamed here, and their song order is persisted directly in the playlist items.
-          </p>
+          <p className="eyebrow">{t('playlists.eyebrow')}</p>
+          <h2>{t('common.playlists')}</h2>
+          <p className="page-copy">{t('playlists.description')}</p>
         </div>
         <form
           className="playlist-create-form"
@@ -192,13 +171,13 @@ export function PlaylistsPage({
           <input
             type="text"
             value={draftName}
-            placeholder="New playlist name"
+            placeholder={t('playlists.newName')}
             onChange={(event) => {
               setDraftName(event.currentTarget.value)
             }}
           />
           <button className="action-button" type="submit" disabled={!draftName.trim()}>
-            Create
+            {t('playlists.create')}
           </button>
         </form>
       </header>
@@ -208,18 +187,18 @@ export function PlaylistsPage({
       <div className="playlist-layout">
         <aside className="playlist-sidebar-panel">
           <div className="playlist-panel-header">
-            <span className="summary-label">Available Playlists</span>
+            <span className="summary-label">{t('playlists.available')}</span>
             <strong>{snapshot.playlists.length}</strong>
           </div>
           {snapshot.playlists.length === 0 ? (
             <div className="empty-state compact">
-              <h3>No playlists yet</h3>
-              <p>Create a custom playlist or mark songs as favorites to populate this list.</p>
+              <h3>{t('playlists.none')}</h3>
+              <p>{t('playlists.noneCopy')}</p>
             </div>
           ) : (
             <div className="playlist-list">
               {snapshot.playlists.map((playlist) => {
-                const isActiveSelection = playlist.id === effectiveSelectedPlaylistId
+                const isActiveSelection = playlist.id === selectedPlaylistId
                 const customPlaylistIndex = customPlaylistIds.indexOf(playlist.id)
                 const canMovePlaylistUp = customPlaylistIndex > 0
                 const canMovePlaylistDown =
@@ -234,14 +213,16 @@ export function PlaylistsPage({
                       type="button"
                       className={`playlist-list-item${isActiveSelection ? ' selected' : ''}`}
                       onClick={() => {
-                        setSelectedPlaylistId(playlist.id)
+                        navigate(`/playlists/${playlist.id}`)
                         onSelectPlaylist(playlist.id)
                       }}
                     >
                       <span>{playlist.name}</span>
                       <small>
-                        {playlist.songCount} song{playlist.songCount === 1 ? '' : 's'}
-                        {playlist.isBuiltIn ? ' - built-in' : ''}
+                        {t('playlists.songCount', {
+                          count: playlist.songCount,
+                        })}
+                        {playlist.isBuiltIn ? ` - ${t('playlists.builtIn')}` : ''}
                       </small>
                     </button>
                     {!playlist.isBuiltIn ? (
@@ -257,7 +238,7 @@ export function PlaylistsPage({
                             }
                           }}
                         >
-                          Up
+                          {t('playlists.up')}
                         </button>
                         <button
                           type="button"
@@ -270,7 +251,7 @@ export function PlaylistsPage({
                             }
                           }}
                         >
-                          Down
+                          {t('playlists.down')}
                         </button>
                       </div>
                     ) : null}
@@ -281,262 +262,77 @@ export function PlaylistsPage({
           )}
         </aside>
 
-        <div className="playlist-detail-panel">
+        <div className="playlist-detail-panel playlist-detail-panel-headered">
           {!selectedPlaylist ? (
             <div className="empty-state">
-              <h3>Select a playlist</h3>
-              <p>Choose a playlist from the left to inspect its songs and manage membership.</p>
+              <h3>{t('playlists.selectPlaylist')}</h3>
+              <p>{t('playlists.selectPlaylistCopy')}</p>
             </div>
           ) : (
             <>
-              <div className="playlist-detail-header">
-                <div>
-                  <span className="summary-label">Selected Playlist</span>
-                  {isEditingSelectedPlaylist ? (
-                    <form
-                      className="playlist-rename-form"
-                      onSubmit={(event) => {
-                        event.preventDefault()
-                        const nextName = renameDraft.trim()
+              <HeaderedPlaylistControl
+                type={selectedPlaylist.isBuiltIn ? 'favorites' : 'playlist'}
+                title={selectedPlaylist.name}
+                subtitle={t('albums.albumSummary', {
+                  songs: fullPlaylistSongs.length,
+                  duration: formatDuration(playlistDuration),
+                })}
+                caption={selectedPlaylist.isBuiltIn ? t('playlists.builtIn') : t('common.playlists')}
+                t={t}
+                songs={playlistSongs}
+                selectedTrackId={selectedTrackId}
+                isPlaying={isPlaying}
+                playlists={snapshot.playlists}
+                artworkUrl={fullPlaylistSongs.find((song) => song.artworkUrl)?.artworkUrl ?? ''}
+                removable={!selectedPlaylist.isBuiltIn}
+                showAlbum
+                showArtist
+                canRename={!selectedPlaylist.isBuiltIn}
+                canDelete={!selectedPlaylist.isBuiltIn}
+                canClear={fullPlaylistSongs.length > 0}
+                onPlayTrack={onPlayTrack}
+                onTogglePlayPause={onTogglePlayPause}
+                onAddSongToPlaylist={onAddSongToPlaylist}
+                onAddSongsToPlaylist={onAddSongsToPlaylist}
+                onRemoveSongs={(songIds) => {
+                  onRemoveSongsFromPlaylist(selectedPlaylist.id, songIds)
+                }}
+                onRename={(name) => {
+                  onRenamePlaylist(selectedPlaylist.id, name)
+                }}
+                onDelete={() => {
+                  onDeletePlaylist(selectedPlaylist.id)
+                  navigate('/playlists')
+                }}
+                onClear={() => {
+                  onRemoveSongsFromPlaylist(selectedPlaylist.id, fullPlaylistSongs.map((song) => song.id))
+                }}
+                onSortSongs={(songIds) => {
+                  onReorderPlaylistSongs(selectedPlaylist.id, songIds)
+                }}
+                onArtistClick={(artist) => {
+                  navigate(`/artists/${encodeURIComponent(artist)}`)
+                }}
+                onAlbumClick={(album) => {
+                  navigate(`/albums/${encodeURIComponent(album)}`)
+                }}
+              />
 
-                        if (!nextName) {
-                          return
-                        }
-
-                        onRenamePlaylist(selectedPlaylist.id, nextName)
-                        setEditingPlaylistId(null)
-                      }}
-                    >
-                      <input
-                        type="text"
-                        value={renameDraft}
-                        onChange={(event) => {
-                          setRenameDraft(event.currentTarget.value)
-                        }}
-                      />
-                      <button className="table-action-button" type="submit">
-                        Save
-                      </button>
-                      <button
-                        className="table-action-button subtle"
-                        type="button"
-                        onClick={() => {
-                          setEditingPlaylistId(null)
-                        }}
-                      >
-                        Cancel
-                      </button>
-                    </form>
-                  ) : (
-                    <h3>{selectedPlaylist.name}</h3>
-                  )}
-                  <p>
-                    {selectedPlaylist.songCount} song
-                    {selectedPlaylist.songCount === 1 ? '' : 's'} stored in this playlist.
-                  </p>
-                </div>
-                <div className="playlist-detail-actions">
-                  {!selectedPlaylist.isBuiltIn ? (
-                    <>
-                      <button
-                        className="action-button secondary"
-                        type="button"
-                        onClick={() => {
-                          setEditingPlaylistId(selectedPlaylist.id)
-                          setRenameDraft(selectedPlaylist.name)
-                        }}
-                      >
-                        Rename
-                      </button>
-                      <button
-                        className="action-button secondary danger"
-                        type="button"
-                        onClick={() => {
-                          onDeletePlaylist(selectedPlaylist.id)
-                        }}
-                      >
-                        Delete Playlist
-                      </button>
-                    </>
-                  ) : null}
-                </div>
-              </div>
-
-              {fullPlaylistSongs.length > 1 ? (
-                <div className="root-banner">
-                  <span className="summary-label">Ordering</span>
-                  <strong>Playlist order is persisted</strong>
-                  <span className="banner-hint">
-                    Use the up and down controls to reorder songs inside this playlist.
-                  </span>
-                </div>
-              ) : null}
-
-              <div className="playlist-content-grid">
-                <div className="table-shell">
+              {!selectedPlaylist.isBuiltIn ? (
+                <div className="table-shell playlist-add-shell">
                   <div className="subpanel-header">
                     <div>
-                      <span className="summary-label">Playlist Songs</span>
-                      <strong>
-                        {playlistSongs.length}
-                        {searchQuery ? ' filtered' : ''}
-                      </strong>
-                    </div>
-                    <div className="table-toolbar">
-                      <span className="banner-hint">
-                        {effectiveSelectedPlaylistSongIds.length} selected
-                      </span>
-                      <button
-                        type="button"
-                        className="table-action-button subtle"
-                        disabled={visiblePlaylistSongIds.length === 0}
-                        onClick={() => {
-                          setSelectedPlaylistSongIds(visiblePlaylistSongIds)
-                        }}
-                      >
-                        Select Visible
-                      </button>
-                      <button
-                        type="button"
-                        className="table-action-button subtle"
-                        disabled={effectiveSelectedPlaylistSongIds.length === 0}
-                        onClick={() => {
-                          setSelectedPlaylistSongIds([])
-                        }}
-                      >
-                        Clear
-                      </button>
-                      <button
-                        type="button"
-                        className="table-action-button"
-                        disabled={effectiveSelectedPlaylistSongIds.length === 0}
-                        onClick={() => {
-                          onRemoveSongsFromPlaylist(
-                            selectedPlaylist.id,
-                            effectiveSelectedPlaylistSongIds,
-                          )
-                          setSelectedPlaylistSongIds([])
-                        }}
-                      >
-                        Remove Selected
-                      </button>
-                    </div>
-                  </div>
-                  {playlistSongs.length === 0 ? (
-                    <div className="empty-state compact">
-                      <h3>No songs in view</h3>
-                      <p>
-                        {selectedPlaylist.songCount > 0 && searchQuery
-                          ? `No playlist songs match "${searchQuery}".`
-                          : 'Add songs from the library panel to start building this playlist.'}
-                      </p>
-                    </div>
-                  ) : (
-                    <table className="music-table">
-                      <thead>
-                        <tr>
-                          <th>Select</th>
-                          <th>#</th>
-                          <th>Name</th>
-                          <th>Artist</th>
-                          <th>Album</th>
-                          <th>Duration</th>
-                          <th>Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {playlistSongs.map((song) => {
-                          const fullIndex = playlistQueueSongIds.findIndex((id) => id === song.id)
-                          const canMoveUp = fullIndex > 0
-                          const canMoveDown = fullIndex >= 0 && fullIndex < playlistQueueSongIds.length - 1
-
-                          return (
-                            <tr
-                              key={`${selectedPlaylist.id}-${song.id}`}
-                              className={song.id === selectedTrackId ? 'is-current' : ''}
-                              onClick={() => {
-                                onPlayTrack(song.id, playlistQueueSongIds)
-                              }}
-                            >
-                              <td>
-                                <input
-                                  type="checkbox"
-                                  checked={effectiveSelectedPlaylistSongIds.includes(song.id)}
-                                  onClick={(event) => {
-                                    event.stopPropagation()
-                                  }}
-                                  onChange={() => {
-                                    toggleSongSelection(setSelectedPlaylistSongIds, song.id)
-                                  }}
-                                />
-                              </td>
-                              <td>{fullIndex + 1}</td>
-                              <td>{song.title}</td>
-                              <td>{getDisplayArtists(song)}</td>
-                              <td>{song.album || 'Unknown album'}</td>
-                              <td>{formatDuration(song.duration)}</td>
-                              <td>
-                                <div className="table-action-group">
-                                  <button
-                                    type="button"
-                                    className="table-action-button subtle"
-                                    disabled={!canMoveUp}
-                                    onClick={(event) => {
-                                      event.stopPropagation()
-                                      const nextSongIds = moveSong(playlistQueueSongIds, song.id, -1)
-                                      if (nextSongIds) {
-                                        onReorderPlaylistSongs(selectedPlaylist.id, nextSongIds)
-                                      }
-                                    }}
-                                  >
-                                    Up
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="table-action-button subtle"
-                                    disabled={!canMoveDown}
-                                    onClick={(event) => {
-                                      event.stopPropagation()
-                                      const nextSongIds = moveSong(playlistQueueSongIds, song.id, 1)
-                                      if (nextSongIds) {
-                                        onReorderPlaylistSongs(selectedPlaylist.id, nextSongIds)
-                                      }
-                                    }}
-                                  >
-                                    Down
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="table-action-button"
-                                    onClick={(event) => {
-                                      event.stopPropagation()
-                                      onRemoveSongFromPlaylist(selectedPlaylist.id, song.id)
-                                    }}
-                                  >
-                                    Remove
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-
-                <div className="table-shell">
-                  <div className="subpanel-header">
-                    <div>
-                      <span className="summary-label">Add From Library</span>
+                      <span className="summary-label">{t('playlists.addFromLibrary')}</span>
                       <strong>
                         {availableSongs.length}
-                        {searchQuery ? ' filtered' : ''}
+                        {searchQuery ? ` ${t('nowPlaying.filtered')}` : ''}
                       </strong>
                     </div>
                     <div className="table-toolbar">
                       <span className="banner-hint">
-                        {effectiveSelectedAvailableSongIds.length} selected
+                        {t('playlists.selectedCount', {
+                          count: effectiveSelectedAvailableSongIds.length,
+                        })}
                       </span>
                       <button
                         type="button"
@@ -546,7 +342,7 @@ export function PlaylistsPage({
                           setSelectedAvailableSongIds(visibleAvailableSongIds)
                         }}
                       >
-                        Select Visible
+                        {t('playlists.selectVisible')}
                       </button>
                       <button
                         type="button"
@@ -556,7 +352,7 @@ export function PlaylistsPage({
                           setSelectedAvailableSongIds([])
                         }}
                       >
-                        Clear
+                        {t('common.clear')}
                       </button>
                       <button
                         type="button"
@@ -570,29 +366,31 @@ export function PlaylistsPage({
                           setSelectedAvailableSongIds([])
                         }}
                       >
-                        Add Selected
+                        {t('playlists.addSelected')}
                       </button>
                     </div>
                   </div>
                   {availableSongs.length === 0 ? (
                     <div className="empty-state compact">
-                      <h3>No songs available</h3>
+                      <h3>{t('playlists.noSongsAvailable')}</h3>
                       <p>
                         {searchQuery
-                          ? `No library songs match "${searchQuery}" outside this playlist.`
-                          : 'All imported songs are already present in this playlist.'}
+                          ? t('playlists.noAvailableMatch', {
+                              query: searchQuery,
+                            })
+                          : t('playlists.allAlreadyAdded')}
                       </p>
                     </div>
                   ) : (
                     <table className="music-table">
                       <thead>
                         <tr>
-                          <th>Select</th>
-                          <th>Name</th>
-                          <th>Artist</th>
-                          <th>Album</th>
-                          <th>Duration</th>
-                          <th>Action</th>
+                          <th>{t('playlists.select')}</th>
+                          <th>{t('common.name')}</th>
+                          <th>{t('common.artist')}</th>
+                          <th>{t('common.album')}</th>
+                          <th>{t('common.duration')}</th>
+                          <th>{t('local.action')}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -609,7 +407,7 @@ export function PlaylistsPage({
                             </td>
                             <td>{song.title}</td>
                             <td>{getDisplayArtists(song)}</td>
-                            <td>{song.album || 'Unknown album'}</td>
+                            <td>{song.album || t('common.albumUnknown')}</td>
                             <td>{formatDuration(song.duration)}</td>
                             <td>
                               <button
@@ -619,7 +417,7 @@ export function PlaylistsPage({
                                   onAddSongToPlaylist(selectedPlaylist.id, song.id)
                                 }}
                               >
-                                Add
+                                {t('playlists.add')}
                               </button>
                             </td>
                           </tr>
@@ -628,7 +426,7 @@ export function PlaylistsPage({
                     </table>
                   )}
                 </div>
-              </div>
+              ) : null}
             </>
           )}
         </div>

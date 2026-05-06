@@ -32,10 +32,6 @@ export function getDisplayArtists(song: Pick<LibrarySong, 'artist' | 'artists'>)
   return artists.length > 0 ? artists.join(', ') : UNKNOWN_ARTIST
 }
 
-export function getPrimaryArtist(song: Pick<LibrarySong, 'artist' | 'artists'>) {
-  return getSongArtists(song)[0] ?? UNKNOWN_ARTIST
-}
-
 function splitArtistValue(value: string | null | undefined) {
   return (value ?? '')
     .split(/\s*(?:;|；|、|\|)\s*/u)

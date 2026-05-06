@@ -1,11 +1,14 @@
 import clsx from 'clsx'
 import { Link } from 'react-router-dom'
 
+import { ArtworkImage } from '../components/ArtworkImage'
 import type { LibrarySong } from '../shared/contracts'
 import { formatDuration } from '../shared/formatters'
+import type { Translator } from '../shared/i18n'
 
 interface ArtistDetailPageProps {
   artistName: string
+  t: Translator
   songs: LibrarySong[]
   selectedTrackId: number | null
   onPlayTrack: (trackId: number, queueSongIds: number[]) => void
@@ -14,6 +17,7 @@ interface ArtistDetailPageProps {
 
 export function ArtistDetailPage({
   artistName,
+  t,
   songs,
   selectedTrackId,
   onPlayTrack,
@@ -21,7 +25,7 @@ export function ArtistDetailPage({
 }: ArtistDetailPageProps) {
   const queueSongIds = songs.map((song) => song.id)
   const artworkUrl = songs.find((song) => song.artworkUrl)?.artworkUrl ?? ''
-  const albums = [...new Set(songs.map((song) => song.album || 'Unknown album'))].sort((left, right) =>
+  const albums = [...new Set(songs.map((song) => song.album || t('common.albumUnknown')))].sort((left, right) =>
     left.localeCompare(right),
   )
   const totalDuration = songs.reduce((sum, song) => sum + song.duration, 0)
@@ -31,11 +35,12 @@ export function ArtistDetailPage({
       <header className="detail-hero">
         <DetailArtwork title={artistName} artworkUrl={artworkUrl} />
         <div>
-          <p className="eyebrow">Artist Detail</p>
+          <p className="eyebrow">{t('detail.artistEyebrow')}</p>
           <h2>{artistName}</h2>
           <p className="page-copy">
-            This artist view now comes from the scanned library instead of a static summary card.
-            It groups the artist catalog into albums and gives you direct playback entry points.
+            {t(
+              'detail.artistDescription',
+            )}
           </p>
         </div>
         <div className="page-actions">
@@ -49,33 +54,33 @@ export function ArtistDetailPage({
               }
             }}
           >
-            Play Artist
+            {t('detail.playArtist')}
           </button>
         </div>
       </header>
 
       <div className="summary-grid">
         <div className="summary-card">
-          <span className="summary-label">Songs</span>
+          <span className="summary-label">{t('common.songs')}</span>
           <span className="summary-value">{songs.length}</span>
-          <p>Tracks currently indexed for this artist.</p>
+          <p>{t('detail.artistSongsCopy')}</p>
         </div>
         <div className="summary-card">
-          <span className="summary-label">Albums</span>
+          <span className="summary-label">{t('common.albums')}</span>
           <span className="summary-value">{albums.length}</span>
-          <p>Distinct album groups found in the local library.</p>
+          <p>{t('detail.artistAlbumsCopy')}</p>
         </div>
         <div className="summary-card">
-          <span className="summary-label">Runtime</span>
+          <span className="summary-label">{t('detail.runtime')}</span>
           <span className="summary-value detail-metric-value">{formatDuration(totalDuration)}</span>
-          <p>Total playable duration for this artist selection.</p>
+          <p>{t('detail.artistRuntimeCopy')}</p>
         </div>
       </div>
 
       {albums.length > 0 ? (
         <section className="detail-panel">
           <div className="subpanel-header">
-            <span className="summary-label">Albums</span>
+            <span className="summary-label">{t('common.albums')}</span>
             <strong>{albums.length}</strong>
           </div>
           <div className="detail-chip-grid">
@@ -96,11 +101,11 @@ export function ArtistDetailPage({
         <table className="music-table">
           <thead>
             <tr>
-              <th>Name</th>
-              <th>Album</th>
-              <th>Duration</th>
-              <th>Favorite</th>
-              <th>Play Count</th>
+              <th>{t('common.name')}</th>
+              <th>{t('common.album')}</th>
+              <th>{t('common.duration')}</th>
+              <th>{t('common.favorite')}</th>
+              <th>{t('common.playCount')}</th>
             </tr>
           </thead>
           <tbody>
@@ -121,7 +126,7 @@ export function ArtistDetailPage({
                       event.stopPropagation()
                     }}
                   >
-                    {song.album || 'Unknown album'}
+                    {song.album || t('common.albumUnknown')}
                   </Link>
                 </td>
                 <td>{formatDuration(song.duration)}</td>
@@ -134,7 +139,7 @@ export function ArtistDetailPage({
                       onToggleFavorite(song.id, !song.favorite)
                     }}
                   >
-                    {song.favorite ? 'YES' : 'ADD'}
+                    {song.favorite ? t('common.yes') : t('common.add')}
                   </button>
                 </td>
                 <td>{song.playCount || ''}</td>
@@ -154,11 +159,16 @@ function DetailArtwork({
   title: string
   artworkUrl: string
 }) {
-  return artworkUrl ? (
-    <img className="detail-artwork" src={artworkUrl} alt={`${title} artwork`} />
-  ) : (
-    <div className="detail-artwork detail-artwork-fallback" aria-hidden="true">
-      <span>{title.slice(0, 2).toUpperCase()}</span>
-    </div>
+  return (
+    <ArtworkImage
+      className="detail-artwork"
+      src={artworkUrl}
+      title={title}
+      renderFallback={() => (
+        <div className="detail-artwork detail-artwork-fallback" aria-hidden="true">
+          <span>{title.slice(0, 2).toUpperCase()}</span>
+        </div>
+      )}
+    />
   )
 }

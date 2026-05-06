@@ -1,104 +1,193 @@
-import { useMemo, useState } from 'react'
-import { NavLink } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { NavLink, useNavigate } from 'react-router-dom'
 
-import type { AppInfo, SearchHistoryEntry } from '../shared/contracts'
+import { Icon, type IconName } from './icons'
+import type { SearchHistoryEntry } from '../shared/contracts'
+import type { Translator } from '../shared/i18n'
 
-const primaryLinks = [
-  { to: '/songs', label: 'Songs', tag: 'SO' },
-  { to: '/artists', label: 'Artists', tag: 'AR' },
-  { to: '/albums', label: 'Albums', tag: 'AL' },
+interface NavLinkItem {
+  to: string
+  labelKey: string
+  label: string
+  icon: IconName
+}
+
+const primaryLinks: NavLinkItem[] = [
+  { to: '/songs', labelKey: 'library.title', label: 'Music Library', icon: 'songs' },
+  { to: '/artists', labelKey: 'common.artists', label: 'Artists', icon: 'users' },
+  { to: '/albums', labelKey: 'common.albums', label: 'Albums', icon: 'albums' },
 ]
 
-const secondaryLinks = [
-  { to: '/now-playing', label: 'Now Playing', tag: 'NP' },
-  { to: '/recent', label: 'Recent', tag: 'RC' },
-  { to: '/local', label: 'Local', tag: 'LC' },
-  { to: '/playlists', label: 'Playlists', tag: 'PL' },
-  { to: '/favorites', label: 'My Favorites', tag: 'FV' },
-  { to: '/settings', label: 'Settings', tag: 'ST' },
+const secondaryLinks: NavLinkItem[] = [
+  { to: '/now-playing', labelKey: 'common.nowPlaying', label: 'Now Playing', icon: 'nowPlaying' },
+  { to: '/recent', labelKey: 'common.recent', label: 'Recent', icon: 'recent' },
+  { to: '/local', labelKey: 'common.local', label: 'Local', icon: 'local' },
+  { to: '/playlists', labelKey: 'common.playlists', label: 'Playlists', icon: 'playlists' },
+  { to: '/favorites', labelKey: 'common.myFavorites', label: 'My Favorites', icon: 'heart' },
 ]
+
+const settingsLink: NavLinkItem = {
+  to: '/settings',
+  labelKey: 'common.settings',
+  label: 'Settings',
+  icon: 'settings',
+}
 
 interface SidebarProps {
-  appInfo: AppInfo
+  t: Translator
+  collapsed: boolean
+  appName: string
+  canGoBack: boolean
   searchQuery: string
   recentSearches: SearchHistoryEntry[]
   onSearchChange: (value: string) => void
   onSearchCommit: (value: string) => void
   onRecentSearchRemove: (entryId: number) => void
   onRecentSearchesClear: () => void
+  onSearchClear: () => void
+  onToggleCollapsed: () => void
 }
 
 export function Sidebar({
-  appInfo,
+  t,
+  collapsed,
+  appName,
+  canGoBack,
   searchQuery,
   recentSearches,
   onSearchChange,
   onSearchCommit,
+  onSearchClear,
   onRecentSearchRemove,
   onRecentSearchesClear,
+  onToggleCollapsed,
 }: SidebarProps) {
   const [isSearchFocused, setIsSearchFocused] = useState(false)
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
+  const focusSearchAfterExpandRef = useRef(false)
+  const navigate = useNavigate()
 
-  const visibleRecentSearches = useMemo(() => {
-    const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase()
-
-    return recentSearches
-      .filter((entry) =>
-        normalizedSearchQuery
-          ? entry.query.toLocaleLowerCase().includes(normalizedSearchQuery)
-          : true,
-      )
-      .slice(0, 6)
-  }, [recentSearches, searchQuery])
+  const visibleRecentSearches = recentSearches.slice(0, 10)
 
   const showRecentSearches = isSearchFocused && visibleRecentSearches.length > 0
 
+  useEffect(() => {
+    if (collapsed || !focusSearchAfterExpandRef.current) {
+      return
+    }
+
+    focusSearchAfterExpandRef.current = false
+    window.requestAnimationFrame(() => {
+      searchInputRef.current?.focus()
+    })
+  }, [collapsed])
+
+  const expandAndFocusSearch = () => {
+    focusSearchAfterExpandRef.current = true
+    onToggleCollapsed()
+  }
+
   return (
-    <aside className="sidebar">
-      <div className="brand">
-        <span className="brand-topline">Groove-inspired rebuild</span>
-        <span className="brand-name">SMPlayer</span>
-        <p className="brand-copy">
-          The Electron rebuild now scans the local library, stores it in SQLite,
-          and plays tracks with real queue state.
-        </p>
-      </div>
+    <aside className={`sidebar${collapsed ? ' is-collapsed' : ''}`}>
+      {canGoBack || !collapsed ? (
+        <div className="sidebar-titlebar">
+          {canGoBack ? (
+            <button
+              className="sidebar-back-button"
+              type="button"
+              aria-label={t('sidebar.back')}
+              title={t('sidebar.back')}
+              data-tooltip={t('sidebar.back')}
+              onClick={() => {
+                navigate(-1)
+              }}
+            >
+              <Icon name="arrowLeft" />
+            </button>
+          ) : null}
+          <span className="sidebar-app-name">{appName}</span>
+        </div>
+      ) : null}
+      <button
+        className="sidebar-collapse-button"
+        type="button"
+        aria-label={collapsed ? t('sidebar.expandNavigation') : t('sidebar.collapseNavigation')}
+        title={collapsed ? t('sidebar.expandNavigation') : t('sidebar.collapseNavigation')}
+        data-tooltip={collapsed ? t('sidebar.expandNavigation') : t('sidebar.collapseNavigation')}
+        onClick={onToggleCollapsed}
+      >
+        <Icon name="menu" />
+      </button>
 
       <div className="search-shell">
-        <label htmlFor="app-search">Search</label>
+        <label htmlFor="app-search">{t('common.search')}</label>
         <div className="search-field-shell">
           <form
-            className="search-form"
+            className={`search-form${searchQuery ? ' has-query' : ''}`}
             onSubmit={(event) => {
               event.preventDefault()
+              if (collapsed) {
+                expandAndFocusSearch()
+                return
+              }
+
               onSearchCommit(searchQuery)
             }}
           >
+            <button
+              className="search-commit-button"
+              type="submit"
+              title={t('common.search')}
+              data-tooltip={t('common.search')}
+              onClick={(event) => {
+                if (!collapsed) {
+                  return
+                }
+
+                event.preventDefault()
+                expandAndFocusSearch()
+              }}
+            >
+              <Icon name="search" />
+            </button>
             <input
+              ref={searchInputRef}
               id="app-search"
               type="search"
-              placeholder="Search songs, albums, and playlists"
+              placeholder={t('common.search')}
               value={searchQuery}
               onFocus={() => {
                 setIsSearchFocused(true)
               }}
               onBlur={() => {
                 setIsSearchFocused(false)
-                onSearchCommit(searchQuery)
               }}
               onChange={(event) => {
                 onSearchChange(event.currentTarget.value)
               }}
             />
-            <button className="search-commit-button" type="submit">
-              SAVE
-            </button>
+            {searchQuery ? (
+              <button
+                className="search-clear-button"
+                type="button"
+                title={t('common.clear')}
+                aria-label={t('common.clear')}
+                onMouseDown={(event) => {
+                  event.preventDefault()
+                }}
+                onClick={() => {
+                  onSearchClear()
+                }}
+              >
+                <Icon name="close" />
+              </button>
+            ) : null}
           </form>
 
           {showRecentSearches ? (
             <div className="search-history-panel">
               <div className="search-history-header">
-                <span>Recent searches</span>
+                <span>{t('sidebar.recentSearches')}</span>
                 <button
                   type="button"
                   onMouseDown={(event) => {
@@ -108,7 +197,7 @@ export function Sidebar({
                     onRecentSearchesClear()
                   }}
                 >
-                  Clear
+                  {t('common.clear')}
                 </button>
               </div>
               <div className="search-history-list">
@@ -126,12 +215,13 @@ export function Sidebar({
                       }}
                     >
                       <span>{entry.query}</span>
-                      <small>{formatRecentSearchTime(entry.searchedAt)}</small>
                     </button>
                     <button
                       type="button"
                       className="search-history-remove"
-                      aria-label={`Remove recent search ${entry.query}`}
+                      aria-label={t('sidebar.removeRecentSearch', {
+                        query: entry.query,
+                      })}
                       onMouseDown={(event) => {
                         event.preventDefault()
                       }}
@@ -139,7 +229,7 @@ export function Sidebar({
                         onRecentSearchRemove(entry.id)
                       }}
                     >
-                      x
+                      <Icon name="close" />
                     </button>
                   </div>
                 ))}
@@ -150,26 +240,25 @@ export function Sidebar({
       </div>
 
       <nav className="nav-section" aria-label="Library sections">
-        <span className="nav-section-label">Library</span>
+        <span className="nav-section-label">{t('sidebar.library')}</span>
         <div className="nav-links">
           {primaryLinks.map((item) => (
-            <NavItem key={item.to} {...item} />
+            <NavItem key={item.to} {...item} label={t(item.labelKey)} />
           ))}
         </div>
       </nav>
 
       <nav className="nav-section" aria-label="Playback sections">
-        <span className="nav-section-label">Playback</span>
+        <span className="nav-section-label">{t('sidebar.playback')}</span>
         <div className="nav-links">
           {secondaryLinks.map((item) => (
-            <NavItem key={item.to} {...item} />
+            <NavItem key={item.to} {...item} label={t(item.labelKey)} />
           ))}
         </div>
       </nav>
 
       <div className="sidebar-footer">
-        <p>{appInfo.platform} target ready</p>
-        <p>{appInfo.userDataPath}</p>
+        <NavItem {...settingsLink} label={t(settingsLink.labelKey)} />
       </div>
     </aside>
   )
@@ -178,41 +267,21 @@ export function Sidebar({
 interface NavItemProps {
   to: string
   label: string
-  tag: string
+  icon: IconName
 }
 
-function NavItem({ to, label, tag }: NavItemProps) {
+function NavItem({ to, label, icon }: NavItemProps) {
   return (
     <NavLink
       className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}
       to={to}
+      title={label}
+      data-tooltip={label}
     >
-      <span className="nav-tag">{tag}</span>
+      <span className="nav-tag" aria-hidden="true">
+        <Icon name={icon} />
+      </span>
       <span>{label}</span>
     </NavLink>
   )
-}
-
-function formatRecentSearchTime(searchedAt: string) {
-  const parsed = new Date(searchedAt)
-
-  if (Number.isNaN(parsed.getTime())) {
-    return 'saved'
-  }
-
-  const diffMinutes = Math.max(0, Math.round((Date.now() - parsed.getTime()) / 60_000))
-
-  if (diffMinutes < 1) {
-    return 'just now'
-  }
-
-  if (diffMinutes < 60) {
-    return `${diffMinutes} min ago`
-  }
-
-  if (diffMinutes < 1_440) {
-    return `${Math.floor(diffMinutes / 60)} hr ago`
-  }
-
-  return parsed.toLocaleDateString()
 }

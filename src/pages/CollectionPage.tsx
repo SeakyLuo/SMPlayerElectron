@@ -1,11 +1,14 @@
 import { Link } from 'react-router-dom'
 
+import { ArtworkImage } from '../components/ArtworkImage'
 import type { CollectionCardData } from '../data/mockLibrary'
+import type { Translator } from '../shared/i18n'
 
 interface CollectionPageProps {
   title: string
   description: string
   items: CollectionCardData[]
+  t?: Translator
   eyebrow?: string
   emptyTitle?: string
   emptyCopy?: string
@@ -16,16 +19,17 @@ export function CollectionPage({
   title,
   description,
   items,
-  eyebrow = 'Library collection',
-  emptyTitle = 'Nothing here yet',
-  emptyCopy = 'This view will populate once the library and playback state have data to show.',
+  t,
+  eyebrow,
+  emptyTitle,
+  emptyCopy,
   getItemPath,
 }: CollectionPageProps) {
   return (
     <section className="page-panel">
       <header className="page-header">
         <div>
-          <p className="eyebrow">{eyebrow}</p>
+          <p className="eyebrow">{eyebrow ?? t?.('collection.library') ?? 'Library collection'}</p>
           <h2>{title}</h2>
           <p className="page-copy">{description}</p>
         </div>
@@ -33,8 +37,14 @@ export function CollectionPage({
 
       {items.length === 0 ? (
         <div className="empty-state">
-          <h3>{emptyTitle}</h3>
-          <p>{emptyCopy}</p>
+          <h3>{emptyTitle ?? t?.('collection.emptyTitle') ?? 'Nothing here yet'}</h3>
+          <p>
+            {emptyCopy ??
+              t?.(
+                'collection.emptyCopy',
+              ) ??
+              'This view will populate once the library and playback state have data to show.'}
+          </p>
         </div>
       ) : (
         <div className="collection-grid">
@@ -72,11 +82,16 @@ function CollectionArtwork({
   title: string
   artworkUrl?: string
 }) {
-  return artworkUrl ? (
-    <img className="collection-artwork" src={artworkUrl} alt={`${title} artwork`} />
-  ) : (
-    <div className="collection-artwork collection-artwork-fallback" aria-hidden="true">
-      <span>{title.slice(0, 2).toUpperCase()}</span>
-    </div>
+  return (
+    <ArtworkImage
+      className="collection-artwork"
+      src={artworkUrl ?? ''}
+      title={title}
+      renderFallback={() => (
+        <div className="collection-artwork collection-artwork-fallback" aria-hidden="true">
+          <span>{title.slice(0, 2).toUpperCase()}</span>
+        </div>
+      )}
+    />
   )
 }

@@ -1,5 +1,22 @@
 import type { DatabaseSync } from 'node:sqlite'
 
+function columnExists(db: DatabaseSync, tableName: string, columnName: string) {
+  const rows = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>
+
+  return rows.some((row) => row.name === columnName)
+}
+
+function addColumnIfMissing(
+  db: DatabaseSync,
+  tableName: string,
+  columnName: string,
+  columnDefinition: string,
+) {
+  if (!columnExists(db, tableName, columnName)) {
+    db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnDefinition}`)
+  }
+}
+
 export function initializeSchema(db: DatabaseSync) {
   db.exec(`
     PRAGMA journal_mode = WAL;
@@ -149,7 +166,7 @@ export function initializeSchema(db: DatabaseSync) {
       ON MusicArtist(MusicId, Name COLLATE NOCASE);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_folder_path ON Folder(Path);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_file_path ON File(Path);
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_playlist_name ON Playlist(Name);
+    CREATE INDEX IF NOT EXISTS idx_playlist_name ON Playlist(Name);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_search_history_query_nocase
       ON SearchHistory(Query COLLATE NOCASE);
 
@@ -162,5 +179,31 @@ export function initializeSchema(db: DatabaseSync) {
     CREATE INDEX IF NOT EXISTS idx_recent_record_type ON RecentRecord(Type);
     CREATE INDEX IF NOT EXISTS idx_preference_item_type_item ON PreferenceItem(Type, ItemId);
     CREATE INDEX IF NOT EXISTS idx_search_history_time ON SearchHistory(SearchedAt);
+  `)
+
+  addColumnIfMissing(db, 'Music', 'ArtworkPath', `ArtworkPath TEXT DEFAULT ''`)
+
+  for (const [columnName, columnDefinition] of [
+    ['LastReleaseNotesVersion', `LastReleaseNotesVersion TEXT DEFAULT ''`],
+    ['RemotePlayPassword', `RemotePlayPassword TEXT DEFAULT ''`],
+    ['UseFilenameNotMusicName', `UseFilenameNotMusicName INTEGER DEFAULT 0`],
+    ['NotificationLyricsSource', `NotificationLyricsSource INTEGER DEFAULT 0`],
+    ['SaveLyricsImmediately', `SaveLyricsImmediately INTEGER DEFAULT 0`],
+  ]) {
+    addColumnIfMissing(db, 'Settings', columnName, columnDefinition)
+  }
+
+  db.exec(`
+    INSERT OR IGNORE INTO MusicArtist (MusicId, Name, Priority, State)
+    SELECT Id, Artist, 0, State
+    FROM Music
+    WHERE NULLIF(TRIM(Artist), '') IS NOT NULL;
+
+    INSERT OR IGNORE INTO SearchHistory (Query, SearchedAt)
+    SELECT ItemId, Time
+    FROM RecentRecord
+    WHERE Type = 2
+      AND State = 1
+      AND NULLIF(TRIM(ItemId), '') IS NOT NULL;
   `)
 }

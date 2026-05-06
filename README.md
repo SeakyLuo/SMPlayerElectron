@@ -32,6 +32,8 @@ Implemented so far:
   - volume / mute
   - repeat / repeat-one / shuffle
   - playback progress persistence
+  - keyboard playback shortcuts
+  - MediaSession seek forward / backward handlers
 - Recent playback history
 - Favorite songs backed by playlist data
 - Search filtering with persisted query and recent search history
@@ -47,10 +49,13 @@ Implemented so far:
   - subtree playback
   - reveal-in-Explorer actions
 - Native now-playing notifications from the Electron main process
+- Global media key handling through Electron plus browser `MediaSession`
 - System tray support with:
   - close-to-tray behavior
   - tray click restore/hide
   - explicit quit from tray menu
+- Packaging configuration with platform-specific scripts and installer defaults
+- Window chrome polish with hidden title bar and native Mica / vibrancy where supported
 - Real playlists page with:
   - create playlist
   - delete playlist
@@ -73,6 +78,12 @@ Implemented so far:
   - accent color / theme tint
   - native notification toggle
   - `AutoLyrics`
+  - language profile
+  - notification lyric source
+  - save fetched lyrics immediately
+  - songs-page sort criterion
+- Multi-artist metadata stored through a `MusicArtist` relation table
+- Migration audit document at `docs/MIGRATION_AUDIT.md`
 
 ## Commands
 
@@ -108,20 +119,15 @@ These are the main migration gaps still left:
 
 ### Core Function Gaps
 
-- More complete settings migration from the old app:
-  - language preferences
-- Audit old settings / tables against the Electron version to close schema gaps
-
-### Media Features
-
-- Better duration / metadata fallback handling
-- Optional gapless or more advanced playback behavior if needed
+- Sort/view criteria migration for albums, artists, folders, searches, and playlists
+- Mini-player mode decision and implementation
+- Remote play/control decision and implementation
+- Preference collection surfaces for `PreferenceSetting` / `PreferenceItem`
 
 ### Desktop Integration
 
-- Better media key integration beyond browser `MediaSession`
-- App packaging polish for Windows / macOS / Linux
-- Better acrylic / blurred window treatment closer to the original UWP look
+- Packaging QA on clean Windows / macOS / Linux machines
+- Native icon replacement with final `.ico` / `.icns` assets
 
 ### UI / UX Gaps
 
@@ -131,7 +137,7 @@ These are the main migration gaps still left:
 
 ### Migration / Compatibility
 
-- Review old UWP-only features one by one and decide Electron equivalents
+- Review pending UWP-only features from `docs/MIGRATION_AUDIT.md` and decide Electron equivalents
 - Document which original features are intentionally dropped or replaced
 
 ## Known Issues
@@ -142,7 +148,7 @@ These are the main migration gaps still left:
 
 ## Recommended Next Steps
 
-1. Continue migrating remaining settings and schema preferences.
-2. Review global media key integration beyond `MediaSession`.
-3. Tighten packaging and release defaults for desktop builds.
-4. Improve duration fallback behavior for hard-to-parse media files.
+1. Implement remaining sort/view criteria migration.
+2. Decide mini-player and remote-play scope.
+3. Build preference collection surfaces or drop those legacy tables.
+4. Add release notes gating or remove `LastReleaseNotesVersion`.

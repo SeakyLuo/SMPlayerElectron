@@ -1,29 +1,40 @@
 import clsx from 'clsx'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 
-import type { LibrarySong, LyricsRequestMode, LyricsSnapshot } from '../shared/contracts'
-import { getDisplayArtists, getSongArtists } from '../shared/artists'
-import { formatDuration } from '../shared/formatters'
+import { Icon } from '../components/icons'
+import { MenuFlyout } from '../components/MenuFlyout'
+import { getAddToPlaylistMenuFlyoutItem, getMusicMenuFlyoutItems, getShuffleMenuItems } from '../components/MenuFlyoutHelper'
+import { MultiSelectCommandBar } from '../components/MultiSelectCommandBar'
+import { PlaylistControlItem } from '../components/PlaylistControlItem'
+import type { LibraryPlaylist, LibrarySong } from '../shared/contracts'
+import type { Translator } from '../shared/i18n'
+
+const QUICK_PLAY_LIMIT = 100
+const NOW_PLAYING_ROW_HEIGHT = 46
+const NOW_PLAYING_OVERSCAN_ROWS = 12
 
 interface NowPlayingPageProps {
   songs: LibrarySong[]
-  currentTrack: LibrarySong | null
-  autoLyrics: boolean
+  librarySongs: LibrarySong[]
+  recentSongs: LibrarySong[]
+  playlists: LibraryPlaylist[]
+  t: Translator
   selectedTrackId: number | null
-  progressSeconds: number
+  isPlaying: boolean
   searchQuery: string
   error: string | null
-  onPlayTrack: (trackId: number) => void
-  onRemoveSong: (songId: number) => void
+  onTogglePlayPause: () => void
+  onPlayTrack: (trackId: number, queueSongIds: number[]) => void
+  onReplaceQueue: (songIds: number[]) => void
+  onPlayNext: (songId: number) => void
+  onAddSongToPlaylist: (playlistId: number, songId: number) => void
+  onAddSongsToPlaylist: (playlistId: number, songIds: number[]) => void
+  onRevealSong: (songPath: string) => void | Promise<void>
+  onToggleFavorite: (songId: number, favorite: boolean) => void
+  onRemoveSongs: (songIds: number[]) => void
+  onDeleteSongFromDisk: (songId: number) => void
   onClearQueue: () => void
-}
-
-const emptyLyrics: LyricsSnapshot = {
-  source: 'none',
-  isSynced: false,
-  rawText: '',
-  lines: [],
 }
 
 function matchesSearch(song: LibrarySong, searchQuery: string) {
@@ -38,370 +49,483 @@ function matchesSearch(song: LibrarySong, searchQuery: string) {
     .includes(normalizedSearchQuery)
 }
 
-function formatLyricsSource(source: LyricsSnapshot['source']) {
-  switch (source) {
-    case 'lrc-file':
-      return 'Sidecar LRC'
-    case 'text-file':
-      return 'Sidecar Text'
-    case 'music-file':
-      return 'Embedded'
-    case 'internet':
-      return 'Internet'
-    default:
-      return 'Unavailable'
-  }
-}
-
-function getActiveLyricsIndex(lyrics: LyricsSnapshot, progressSeconds: number) {
-  if (!lyrics.isSynced) {
-    return -1
-  }
-
-  const progressMs = Math.round(progressSeconds * 1000)
-  let activeIndex = -1
-
-  for (let index = 0; index < lyrics.lines.length; index += 1) {
-    const line = lyrics.lines[index]
-    if (line.timestampMs == null || line.timestampMs > progressMs) {
-      break
-    }
-
-    activeIndex = index
-  }
-
-  return activeIndex
-}
-
 export function NowPlayingPage({
   songs,
-  currentTrack,
-  autoLyrics,
+  librarySongs,
+  recentSongs,
+  playlists,
+  t,
   selectedTrackId,
-  progressSeconds,
+  isPlaying,
   searchQuery,
   error,
+  onTogglePlayPause,
   onPlayTrack,
-  onRemoveSong,
+  onReplaceQueue,
+  onPlayNext,
+  onAddSongToPlaylist,
+  onAddSongsToPlaylist,
+  onRevealSong,
+  onToggleFavorite,
+  onRemoveSongs,
+  onDeleteSongFromDisk,
   onClearQueue,
 }: NowPlayingPageProps) {
-  const [lyricsMode, setLyricsMode] = useState<LyricsRequestMode>('auto')
-  const [lyrics, setLyrics] = useState<LyricsSnapshot>(emptyLyrics)
-  const [lyricsLoading, setLyricsLoading] = useState(false)
-  const [lyricsError, setLyricsError] = useState<string | null>(null)
-  const activeLyricsLineRef = useRef<HTMLParagraphElement | null>(null)
-  const visibleSongs = songs.filter((song) => matchesSearch(song, searchQuery))
-  const currentQueueIndex = currentTrack ? songs.findIndex((song) => song.id === currentTrack.id) : -1
-  const remainingTracks = currentQueueIndex >= 0 ? Math.max(songs.length - currentQueueIndex - 1, 0) : songs.length
-  const displayedLyrics = currentTrack ? lyrics : emptyLyrics
-  const displayedLyricsError = currentTrack ? lyricsError : null
-  const displayedLyricsLoading = currentTrack ? lyricsLoading : false
-  const activeLyricsIndex = useMemo(
-    () => getActiveLyricsIndex(displayedLyrics, progressSeconds),
-    [displayedLyrics, progressSeconds],
+  const [multiSelect, setMultiSelect] = useState(false)
+  const [selectedSongIds, setSelectedSongIds] = useState<Set<number>>(new Set())
+  const [randomMenuOpen, setRandomMenuOpen] = useState(false)
+  const [songMenu, setSongMenu] = useState<NowPlayingSongMenuState | null>(null)
+  const [addToMenu, setAddToMenu] = useState<NowPlayingAddToMenuState | null>(null)
+  const listShellRef = useRef<HTMLElement | null>(null)
+  const currentRowRef = useRef<HTMLDivElement | null>(null)
+  const draggedSongIdRef = useRef<number | null>(null)
+  const [scrollTop, setScrollTop] = useState(0)
+  const [viewportHeight, setViewportHeight] = useState(640)
+  const navigate = useNavigate()
+
+  const visibleSongs = useMemo(
+    () => songs.filter((song) => matchesSearch(song, searchQuery)),
+    [songs, searchQuery],
   )
+  const queueSongIds = useMemo(() => songs.map((song) => song.id), [songs])
+  const selectedVisibleSongIds = useMemo(
+    () => visibleSongs.filter((song) => selectedSongIds.has(song.id)).map((song) => song.id),
+    [selectedSongIds, visibleSongs],
+  )
+  const customPlaylists = useMemo(() => playlists.filter((playlist) => !playlist.isBuiltIn), [playlists])
+  const currentSong = useMemo(
+    () => songs.find((song) => song.id === selectedTrackId) ?? null,
+    [selectedTrackId, songs],
+  )
+  const canUseQueueCommands = songs.length > 0
+  const canUseLibraryCommands = librarySongs.length > 0
+  const queueIndexBySongId = useMemo(
+    () => new Map(queueSongIds.map((songId, index) => [songId, index])),
+    [queueSongIds],
+  )
+  const listHeight = visibleSongs.length * NOW_PLAYING_ROW_HEIGHT
+  const effectiveScrollTop = Math.min(scrollTop, Math.max(0, listHeight - viewportHeight))
+  const startIndex = Math.max(0, Math.floor(effectiveScrollTop / NOW_PLAYING_ROW_HEIGHT) - NOW_PLAYING_OVERSCAN_ROWS)
+  const endIndex = Math.min(
+    visibleSongs.length,
+    Math.ceil((effectiveScrollTop + viewportHeight) / NOW_PLAYING_ROW_HEIGHT) + NOW_PLAYING_OVERSCAN_ROWS,
+  )
+  const renderedSongs = visibleSongs.slice(startIndex, endIndex)
+  const topSpacerHeight = startIndex * NOW_PLAYING_ROW_HEIGHT
+  const bottomSpacerHeight = (visibleSongs.length - endIndex) * NOW_PLAYING_ROW_HEIGHT
+  const randomActions = useMemo(
+    () =>
+      getShuffleMenuItems({
+        songs,
+        librarySongs,
+        recentSongs,
+        playlists,
+        randomLimit: QUICK_PLAY_LIMIT,
+        t,
+        onPlaySongs: (songIds) => {
+          onReplaceQueue(songIds)
+          onPlayTrack(songIds[0]!, songIds)
+        },
+      }),
+    [librarySongs, onPlayTrack, onReplaceQueue, playlists, recentSongs, songs, t],
+  )
+  const addToMenuItem = addToMenu
+    ? getAddToPlaylistMenuFlyoutItem({
+        playlists,
+        songIds: addToMenu.songIds,
+        t,
+        onAddToPlaylist: (playlistId) => {
+          onAddSongsToPlaylist(playlistId, addToMenu.songIds)
+        },
+      })
+    : null
 
-  useEffect(() => {
-    setLyricsMode('auto')
-  }, [currentTrack?.id])
+  const clearSelection = () => {
+    setSelectedSongIds(new Set())
+  }
 
-  useEffect(() => {
-    let disposed = false
-
-    if (!currentTrack || !window.smplayer) {
-      return () => {
-        disposed = true
+  const toggleSelection = (songId: number) => {
+    setSelectedSongIds((current) => {
+      const next = new Set(current)
+      if (next.has(songId)) {
+        next.delete(songId)
+      } else {
+        next.add(songId)
       }
-    }
+      return next
+    })
+  }
 
-    const smplayer = window.smplayer
+  const playSelected = () => {
+    const [firstSongId] = selectedVisibleSongIds
+    onReplaceQueue(selectedVisibleSongIds)
+    onPlayTrack(firstSongId!, selectedVisibleSongIds)
+  }
 
-    void (async () => {
-      setLyricsLoading(true)
-      setLyricsError(null)
-
-      try {
-        const snapshot = await smplayer.getLyrics(currentTrack.id, lyricsMode)
-        if (!disposed) {
-          setLyrics(snapshot)
-        }
-      } catch (requestError: unknown) {
-        if (!disposed) {
-          setLyrics(emptyLyrics)
-          setLyricsError(
-            requestError instanceof Error ? requestError.message : 'Failed to load lyrics.',
-          )
-        }
-      } finally {
-        if (!disposed) {
-          setLyricsLoading(false)
+  const reverseSelection = () => {
+    setSelectedSongIds((current) => {
+      const next = new Set<number>()
+      for (const song of visibleSongs) {
+        if (!current.has(song.id)) {
+          next.add(song.id)
         }
       }
-    })()
+      return next
+    })
+  }
 
-    return () => {
-      disposed = true
-    }
-  }, [currentTrack, lyricsMode])
-
-  useEffect(() => {
-    if (activeLyricsIndex < 0 || !activeLyricsLineRef.current) {
+  const locateCurrent = () => {
+    const currentVisibleIndex = visibleSongs.findIndex((song) => song.id === selectedTrackId)
+    if (currentVisibleIndex < 0) {
       return
     }
 
-    activeLyricsLineRef.current.scrollIntoView({
-      block: 'center',
-      behavior: 'smooth',
+    const nextScrollTop = Math.max(
+      0,
+      currentVisibleIndex * NOW_PLAYING_ROW_HEIGHT - (listShellRef.current?.clientHeight ?? viewportHeight) / 2,
+    )
+    listShellRef.current?.scrollTo({ top: nextScrollTop, behavior: 'smooth' })
+  }
+
+  useEffect(() => {
+    if (!randomMenuOpen) {
+      return
+    }
+
+    const closeRandomMenu = () => {
+      setRandomMenuOpen(false)
+    }
+
+    window.addEventListener('pointerdown', closeRandomMenu)
+
+    return () => {
+      window.removeEventListener('pointerdown', closeRandomMenu)
+    }
+  }, [randomMenuOpen])
+
+  useEffect(() => {
+    const listShell = listShellRef.current
+    if (!listShell) {
+      return
+    }
+
+    const resizeObserver = new ResizeObserver(() => {
+      setViewportHeight(listShell.clientHeight)
     })
-  }, [activeLyricsIndex])
+    setViewportHeight(listShell.clientHeight)
+    resizeObserver.observe(listShell)
+
+    return () => {
+      resizeObserver.disconnect()
+    }
+  }, [])
 
   return (
-    <section className="page-panel">
-      <header className="now-playing-hero">
-        {currentTrack?.artworkUrl ? (
-          <img
-            className="now-playing-artwork"
-            src={currentTrack.artworkUrl}
-            alt={`${currentTrack.title} artwork`}
-          />
-        ) : (
-          <div className="now-playing-artwork now-playing-artwork-fallback" aria-hidden="true">
-            <span>{(currentTrack?.title ?? 'NP').slice(0, 2).toUpperCase()}</span>
-          </div>
-        )}
-        <div className="now-playing-hero-copy">
-          <p className="eyebrow">Now Playing Full</p>
-          <h2>{currentTrack?.title ?? 'Now Playing'}</h2>
-          <p className="page-copy">
-            {currentTrack
-              ? 'Queue, artwork, and lyrics now live on one page instead of a bare list. Lyrics prefer sidecar `.lrc` files and then fall back to embedded tags.'
-              : 'Start playback from the library or a playlist to populate the persisted queue, artwork, and lyrics panes.'}
-          </p>
-          {currentTrack ? (
-            <div className="now-playing-meta-row">
-              <Link
-                className="detail-chip"
-                to={`/artists/${encodeURIComponent(getSongArtists(currentTrack)[0])}`}
-              >
-                {getDisplayArtists(currentTrack)}
-              </Link>
-              <Link
-                className="detail-chip"
-                to={`/albums/${encodeURIComponent(currentTrack.album || 'Unknown album')}`}
-              >
-                {currentTrack.album || 'Unknown album'}
-              </Link>
-              <span className="detail-chip">{formatDuration(currentTrack.duration)}</span>
+    <section className="now-playing-page page-panel">
+      <header className="now-playing-commandbar">
+        <button
+          type="button"
+          className="now-playing-command"
+          disabled={!canUseLibraryCommands}
+          onClick={() => {
+            const songIds = librarySongs.slice(0, QUICK_PLAY_LIMIT).map((song) => song.id)
+            onReplaceQueue(songIds)
+            onPlayTrack(songIds[0]!, songIds)
+          }}
+        >
+          <Icon name="play" />
+          {t('nowPlaying.quickPlay')}
+        </button>
+        <div className="now-playing-random-menu">
+          <button
+            type="button"
+            className="now-playing-command"
+            disabled={!canUseLibraryCommands}
+            aria-haspopup="menu"
+            aria-expanded={randomMenuOpen}
+            onPointerDown={(event) => {
+              event.stopPropagation()
+            }}
+            onClick={() => {
+              setRandomMenuOpen((current) => !current)
+            }}
+          >
+            <Icon name="shuffle" />
+            {t('nowPlaying.randomPlay')}
+          </button>
+          {randomMenuOpen ? (
+            <div
+              className="now-playing-random-options"
+              role="menu"
+              onPointerDown={(event) => {
+                event.stopPropagation()
+              }}
+            >
+              {randomActions.map((action) => (
+                <button
+                  type="button"
+                  role="menuitem"
+                  key={action.key}
+                  disabled={action.disabled}
+                  onClick={() => {
+                    action.onClick?.()
+                    setRandomMenuOpen(false)
+                  }}
+                >
+                  {action.text}
+                </button>
+              ))}
             </div>
           ) : null}
         </div>
-        <div className="page-actions">
+        <button
+          type="button"
+          className="now-playing-command"
+          disabled={!canUseQueueCommands || !currentSong}
+          onClick={locateCurrent}
+        >
+          <Icon name="nowPlaying" />
+          {t('nowPlaying.locateCurrent')}
+        </button>
+        {customPlaylists.length > 0 ? (
           <button
-            className="action-button secondary danger"
             type="button"
-            disabled={songs.length === 0}
-            onClick={onClearQueue}
+            className="now-playing-command"
+            disabled={!canUseQueueCommands}
+            onClick={(event) => {
+              const rect = event.currentTarget.getBoundingClientRect()
+              setAddToMenu({ x: rect.left, y: rect.bottom + 8, songIds: queueSongIds })
+            }}
           >
-            Clear Queue
+            <Icon name="plus" />
+            {t('context.addToPlaylist')}
           </button>
-        </div>
+        ) : null}
+        <button
+          type="button"
+          className="now-playing-command"
+          disabled={!canUseQueueCommands}
+          onClick={onClearQueue}
+        >
+          <Icon name="close" />
+          {t('nowPlaying.clearQueue')}
+        </button>
+        <button
+          type="button"
+          className="now-playing-command"
+          disabled={!currentSong}
+          onClick={() => {
+            navigate('/now-playing?full=1')
+          }}
+        >
+          <Icon name="albums" />
+          {t('nowPlaying.playMode')}
+        </button>
+        <button
+          type="button"
+          className={clsx('now-playing-command', { 'is-active': multiSelect })}
+          disabled={!canUseQueueCommands}
+          onClick={() => {
+            setMultiSelect((current) => {
+              if (current) {
+                clearSelection()
+              }
+              return !current
+            })
+          }}
+        >
+          <Icon name="menu" />
+          {t('albums.multiSelect')}
+        </button>
       </header>
 
       {error ? <div className="error-banner">{error}</div> : null}
 
-      <div className="summary-grid">
-        <div className="summary-card">
-          <span className="summary-label">Queue</span>
-          <span className="summary-value">{songs.length}</span>
-          <p>Tracks persisted in the built-in now-playing playlist.</p>
-        </div>
-        <div className="summary-card">
-          <span className="summary-label">Current Slot</span>
-          <span className="summary-value">{currentQueueIndex >= 0 ? currentQueueIndex + 1 : '-'}</span>
-          <p>Playback follows the stored queue order rather than a library-wide sort.</p>
-        </div>
-        <div className="summary-card">
-          <span className="summary-label">Up Next</span>
-          <span className="summary-value">{remainingTracks}</span>
-          <p>Tracks still queued after the current selection.</p>
-        </div>
-        <div className="summary-card">
-          <span className="summary-label">Lyrics</span>
-          <span className="summary-value settings-mode-value">
-            {formatLyricsSource(displayedLyrics.source)}
-          </span>
-          <p>Source priority: sidecar `.lrc`, sidecar `.txt`, then embedded music tags.</p>
-        </div>
-      </div>
-
-      <div className="now-playing-layout">
-        <section className="detail-panel now-playing-lyrics-panel">
-          <div className="subpanel-header">
-            <div>
-              <span className="summary-label">Lyrics</span>
-              <strong>
-                {displayedLyricsLoading ? 'Loading...' : formatLyricsSource(displayedLyrics.source)}
-              </strong>
-            </div>
-            <div className="table-toolbar">
-              <button
-                type="button"
-                className={`table-action-button subtle${lyricsMode === 'auto' ? ' is-selected' : ''}`}
-                onClick={() => {
-                  setLyricsMode('auto')
-                }}
-              >
-                Auto
-              </button>
-              <button
-                type="button"
-                className={`table-action-button subtle${lyricsMode === 'local' ? ' is-selected' : ''}`}
-                onClick={() => {
-                  setLyricsMode('local')
-                }}
-              >
-                Local
-              </button>
-              <button
-                type="button"
-                className={`table-action-button subtle${lyricsMode === 'internet' ? ' is-selected' : ''}`}
-                onClick={() => {
-                  setLyricsMode('internet')
-                }}
-              >
-                Internet
-              </button>
-            </div>
+      <section
+        className="now-playing-list-shell"
+        ref={listShellRef}
+        onScroll={(event) => {
+          setScrollTop(event.currentTarget.scrollTop)
+        }}
+      >
+        {visibleSongs.length === 0 ? (
+          <div className="empty-state compact">
+            <h3>
+              {songs.length > 0
+                ? t('nowPlaying.noQueueMatch', { query: searchQuery })
+                : t('nowPlaying.queueEmpty')}
+            </h3>
+            <p>{songs.length > 0 ? t('nowPlaying.queueSearchHelp') : t('nowPlaying.queueEmptyHelp')}</p>
           </div>
+        ) : (
+          <div className="now-playing-playlist-control" style={{ minHeight: listHeight }}>
+            {topSpacerHeight > 0 ? <div className="now-playing-virtual-spacer" style={{ height: topSpacerHeight }} /> : null}
+            {renderedSongs.map((song) => {
+              const queueIndex = queueIndexBySongId.get(song.id) ?? 0
+              const current = song.id === selectedTrackId
 
-          <div className="root-banner">
-            <span className="summary-label">Mode</span>
-            <strong>
-              {lyricsMode === 'auto'
-                ? autoLyrics
-                  ? 'Auto: local then internet then embedded'
-                  : 'Auto: local then embedded'
-                : lyricsMode === 'local'
-                  ? 'Local-only lyrics'
-                  : 'Internet-only lyrics'}
-            </strong>
-            {displayedLyrics.isSynced ? (
-              <span className="banner-hint">Synced to playback position</span>
-            ) : null}
+              return (
+                <PlaylistControlItem
+                  key={`now-playing-${queueIndex}-${song.id}`}
+                  containerRef={current ? currentRowRef : undefined}
+                  song={song}
+                  t={t}
+                  current={current}
+                  isPlaying={isPlaying}
+                  selected={selectedSongIds.has(song.id)}
+                  selectionMode={multiSelect}
+                  queueSongIds={queueSongIds}
+                  draggable
+                  showArtist
+                  showAlbum
+                  onPlayTrack={onPlayTrack}
+                  onTogglePlayPause={onTogglePlayPause}
+                  onSelect={toggleSelection}
+                  onAddToPlaylistClick={(contextSong, x, y) => {
+                    setSongMenu({ song: contextSong, x, y })
+                  }}
+                  onContextMenu={(contextSong, x, y) => {
+                    setSongMenu({ song: contextSong, x, y })
+                  }}
+                  onDragStart={(event) => {
+                    draggedSongIdRef.current = song.id
+                    event.dataTransfer.effectAllowed = 'move'
+                  }}
+                  onDragOver={(event) => {
+                    event.preventDefault()
+                    event.dataTransfer.dropEffect = 'move'
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault()
+                    const draggedSongId = draggedSongIdRef.current
+                    draggedSongIdRef.current = null
+                    if (draggedSongId == null || draggedSongId === song.id) {
+                      return
+                    }
+
+                    const nextSongIds = queueSongIds.filter((songId) => songId !== draggedSongId)
+                    nextSongIds.splice(queueIndex, 0, draggedSongId)
+                    onReplaceQueue(nextSongIds)
+                  }}
+                />
+              )
+            })}
+            {bottomSpacerHeight > 0 ? <div className="now-playing-virtual-spacer" style={{ height: bottomSpacerHeight }} /> : null}
           </div>
+        )}
+      </section>
 
-          {displayedLyricsError ? <div className="error-banner">{displayedLyricsError}</div> : null}
-
-          {!currentTrack ? (
-            <div className="empty-state compact">
-              <h3>No active track</h3>
-              <p>Play a song to load its local or embedded lyrics.</p>
-            </div>
-          ) : displayedLyricsLoading ? (
-            <div className="empty-state compact">
-              <h3>Loading lyrics</h3>
-              <p>Reading sidecar files and embedded tags for the current song.</p>
-            </div>
-          ) : displayedLyrics.lines.length === 0 ? (
-            <div className="empty-state compact">
-              <h3>No lyrics found</h3>
-              <p>
-                No sidecar `.lrc` or `.txt` file was found next to this song, and no embedded
-                lyrics were detected in the media tags.
-              </p>
-            </div>
-          ) : (
-            <div className="lyrics-scroll-shell">
-              {displayedLyrics.lines.map((line, index) => (
-                <p
-                  key={line.id}
-                  ref={index === activeLyricsIndex ? activeLyricsLineRef : null}
-                  className={clsx('lyrics-line', {
-                    'is-active': index === activeLyricsIndex,
-                    'is-past': activeLyricsIndex > index,
-                  })}
-                >
-                  {line.text}
-                </p>
-              ))}
-            </div>
-          )}
-        </section>
-
-        <section className="table-shell now-playing-queue-shell">
-          <div className="subpanel-header">
-            <div>
-              <span className="summary-label">Queue</span>
-              <strong>
-                {visibleSongs.length}
-                {searchQuery ? ' filtered' : ''}
-              </strong>
-            </div>
-            {searchQuery ? (
-              <span className="banner-hint">
-                {visibleSongs.length} result{visibleSongs.length === 1 ? '' : 's'} for "{searchQuery}"
-              </span>
-            ) : null}
-          </div>
-
-          {visibleSongs.length === 0 ? (
-            <div className="empty-state compact">
-              <h3>{songs.length > 0 ? `No queue items match "${searchQuery}"` : 'Queue is empty'}</h3>
-              <p>
-                {songs.length > 0
-                  ? 'Try a broader keyword. Search matches title, artist, album, and file path.'
-                  : 'Start playback from the library or a playlist to persist a real now-playing queue.'}
-              </p>
-            </div>
-          ) : (
-            <table className="music-table">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Name</th>
-                  <th>Artist</th>
-                  <th>Album</th>
-                  <th>Duration</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleSongs.map((song) => {
-                  const queueIndex = songs.findIndex((queueSong) => queueSong.id === song.id)
-
-                  return (
-                    <tr
-                      key={`queue-${queueIndex}-${song.id}`}
-                      className={clsx({ 'is-current': song.id === selectedTrackId })}
-                      onClick={() => {
-                        onPlayTrack(song.id)
-                      }}
-                    >
-                      <td>{queueIndex + 1}</td>
-                      <td>{song.title}</td>
-                      <td>{getDisplayArtists(song)}</td>
-                      <td>{song.album || 'Unknown album'}</td>
-                      <td>{formatDuration(song.duration)}</td>
-                      <td>
-                        <button
-                          type="button"
-                          className="table-action-button"
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            onRemoveSong(song.id)
-                          }}
-                        >
-                          Remove
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          )}
-        </section>
-      </div>
+      <MultiSelectCommandBar
+        visible={multiSelect}
+        selectedCount={selectedVisibleSongIds.length}
+        t={t}
+        playlists={customPlaylists}
+        removeLabel={t('nowPlaying.remove')}
+        onPlay={playSelected}
+        onAddToPlaylist={(playlistId) => {
+          onAddSongsToPlaylist(playlistId, selectedVisibleSongIds)
+        }}
+        onAddToPlaylistMenuClick={(event) => {
+          const rect = event.currentTarget.getBoundingClientRect()
+          setAddToMenu({ x: rect.left, y: rect.top - 8, songIds: selectedVisibleSongIds })
+        }}
+        onRemove={() => {
+          onRemoveSongs(selectedVisibleSongIds)
+          clearSelection()
+        }}
+        onSelectAll={() => {
+          setSelectedSongIds(new Set(visibleSongs.map((song) => song.id)))
+        }}
+        onReverseSelection={reverseSelection}
+        onClearSelection={clearSelection}
+        onCancel={() => {
+          setMultiSelect(false)
+          clearSelection()
+        }}
+      />
+      {songMenu ? (
+        <MenuFlyout
+          position={songMenu}
+          onClose={() => {
+            setSongMenu(null)
+          }}
+          items={getMusicMenuFlyoutItems({
+            song: songMenu.song,
+            option: {
+              showRemove: true,
+              showSelect: true,
+              showDelete: true,
+            },
+            playlists,
+            queueSongIds,
+            currentTrackId: selectedTrackId,
+            isPlaying,
+            t,
+            onPlay: () => {
+              onPlayTrack(songMenu.song.id, queueSongIds)
+            },
+            onPause: onTogglePlayPause,
+            onPlayNext: () => {
+              onPlayNext(songMenu.song.id)
+            },
+            onAddToPlaylist: (playlistId) => {
+              onAddSongToPlaylist(playlistId, songMenu.song.id)
+            },
+            onRemove: () => {
+              onRemoveSongs([songMenu.song.id])
+            },
+            onSelect: () => {
+              setMultiSelect(true)
+              setSelectedSongIds(new Set([songMenu.song.id]))
+            },
+            onToggleFavorite: () => {
+              onToggleFavorite(songMenu.song.id, !songMenu.song.favorite)
+            },
+            onReveal: () => {
+              onRevealSong(songMenu.song.path)
+            },
+            onDelete: () => {
+              onDeleteSongFromDisk(songMenu.song.id)
+            },
+            onSeeArtist: () => {
+              navigate(`/artists/${encodeURIComponent(songMenu.song.artists[0] || songMenu.song.artist)}`)
+            },
+            onSeeAlbum: () => {
+              navigate(`/albums/${encodeURIComponent(songMenu.song.album || t('common.albumUnknown'))}`)
+            },
+            onSeeMusicInfo: () => {
+              navigate('/now-playing?full=1&panel=info')
+            },
+            onSeeLyrics: () => {
+              navigate('/now-playing?full=1&panel=lyrics')
+            },
+            onSeeAlbumArt: () => {
+              navigate('/now-playing?full=1&panel=album-art')
+            },
+          })}
+        />
+      ) : null}
+      {addToMenuItem?.submenu ? (
+        <MenuFlyout
+          position={addToMenu!}
+          onClose={() => {
+            setAddToMenu(null)
+          }}
+          items={addToMenuItem.submenu}
+        />
+      ) : null}
     </section>
   )
+}
+
+interface NowPlayingSongMenuState {
+  song: LibrarySong
+  x: number
+  y: number
+}
+
+interface NowPlayingAddToMenuState {
+  songIds: number[]
+  x: number
+  y: number
 }

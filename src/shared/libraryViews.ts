@@ -1,10 +1,31 @@
 import type { LibrarySong, PlaybackMode, RecentLibrarySong } from './contracts'
 import { formatDuration } from './formatters'
 import { getDisplayArtists, getSongArtists } from './artists'
+import type { Translator } from './i18n'
 
 const CARD_LIMIT = 18
 
-function formatCount(value: number, singular: string, plural = `${singular}s`) {
+function formatCount(value: number, singular: string, plural = `${singular}s`, t?: Translator) {
+  if (!t) {
+    return `${value} ${value === 1 ? singular : plural}`
+  }
+
+  if (singular === 'song') {
+    return t('cards.songCount', { count: value })
+  }
+
+  if (singular === 'track') {
+    return t('cards.trackCount', { count: value })
+  }
+
+  if (singular === 'album') {
+    return t('cards.albumCount', { count: value })
+  }
+
+  if (singular === 'artist') {
+    return t('cards.artistCount', { count: value })
+  }
+
   return `${value} ${value === 1 ? singular : plural}`
 }
 
@@ -42,29 +63,32 @@ function getRelativeFolderLabel(folderPath: string, rootPath: string) {
   return folderPath
 }
 
-function formatPlayedAt(playedAt: string) {
+function formatPlayedAt(playedAt: string, t?: Translator) {
   const parsed = new Date(playedAt)
 
   if (Number.isNaN(parsed.getTime())) {
-    return 'recently'
+    return t?.('cards.recently') ?? 'recently'
   }
 
   const diffSeconds = Math.max(0, Math.round((Date.now() - parsed.getTime()) / 1000))
 
   if (diffSeconds < 60) {
-    return 'just now'
+    return t?.('common.justNow') ?? 'just now'
   }
 
   if (diffSeconds < 3600) {
-    return `${Math.floor(diffSeconds / 60)} min ago`
+    const count = Math.floor(diffSeconds / 60)
+    return t?.('common.minAgo', { count }) ?? `${count} min ago`
   }
 
   if (diffSeconds < 86_400) {
-    return `${Math.floor(diffSeconds / 3600)} hr ago`
+    const count = Math.floor(diffSeconds / 3600)
+    return t?.('common.hrAgo', { count }) ?? `${count} hr ago`
   }
 
   if (diffSeconds < 604_800) {
-    return `${Math.floor(diffSeconds / 86_400)} day ago`
+    const count = Math.floor(diffSeconds / 86_400)
+    return t?.('cards.dayAgo', { count }) ?? `${count} day ago`
   }
 
   return parsed.toLocaleDateString()
@@ -83,7 +107,7 @@ function formatMode(mode: PlaybackMode) {
   }
 }
 
-export function buildArtistCards(songs: LibrarySong[]) {
+export function buildArtistCards(songs: LibrarySong[], t?: Translator) {
   const groups = new Map<
     string,
     { count: number; duration: number; albums: Set<string>; artworkUrl: string }
@@ -118,23 +142,31 @@ export function buildArtistCards(songs: LibrarySong[]) {
     .slice(0, CARD_LIMIT)
     .map(([artist, summary]) => ({
       title: artist,
-      subtitle: `${formatCount(summary.count, 'song')} across ${formatCount(summary.albums.size, 'album')}`,
+      subtitle: t
+        ? t('cards.artistSubtitle', {
+            songs: formatCount(summary.count, 'song', undefined, t),
+            albums: formatCount(summary.albums.size, 'album', undefined, t),
+          })
+        : `${formatCount(summary.count, 'song')} across ${formatCount(summary.albums.size, 'album')}`,
       artworkUrl: summary.artworkUrl,
       detail:
         summary.duration > 0
-          ? `${formatDuration(summary.duration)} total runtime in the imported library.`
-          : 'Runtime metadata has not been detected for these tracks yet.',
+          ? t?.('cards.artistRuntime', {
+              duration: formatDuration(summary.duration),
+            }) ?? `${formatDuration(summary.duration)} total runtime in the imported library.`
+          : t?.('cards.artistNoRuntime') ??
+            'Runtime metadata has not been detected for these tracks yet.',
     }))
 }
 
-export function buildAlbumCards(songs: LibrarySong[]) {
+export function buildAlbumCards(songs: LibrarySong[], t?: Translator) {
   const groups = new Map<
     string,
     { count: number; duration: number; artists: Set<string>; artworkUrl: string }
   >()
 
   for (const song of songs) {
-    const album = song.album || 'Unknown album'
+    const album = song.album || t?.('common.albumUnknown') || 'Unknown album'
     const current =
       groups.get(album) ?? { count: 0, duration: 0, artists: new Set<string>(), artworkUrl: '' }
 
@@ -161,12 +193,20 @@ export function buildAlbumCards(songs: LibrarySong[]) {
     .slice(0, CARD_LIMIT)
     .map(([album, summary]) => ({
       title: album,
-      subtitle: `${formatCount(summary.count, 'track')} by ${formatCount(summary.artists.size, 'artist')}`,
+      subtitle: t
+        ? t('cards.albumSubtitle', {
+            tracks: formatCount(summary.count, 'track', undefined, t),
+            artists: formatCount(summary.artists.size, 'artist', undefined, t),
+          })
+        : `${formatCount(summary.count, 'track')} by ${formatCount(summary.artists.size, 'artist')}`,
       artworkUrl: summary.artworkUrl,
       detail:
         summary.duration > 0
-          ? `${formatDuration(summary.duration)} total runtime in this album group.`
-          : 'Duration data is still missing from the imported tags for this album.',
+          ? t?.('cards.albumRuntime', {
+              duration: formatDuration(summary.duration),
+            }) ?? `${formatDuration(summary.duration)} total runtime in this album group.`
+          : t?.('cards.albumNoRuntime') ??
+            'Duration data is still missing from the imported tags for this album.',
     }))
 }
 
@@ -203,16 +243,18 @@ export function buildFolderCards(songs: LibrarySong[], rootPath: string) {
     }))
 }
 
-export function buildRecentCards(recentSongs: RecentLibrarySong[]) {
+export function buildRecentCards(recentSongs: RecentLibrarySong[], t?: Translator) {
   return recentSongs.slice(0, CARD_LIMIT).map((song) => ({
     title: song.title,
     subtitle: `${getDisplayArtists(song)} - ${formatDuration(song.duration)}`,
     artworkUrl: song.artworkUrl,
-    detail: `Played ${formatPlayedAt(song.playedAt)}${song.album ? ` - ${song.album}` : ''}`,
+    detail: `${t?.('cards.played', {
+      time: formatPlayedAt(song.playedAt, t),
+    }) ?? `Played ${formatPlayedAt(song.playedAt)}`}${song.album ? ` - ${song.album}` : ''}`,
   }))
 }
 
-export function buildFavoriteCards(songs: LibrarySong[]) {
+export function buildFavoriteCards(songs: LibrarySong[], t?: Translator) {
   return songs
     .filter((song) => song.favorite)
     .sort((left, right) => {
@@ -227,7 +269,12 @@ export function buildFavoriteCards(songs: LibrarySong[]) {
       title: song.title,
       subtitle: `${getDisplayArtists(song)} - ${formatDuration(song.duration)}`,
       artworkUrl: song.artworkUrl,
-      detail: `${song.album || 'Unknown album'} - Played ${song.playCount} times`,
+      detail: t
+        ? t('cards.playedTimes', {
+            album: song.album || t('common.albumUnknown'),
+            count: song.playCount,
+          })
+        : `${song.album || 'Unknown album'} - Played ${song.playCount} times`,
     }))
 }
 

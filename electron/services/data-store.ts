@@ -4,6 +4,7 @@ import { basename, dirname, extname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { pathToFileURL } from 'node:url'
 
+import { nativeImage } from 'electron'
 import { parseFile } from 'music-metadata'
 
 import type {
@@ -16,8 +17,15 @@ import type {
   LyricsRequestMode,
   LyricsSnapshot,
   LyricsSource,
+  MusicLibrarySortCriterion,
   PlaybackMode,
   PlaybackSettingsUpdate,
+  PreferenceEntityType,
+  PreferenceItemSnapshot,
+  PreferenceItemUpdate,
+  PreferenceLevel,
+  PreferenceSettingsSnapshot,
+  PreferenceSettingsUpdate,
   PreferredLanguage,
   RecentLibrarySong,
   ScanLibraryResult,
@@ -28,12 +36,15 @@ import { normalizeArtists } from '../../src/shared/artists.ts'
 import { ACTIVE_STATE, AUDIO_EXTENSIONS, PLAYLIST_NAMES, SMPLAYER_DB_NAME } from './constants.ts'
 import { initializeSchema } from './schema.ts'
 
+const LYRICS_REQUEST_TIMEOUT_MS = 10_000
+
 interface SettingsRow {
   Id: number
   RootPath: string
   MyFavorites: number
   NowPlaying: number
   ThemeColor: string
+  NotificationSend: number
   NotificationDisplay: number
   AutoLyrics: number
   ShowLyricsInNotification: number
@@ -41,6 +52,7 @@ interface SettingsRow {
   NotificationLyricsSource: number
   SaveLyricsImmediately: number
   UseFilenameNotMusicName: number
+  MusicLibraryCriterion: number
   LastMusicIndex: number
   Volume: number
   IsMuted: number
@@ -49,6 +61,7 @@ interface SettingsRow {
   AutoPlay: number
   SaveMusicProgress: number
   ShowCount: number
+  HideMultiSelectCommandBarAfterOperation: number
   LastPage: string
   LastPlaylist: number
 }
@@ -100,10 +113,34 @@ interface SongPathRow {
   path: string
 }
 
+interface PreferenceSettingRow {
+  Id: number
+  Songs: number
+  Artists: number
+  Albums: number
+  Playlists: number
+  Folders: number
+}
+
+interface PreferenceItemRow {
+  id: number
+  type: number
+  itemId: string
+  itemName: string
+  isEnabled: number
+  level: number
+  songName: string | null
+  songTooltip: string | null
+  artistValid: number
+  albumValid: number
+  playlistName: string | null
+  folderName: string | null
+  folderTooltip: string | null
+}
+
 export class SmplayerDataStore {
   private readonly db: DatabaseSync
   private readonly coverCachePath: string
-  private readonly searchHistoryLimit = 8
 
   private readonly getSettingsStatement
   private readonly getPlaylistIdStatement
@@ -113,7 +150,6 @@ export class SmplayerDataStore {
   private readonly deleteSearchHistoryEntryStatement
   private readonly deleteSearchHistoryByQueryStatement
   private readonly insertSearchHistoryStatement
-  private readonly trimSearchHistoryStatement
   private readonly clearSearchHistoryStatement
   private readonly insertSettingsStatement
   private readonly updateSettingsPlaylistsStatement
@@ -121,6 +157,7 @@ export class SmplayerDataStore {
   private readonly updateAppSettingsStatement
   private readonly updateViewStateStatement
   private readonly updatePlaybackSettingsStatement
+  private readonly updateSongDurationStatement
   private readonly insertPlaylistStatement
   private readonly updatePlaylistNameStatement
   private readonly updatePlaylistPriorityStatement
@@ -128,13 +165,17 @@ export class SmplayerDataStore {
   private readonly updatePlaylistItemStateStatement
   private readonly insertPlaylistItemStatement
   private readonly markPlaylistItemsInactiveStatement
+  private readonly markPlaylistItemsBySongInactiveStatement
   private readonly cleanupInvalidPlaylistItemsStatement
   private readonly markMusicInactiveStatement
+  private readonly markSingleMusicInactiveStatement
   private readonly markSongArtistsInactiveStatement
   private readonly markFolderInactiveStatement
   private readonly markFileInactiveStatement
+  private readonly markFileByPathInactiveStatement
   private readonly markSongPlayedStatement
   private readonly markRecentPlayedInactiveStatement
+  private readonly clearRecentPlayedStatement
   private readonly cleanupInvalidRecentPlayedStatement
   private readonly insertRecentPlayedStatement
   private readonly upsertFolderStatement
@@ -169,6 +210,7 @@ export class SmplayerDataStore {
         MyFavorites,
         NowPlaying,
         ThemeColor,
+        NotificationSend,
         NotificationDisplay,
         AutoLyrics,
         ShowLyricsInNotification,
@@ -176,6 +218,7 @@ export class SmplayerDataStore {
         NotificationLyricsSource,
         SaveLyricsImmediately,
         UseFilenameNotMusicName,
+        MusicLibraryCriterion,
         LastMusicIndex,
         Volume,
         IsMuted,
@@ -184,6 +227,7 @@ export class SmplayerDataStore {
         AutoPlay,
         SaveMusicProgress,
         ShowCount,
+        HideMultiSelectCommandBarAfterOperation,
         LastPage,
         LastPlaylist
       FROM Settings
@@ -213,7 +257,6 @@ export class SmplayerDataStore {
         SearchedAt AS searchedAt
       FROM SearchHistory
       ORDER BY datetime(SearchedAt) DESC, Id DESC
-      LIMIT ?
     `)
     this.deleteSearchHistoryEntryStatement = this.db.prepare(`
       DELETE FROM SearchHistory
@@ -226,15 +269,6 @@ export class SmplayerDataStore {
     this.insertSearchHistoryStatement = this.db.prepare(`
       INSERT INTO SearchHistory (Query, SearchedAt)
       VALUES (?, ?)
-    `)
-    this.trimSearchHistoryStatement = this.db.prepare(`
-      DELETE FROM SearchHistory
-      WHERE Id NOT IN (
-        SELECT Id
-        FROM SearchHistory
-        ORDER BY datetime(SearchedAt) DESC, Id DESC
-        LIMIT ?
-      )
     `)
     this.clearSearchHistoryStatement = this.db.prepare('DELETE FROM SearchHistory')
     this.insertSettingsStatement = this.db.prepare(`
@@ -264,8 +298,10 @@ export class SmplayerDataStore {
         VoiceAssistantPreferredLanguage = ?,
         NotificationLyricsSource = ?,
         SaveLyricsImmediately = ?,
+        MusicLibraryCriterion = ?,
         AutoPlay = ?,
         SaveMusicProgress = ?,
+        HideMultiSelectCommandBarAfterOperation = ?,
         MusicProgress = ?
       WHERE Id = ?
     `)
@@ -285,6 +321,16 @@ export class SmplayerDataStore {
         Mode = ?,
         MusicProgress = ?
       WHERE Id = ?
+    `)
+    this.updateSongDurationStatement = this.db.prepare(`
+      UPDATE Music
+      SET Duration = ?
+      WHERE Id = ?
+        AND State = ?
+        AND (
+          Duration <= 0
+          OR ABS(Duration - ?) > 1
+        )
     `)
     this.insertPlaylistStatement = this.db.prepare(`
       INSERT INTO Playlist (Name, Criterion, Priority, State)
@@ -319,6 +365,11 @@ export class SmplayerDataStore {
       SET State = ?
       WHERE PlaylistId = ?
     `)
+    this.markPlaylistItemsBySongInactiveStatement = this.db.prepare(`
+      UPDATE PlaylistItem
+      SET State = ?
+      WHERE ItemId = ?
+    `)
     this.cleanupInvalidPlaylistItemsStatement = this.db.prepare(`
       UPDATE PlaylistItem
       SET State = ?
@@ -339,6 +390,7 @@ export class SmplayerDataStore {
         )
     `)
     this.markMusicInactiveStatement = this.db.prepare('UPDATE Music SET State = ?')
+    this.markSingleMusicInactiveStatement = this.db.prepare('UPDATE Music SET State = ? WHERE Id = ?')
     this.markSongArtistsInactiveStatement = this.db.prepare(`
       UPDATE MusicArtist
       SET State = ?
@@ -346,6 +398,7 @@ export class SmplayerDataStore {
     `)
     this.markFolderInactiveStatement = this.db.prepare('UPDATE Folder SET State = ?')
     this.markFileInactiveStatement = this.db.prepare('UPDATE File SET State = ?')
+    this.markFileByPathInactiveStatement = this.db.prepare('UPDATE File SET State = ? WHERE Path = ?')
     this.markSongPlayedStatement = this.db.prepare(`
       UPDATE Music
       SET PlayCount = PlayCount + 1
@@ -355,6 +408,11 @@ export class SmplayerDataStore {
       UPDATE RecentRecord
       SET State = ?
       WHERE Type = 0 AND ItemId = ?
+    `)
+    this.clearRecentPlayedStatement = this.db.prepare(`
+      UPDATE RecentRecord
+      SET State = ?
+      WHERE Type = 0
     `)
     this.cleanupInvalidRecentPlayedStatement = this.db.prepare(`
       UPDATE RecentRecord
@@ -488,7 +546,7 @@ export class SmplayerDataStore {
         Music.Album AS album,
         Music.Duration AS duration,
         Music.PlayCount AS playCount,
-        Music.DateAdded AS dateAdded,
+        CAST(Music.DateAdded AS TEXT) AS dateAdded,
         EXISTS(
           SELECT 1
           FROM PlaylistItem
@@ -532,8 +590,8 @@ export class SmplayerDataStore {
         Music.Album AS album,
         Music.Duration AS duration,
         Music.PlayCount AS playCount,
-        Music.DateAdded AS dateAdded,
-        RecentRecord.Time AS playedAt,
+        CAST(Music.DateAdded AS TEXT) AS dateAdded,
+        CAST(RecentRecord.Time AS TEXT) AS playedAt,
         EXISTS(
           SELECT 1
           FROM PlaylistItem
@@ -547,8 +605,7 @@ export class SmplayerDataStore {
       WHERE RecentRecord.Type = 0
         AND RecentRecord.State = ?
         AND Music.State = ?
-      ORDER BY datetime(RecentRecord.Time) DESC, RecentRecord.Id DESC
-      LIMIT 12
+      ORDER BY RecentRecord.Id DESC
     `)
     this.getCountsStatement = this.db.prepare(`
       SELECT
@@ -592,7 +649,16 @@ export class SmplayerDataStore {
       WHERE Id = ?
     `)
 
-    this.ensureDefaultRows()
+    this.initializeSettingsRows()
+  }
+
+  flush() {
+    this.db.exec('PRAGMA wal_checkpoint(FULL)')
+  }
+
+  close() {
+    this.flush()
+    this.db.close()
   }
 
   getSettingsSnapshot(): SettingsSnapshot {
@@ -603,12 +669,15 @@ export class SmplayerDataStore {
       useFilenameNotMusicName: Boolean(settings.UseFilenameNotMusicName),
       showCount: Boolean(settings.ShowCount),
       themeColor: settings.ThemeColor || '#5b87b6',
-      showNotifications: Boolean(settings.NotificationDisplay),
+      notificationSend: this.mapNotificationSend(settings.NotificationSend),
+      notificationDisplay: this.mapNotificationDisplay(settings.NotificationDisplay),
+      showNotifications: this.mapNotificationSend(settings.NotificationSend) !== 'never',
       autoLyrics: Boolean(settings.AutoLyrics),
       showLyricsInNotification: Boolean(settings.ShowLyricsInNotification),
       notificationLyricsSource: this.mapLyricsRequestMode(settings.NotificationLyricsSource),
       saveLyricsImmediately: Boolean(settings.SaveLyricsImmediately),
       preferredLanguage: this.mapPreferredLanguage(settings.VoiceAssistantPreferredLanguage),
+      musicLibrarySort: this.mapMusicLibrarySort(settings.MusicLibraryCriterion),
       lastMusicIndex: settings.LastMusicIndex,
       volume: settings.Volume,
       isMuted: Boolean(settings.IsMuted),
@@ -616,6 +685,7 @@ export class SmplayerDataStore {
       musicProgress: settings.MusicProgress,
       autoPlay: Boolean(settings.AutoPlay),
       saveMusicProgress: Boolean(settings.SaveMusicProgress),
+      hideMultiSelectCommandBarAfterOperation: Boolean(settings.HideMultiSelectCommandBarAfterOperation),
       lastPage: settings.LastPage || '/songs',
       lastPlaylistId: settings.LastPlaylist,
     }
@@ -624,9 +694,7 @@ export class SmplayerDataStore {
   getLibrarySnapshot(): LibrarySnapshot {
     const settings = this.getSettings()
     const searchState = this.getSearchState()
-    const recentSearches = this.getSearchHistoryStatement.all(
-      this.searchHistoryLimit,
-    ) as unknown as SearchHistoryEntry[]
+    const recentSearches = this.getSearchHistoryStatement.all() as unknown as SearchHistoryEntry[]
     const playlists = this.getPlaylistsStatement.all(
       ACTIVE_STATE.active,
       ACTIVE_STATE.active,
@@ -665,7 +733,7 @@ export class SmplayerDataStore {
     const librarySongs = songs.map((song) => this.toLibrarySong(song, artistsBySongId))
     const recentLibrarySongs = recentSongs.map((song) => ({
       ...this.toLibrarySong(song, artistsBySongId),
-      playedAt: song.playedAt,
+      playedAt: this.normalizeStoredDate(song.playedAt),
     }))
     const playlistSongIds = new Map<number, number[]>()
 
@@ -681,12 +749,15 @@ export class SmplayerDataStore {
         useFilenameNotMusicName: Boolean(settings.UseFilenameNotMusicName),
         showCount: Boolean(settings.ShowCount),
         themeColor: settings.ThemeColor || '#5b87b6',
-        showNotifications: Boolean(settings.NotificationDisplay),
+        notificationSend: this.mapNotificationSend(settings.NotificationSend),
+        notificationDisplay: this.mapNotificationDisplay(settings.NotificationDisplay),
+        showNotifications: this.mapNotificationSend(settings.NotificationSend) !== 'never',
         autoLyrics: Boolean(settings.AutoLyrics),
         showLyricsInNotification: Boolean(settings.ShowLyricsInNotification),
         notificationLyricsSource: this.mapLyricsRequestMode(settings.NotificationLyricsSource),
         saveLyricsImmediately: Boolean(settings.SaveLyricsImmediately),
         preferredLanguage: this.mapPreferredLanguage(settings.VoiceAssistantPreferredLanguage),
+        musicLibrarySort: this.mapMusicLibrarySort(settings.MusicLibraryCriterion),
         lastMusicIndex: settings.LastMusicIndex,
         volume: settings.Volume,
         isMuted: Boolean(settings.IsMuted),
@@ -694,6 +765,7 @@ export class SmplayerDataStore {
         musicProgress: settings.MusicProgress,
         autoPlay: Boolean(settings.AutoPlay),
         saveMusicProgress: Boolean(settings.SaveMusicProgress),
+        hideMultiSelectCommandBarAfterOperation: Boolean(settings.HideMultiSelectCommandBarAfterOperation),
         lastPage: settings.LastPage || '/songs',
         lastPlaylistId: settings.LastPlaylist,
       },
@@ -725,22 +797,350 @@ export class SmplayerDataStore {
     }
   }
 
+  async getSongArtwork(songId: number) {
+    const artworkUrl = await this.getSongArtworkFileUrl(songId)
+    return artworkUrl ? this.getSongArtworkUrl(songId) : ''
+  }
+
+  getSongFileUrl(songId: number) {
+    const song = this.db.prepare(`
+      SELECT Path AS path
+      FROM Music
+      WHERE Id = ?
+        AND State = ?
+      LIMIT 1
+    `).get(songId, ACTIVE_STATE.active) as { path: string } | undefined
+
+    if (!song) {
+      throw new Error('Song not found.')
+    }
+
+    return pathToFileURL(song.path).href
+  }
+
+  getSongPath(songId: number) {
+    const song = this.getSongPathStatement.get(
+      songId,
+      ACTIVE_STATE.active,
+    ) as { path: string } | undefined
+
+    if (!song) {
+      throw new Error('Song not found.')
+    }
+
+    return song.path
+  }
+
+  deleteSong(songId: number) {
+    const songPath = this.getSongPath(songId)
+
+    this.db.exec('BEGIN')
+    try {
+      this.markSingleMusicInactiveStatement.run(ACTIVE_STATE.inactive, songId)
+      this.markSongArtistsInactiveStatement.run(ACTIVE_STATE.inactive, songId)
+      this.markPlaylistItemsBySongInactiveStatement.run(ACTIVE_STATE.inactive, songId)
+      this.markRecentPlayedInactiveStatement.run(ACTIVE_STATE.inactive, songId.toString())
+      this.markFileByPathInactiveStatement.run(ACTIVE_STATE.inactive, songPath)
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  async getSongArtworkFileUrl(songId: number) {
+    const song = this.db.prepare(`
+      SELECT
+        Path AS path,
+        ArtworkPath AS artworkPath
+      FROM Music
+      WHERE Id = ?
+        AND State = ?
+      LIMIT 1
+    `).get(songId, ACTIVE_STATE.active) as { path: string; artworkPath: string } | undefined
+
+    if (!song) {
+      throw new Error('Song not found.')
+    }
+
+    if (song.artworkPath) {
+      try {
+        await stat(song.artworkPath)
+        return pathToFileURL(song.artworkPath).href
+      } catch {
+        // Rebuild stale artwork cache entries below.
+      }
+    }
+
+    try {
+      const artworkPath =
+        (await this.writeShellThumbnailCache(song.path)) ||
+        (await this.writeEmbeddedArtworkCache(song.path))
+
+      if (!artworkPath) {
+        return ''
+      }
+
+      this.db.prepare(`
+        UPDATE Music
+        SET ArtworkPath = ?
+        WHERE Id = ?
+          AND State = ?
+      `).run(artworkPath, songId, ACTIVE_STATE.active)
+
+      return pathToFileURL(artworkPath).href
+    } catch {
+      return ''
+    }
+  }
+
+  getPreferenceSettings(): PreferenceSettingsSnapshot {
+    const setting = this.getPreferenceSetting()
+    const items = this.db.prepare(`
+      SELECT
+        PreferenceItem.Id AS id,
+        PreferenceItem.Type AS type,
+        PreferenceItem.ItemId AS itemId,
+        PreferenceItem.ItemName AS itemName,
+        PreferenceItem.IsEnabled AS isEnabled,
+        PreferenceItem.Level AS level,
+        Music.Name AS songName,
+        Music.Path AS songTooltip,
+        EXISTS(
+          SELECT 1
+          FROM MusicArtist
+          WHERE MusicArtist.Name = PreferenceItem.ItemId
+            AND MusicArtist.State = ?
+        ) AS artistValid,
+        EXISTS(
+          SELECT 1
+          FROM Music
+          WHERE Music.Album = PreferenceItem.ItemId
+            AND Music.State = ?
+        ) AS albumValid,
+        Playlist.Name AS playlistName,
+        Folder.Path AS folderName,
+        Folder.Path AS folderTooltip
+      FROM PreferenceItem
+      LEFT JOIN Music
+        ON PreferenceItem.Type = 0
+       AND Music.Id = CAST(PreferenceItem.ItemId AS INTEGER)
+       AND Music.State = ?
+      LEFT JOIN Playlist
+        ON PreferenceItem.Type = 3
+       AND Playlist.Id = CAST(PreferenceItem.ItemId AS INTEGER)
+       AND Playlist.State = ?
+      LEFT JOIN Folder
+        ON PreferenceItem.Type = 4
+       AND Folder.Id = CAST(PreferenceItem.ItemId AS INTEGER)
+       AND Folder.State = ?
+      WHERE PreferenceItem.State = ?
+      ORDER BY PreferenceItem.Id DESC
+    `).all(
+      ACTIVE_STATE.active,
+      ACTIVE_STATE.active,
+      ACTIVE_STATE.active,
+      ACTIVE_STATE.active,
+      ACTIVE_STATE.active,
+      ACTIVE_STATE.active,
+    ) as unknown as PreferenceItemRow[]
+    const mappedItems = items.map((item) => this.toPreferenceItemSnapshot(item))
+
+    return {
+      enabled: {
+        songs: Boolean(setting.Songs),
+        artists: Boolean(setting.Artists),
+        albums: Boolean(setting.Albums),
+        playlists: Boolean(setting.Playlists),
+        folders: Boolean(setting.Folders),
+      },
+      songs: mappedItems.filter((item) => item.type === 'song'),
+      artists: mappedItems.filter((item) => item.type === 'artist'),
+      albums: mappedItems.filter((item) => item.type === 'album'),
+      playlists: mappedItems.filter((item) => item.type === 'playlist'),
+      folders: mappedItems.filter((item) => item.type === 'folder'),
+      others: mappedItems.filter((item) =>
+        item.type === 'recent-added' ||
+        item.type === 'my-favorites' ||
+        item.type === 'most-played' ||
+        item.type === 'least-played',
+      ),
+    }
+  }
+
+  updatePreferenceSettings(update: PreferenceSettingsUpdate) {
+    const setting = this.getPreferenceSetting()
+    this.db.prepare(`
+      UPDATE PreferenceSetting
+      SET Songs = ?, Artists = ?, Albums = ?, Playlists = ?, Folders = ?
+      WHERE Id = ?
+    `).run(
+      Number(update.songs ?? Boolean(setting.Songs)),
+      Number(update.artists ?? Boolean(setting.Artists)),
+      Number(update.albums ?? Boolean(setting.Albums)),
+      Number(update.playlists ?? Boolean(setting.Playlists)),
+      Number(update.folders ?? Boolean(setting.Folders)),
+      setting.Id,
+    )
+  }
+
+  updatePreferenceItem(itemId: number, update: PreferenceItemUpdate) {
+    const item = this.db.prepare(`
+      SELECT IsEnabled AS isEnabled, Level AS level
+      FROM PreferenceItem
+      WHERE Id = ? AND State = ?
+    `).get(itemId, ACTIVE_STATE.active) as unknown as Pick<PreferenceItemRow, 'isEnabled' | 'level'>
+    this.db.prepare(`
+      UPDATE PreferenceItem
+      SET IsEnabled = ?, Level = ?
+      WHERE Id = ?
+    `).run(
+      Number(update.isEnabled ?? Boolean(item.isEnabled)),
+      this.toPreferenceLevelValue(update.level ?? this.mapPreferenceLevel(item.level)),
+      itemId,
+    )
+  }
+
+  removePreferenceItem(itemId: number) {
+    this.db.prepare('UPDATE PreferenceItem SET State = ? WHERE Id = ?').run(ACTIVE_STATE.inactive, itemId)
+  }
+
+  clearInvalidPreferenceItems(type: PreferenceEntityType) {
+    const entityType = this.toPreferenceEntityValue(type)
+    switch (type) {
+      case 'song':
+        this.db.prepare(`
+          UPDATE PreferenceItem
+          SET State = ?
+          WHERE Type = ?
+            AND State = ?
+            AND NOT EXISTS (
+              SELECT 1
+              FROM Music
+              WHERE Music.Id = CAST(PreferenceItem.ItemId AS INTEGER)
+                AND Music.State = ?
+            )
+        `).run(ACTIVE_STATE.inactive, entityType, ACTIVE_STATE.active, ACTIVE_STATE.active)
+        return
+      case 'artist':
+        this.db.prepare(`
+          UPDATE PreferenceItem
+          SET State = ?
+          WHERE Type = ?
+            AND State = ?
+            AND NOT EXISTS (
+              SELECT 1
+              FROM MusicArtist
+              WHERE MusicArtist.Name = PreferenceItem.ItemId
+                AND MusicArtist.State = ?
+            )
+        `).run(ACTIVE_STATE.inactive, entityType, ACTIVE_STATE.active, ACTIVE_STATE.active)
+        return
+      case 'album':
+        this.db.prepare(`
+          UPDATE PreferenceItem
+          SET State = ?
+          WHERE Type = ?
+            AND State = ?
+            AND NOT EXISTS (
+              SELECT 1
+              FROM Music
+              WHERE Music.Album = PreferenceItem.ItemId
+                AND Music.State = ?
+            )
+        `).run(ACTIVE_STATE.inactive, entityType, ACTIVE_STATE.active, ACTIVE_STATE.active)
+        return
+      case 'playlist':
+        this.db.prepare(`
+          UPDATE PreferenceItem
+          SET State = ?
+          WHERE Type = ?
+            AND State = ?
+            AND NOT EXISTS (
+              SELECT 1
+              FROM Playlist
+              WHERE Playlist.Id = CAST(PreferenceItem.ItemId AS INTEGER)
+                AND Playlist.State = ?
+            )
+        `).run(ACTIVE_STATE.inactive, entityType, ACTIVE_STATE.active, ACTIVE_STATE.active)
+        return
+      case 'folder':
+        this.db.prepare(`
+          UPDATE PreferenceItem
+          SET State = ?
+          WHERE Type = ?
+            AND State = ?
+            AND NOT EXISTS (
+              SELECT 1
+              FROM Folder
+              WHERE Folder.Id = CAST(PreferenceItem.ItemId AS INTEGER)
+                AND Folder.State = ?
+            )
+        `).run(ACTIVE_STATE.inactive, entityType, ACTIVE_STATE.active, ACTIVE_STATE.active)
+        return
+      case 'recent-added':
+      case 'my-favorites':
+      case 'most-played':
+      case 'least-played':
+        return
+    }
+  }
+
   setRootPath(rootPath: string) {
     const settings = this.getSettings()
     this.updateRootPathStatement.run(rootPath, settings.Id)
+  }
+
+  replaceRootPathReferences(originalPath: string, nextPath: string) {
+    if (originalPath === nextPath || !originalPath) {
+      return
+    }
+
+    this.db.exec('BEGIN')
+    try {
+      this.db.prepare(`
+        UPDATE Settings
+        SET RootPath = replace(RootPath, ?, ?)
+      `).run(originalPath, nextPath)
+      this.db.prepare(`
+        UPDATE Music
+        SET Path = replace(Path, ?, ?)
+      `).run(originalPath, nextPath)
+      this.db.prepare(`
+        UPDATE Folder
+        SET Path = replace(Path, ?, ?)
+      `).run(originalPath, nextPath)
+      this.db.prepare(`
+        UPDATE File
+        SET Path = replace(Path, ?, ?)
+      `).run(originalPath, nextPath)
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
   }
 
   updateSettings(update: AppSettingsUpdate) {
     const settings = this.getSettings()
     const nextSaveMusicProgress =
       update.saveMusicProgress ?? Boolean(settings.SaveMusicProgress)
+    const nextNotificationSend =
+      update.notificationSend ??
+      (update.showNotifications === undefined
+        ? this.mapNotificationSend(settings.NotificationSend)
+        : update.showNotifications
+          ? 'music-changed'
+          : 'never')
 
     this.updateAppSettingsStatement.run(
       Number(update.useFilenameNotMusicName ?? Boolean(settings.UseFilenameNotMusicName)),
       Number(update.showCount ?? Boolean(settings.ShowCount)),
       update.themeColor ?? settings.ThemeColor ?? '#5b87b6',
-      Number(update.showNotifications ?? Boolean(settings.NotificationDisplay)),
-      Number(update.showNotifications ?? Boolean(settings.NotificationDisplay)),
+      this.toNotificationDisplayValue(
+        update.notificationDisplay ?? this.mapNotificationDisplay(settings.NotificationDisplay),
+      ),
+      this.toNotificationSendValue(nextNotificationSend),
       Number(update.autoLyrics ?? Boolean(settings.AutoLyrics)),
       Number(update.showLyricsInNotification ?? Boolean(settings.ShowLyricsInNotification)),
       this.toPreferredLanguageValue(
@@ -750,8 +1150,15 @@ export class SmplayerDataStore {
         update.notificationLyricsSource ?? this.mapLyricsRequestMode(settings.NotificationLyricsSource),
       ),
       Number(update.saveLyricsImmediately ?? Boolean(settings.SaveLyricsImmediately)),
+      this.toMusicLibrarySortValue(
+        update.musicLibrarySort ?? this.mapMusicLibrarySort(settings.MusicLibraryCriterion),
+      ),
       Number(update.autoPlay ?? Boolean(settings.AutoPlay)),
       Number(nextSaveMusicProgress),
+      Number(
+        update.hideMultiSelectCommandBarAfterOperation ??
+          Boolean(settings.HideMultiSelectCommandBarAfterOperation),
+      ),
       nextSaveMusicProgress ? settings.MusicProgress : 0,
       settings.Id,
     )
@@ -980,7 +1387,6 @@ export class SmplayerDataStore {
     try {
       this.deleteSearchHistoryByQueryStatement.run(nextQuery)
       this.insertSearchHistoryStatement.run(nextQuery, new Date().toISOString())
-      this.trimSearchHistoryStatement.run(this.searchHistoryLimit)
       this.db.exec('COMMIT')
     } catch (error) {
       this.db.exec('ROLLBACK')
@@ -992,8 +1398,27 @@ export class SmplayerDataStore {
     this.deleteSearchHistoryEntryStatement.run(entryId)
   }
 
+  removeRecentSearches(entryIds: number[]) {
+    const placeholders = entryIds.map(() => '?').join(',')
+    this.db.prepare(`DELETE FROM SearchHistory WHERE Id IN (${placeholders})`).run(...entryIds)
+  }
+
   clearRecentSearches() {
     this.clearSearchHistoryStatement.run()
+  }
+
+  removeRecentPlayed(songIds: number[]) {
+    const placeholders = songIds.map(() => '?').join(',')
+    this.db.prepare(`
+      UPDATE RecentRecord
+      SET State = ?
+      WHERE Type = 0
+        AND ItemId IN (${placeholders})
+    `).run(ACTIVE_STATE.inactive, ...songIds.map((songId) => songId.toString()))
+  }
+
+  clearRecentPlayed() {
+    this.clearRecentPlayedStatement.run(ACTIVE_STATE.inactive)
   }
 
   async getLyrics(songId: number, mode: LyricsRequestMode = 'auto'): Promise<LyricsSnapshot> {
@@ -1008,6 +1433,11 @@ export class SmplayerDataStore {
 
     const settings = this.getSettings()
     const sidecarLyrics = await this.getSidecarLyrics(song.path)
+
+    if (mode === 'embedded') {
+      const embeddedLyrics = await this.getEmbeddedLyrics(song.path)
+      return this.createLyricsSnapshot(embeddedLyrics, embeddedLyrics ? 'music-file' : 'none')
+    }
 
     if (mode !== 'internet' && sidecarLyrics) {
       return sidecarLyrics
@@ -1030,6 +1460,41 @@ export class SmplayerDataStore {
     }
 
     const embeddedLyrics = await this.getEmbeddedLyrics(song.path)
+    return this.createLyricsSnapshot(embeddedLyrics, embeddedLyrics ? 'music-file' : 'none')
+  }
+
+  async saveInternetLyricsToFile(songId: number) {
+    const song = this.getSongPathStatement.get(
+      songId,
+      ACTIVE_STATE.active,
+    ) as SongPathRow | undefined
+
+    if (!song) {
+      return { status: 'failed' as const }
+    }
+
+    const existingLyrics = await this.getExistingLyrics(song.path)
+    if (existingLyrics.rawText.trim()) {
+      return { status: 'skipped' as const }
+    }
+
+    const internetLyrics = await this.searchInternetLyrics(song)
+    if (!internetLyrics.trim()) {
+      return { status: 'missing' as const }
+    }
+
+    await this.writeEmbeddedLyrics(song.path, internetLyrics)
+
+    return { status: 'saved' as const }
+  }
+
+  private async getExistingLyrics(songPath: string) {
+    const sidecarLyrics = await this.getSidecarLyrics(songPath)
+    if (sidecarLyrics) {
+      return sidecarLyrics
+    }
+
+    const embeddedLyrics = await this.getEmbeddedLyrics(songPath)
     return this.createLyricsSnapshot(embeddedLyrics, embeddedLyrics ? 'music-file' : 'none')
   }
 
@@ -1066,6 +1531,21 @@ export class SmplayerDataStore {
       this.db.exec('ROLLBACK')
       throw error
     }
+  }
+
+  updateSongDuration(songId: number, duration: number) {
+    const nextDuration = Math.round(duration)
+
+    if (!Number.isFinite(nextDuration) || nextDuration <= 0) {
+      return
+    }
+
+    this.updateSongDurationStatement.run(
+      nextDuration,
+      songId,
+      ACTIVE_STATE.active,
+      nextDuration,
+    )
   }
 
   async scanLibrary(requestedRootPath?: string): Promise<ScanLibraryResult> {
@@ -1169,40 +1649,32 @@ export class SmplayerDataStore {
     }
   }
 
-  private ensureDefaultRows() {
-    const myFavoritesId = this.ensurePlaylist(PLAYLIST_NAMES.myFavorites, 0)
-    const nowPlayingId = this.ensurePlaylist(PLAYLIST_NAMES.nowPlaying, 1)
+  private initializeSettingsRows() {
     const settings = this.getSettingsStatement.get() as SettingsRow | undefined
 
     if (!settings) {
+      const myFavoritesId = this.createBuiltInPlaylist(PLAYLIST_NAMES.myFavorites, 0)
+      const nowPlayingId = this.createBuiltInPlaylist(PLAYLIST_NAMES.nowPlaying, 1)
       this.insertSettingsStatement.run('', myFavoritesId, nowPlayingId)
       return
     }
 
-    if (settings.MyFavorites !== myFavoritesId || settings.NowPlaying !== nowPlayingId) {
-      this.updateSettingsPlaylistsStatement.run(myFavoritesId, nowPlayingId, settings.Id)
+    if (settings.NowPlaying <= 0) {
+      const nowPlayingId = this.createBuiltInPlaylist(PLAYLIST_NAMES.nowPlaying, 1)
+      this.updateSettingsPlaylistsStatement.run(settings.MyFavorites, nowPlayingId, settings.Id)
     }
   }
 
-  private ensurePlaylist(name: string, priority: number): number {
-    this.db.prepare(`
-      INSERT INTO Playlist (Name, Criterion, Priority, State)
-      VALUES (?, -1, ?, ?)
-      ON CONFLICT(Name) DO UPDATE SET
-        Priority = excluded.Priority,
-        State = excluded.State
-    `).run(name, priority, ACTIVE_STATE.active)
-
-    const row = this.getPlaylistIdStatement.get(name) as { Id: number }
-    return row.Id
+  private createBuiltInPlaylist(name: string, priority: number): number {
+    const result = this.insertPlaylistStatement.run(name, priority, ACTIVE_STATE.active)
+    return Number(result.lastInsertRowid)
   }
 
   private getSettings(): SettingsRow {
     const settings = this.getSettingsStatement.get() as SettingsRow | undefined
 
     if (!settings) {
-      this.ensureDefaultRows()
-      return this.getSettings()
+      throw new Error('Settings row has not been initialized.')
     }
 
     return settings
@@ -1212,8 +1684,7 @@ export class SmplayerDataStore {
     const searchState = this.getSearchStateStatement.get() as SearchStateRow | undefined
 
     if (!searchState) {
-      this.db.exec(`INSERT OR IGNORE INTO SearchState (Id, LastQuery) VALUES (1, '')`)
-      return this.getSearchState()
+      throw new Error('Search state row has not been initialized.')
     }
 
     return searchState
@@ -1240,16 +1711,83 @@ export class SmplayerDataStore {
     return {
       id: song.id,
       path: song.path,
-      mediaUrl: pathToFileURL(song.path).href,
-      artworkUrl: song.artworkPath ? pathToFileURL(song.artworkPath).href : '',
+      mediaUrl: this.getSongMediaUrl(song.id),
+      artworkUrl: this.getSongArtworkUrl(song.id),
       title: song.title,
       artist: song.artist,
       artists,
       album: song.album,
       duration: song.duration,
       playCount: song.playCount,
-      dateAdded: song.dateAdded,
+      dateAdded: this.normalizeStoredDate(song.dateAdded),
       favorite: Boolean(song.favorite),
+    }
+  }
+
+  private getSongMediaUrl(songId: number) {
+    return `smplayer-media://song/${songId}`
+  }
+
+  private getSongArtworkUrl(songId: number) {
+    return `smplayer-artwork://song/${songId}`
+  }
+
+  private normalizeStoredDate(value: unknown) {
+    if (typeof value === 'string') {
+      const normalized = value.trim()
+
+      if (!normalized) {
+        return ''
+      }
+
+      if (/^\d{15,}$/.test(normalized)) {
+        return this.dotNetTicksToIso(normalized)
+      }
+
+      return normalized
+    }
+
+    if (typeof value === 'number') {
+      if (!Number.isFinite(value)) {
+        return ''
+      }
+
+      if (value > 10_000_000_000_000) {
+        return this.dotNetTicksToIso(Math.trunc(value).toString())
+      }
+
+      return new Date(value).toISOString()
+    }
+
+    if (typeof value === 'bigint') {
+      return this.dotNetTicksToIso(value.toString())
+    }
+
+    return ''
+  }
+
+  private dotNetTicksToIso(rawTicks: string) {
+    try {
+      const ticks = BigInt(rawTicks)
+      const unixEpochTicks = 621_355_968_000_000_000n
+      const milliseconds = (ticks - unixEpochTicks) / 10_000n
+
+      if (
+        milliseconds < BigInt(Number.MIN_SAFE_INTEGER) ||
+        milliseconds > BigInt(Number.MAX_SAFE_INTEGER)
+      ) {
+        return rawTicks
+      }
+
+      const date = new Date(Number(milliseconds))
+
+      if (Number.isNaN(date.getTime())) {
+        return rawTicks
+      }
+
+      return date.toISOString()
+    } catch {
+      return rawTicks
     }
   }
 
@@ -1296,9 +1834,9 @@ export class SmplayerDataStore {
       case 1:
         return 'local'
       case 2:
-        return 'internet'
+        return 'embedded'
       default:
-        return 'auto'
+        return 'internet'
     }
   }
 
@@ -1306,7 +1844,7 @@ export class SmplayerDataStore {
     switch (mode) {
       case 'local':
         return 1
-      case 'internet':
+      case 'embedded':
         return 2
       default:
         return 0
@@ -1316,11 +1854,9 @@ export class SmplayerDataStore {
   private mapPreferredLanguage(languageValue: number): PreferredLanguage {
     switch (languageValue) {
       case 1:
-        return 'zh-CN'
-      case 2:
         return 'en-US'
-      case 3:
-        return 'ja-JP'
+      case 2:
+        return 'zh-CN'
       default:
         return 'system'
     }
@@ -1329,11 +1865,43 @@ export class SmplayerDataStore {
   private toPreferredLanguageValue(language: PreferredLanguage) {
     switch (language) {
       case 'zh-CN':
-        return 1
-      case 'en-US':
         return 2
-      case 'ja-JP':
+      case 'en-US':
+        return 1
+      default:
+        return 0
+    }
+  }
+
+  private mapMusicLibrarySort(criterionValue: number): MusicLibrarySortCriterion {
+    switch (criterionValue) {
+      case 1:
+        return 'artist'
+      case 2:
+        return 'album'
+      case 3:
+        return 'duration'
+      case 4:
+        return 'play-count'
+      case 5:
+        return 'date-added'
+      default:
+        return 'title'
+    }
+  }
+
+  private toMusicLibrarySortValue(criterion: MusicLibrarySortCriterion) {
+    switch (criterion) {
+      case 'artist':
+        return 1
+      case 'album':
+        return 2
+      case 'duration':
         return 3
+      case 'play-count':
+        return 4
+      case 'date-added':
+        return 5
       default:
         return 0
     }
@@ -1349,6 +1917,36 @@ export class SmplayerDataStore {
         return 3
       default:
         return 0
+    }
+  }
+
+  private mapNotificationSend(modeValue: number) {
+    return modeValue === 1 ? 'never' : 'music-changed'
+  }
+
+  private toNotificationSendValue(mode: 'music-changed' | 'never') {
+    return mode === 'never' ? 1 : 0
+  }
+
+  private mapNotificationDisplay(modeValue: number) {
+    switch (modeValue) {
+      case 0:
+        return 'reminder'
+      case 2:
+        return 'quick'
+      default:
+        return 'normal'
+    }
+  }
+
+  private toNotificationDisplayValue(mode: 'reminder' | 'normal' | 'quick') {
+    switch (mode) {
+      case 'reminder':
+        return 0
+      case 'quick':
+        return 2
+      default:
+        return 1
     }
   }
 
@@ -1403,12 +2001,14 @@ export class SmplayerDataStore {
 
       return {
         path: filePath,
-        artworkPath: await this.writeArtworkCache(filePath, metadata.common.picture?.[0]),
+        artworkPath:
+          (await this.writeShellThumbnailCache(filePath)) ||
+          (await this.writeArtworkCache(filePath, metadata.common.picture?.[0])),
         title: useFilenameNotMusicName ? filename : metadata.common.title?.trim() || filename,
         artist: artists.join(', '),
         artists,
         album: metadata.common.album?.trim() || '',
-        duration: Math.round(metadata.format.duration ?? 0),
+        duration: this.resolveDurationSeconds(metadata.format, fileStats.size),
         dateAdded,
       }
     } catch {
@@ -1425,6 +2025,21 @@ export class SmplayerDataStore {
     }
   }
 
+  private resolveDurationSeconds(
+    format: { duration?: number; bitrate?: number },
+    fileSize: number,
+  ) {
+    if (Number.isFinite(format.duration) && (format.duration ?? 0) > 0) {
+      return Math.round(format.duration ?? 0)
+    }
+
+    if (Number.isFinite(format.bitrate) && (format.bitrate ?? 0) > 0 && fileSize > 0) {
+      return Math.round((fileSize * 8) / (format.bitrate ?? 1))
+    }
+
+    return 0
+  }
+
   private async writeArtworkCache(
     filePath: string,
     picture?: { data: Uint8Array; format?: string },
@@ -1437,9 +2052,42 @@ export class SmplayerDataStore {
     const artworkHash = createHash('sha1').update(filePath).digest('hex')
     const artworkPath = join(this.coverCachePath, `${artworkHash}.${extension}`)
 
+    await mkdir(this.coverCachePath, { recursive: true })
     await writeFile(artworkPath, picture.data)
 
     return artworkPath
+  }
+
+  private async writeEmbeddedArtworkCache(filePath: string) {
+    const metadata = await parseFile(filePath, {
+      duration: false,
+      skipCovers: false,
+    })
+
+    return this.writeArtworkCache(filePath, metadata.common.picture?.[0])
+  }
+
+  private async writeShellThumbnailCache(filePath: string) {
+    try {
+      const thumbnail = await nativeImage.createThumbnailFromPath(filePath, {
+        width: 100,
+        height: 100,
+      })
+
+      if (thumbnail.isEmpty()) {
+        return ''
+      }
+
+      const artworkHash = createHash('sha1').update(`${filePath}:shell-thumbnail`).digest('hex')
+      const artworkPath = join(this.coverCachePath, `${artworkHash}.png`)
+
+      await mkdir(this.coverCachePath, { recursive: true })
+      await writeFile(artworkPath, thumbnail.toPNG())
+
+      return artworkPath
+    } catch {
+      return ''
+    }
   }
 
   private async maybePersistFetchedLyrics(
@@ -1451,14 +2099,117 @@ export class SmplayerDataStore {
       return
     }
 
-    const basePath = songPath.slice(0, songPath.length - extname(songPath).length)
-    const outputPath = `${basePath}.${lyrics.isSynced ? 'lrc' : 'txt'}`
-
     try {
-      await writeFile(outputPath, lyrics.rawText, 'utf8')
+      await this.writeEmbeddedLyrics(songPath, lyrics.rawText)
     } catch {
-      // Ignore sidecar write failures so playback and lyric loading stay non-blocking.
+      // Ignore tag write failures so playback and lyric loading stay non-blocking.
     }
+  }
+
+  private async writeEmbeddedLyrics(songPath: string, rawLyrics: string) {
+    if (extname(songPath).toLocaleLowerCase() !== '.mp3') {
+      throw new Error('Embedded lyrics writing is currently supported for MP3 files.')
+    }
+
+    const fileBuffer = await readFile(songPath)
+    const existingTag = this.readId3Tag(fileBuffer)
+    const audioBuffer = fileBuffer.subarray(existingTag.endOffset)
+    const tagVersion = existingTag.version === 4 ? 4 : 3
+    const preservedFrames = existingTag.frames.filter(
+      (frame) => frame.id !== 'USLT' && frame.id !== 'SYLT',
+    )
+    const lyricsFrame = this.createId3Frame(tagVersion, 'USLT', Buffer.concat([
+      Buffer.from([3]),
+      Buffer.from('eng', 'ascii'),
+      Buffer.from([0]),
+      Buffer.from(rawLyrics, 'utf8'),
+    ]))
+    const tagBody = Buffer.concat([...preservedFrames.map((frame) => frame.raw), lyricsFrame])
+    const padding = Buffer.alloc(2048)
+    const header = Buffer.alloc(10)
+
+    header.write('ID3', 0, 'ascii')
+    header[3] = tagVersion
+    header[4] = 0
+    header[5] = 0
+    this.writeSynchsafeSize(header, 6, tagBody.length + padding.length)
+
+    await writeFile(songPath, Buffer.concat([header, tagBody, padding, audioBuffer]))
+  }
+
+  private readId3Tag(fileBuffer: Buffer) {
+    if (fileBuffer.subarray(0, 3).toString('ascii') !== 'ID3') {
+      return {
+        version: 3,
+        endOffset: 0,
+        frames: [] as Array<{ id: string; raw: Buffer }>,
+      }
+    }
+
+    const tagSize = this.readSynchsafeSize(fileBuffer, 6)
+    const endOffset = 10 + tagSize
+    const version = fileBuffer[3]
+    const frames: Array<{ id: string; raw: Buffer }> = []
+    let offset = 10
+
+    while (offset + 10 <= endOffset) {
+      const frameHeader = fileBuffer.subarray(offset, offset + 10)
+      const id = frameHeader.subarray(0, 4).toString('ascii')
+
+      if (!/^[A-Z0-9]{4}$/.test(id)) {
+        break
+      }
+
+      const frameSize =
+        version === 4
+          ? this.readSynchsafeSize(frameHeader, 4)
+          : frameHeader.readUInt32BE(4)
+
+      if (frameSize <= 0 || offset + 10 + frameSize > endOffset) {
+        break
+      }
+
+      frames.push({
+        id,
+        raw: fileBuffer.subarray(offset, offset + 10 + frameSize),
+      })
+      offset += 10 + frameSize
+    }
+
+    return {
+      version,
+      endOffset,
+      frames,
+    }
+  }
+
+  private createId3Frame(version: number, id: string, payload: Buffer) {
+    const frame = Buffer.alloc(10 + payload.length)
+    frame.write(id, 0, 'ascii')
+    if (version === 4) {
+      this.writeSynchsafeSize(frame, 4, payload.length)
+    } else {
+      frame.writeUInt32BE(payload.length, 4)
+    }
+    payload.copy(frame, 10)
+
+    return frame
+  }
+
+  private readSynchsafeSize(buffer: Buffer, offset: number) {
+    return (
+      (buffer[offset] << 21) |
+      (buffer[offset + 1] << 14) |
+      (buffer[offset + 2] << 7) |
+      buffer[offset + 3]
+    )
+  }
+
+  private writeSynchsafeSize(buffer: Buffer, offset: number, size: number) {
+    buffer[offset] = (size >> 21) & 0x7f
+    buffer[offset + 1] = (size >> 14) & 0x7f
+    buffer[offset + 2] = (size >> 7) & 0x7f
+    buffer[offset + 3] = size & 0x7f
   }
 
   private getLyricsPreviewLine(lyrics: LyricsSnapshot) {
@@ -1813,20 +2564,30 @@ export class SmplayerDataStore {
 
   private async fetchJson(url: string) {
     const acceptLanguage = this.getPreferredLanguageHeader()
-    const response = await fetch(url, {
-      headers: {
-        accept: 'application/json',
-        'accept-language': acceptLanguage,
-        referer: 'https://y.qq.com/portal/player.html',
-        'user-agent': 'Mozilla/5.0',
-      },
-    })
+    const controller = new AbortController()
+    const timeout = setTimeout(() => {
+      controller.abort()
+    }, LYRICS_REQUEST_TIMEOUT_MS)
 
-    if (!response.ok) {
-      throw new Error(`Lyrics request failed: ${response.status}`)
+    try {
+      const response = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          accept: 'application/json',
+          'accept-language': acceptLanguage,
+          referer: 'https://y.qq.com/portal/player.html',
+          'user-agent': 'Mozilla/5.0',
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error(`Lyrics request failed: ${response.status}`)
+      }
+
+      return response.json()
+    } finally {
+      clearTimeout(timeout)
     }
-
-    return response.json()
   }
 
   private getPreferredLanguageHeader() {
@@ -1839,6 +2600,152 @@ export class SmplayerDataStore {
     }
 
     return Intl.DateTimeFormat().resolvedOptions().locale || 'en-US'
+  }
+
+  private getPreferenceSetting() {
+    let setting = this.db.prepare(`
+      SELECT Id, Songs, Artists, Albums, Playlists, Folders
+      FROM PreferenceSetting
+      ORDER BY Id DESC
+      LIMIT 1
+    `).get() as unknown as PreferenceSettingRow | undefined
+
+    if (!setting) {
+      this.db.prepare(`
+        INSERT INTO PreferenceSetting (Songs, Artists, Albums, Playlists, Folders)
+        VALUES (0, 0, 0, 0, 0)
+      `).run()
+      setting = this.db.prepare(`
+        SELECT Id, Songs, Artists, Albums, Playlists, Folders
+        FROM PreferenceSetting
+        ORDER BY Id DESC
+        LIMIT 1
+      `).get() as unknown as PreferenceSettingRow
+    }
+
+    this.ensureBuiltinPreferenceItems()
+    return setting
+  }
+
+  private ensureBuiltinPreferenceItems() {
+    this.db.prepare(`
+      INSERT INTO PreferenceItem (Type, ItemId, ItemName, IsEnabled, Level, State)
+      SELECT Builtins.Type, Builtins.ItemId, Builtins.ItemName, 0, 1, ?
+      FROM (
+        SELECT 5 AS Type, '5' AS ItemId, 'Recent Added' AS ItemName
+        UNION ALL SELECT 6, '6', 'My Favorites'
+        UNION ALL SELECT 7, '7', 'Most Played'
+        UNION ALL SELECT 8, '8', 'Least Played'
+      ) AS Builtins
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM PreferenceItem
+        WHERE PreferenceItem.Type = Builtins.Type
+          AND PreferenceItem.State = ?
+      )
+    `).run(ACTIVE_STATE.active, ACTIVE_STATE.active)
+  }
+
+  private toPreferenceItemSnapshot(item: PreferenceItemRow): PreferenceItemSnapshot {
+    const type = this.mapPreferenceEntityType(item.type)
+    const resolved = this.resolvePreferenceItem(item, type)
+
+    return {
+      id: item.id,
+      type,
+      itemId: item.itemId,
+      name: resolved.name,
+      tooltip: resolved.tooltip,
+      isEnabled: Boolean(item.isEnabled),
+      level: this.mapPreferenceLevel(item.level),
+      isValid: resolved.isValid,
+      canRemove: item.type < 5,
+    }
+  }
+
+  private resolvePreferenceItem(item: PreferenceItemRow, type: PreferenceEntityType) {
+    switch (type) {
+      case 'song':
+        return item.songName
+          ? { name: item.songName, tooltip: item.songTooltip!, isValid: true }
+          : { name: item.itemName || item.itemId, tooltip: item.itemName || item.itemId, isValid: false }
+      case 'artist':
+        return { name: item.itemId, tooltip: item.itemId, isValid: Boolean(item.artistValid) }
+      case 'album':
+        return { name: item.itemName || item.itemId, tooltip: item.itemId, isValid: Boolean(item.albumValid) }
+      case 'playlist':
+        return item.playlistName
+          ? { name: item.playlistName, tooltip: item.playlistName, isValid: true }
+          : { name: item.itemName || item.itemId, tooltip: item.itemName || item.itemId, isValid: false }
+      case 'folder':
+        return item.folderName
+          ? { name: basename(item.folderName), tooltip: item.folderTooltip!, isValid: true }
+          : { name: item.itemName || item.itemId, tooltip: item.itemName || item.itemId, isValid: false }
+      case 'recent-added':
+        return { name: 'Recent Added', tooltip: 'Recent Added', isValid: true }
+      case 'my-favorites':
+        return { name: 'My Favorites', tooltip: 'My Favorites', isValid: true }
+      case 'most-played':
+        return { name: 'Most Played', tooltip: 'Most Played', isValid: true }
+      case 'least-played':
+        return { name: 'Least Played', tooltip: 'Least Played', isValid: true }
+    }
+  }
+
+  private mapPreferenceEntityType(type: number): PreferenceEntityType {
+    return [
+      'song',
+      'artist',
+      'album',
+      'playlist',
+      'folder',
+      'recent-added',
+      'my-favorites',
+      'most-played',
+      'least-played',
+    ][type] as PreferenceEntityType
+  }
+
+  private toPreferenceEntityValue(type: PreferenceEntityType) {
+    return {
+      'song': 0,
+      'artist': 1,
+      'album': 2,
+      'playlist': 3,
+      'folder': 4,
+      'recent-added': 5,
+      'my-favorites': 6,
+      'most-played': 7,
+      'least-played': 8,
+    }[type]
+  }
+
+  private mapPreferenceLevel(level: number): PreferenceLevel {
+    switch (level) {
+      case 0:
+        return 'do-not-appear'
+      case -1:
+        return 'dislike'
+      case 2:
+        return 'high'
+      case 3:
+        return 'higher'
+      case 4:
+        return 'very-high'
+      default:
+        return 'normal'
+    }
+  }
+
+  private toPreferenceLevelValue(level: PreferenceLevel) {
+    return {
+      'do-not-appear': 0,
+      'dislike': -1,
+      'normal': 1,
+      'high': 2,
+      'higher': 3,
+      'very-high': 4,
+    }[level]
   }
 
   private evaluateLyricsMatch(target: string, candidate: string) {
