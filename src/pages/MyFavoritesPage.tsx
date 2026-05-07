@@ -2,7 +2,6 @@ import { useNavigate } from 'react-router-dom'
 
 import { HeaderedPlaylistControl } from '../components/HeaderedPlaylistControl'
 import type { LibraryPlaylist, LibrarySong, PreferenceLevel } from '../shared/contracts'
-import { formatDuration } from '../shared/formatters'
 import type { Translator } from '../shared/i18n'
 
 interface MyFavoritesPageProps {
@@ -13,6 +12,8 @@ interface MyFavoritesPageProps {
   selectedTrackId: number | null
   isPlaying: boolean
   onPlayTrack: (trackId: number, queueSongIds: number[]) => void
+  onMoveToMusicOrPlay: (songId: number) => void
+  onPlayNext: (songId: number) => void
   onTogglePlayPause: () => void
   onAddSongToPlaylist: (playlistId: number, songId: number) => void
   onAddSongsToPlaylist: (playlistId: number, songIds: number[]) => void
@@ -30,6 +31,8 @@ export function MyFavoritesPage({
   selectedTrackId,
   isPlaying,
   onPlayTrack,
+  onMoveToMusicOrPlay,
+  onPlayNext,
   onTogglePlayPause,
   onAddSongToPlaylist,
   onAddSongsToPlaylist,
@@ -40,18 +43,12 @@ export function MyFavoritesPage({
 }: MyFavoritesPageProps) {
   const navigate = useNavigate()
   const artworkUrl = songs.find((song) => song.artworkUrl)?.artworkUrl ?? ''
-  const duration = songs.reduce((sum, song) => sum + song.duration, 0)
 
   return (
     <section className="page-panel immersive-detail-page">
       <HeaderedPlaylistControl
         type="favorites"
         title={t('common.myFavorites')}
-        subtitle={t('albums.albumSummary', {
-          songs: songs.length,
-          duration: formatDuration(duration),
-        })}
-        caption={t('common.playlists')}
         t={t}
         songs={songs}
         selectedTrackId={selectedTrackId}
@@ -67,6 +64,8 @@ export function MyFavoritesPage({
         preferenceType="my-favorites"
         preferenceItemId="6"
         onPlayTrack={onPlayTrack}
+        onMoveToMusicOrPlay={onMoveToMusicOrPlay}
+        onPlayNext={onPlayNext}
         onTogglePlayPause={onTogglePlayPause}
         onAddSongToPlaylist={onAddSongToPlaylist}
         onAddSongsToPlaylist={onAddSongsToPlaylist}

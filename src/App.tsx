@@ -1,29 +1,32 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Navigate, Route, Routes, useLocation, useNavigate, useNavigationType, useParams } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Navigate, Route, Routes, useLocation, useNavigate, useNavigationType, useParams, type Location } from 'react-router-dom'
 
 import { AlbumDetailPage } from './pages/AlbumDetailPage'
 import { AlbumsPage } from './pages/AlbumsPage'
-import { ArtistDetailPage } from './pages/ArtistDetailPage'
 import { ArtistsPage } from './pages/ArtistsPage'
 import { PlayerBar } from './components/PlayerBar'
 import { Sidebar } from './components/Sidebar'
+import { UndoableNotificationHost } from './components/UndoableNotificationHost'
 import { usePlaybackController } from './hooks/usePlaybackController'
 import { CollectionPage } from './pages/CollectionPage'
-import { LibraryPage } from './pages/LibraryPage'
-import { LocalBrowserPage } from './pages/LocalBrowserPage'
+import { HiddenFoldersPage } from './pages/HiddenFoldersPage'
+import { MusicLibraryPage } from './pages/MusicLibraryPage'
+import { LocalPage, LocalTitleGrid } from './pages/LocalPage'
 import { MyFavoritesPage } from './pages/MyFavoritesPage'
+import { NowPlayingFullPage } from './pages/NowPlayingFullPage'
 import { NowPlayingPage } from './pages/NowPlayingPage'
 import { PlaylistsPage } from './pages/PlaylistsPage'
 import { RecentPage } from './pages/RecentPage'
 import { SearchPage } from './pages/SearchPage'
 import { SettingsPage } from './pages/SettingsPage'
-import { decodeLocalRoute } from './pages/localBrowserPaths'
-import type { AppInfo, LibraryCounts, LibraryPlaylist, LibrarySong, PreferenceLevel } from './shared/contracts'
+import { decodeLocalRoute } from './pages/localPagePaths'
+import type { LibraryCounts, LibraryFolder, LibraryPlaylist, LibrarySong, LocalFolderSortCriterion, PreferenceLevel, ScanLibraryResult } from './shared/contracts'
 import { getDisplayArtists, getSongArtists } from './shared/artists'
 import { formatDuration } from './shared/formatters'
-import { createTranslator, type Translator } from './shared/i18n'
+import { createTranslator, resolveLocale, type Translator } from './shared/i18n'
 import { sortLibrarySongs } from './shared/sorting'
-import { playNext as setQueuePlayNext, setMusicAndPlayFromPlaylist } from './shared/mediaHelper'
+import { addNextAndPlay as setQueueAddNextAndPlay, moveToMusicOrPlay as setQueueMoveToMusicOrPlay, playNext as setQueuePlayNext, quickPlay, setMusicAndPlayFromPlaylist } from './shared/mediaHelper'
+import { ByArtistRequest, MatchType, VoiceAssistantHelper, type VolumeRequest } from './shared/VoiceAssistantHelper'
 import { useLibraryStore } from './state/useLibraryStore'
 import './App.css'
 
@@ -52,6 +55,8 @@ const SCROLLBAR_HOST_SELECTOR = [
   '.lyrics-scroll-shell',
   '.preference-page',
   '.playlists-page',
+  '.recent-grid-shell',
+  '.recent-search-list',
   '.recent-page',
   '.settings-page',
 ].join(',')
@@ -68,6 +73,8 @@ const RESTORABLE_SCROLL_SELECTORS = [
   '.lyrics-scroll-shell',
   '.preference-page',
   '.playlists-page',
+  '.recent-grid-shell',
+  '.recent-search-list',
   '.recent-page',
   '.settings-page',
 ]
@@ -122,6 +129,54 @@ function getScrollElementKey(root: HTMLElement, element: HTMLElement) {
   return `${selector}:${index}`
 }
 
+function KeepAlivePane({
+  active,
+  children,
+}: {
+  active: boolean
+  children: ReactNode
+}) {
+  return (
+    <div className="keep-alive-pane" hidden={!active}>
+      {children}
+    </div>
+  )
+}
+
+function KeepAliveRoutes({
+  location,
+  routeKey,
+  children,
+}: {
+  location: Location
+  routeKey: string
+  children: ReactNode
+}) {
+  const [cachedLocations, setCachedLocations] = useState<Array<{ key: string; location: Location }>>([
+    { key: routeKey, location },
+  ])
+
+  useEffect(() => {
+    setCachedLocations((current) => {
+      if (current.some((item) => item.key === routeKey)) {
+        return current
+      }
+
+      return [...current, { key: routeKey, location }]
+    })
+  }, [location, routeKey])
+
+  return (
+    <>
+      {cachedLocations.map((item) => (
+        <KeepAlivePane active={item.key === routeKey} key={item.key}>
+          <Routes location={item.location}>{children}</Routes>
+        </KeepAlivePane>
+      ))}
+    </>
+  )
+}
+
 function hexToRgb(color: string) {
   const normalized = color.replace('#', '').trim()
   const hex = normalized.length === 3
@@ -158,13 +213,98 @@ function applyThemeColor(themeColor: string) {
   root.style.setProperty('--focus', `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.82)`)
 }
 
+function getSearchScore(query: string, candidate: string) {
+  const trimmedQuery = query.trim()
+  const trimmedCandidate = candidate.trim()
+
+  if (!trimmedQuery || !trimmedCandidate) {
+    return 0
+  }
+
+  const normalizedQuery = trimmedQuery.toLocaleLowerCase()
+  const normalizedCandidate = trimmedCandidate.toLocaleLowerCase()
+
+  if (trimmedCandidate === trimmedQuery) {
+    return 100
+  }
+
+  if (normalizedCandidate === normalizedQuery) {
+    return 95
+  }
+
+  if (trimmedCandidate.startsWith(trimmedQuery)) {
+    return 90
+  }
+
+  if (normalizedCandidate.startsWith(normalizedQuery)) {
+    return 85
+  }
+
+  if (trimmedCandidate.includes(trimmedQuery)) {
+    return 80
+  }
+
+  if (normalizedCandidate.includes(normalizedQuery)) {
+    return 75
+  }
+
+  if (normalizedQuery.includes(normalizedCandidate)) {
+    return 70
+  }
+
+  const editDistance = getEditDistance(normalizedCandidate, normalizedQuery)
+  const ratio = Math.floor((editDistance * 100) / Math.max(normalizedCandidate.length, normalizedQuery.length))
+  return ratio <= 60 ? 70 - ratio : 0
+}
+
+function getEditDistance(target: string, given: string) {
+  const dp = Array.from({ length: target.length + 1 }, (_, rowIndex) =>
+    Array.from({ length: given.length + 1 }, (__, columnIndex) =>
+      rowIndex === 0 ? columnIndex : columnIndex === 0 ? rowIndex : 0,
+    ),
+  )
+
+  for (let rowIndex = 1; rowIndex <= target.length; rowIndex += 1) {
+    for (let columnIndex = 1; columnIndex <= given.length; columnIndex += 1) {
+      const replaceCost = target[rowIndex - 1] === given[columnIndex - 1] ? 0 : 1
+      dp[rowIndex][columnIndex] = Math.min(
+        dp[rowIndex - 1][columnIndex] + 1,
+        dp[rowIndex][columnIndex - 1] + 1,
+        dp[rowIndex - 1][columnIndex - 1] + replaceCost,
+      )
+    }
+  }
+
+  return dp[target.length][given.length]
+}
+
+function findBest<T>(items: T[], query: string, getCandidates: (item: T) => string[]) {
+  let best: { item: T; score: number } | null = null
+
+  for (const item of items) {
+    const score = Math.max(...getCandidates(item).map((candidate) => getSearchScore(query, candidate)))
+    if (score > 0 && (!best || score > best.score)) {
+      best = { item, score }
+    }
+  }
+
+  return best
+}
+
+function getFolderName(path: string) {
+  return path.split(/[\\/]+/).filter(Boolean).at(-1) ?? path
+}
+
+function getSongFolder(path: string) {
+  const index = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
+  return index >= 0 ? path.slice(0, index) : ''
+}
+
+function findSongsInFolder(songs: LibrarySong[], folderPath: string) {
+  return songs.filter((song) => getSongFolder(song.path) === folderPath)
+}
+
 function App() {
-  const [appInfo, setAppInfo] = useState<AppInfo>({
-    platform: 'web',
-    version: '0.1.0',
-    isPackaged: false,
-    userDataPath: 'Renderer preview',
-  })
   const [initialLoadComplete, setInitialLoadComplete] = useState(false)
   const [searchInput, setSearchInput] = useState('')
   const [submittedSearchQuery, setSubmittedSearchQuery] = useState('')
@@ -189,6 +329,7 @@ function App() {
   const navigate = useNavigate()
   const navigationType = useNavigationType()
   const [navigationDepth, setNavigationDepth] = useState(0)
+  const [showNowPlayingFullPage, setShowNowPlayingFullPage] = useState(false)
 
   const snapshot = useLibraryStore((state) => state.snapshot)
   const loading = useLibraryStore((state) => state.loading)
@@ -197,6 +338,7 @@ function App() {
   const refresh = useLibraryStore((state) => state.refresh)
   const pickLibraryRoot = useLibraryStore((state) => state.pickLibraryRoot)
   const scanLibrary = useLibraryStore((state) => state.scanLibrary)
+  const scanLocalFolder = useLibraryStore((state) => state.scanLocalFolder)
   const setSongFavorite = useLibraryStore((state) => state.setSongFavorite)
   const createPlaylist = useLibraryStore((state) => state.createPlaylist)
   const deletePlaylist = useLibraryStore((state) => state.deletePlaylist)
@@ -208,6 +350,9 @@ function App() {
   const reorderPlaylists = useLibraryStore((state) => state.reorderPlaylists)
   const replaceNowPlaying = useLibraryStore((state) => state.replaceNowPlaying)
   const deleteSongFromDisk = useLibraryStore((state) => state.deleteSongFromDisk)
+  const hideLocalFolder = useLibraryStore((state) => state.hideLocalFolder)
+  const renameLocalFolder = useLibraryStore((state) => state.renameLocalFolder)
+  const deleteLocalFolder = useLibraryStore((state) => state.deleteLocalFolder)
   const clearNowPlaying = useLibraryStore((state) => state.clearNowPlaying)
   const saveSearchQuery = useLibraryStore((state) => state.saveSearchQuery)
   const addRecentSearch = useLibraryStore((state) => state.addRecentSearch)
@@ -345,14 +490,13 @@ function App() {
             ? playback.progressSeconds / playback.durationSeconds
             : 0,
         isReady: playback.durationSeconds > 0 || playback.currentTrack.duration > 0,
+        isLoading: playback.status === 'loading' || playback.status === 'buffering',
         favorite: playback.currentTrack.favorite,
       }
     : {
         id: null,
-        title: snapshot.songs.length > 0 ? t('app.selectTrack') : t('app.libraryEmpty'),
-        artist: snapshot.settings.rootPath
-          ? t('app.chooseSong')
-          : t('app.chooseFolderFirst'),
+        title: '',
+        artist: '',
         artworkUrl: '',
         elapsedLabel: '0:00',
         durationLabel: '0:00',
@@ -360,18 +504,12 @@ function App() {
         durationSeconds: 0,
         progressRatio: 0,
         isReady: false,
+        isLoading: false,
         favorite: false,
       }
 
   useEffect(() => {
     let isDisposed = false
-
-    window.smplayer
-      ?.getAppInfo()
-      .then(setAppInfo)
-      .catch(() => {
-        // Keep the browser fallback when the renderer is opened without Electron.
-      })
 
     void refresh().finally(() => {
       if (!isDisposed) {
@@ -519,22 +657,406 @@ function App() {
     })
   }, [playback.currentTrack])
 
-  async function playTrackInQueue(trackId: number, queueSongIds: number[]) {
+  async function playTrackInQueue(trackId: number, queueSongIds: number[], queueIndex = -1) {
     const nextQueue = setMusicAndPlayFromPlaylist(
       snapshot.nowPlaying.songIds,
       queueSongIds,
       trackId,
       playback.mode === 'shuffle',
+      queueIndex,
     )
 
     await replaceNowPlaying(nextQueue.songIds)
     if (nextQueue.trackId != null) {
-      await playback.playTrack(nextQueue.trackId, nextQueue.songIds)
+      await playback.playTrack(nextQueue.trackId, nextQueue.songIds, nextQueue.trackIndex ?? -1)
     }
   }
 
-  async function playNextInQueue(songId: number) {
-    await replaceNowPlaying(setQueuePlayNext(snapshot.nowPlaying.songIds, songId, playback.currentTrackId))
+  async function playNextInQueue(songId: number, queueIndex = -1) {
+    await replaceNowPlaying(setQueuePlayNext(snapshot.nowPlaying.songIds, songId, playback.currentTrackId, queueIndex, playback.currentQueueIndex ?? -1))
+  }
+
+  async function addNextAndPlay(songId: number) {
+    const nextQueue = setQueueAddNextAndPlay(snapshot.nowPlaying.songIds, songId, playback.currentTrackId, playback.currentQueueIndex ?? -1)
+    await replaceNowPlaying(nextQueue.songIds)
+    if (nextQueue.trackId != null) {
+      await playback.playTrack(nextQueue.trackId, nextQueue.songIds, nextQueue.trackIndex ?? -1)
+    }
+  }
+
+  async function moveToMusicOrPlayInQueue(songId: number, queueIndex = -1) {
+    const nextQueue = setQueueMoveToMusicOrPlay(
+      snapshot.nowPlaying.songIds,
+      songId,
+      queueIndex,
+      playback.currentTrackId,
+      playback.currentQueueIndex ?? -1,
+    )
+    await replaceNowPlaying(nextQueue.songIds)
+    if (nextQueue.trackId != null) {
+      await playback.playTrack(nextQueue.trackId, nextQueue.songIds, nextQueue.trackIndex ?? -1)
+    }
+  }
+
+  async function playQuick() {
+    const preferences = await window.smplayer!.getPreferenceSettings()
+    const songIds = quickPlay({
+      songs: snapshot.songs,
+      recentSongs: snapshot.recentSongs,
+      playlists: snapshot.playlists,
+      folders: snapshot.folders,
+      preferences,
+    })
+    await replaceNowPlaying(songIds)
+    if (songIds[0] != null) {
+      await playback.playTrack(songIds[0], songIds, 0)
+    }
+  }
+
+  async function playVoiceSongIds(songIds: number[]) {
+    await replaceNowPlaying(songIds)
+    if (songIds[0] != null) {
+      await playback.playTrack(songIds[0], songIds, 0)
+    }
+  }
+
+  async function playVoiceSong(song: LibrarySong) {
+    if (snapshot.nowPlaying.songIds.includes(song.id)) {
+      await playback.playTrack(song.id, snapshot.nowPlaying.songIds)
+      return
+    }
+
+    await addNextAndPlay(song.id)
+  }
+
+  function findVoiceArtist(query: string) {
+    const artistGroups = new Map<string, LibrarySong[]>()
+    for (const song of snapshot.songs) {
+      for (const artist of getSongArtists(song)) {
+        artistGroups.set(artist, [...(artistGroups.get(artist) ?? []), song])
+      }
+    }
+
+    return findBest([...artistGroups.entries()], query, ([artist]) => [artist])
+  }
+
+  function findRandomArtist() {
+    const artistGroups = new Map<string, LibrarySong[]>()
+    for (const song of snapshot.songs) {
+      for (const artist of getSongArtists(song)) {
+        artistGroups.set(artist, [...(artistGroups.get(artist) ?? []), song])
+      }
+    }
+
+    const artist = [...artistGroups.entries()][Math.floor(Math.random() * artistGroups.size)]
+    return artist ? { item: artist, score: 100 } : null
+  }
+
+  function findVoiceAlbum(query: string) {
+    const albumGroups = new Map<string, LibrarySong[]>()
+    for (const song of snapshot.songs) {
+      const album = song.album || t('common.albumUnknown')
+      albumGroups.set(album, [...(albumGroups.get(album) ?? []), song])
+    }
+
+    return findBest([...albumGroups.entries()], query, ([album]) => [album])
+  }
+
+  function findVoicePlaylist(query: string) {
+    return findBest(snapshot.playlists, query, (playlist) => [playlist.name])
+  }
+
+  function findVoiceFolder(query: string) {
+    return findBest(snapshot.folders, query, (folder) => [getFolderName(folder.path), folder.path])
+  }
+
+  function findRandomAlbum() {
+    const albums = [...new Map(snapshot.songs.map((song) => [
+      song.album || t('common.albumUnknown'),
+      snapshot.songs.filter((item) => (item.album || t('common.albumUnknown')) === (song.album || t('common.albumUnknown'))),
+    ])).entries()]
+
+    const album = albums[Math.floor(Math.random() * albums.length)]
+    return album ? { item: album, score: 100 } : null
+  }
+
+  function findRandomPlaylist() {
+    const playlist = snapshot.playlists[Math.floor(Math.random() * snapshot.playlists.length)]
+    return playlist ? { item: playlist, score: 100 } : null
+  }
+
+  function findRandomFolder() {
+    const folder = snapshot.folders[Math.floor(Math.random() * snapshot.folders.length)]
+    return folder ? { item: folder, score: 100 } : null
+  }
+
+  function findVoiceSong(query: string, songs = snapshot.songs) {
+    return findBest(songs, query, (song) => [
+      song.title,
+      song.album,
+      song.artist,
+      getDisplayArtists(song),
+      ...song.artists,
+    ])
+  }
+
+  async function playVoiceSearch(query: string) {
+    const song = findVoiceSong(query)
+    const artist = findVoiceArtist(query)
+    const album = findVoiceAlbum(query)
+    const playlist = findVoicePlaylist(query)
+    const folder = findVoiceFolder(query)
+    const best = [
+      song ? { type: 'song' as const, score: song.score, item: song.item } : null,
+      artist ? { type: 'artist' as const, score: artist.score, item: artist.item } : null,
+      album ? { type: 'album' as const, score: album.score, item: album.item } : null,
+      playlist ? { type: 'playlist' as const, score: playlist.score, item: playlist.item } : null,
+      folder ? { type: 'folder' as const, score: folder.score, item: folder.item } : null,
+    ].filter((item): item is NonNullable<typeof item> => item != null)
+      .sort((left, right) => right.score - left.score)[0]
+
+    if (!best) {
+      return t('voiceAssistant.noResults', { query })
+    }
+
+    if (best.type === 'song') {
+      await playVoiceSong(best.item)
+    } else if (best.type === 'artist' || best.type === 'album') {
+      await playVoiceSongIds(best.item[1].map((song) => song.id))
+    } else if (best.type === 'playlist') {
+      await playVoiceSongIds(best.item.songIds)
+    } else {
+      await playVoiceSongIds(findSongsInFolder(snapshot.songs, best.item.path).map((song) => song.id))
+    }
+
+    return t('voiceAssistant.executed')
+  }
+
+  async function handleVoiceByArtist(request: ByArtistRequest, command: MatchType) {
+    if (command === MatchType.PlayByArtistOrMusic) {
+      const artist = findVoiceArtist(request.artist)
+      if (artist) {
+        await playVoiceSongIds(artist.item[1].map((song) => song.id))
+        return t('voiceAssistant.executed')
+      }
+
+      return playVoiceSearch(request.original)
+    }
+
+    if (command === MatchType.PlayByArtist || command === MatchType.PlayByArtistAndMusic) {
+      const artist = findVoiceArtist(request.artist)
+      const songs = artist ? artist.item[1] : snapshot.songs
+      const song = findVoiceSong(request.item, songs)
+      if (song) {
+        await playVoiceSong(song.item)
+        return t('voiceAssistant.executed')
+      }
+
+      return playVoiceSearch(request.original)
+    }
+
+    if (command === MatchType.PlayByArtistAndAlbum) {
+      const artist = findVoiceArtist(request.artist)
+      const songs = artist ? artist.item[1] : snapshot.songs
+      const album = findBest(
+        [...new Map(songs.map((song) => [song.album || t('common.albumUnknown'), songs.filter((item) => (item.album || t('common.albumUnknown')) === (song.album || t('common.albumUnknown')))])).entries()],
+        request.item,
+        ([albumName]) => [albumName],
+      )
+      if (album) {
+        await playVoiceSongIds(album.item[1].map((song) => song.id))
+        return t('voiceAssistant.executed')
+      }
+
+      return playVoiceSearch(request.original)
+    }
+
+    if (command === MatchType.PlayMusicInAlbum) {
+      const album = findVoiceAlbum(request.artist)
+      const song = album ? findVoiceSong(request.item, album.item[1]) : null
+      if (song) {
+        await playVoiceSong(song.item)
+        return t('voiceAssistant.executed')
+      }
+    }
+
+    if (command === MatchType.PlayMusicInPlaylist) {
+      const playlist = findVoicePlaylist(request.artist)
+      const playlistSongs = playlist
+        ? playlist.item.songIds
+            .map((songId) => songsById.get(songId) ?? null)
+            .filter((song): song is LibrarySong => song != null)
+        : []
+      const song = findVoiceSong(request.item, playlistSongs)
+      if (song) {
+        await playVoiceSong(song.item)
+        return t('voiceAssistant.executed')
+      }
+    }
+
+    if (command === MatchType.PlayMusicInFolder || command === MatchType.PlayMusicIn) {
+      const folder = findVoiceFolder(request.artist)
+      const folderSongs = folder ? findSongsInFolder(snapshot.songs, folder.item.path) : snapshot.songs
+      const song = findVoiceSong(request.item, folderSongs)
+      if (song) {
+        await playVoiceSong(song.item)
+        return t('voiceAssistant.executed')
+      }
+    }
+
+    return playVoiceSearch(request.original)
+  }
+
+  async function executeVoiceCommand(text: string) {
+    const command = VoiceAssistantHelper.handle(text, snapshot.settings.preferredLanguage)
+
+    switch (command.type) {
+      case MatchType.Play:
+        await playback.togglePlayPause()
+        return t('voiceAssistant.executed')
+      case MatchType.PlayMusic: {
+        const param = command.param as string | undefined
+        if (!param) {
+          await playQuick()
+          return t('voiceAssistant.executed')
+        }
+        const song = findVoiceSong(param)
+        if (!song) {
+          return t('voiceAssistant.noResults', { query: param })
+        }
+        await playVoiceSong(song.item)
+        return t('voiceAssistant.executed')
+      }
+      case MatchType.PlayArtist: {
+        const param = command.param as string | undefined
+        const artist = param ? findVoiceArtist(param) : findRandomArtist()
+        const songIds = artist
+          ? artist.item[1].map((song) => song.id)
+          : []
+        if (songIds.length === 0) {
+          return t('voiceAssistant.noResults', { query: param ?? t('common.artists') })
+        }
+        await playVoiceSongIds(songIds)
+        return t('voiceAssistant.executed')
+      }
+      case MatchType.PlayAlbum: {
+        const param = command.param as string | undefined
+        const album = param ? findVoiceAlbum(param) : findRandomAlbum()
+        if (!album) {
+          return t('voiceAssistant.noResults', { query: param ?? t('common.album') })
+        }
+        await playVoiceSongIds(album.item[1].map((song) => song.id))
+        return t('voiceAssistant.executed')
+      }
+      case MatchType.PlayPlaylist: {
+        const param = command.param as string | undefined
+        const playlist = param ? findVoicePlaylist(param) : findRandomPlaylist()
+        if (!playlist) {
+          return t('voiceAssistant.noResults', { query: param ?? t('common.playlists') })
+        }
+        await playVoiceSongIds(playlist.item.songIds)
+        return t('voiceAssistant.executed')
+      }
+      case MatchType.PlayFolder: {
+        const param = command.param as string | undefined
+        const folder = param ? findVoiceFolder(param) : findRandomFolder()
+        if (!folder) {
+          return t('voiceAssistant.noResults', { query: param ?? t('common.local') })
+        }
+        await playVoiceSongIds(findSongsInFolder(snapshot.songs, folder.item.path).map((song) => song.id))
+        return t('voiceAssistant.executed')
+      }
+      case MatchType.SearchAndPlay:
+        return playVoiceSearch(command.param as string)
+      case MatchType.QuickPlay:
+        await playQuick()
+        return t('voiceAssistant.executed')
+      case MatchType.PlayByArtistOrMusic:
+      case MatchType.PlayByArtist:
+      case MatchType.PlayByArtistAndMusic:
+      case MatchType.PlayByArtistAndAlbum:
+      case MatchType.PlayMusicIn:
+      case MatchType.PlayMusicInAlbum:
+      case MatchType.PlayMusicInFolder:
+      case MatchType.PlayMusicInPlaylist:
+        return handleVoiceByArtist(command.param as ByArtistRequest, command.type)
+      case MatchType.Pause:
+        if (playback.isPlaying) {
+          await playback.togglePlayPause()
+        }
+        return t('voiceAssistant.executed')
+      case MatchType.Previous:
+        await playback.playPrevious()
+        return t('voiceAssistant.executed')
+      case MatchType.Next:
+        await playback.playNext()
+        return t('voiceAssistant.executed')
+      case MatchType.ChangeVolume: {
+        const request = command.param as VolumeRequest
+        handleVoiceVolume(request)
+        return t('voiceAssistant.volume', { volume: getVoiceVolumeValue(request) })
+      }
+      case MatchType.Search: {
+        const param = command.param as string | undefined
+        if (!param) {
+          return t('voiceAssistant.notUnderstood')
+        }
+        await commitSearchQuery(param)
+        return t('voiceAssistant.executed')
+      }
+      case MatchType.Mute:
+        playback.setMuted(true)
+        return t('voiceAssistant.executed')
+      case MatchType.UnMute:
+        playback.setMuted(false)
+        return t('voiceAssistant.executed')
+      case MatchType.Help:
+        return getVoiceHelpText()
+      case MatchType.Nothing:
+        return t('voiceAssistant.canceled')
+      default:
+        return t('voiceAssistant.notUnderstood')
+    }
+  }
+
+  function getVoiceVolumeValue(request: VolumeRequest) {
+    if (request.to) {
+      return Math.min(Math.max(Math.round(request.value), 0), 100)
+    }
+
+    const delta = request.value * (request.percentage ? playback.volume / 100 : 1)
+    const nextVolume = playback.volume + (request.turnUp ? delta : -delta)
+    return Math.min(Math.max(Math.round(nextVolume), 0), 100)
+  }
+
+  function handleVoiceVolume(request: VolumeRequest) {
+    playback.setVolumeLevel(getVoiceVolumeValue(request))
+  }
+
+  function getVoiceHint() {
+    const songs = snapshot.songs
+    const song = songs[Math.floor(Math.random() * songs.length)]
+    if (song?.artist && song.artist.length <= 30) {
+      return t('voiceAssistant.hintArtist', { artist: song.artist })
+    }
+
+    if (song?.album && song.album.length <= 30) {
+      return t('voiceAssistant.hintAlbum', { album: song.album })
+    }
+
+    return t('voiceAssistant.hintQuickPlay')
+  }
+
+  function getVoiceHelpText() {
+    return t('voiceAssistant.help')
+  }
+
+  async function handleVoiceCommand(text: string) {
+    const message = await executeVoiceCommand(text)
+    return {
+      message,
+      shouldContinue: message === t('voiceAssistant.notUnderstood'),
+    }
   }
 
   async function commitSearchQuery(value: string) {
@@ -564,6 +1086,33 @@ function App() {
     }, 40)
     void addRecentSearch(nextQuery)
   }
+
+  function commitDirectorySearchQuery(value: string, folderRelativePath: string) {
+    const nextQuery = value.trim()
+    if (!nextQuery) {
+      return
+    }
+
+    if (searchResultTimerRef.current != null) {
+      window.clearTimeout(searchResultTimerRef.current)
+      searchResultTimerRef.current = null
+    }
+
+    setSearchInput(nextQuery)
+    setSubmittedSearchQuery(nextQuery)
+    setSearchResultQuery(nextQuery)
+    setSearchResultsLoading(false)
+    navigate(`/search?folder=${encodeURIComponent(folderRelativePath)}`)
+    void addRecentSearch(nextQuery)
+  }
+
+  const isLocalRoute = location.pathname === '/local' || location.pathname.startsWith('/local/')
+  const currentLocalRelativePath = isLocalRoute
+    ? decodeLocalRoute(location.pathname.replace(/^\/local\/?/, ''))
+    : ''
+  const searchFolderRelativePath = new URLSearchParams(location.search).get('folder') ?? ''
+  const searchFolderPath = getSearchFolderPath(snapshot.settings.rootPath, searchFolderRelativePath)
+  const searchFolderName = getSearchFolderName(snapshot.settings.rootPath, searchFolderRelativePath)
 
   return (
     <div className={`app-shell${isNavigationCollapsed ? ' nav-collapsed' : ''}`}>
@@ -601,19 +1150,59 @@ function App() {
             location.pathname.startsWith('/playlists/') ||
             location.pathname.startsWith('/favorites')
           ? 'workspace is-immersive-route'
-          : 'workspace'
+          : isLocalRoute
+            ? 'workspace is-local-route'
+            : 'workspace'
       }>
         <header className="workspace-header">
-          <div>
-            <h1>
-              {location.pathname === '/' && !initialLoadComplete
-                ? ''
-                : getPageTitle(location.pathname, snapshot.counts, t, showCount, submittedSearchQuery)}
-            </h1>
-          </div>
+          {isLocalRoute && snapshot.settings.rootPath ? (
+            <LocalTitleGrid
+              songs={snapshot.songs}
+              folders={snapshot.folders}
+              playlists={snapshot.playlists}
+              t={t}
+              rootPath={snapshot.settings.rootPath}
+              currentRelativePath={currentLocalRelativePath}
+              onHiddenFoldersListButtonClick={() => {
+                navigate('/hidden-folders')
+              }}
+              onRevealFolder={(folderPath) => window.smplayer?.revealItemInFolder(folderPath)}
+              onSearchDirectory={(query, folderRelativePath) => {
+                commitDirectorySearchQuery(query, folderRelativePath)
+              }}
+              onPlayTrack={(trackId, queueSongIds) => {
+                void playTrackInQueue(trackId, queueSongIds)
+              }}
+              onAddSongsToNowPlaying={(songIds) => {
+                void replaceNowPlaying([...snapshot.nowPlaying.songIds, ...songIds])
+              }}
+              onCreatePlaylistWithSongs={(name, songIds) => {
+                void createPlaylist(name, songIds)
+              }}
+              onAddSongsToPlaylist={(playlistId, songIds) => {
+                void addSongsToPlaylist(playlistId, songIds)
+              }}
+              onDropLocalItems={async (payload, targetRelativePath) => {
+                const targetFolderPath = targetRelativePath
+                  ? getSearchFolderPath(snapshot.settings.rootPath, targetRelativePath)
+                  : snapshot.settings.rootPath
+                await window.smplayer!.moveSongsToFolder(payload.songIds, targetFolderPath)
+                for (const folderPath of payload.folderPaths) {
+                  await window.smplayer!.moveLocalFolderToFolder(folderPath, targetFolderPath)
+                }
+                await refresh()
+              }}
+            />
+          ) : (
+            <div>
+              <h1>
+                {location.pathname === '/' && !initialLoadComplete
+                  ? ''
+                  : getPageTitle(location.pathname, snapshot.counts, t, showCount, submittedSearchQuery, searchFolderName)}
+              </h1>
+            </div>
+          )}
           <div className="status-pills">
-            <span>{appInfo.platform}</span>
-            <span>{appInfo.isPackaged ? t('app.packaged') : t('app.development')}</span>
             <span>{t('app.songsCached', { count: snapshot.counts.songs })}</span>
           </div>
         </header>
@@ -626,12 +1215,12 @@ function App() {
           }}
         >
           {initialLoadComplete ? (
-            <Routes>
+            <KeepAliveRoutes location={location} routeKey={routeScrollKey}>
               <Route path="/" element={<Navigate to={resolveRestoredPage(snapshot.settings.lastPage)} replace />} />
             <Route
               path="/songs"
               element={
-                <LibraryPage
+                <MusicLibraryPage
                   snapshot={snapshot}
                   t={t}
                   songs={visibleSongs}
@@ -639,6 +1228,7 @@ function App() {
                   scanning={scanning}
                   error={error}
                   selectedTrackId={playback.currentTrackId}
+                  isPlaying={playback.isPlaying}
                   searchQuery=""
                   onPickLibraryRoot={() => {
                     void pickLibraryRoot()
@@ -649,6 +1239,15 @@ function App() {
                   onPlayTrack={(trackId, queueSongIds) => {
                     void playTrackInQueue(trackId, queueSongIds)
                   }}
+                  onAddNextAndPlay={(trackId) => {
+                    void addNextAndPlay(trackId)
+                  }}
+                  onMoveToMusicOrPlay={(songId) => {
+                    void moveToMusicOrPlayInQueue(songId)
+                  }}
+                  onTogglePlayPause={() => {
+                    void playback.togglePlayPause()
+                  }}
                   onPlayNext={(songId) => {
                     void playNextInQueue(songId)
                   }}
@@ -657,6 +1256,15 @@ function App() {
                   }}
                   onAddSongToPlaylist={(playlistId, songId) => {
                     void addSongToPlaylist(playlistId, songId)
+                  }}
+                  onAddSongsToPlaylist={(playlistId, songIds) => {
+                    void addSongsToPlaylist(playlistId, songIds)
+                  }}
+                  onAddSongsToNowPlaying={(songIds) => {
+                    void replaceNowPlaying([...snapshot.nowPlaying.songIds, ...songIds])
+                  }}
+                  onCreatePlaylistWithSongs={(name, songIds) => {
+                    void createPlaylist(name, songIds)
                   }}
                   onRevealSong={(songPath) => window.smplayer?.revealItemInFolder(songPath)}
                   onDeleteSongFromDisk={(songId) => {
@@ -679,8 +1287,19 @@ function App() {
                   searchQuery=""
                   error={error}
                   playlists={snapshot.playlists}
+                  loading={loading}
+                  scanning={scanning}
                   onPlayTrack={(trackId, queueSongIds) => {
                     void playTrackInQueue(trackId, queueSongIds)
+                  }}
+                  onMoveToMusicOrPlay={(songId) => {
+                    void moveToMusicOrPlayInQueue(songId)
+                  }}
+                  onAddSongsToNowPlaying={(songIds) => {
+                    void replaceNowPlaying([...snapshot.nowPlaying.songIds, ...songIds])
+                  }}
+                  onCreatePlaylistWithSongs={(name, songIds) => {
+                    void createPlaylist(name, songIds)
                   }}
                   onTogglePlayPause={() => {
                     void playback.togglePlayPause()
@@ -711,14 +1330,22 @@ function App() {
                   songs={snapshot.songs}
                   playlists={snapshot.playlists}
                   t={t}
+                  loading={loading}
+                  scanning={scanning}
                   onPlayTrack={(trackId, queueSongIds) => {
                     void playTrackInQueue(trackId, queueSongIds)
                   }}
                   onAddSongsToPlaylist={(playlistId, songIds) => {
                     void addSongsToPlaylist(playlistId, songIds)
                   }}
+                  onAddSongsToNowPlaying={(songIds) => {
+                    void replaceNowPlaying([...snapshot.nowPlaying.songIds, ...songIds])
+                  }}
                   onCreatePlaylistWithSongs={(name, songIds) => {
                     void createPlaylist(name, songIds)
+                  }}
+                  onUpdateSettings={(update) => {
+                    void updateSettings(update)
                   }}
                 />
               }
@@ -726,15 +1353,47 @@ function App() {
             <Route
               path="/artists/:artistName"
               element={
-                <ArtistDetailRoute
-                  songs={snapshot.songs}
+                <ArtistsPage
                   t={t}
+                  songs={visibleSongs}
                   selectedTrackId={playback.currentTrackId}
+                  isPlaying={playback.isPlaying}
+                  searchQuery=""
+                  error={error}
+                  playlists={snapshot.playlists}
+                  loading={loading}
+                  scanning={scanning}
+                  targetArtistName={decodeURIComponent(location.pathname.slice('/artists/'.length))}
                   onPlayTrack={(trackId, queueSongIds) => {
                     void playTrackInQueue(trackId, queueSongIds)
                   }}
+                  onMoveToMusicOrPlay={(songId) => {
+                    void moveToMusicOrPlayInQueue(songId)
+                  }}
+                  onAddSongsToNowPlaying={(songIds) => {
+                    void replaceNowPlaying([...snapshot.nowPlaying.songIds, ...songIds])
+                  }}
+                  onCreatePlaylistWithSongs={(name, songIds) => {
+                    void createPlaylist(name, songIds)
+                  }}
+                  onTogglePlayPause={() => {
+                    void playback.togglePlayPause()
+                  }}
+                  onPlayNext={(songId) => {
+                    void playNextInQueue(songId)
+                  }}
                   onToggleFavorite={(songId, favorite) => {
                     void setSongFavorite(songId, favorite)
+                  }}
+                  onAddSongToPlaylist={(playlistId, songId) => {
+                    void addSongToPlaylist(playlistId, songId)
+                  }}
+                  onAddSongsToPlaylist={(playlistId, songIds) => {
+                    void addSongsToPlaylist(playlistId, songIds)
+                  }}
+                  onRevealSong={(songPath) => window.smplayer?.revealItemInFolder(songPath)}
+                  onDeleteSongFromDisk={(songId) => {
+                    void deleteSongFromDisk(songId)
                   }}
                 />
               }
@@ -746,8 +1405,18 @@ function App() {
                   songs={snapshot.songs}
                   t={t}
                   selectedTrackId={playback.currentTrackId}
+                  isPlaying={playback.isPlaying}
                   onPlayTrack={(trackId, queueSongIds) => {
                     void playTrackInQueue(trackId, queueSongIds)
+                  }}
+                  onMoveToMusicOrPlay={(songId) => {
+                    void moveToMusicOrPlayInQueue(songId)
+                  }}
+                  onPlayNext={(songId) => {
+                    void playNextInQueue(songId)
+                  }}
+                  onTogglePlayPause={() => {
+                    void playback.togglePlayPause()
                   }}
                   onToggleFavorite={(songId, favorite) => {
                     void setSongFavorite(songId, favorite)
@@ -762,8 +1431,8 @@ function App() {
                   onSetAlbumPreferred={(albumName, level) => {
                     void window.smplayer?.addPreferenceItem('album', albumName, albumName, level)
                   }}
-                  onEditAlbumArtwork={(albumName) => {
-                    void window.smplayer?.pickAlbumArtwork(albumName).then(refresh)
+                  onAlbumArtworkSaved={() => {
+                    void refresh()
                   }}
                 />
               }
@@ -778,20 +1447,21 @@ function App() {
                   playlists={snapshot.playlists}
                   t={t}
                   selectedTrackId={playback.currentTrackId}
+                  selectedQueueIndex={playback.currentQueueIndex}
                   isPlaying={playback.isPlaying}
                   searchQuery=""
                   error={error}
                   onTogglePlayPause={() => {
                     void playback.togglePlayPause()
                   }}
-                  onPlayTrack={(trackId, queueSongIds) => {
-                    void playback.playTrack(trackId, queueSongIds)
+                  onPlayTrack={(trackId, queueSongIds, queueIndex) => {
+                    void playback.playTrack(trackId, queueSongIds, queueIndex)
                   }}
                   onReplaceQueue={(songIds) => {
                     void replaceNowPlaying(songIds)
                   }}
-                  onPlayNext={(songId) => {
-                    void playNextInQueue(songId)
+                  onPlayNext={(songId, queueIndex) => {
+                    void playNextInQueue(songId, queueIndex)
                   }}
                   onAddSongToPlaylist={(playlistId, songId) => {
                     void addSongToPlaylist(playlistId, songId)
@@ -829,6 +1499,9 @@ function App() {
                   showCount={showCount}
                   onPlayTrack={(trackId, queueSongIds) => {
                     void playTrackInQueue(trackId, queueSongIds)
+                  }}
+                  onMoveToMusicOrPlay={(songId) => {
+                    void moveToMusicOrPlayInQueue(songId)
                   }}
                   onTogglePlayPause={() => {
                     void playback.togglePlayPause()
@@ -878,11 +1551,14 @@ function App() {
             <Route
               path="/local/*"
               element={
-                <LocalBrowserRoute
+                <LocalPageRoute
                   songs={snapshot.songs}
+                  folders={snapshot.folders}
+                  playlists={snapshot.playlists}
                   t={t}
                   rootPath={snapshot.settings.rootPath}
                   selectedTrackId={playback.currentTrackId}
+                  isPlaying={playback.isPlaying}
                   searchQuery=""
                   loading={loading}
                   scanning={scanning}
@@ -890,14 +1566,84 @@ function App() {
                   onPickLibraryRoot={() => {
                     void pickLibraryRoot()
                   }}
-                  onScanLibrary={() => {
-                    void scanLibrary()
-                  }}
+                  onRefreshFolder={(folderPath) => scanLocalFolder(folderPath)}
                   onPlayTrack={(trackId, queueSongIds) => {
                     void playTrackInQueue(trackId, queueSongIds)
                   }}
+                  onMoveToMusicOrPlay={(songId) => {
+                    void moveToMusicOrPlayInQueue(songId)
+                  }}
+                  onTogglePlayPause={() => {
+                    void playback.togglePlayPause()
+                  }}
+                  onPlayNext={(songId) => {
+                    void playNextInQueue(songId)
+                  }}
                   onRevealSong={(songPath) => window.smplayer?.revealItemInFolder(songPath)}
-                  onCreateFolder={(relativePath, name) => window.smplayer!.createLocalFolder(snapshot.settings.rootPath, relativePath, name)}
+                  onRevealFolder={(folderPath) => window.smplayer?.revealItemInFolder(folderPath)}
+                  onCreateFolder={async (relativePath, name) => {
+                    await window.smplayer!.createLocalFolder(snapshot.settings.rootPath, relativePath, name)
+                    await scanLocalFolder(relativePath ? getSearchFolderPath(snapshot.settings.rootPath, relativePath) : snapshot.settings.rootPath)
+                  }}
+                  onRenameFolder={async (folderPath, name) => {
+                    await renameLocalFolder(folderPath, name)
+                  }}
+                  onDeleteFolder={async (folderPath) => {
+                    await deleteLocalFolder(folderPath)
+                  }}
+                  onHideFolder={async (folderPath) => {
+                    await hideLocalFolder(folderPath)
+                  }}
+                  onAddSongToPlaylist={(playlistId, songId) => {
+                    void addSongToPlaylist(playlistId, songId)
+                  }}
+                  onAddSongsToPlaylist={(playlistId, songIds) => {
+                    void addSongsToPlaylist(playlistId, songIds)
+                  }}
+                  onCreatePlaylistWithSongs={(name, songIds) => {
+                    void createPlaylist(name, songIds)
+                  }}
+                  onAddSongsToNowPlaying={(songIds) => {
+                    void replaceNowPlaying([...snapshot.nowPlaying.songIds, ...songIds])
+                  }}
+                  onToggleFavorite={(songId, favorite) => {
+                    void setSongFavorite(songId, favorite)
+                  }}
+                  onDeleteSongFromDisk={(songId) => {
+                    void deleteSongFromDisk(songId)
+                  }}
+                  onMoveSongsToFolder={async (songIds, folderPath) => {
+                    await window.smplayer!.moveSongsToFolder(songIds, folderPath)
+                    await refresh()
+                  }}
+                  onMoveFolderToFolder={async (sourceFolderPath, targetFolderPath) => {
+                    await window.smplayer!.moveLocalFolderToFolder(sourceFolderPath, targetFolderPath)
+                    await refresh()
+                  }}
+                  onDeleteLocalItems={async (songIds, folderPaths) => {
+                    await window.smplayer!.deleteLocalItems(songIds, folderPaths)
+                    await refresh()
+                  }}
+                  onUpdateFolderSort={async (folderPath, sortCriterion) => {
+                    await window.smplayer!.updateLocalFolderSort(folderPath, sortCriterion)
+                    await refresh()
+                  }}
+                  onSearchDirectory={(query, folderRelativePath) => {
+                    commitDirectorySearchQuery(query, folderRelativePath)
+                  }}
+                />
+              }
+            />
+            <Route
+              path="/hidden-folders"
+              element={
+                <HiddenFoldersPage
+                  active={location.pathname === '/hidden-folders'}
+                  t={t}
+                  onResumeHiddenStorageItem={async (item) => {
+                    await window.smplayer!.resumeHiddenStorageItem(item)
+                    await scanLibrary()
+                  }}
                 />
               }
             />
@@ -915,6 +1661,12 @@ function App() {
                   onPlayTrack={(trackId, queueSongIds) => {
                     void playTrackInQueue(trackId, queueSongIds)
                   }}
+                  onMoveToMusicOrPlay={(songId) => {
+                    void moveToMusicOrPlayInQueue(songId)
+                  }}
+                  onPlayNext={(songId) => {
+                    void playNextInQueue(songId)
+                  }}
                   onTogglePlayPause={() => {
                     void playback.togglePlayPause()
                   }}
@@ -926,6 +1678,12 @@ function App() {
                   }}
                   onRenamePlaylist={(playlistId, name) => {
                     void renamePlaylist(playlistId, name)
+                  }}
+                  onCreatePlaylistWithSongs={(name, songIds) => {
+                    void createPlaylist(name, songIds)
+                  }}
+                  onAddSongsToNowPlaying={(songIds) => {
+                    void replaceNowPlaying([...snapshot.nowPlaying.songIds, ...songIds])
                   }}
                   onReorderPlaylists={(playlistIds) => {
                     void reorderPlaylists(playlistIds)
@@ -961,6 +1719,12 @@ function App() {
                   onPlayTrack={(trackId, queueSongIds) => {
                     void playTrackInQueue(trackId, queueSongIds)
                   }}
+                  onMoveToMusicOrPlay={(songId) => {
+                    void moveToMusicOrPlayInQueue(songId)
+                  }}
+                  onPlayNext={(songId) => {
+                    void playNextInQueue(songId)
+                  }}
                   onTogglePlayPause={() => {
                     void playback.togglePlayPause()
                   }}
@@ -994,19 +1758,38 @@ function App() {
                   requestedQuery={submittedSearchQuery}
                   loading={searchResultsLoading}
                   songs={snapshot.songs}
+                  folders={snapshot.folders}
                   playlists={snapshot.playlists}
                   rootPath={snapshot.settings.rootPath}
+                  searchFolderPath={searchFolderPath}
+                  searchFolderName={searchFolderName}
                   selectedTrackId={playback.currentTrackId}
                   isPlaying={playback.isPlaying}
                   showCount={showCount}
+                  sortCriteria={{
+                    artists: snapshot.settings.searchArtistsCriterion,
+                    albums: snapshot.settings.searchAlbumsCriterion,
+                    songs: snapshot.settings.searchSongsCriterion,
+                    playlists: snapshot.settings.searchPlaylistsCriterion,
+                    folders: snapshot.settings.searchFoldersCriterion,
+                  }}
                   onPlayTrack={(trackId, queueSongIds) => {
                     void playTrackInQueue(trackId, queueSongIds)
+                  }}
+                  onMoveToMusicOrPlay={(songId) => {
+                    void moveToMusicOrPlayInQueue(songId)
                   }}
                   onTogglePlayPause={() => {
                     void playback.togglePlayPause()
                   }}
                   onPlayNext={(songId) => {
                     void playNextInQueue(songId)
+                  }}
+                  onAddSongsToNowPlaying={(songIds) => {
+                    void replaceNowPlaying([...snapshot.nowPlaying.songIds, ...songIds])
+                  }}
+                  onCreatePlaylistWithSongs={(name, songIds) => {
+                    void createPlaylist(name, songIds)
                   }}
                   onAddSongToPlaylist={(playlistId, songId) => {
                     void addSongToPlaylist(playlistId, songId)
@@ -1022,6 +1805,12 @@ function App() {
                   }}
                   onToggleFavorite={(songId, favorite) => {
                     void setSongFavorite(songId, favorite)
+                  }}
+                  onUpdateSettings={(update) => {
+                    void updateSettings(update)
+                  }}
+                  onSearchDirectory={(query, folderRelativePath) => {
+                    commitDirectorySearchQuery(query, folderRelativePath)
                   }}
                 />
               }
@@ -1047,95 +1836,141 @@ function App() {
                 />
               }
             />
-            </Routes>
+            </KeepAliveRoutes>
           ) : null}
         </main>
       </div>
 
-      <PlayerBar
-        track={playerTrack}
-        disabled={!playback.currentTrack}
-        isPlaying={playback.isPlaying}
-        volume={playback.volume}
-        isMuted={playback.isMuted}
-        mode={playback.mode}
-        t={t}
-        onTogglePlayPause={() => {
-          void playback.togglePlayPause()
-        }}
-        onPrevious={() => {
-          void playback.playPrevious()
-        }}
-        onNext={() => {
-          void playback.playNext()
-        }}
-        onSeek={playback.seekToSeconds}
-        onBeginSeek={playback.beginSeek}
-        onEndSeek={playback.endSeek}
-        onVolumeChange={playback.setVolumeLevel}
-        onToggleMute={playback.toggleMute}
-        onToggleShuffle={playback.toggleShuffle}
-        onToggleRepeat={playback.toggleRepeat}
-        onToggleRepeatOne={playback.toggleRepeatOne}
-        onToggleFavorite={() => {
-          if (playback.currentTrack) {
-            void setSongFavorite(playback.currentTrack.id, !playback.currentTrack.favorite)
+      {showNowPlayingFullPage ? (
+        <NowPlayingFullPage
+          songs={nowPlayingSongs}
+          librarySongs={snapshot.songs}
+          recentSongs={snapshot.recentSongs}
+          playlists={snapshot.playlists}
+          currentSong={playback.currentTrack}
+          t={t}
+          selectedTrackId={playback.currentTrackId}
+          selectedQueueIndex={playback.currentQueueIndex}
+          isPlaying={playback.isPlaying}
+          progressSeconds={playback.progressSeconds}
+          durationSeconds={playback.durationSeconds}
+          volume={playback.volume}
+          isMuted={playback.isMuted}
+          mode={playback.mode}
+          resolvedArtworkUrl={
+            playback.currentTrack && resolvedArtwork?.trackId === playback.currentTrack.id
+              ? resolvedArtwork.artworkUrl
+              : ''
           }
-        }}
-        onOpenNowPlaying={() => {
-          navigate('/now-playing?full=1')
-        }}
-        onArtworkResolved={(trackId, artworkUrl) => {
-          setResolvedArtwork({ trackId, artworkUrl })
-        }}
-      />
+          error={error}
+          onClose={() => {
+            setShowNowPlayingFullPage(false)
+          }}
+          onTogglePlayPause={() => {
+            void playback.togglePlayPause()
+          }}
+          onPrevious={() => {
+            void playback.playPrevious()
+          }}
+          onNext={() => {
+            void playback.playNext()
+          }}
+          onSeek={playback.seekToSeconds}
+          onBeginSeek={playback.beginSeek}
+          onEndSeek={playback.endSeek}
+          onVolumeChange={playback.setVolumeLevel}
+          onToggleMute={playback.toggleMute}
+          onToggleShuffle={playback.toggleShuffle}
+          onToggleRepeat={playback.toggleRepeat}
+          onToggleRepeatOne={playback.toggleRepeatOne}
+          onPlayTrack={(trackId, queueSongIds, queueIndex) => {
+            void playback.playTrack(trackId, queueSongIds, queueIndex)
+          }}
+          onReplaceQueue={(songIds) => {
+            void replaceNowPlaying(songIds)
+          }}
+          onPlayNext={(songId, queueIndex) => {
+            void playNextInQueue(songId, queueIndex)
+          }}
+          onAddSongToPlaylist={(playlistId, songId) => {
+            void addSongToPlaylist(playlistId, songId)
+          }}
+          onAddSongsToPlaylist={(playlistId, songIds) => {
+            void addSongsToPlaylist(playlistId, songIds)
+          }}
+          onRevealSong={(songPath) => window.smplayer?.revealItemInFolder(songPath)}
+          onToggleFavorite={(songId, favorite) => {
+            void setSongFavorite(songId, favorite)
+          }}
+          onRemoveSongs={(songIds) => {
+            void replaceNowPlaying(snapshot.nowPlaying.songIds.filter((songId) => !songIds.includes(songId)))
+          }}
+          onDeleteSongFromDisk={(songId) => {
+            void deleteSongFromDisk(songId)
+          }}
+          onClearQueue={() => {
+            void clearNowPlaying()
+          }}
+          onArtworkResolved={(trackId, artworkUrl) => {
+            setResolvedArtwork({ trackId, artworkUrl })
+          }}
+          onRefresh={() => {
+            void refresh()
+          }}
+        />
+      ) : null}
+
+      {!showNowPlayingFullPage ? (
+        <PlayerBar
+          track={playerTrack}
+          currentSong={playback.currentTrack}
+          playlists={snapshot.playlists}
+          queueSongIds={snapshot.nowPlaying.songIds}
+          disabled={snapshot.nowPlaying.songIds.length === 0}
+          isPlaying={playback.isPlaying}
+          volume={playback.volume}
+          isMuted={playback.isMuted}
+          mode={playback.mode}
+          t={t}
+          onTogglePlayPause={() => {
+            void playback.togglePlayPause()
+          }}
+          onPrevious={() => {
+            void playback.playPrevious()
+          }}
+          onNext={() => {
+            void playback.playNext()
+          }}
+          onSeek={playback.seekToSeconds}
+          onBeginSeek={playback.beginSeek}
+          onEndSeek={playback.endSeek}
+          onVolumeChange={playback.setVolumeLevel}
+          onToggleMute={playback.toggleMute}
+          onToggleShuffle={playback.toggleShuffle}
+          onToggleRepeat={playback.toggleRepeat}
+          onToggleRepeatOne={playback.toggleRepeatOne}
+          onToggleFavorite={() => {
+            if (playback.currentTrack) {
+              void setSongFavorite(playback.currentTrack.id, !playback.currentTrack.favorite)
+            }
+          }}
+          onQuickPlay={() => {
+            void playQuick()
+          }}
+          onVoiceCommand={handleVoiceCommand}
+          getVoiceHint={getVoiceHint}
+          getVoiceHelpText={getVoiceHelpText}
+          voiceLanguage={resolveLocale(snapshot.settings.preferredLanguage)}
+          onOpenNowPlaying={() => {
+            setShowNowPlayingFullPage(true)
+          }}
+          onArtworkResolved={(trackId, artworkUrl) => {
+            setResolvedArtwork({ trackId, artworkUrl })
+          }}
+        />
+      ) : null}
+      <UndoableNotificationHost />
     </div>
-  )
-}
-
-function ArtistDetailRoute({
-  songs,
-  t,
-  selectedTrackId,
-  onPlayTrack,
-  onToggleFavorite,
-}: {
-  songs: LibrarySong[]
-  t: Translator
-  selectedTrackId: number | null
-  onPlayTrack: (trackId: number, queueSongIds: number[]) => void
-  onToggleFavorite: (songId: number, favorite: boolean) => void
-}) {
-  const params = useParams()
-  const artistName = decodeURIComponent(params.artistName ?? '')
-  const artistSongs = songs.filter((song) => getSongArtists(song).includes(artistName))
-
-  if (!artistName || artistSongs.length === 0) {
-    return (
-      <CollectionPage
-        title={t('collection.artistNotFound')}
-        description={t(
-          'collection.artistNotFoundDescription',
-        )}
-        items={[]}
-        t={t}
-        emptyTitle={t('collection.artistNotFound')}
-        emptyCopy={t(
-          'collection.artistNotFoundCopy',
-        )}
-      />
-    )
-  }
-
-  return (
-    <ArtistDetailPage
-      artistName={artistName}
-      t={t}
-      songs={artistSongs}
-      selectedTrackId={selectedTrackId}
-      onPlayTrack={onPlayTrack}
-      onToggleFavorite={onToggleFavorite}
-    />
   )
 }
 
@@ -1143,28 +1978,39 @@ function AlbumDetailRoute({
   songs,
   t,
   selectedTrackId,
+  isPlaying,
   onPlayTrack,
+  onMoveToMusicOrPlay,
+  onPlayNext,
+  onTogglePlayPause,
   onToggleFavorite,
   playlists,
   onAddSongToPlaylist,
   onAddSongsToPlaylist,
   onSetAlbumPreferred,
-  onEditAlbumArtwork,
+  onAlbumArtworkSaved,
 }: {
   songs: LibrarySong[]
   t: Translator
   selectedTrackId: number | null
+  isPlaying: boolean
   onPlayTrack: (trackId: number, queueSongIds: number[]) => void
+  onMoveToMusicOrPlay: (songId: number) => void
+  onPlayNext: (songId: number) => void
+  onTogglePlayPause: () => void
   onToggleFavorite: (songId: number, favorite: boolean) => void
   playlists: LibraryPlaylist[]
   onAddSongToPlaylist: (playlistId: number, songId: number) => void
   onAddSongsToPlaylist: (playlistId: number, songIds: number[]) => void
   onSetAlbumPreferred: (albumName: string, level: PreferenceLevel) => void
-  onEditAlbumArtwork: (albumName: string) => void
+  onAlbumArtworkSaved: () => void
 }) {
   const params = useParams()
-  const albumName = decodeURIComponent(params.albumName ?? '')
-  const albumSongs = songs.filter((song) => (song.album || 'Unknown album') === albumName)
+  const navigate = useNavigate()
+  const albumName = params.albumName ?? ''
+  const albumSongs = songs
+    .filter((song) => (song.album || t('common.albumUnknown')) === albumName)
+    .sort((left, right) => left.title.localeCompare(right.title))
 
   if (!albumName || albumSongs.length === 0) {
     return (
@@ -1189,65 +2035,138 @@ function AlbumDetailRoute({
       t={t}
       songs={albumSongs}
       selectedTrackId={selectedTrackId}
+      isPlaying={isPlaying}
       onPlayTrack={onPlayTrack}
+      onMoveToMusicOrPlay={onMoveToMusicOrPlay}
+      onPlayNext={onPlayNext}
+      onTogglePlayPause={onTogglePlayPause}
       onToggleFavorite={onToggleFavorite}
       playlists={playlists}
       onAddSongToPlaylist={onAddSongToPlaylist}
       onAddSongsToPlaylist={onAddSongsToPlaylist}
       onSetAlbumPreferred={onSetAlbumPreferred}
-      onEditAlbumArtwork={onEditAlbumArtwork}
+      onAlbumArtworkSaved={onAlbumArtworkSaved}
+      onArtistClick={(artist) => {
+        navigate(`/artists/${encodeURIComponent(artist)}`)
+      }}
+      onAlbumClick={(album) => {
+        navigate(`/albums/${encodeURIComponent(album)}`)
+      }}
     />
   )
 }
 
-function LocalBrowserRoute({
+function LocalPageRoute({
   songs,
+  folders,
+  playlists,
   t,
   rootPath,
   selectedTrackId,
+  isPlaying,
   searchQuery,
   loading,
   scanning,
   error,
   onPickLibraryRoot,
-  onScanLibrary,
+  onRefreshFolder,
   onPlayTrack,
+  onMoveToMusicOrPlay,
+  onTogglePlayPause,
+  onPlayNext,
   onRevealSong,
+  onRevealFolder,
   onCreateFolder,
+  onRenameFolder,
+  onDeleteFolder,
+  onHideFolder,
+  onAddSongToPlaylist,
+  onAddSongsToPlaylist,
+  onCreatePlaylistWithSongs,
+  onAddSongsToNowPlaying,
+  onToggleFavorite,
+  onDeleteSongFromDisk,
+  onMoveSongsToFolder,
+  onMoveFolderToFolder,
+  onDeleteLocalItems,
+  onUpdateFolderSort,
+  onSearchDirectory,
 }: {
   songs: LibrarySong[]
+  folders: LibraryFolder[]
+  playlists: LibraryPlaylist[]
   t: Translator
   rootPath: string
   selectedTrackId: number | null
+  isPlaying: boolean
   searchQuery: string
   loading: boolean
   scanning: boolean
   error: string | null
   onPickLibraryRoot: () => void
-  onScanLibrary: () => void
+  onRefreshFolder: (folderPath: string) => void | ScanLibraryResult | null | Promise<ScanLibraryResult | null | void>
   onPlayTrack: (trackId: number, queueSongIds: number[]) => void
+  onMoveToMusicOrPlay: (songId: number) => void
+  onTogglePlayPause: () => void
+  onPlayNext: (songId: number) => void
   onRevealSong: (songPath: string) => void | Promise<void>
+  onRevealFolder: (folderPath: string) => void | Promise<void>
   onCreateFolder: (relativePath: string, name: string) => void | Promise<void>
+  onRenameFolder: (folderPath: string, name: string) => void | Promise<void>
+  onDeleteFolder: (folderPath: string) => void | Promise<void>
+  onHideFolder: (folderPath: string) => void | Promise<void>
+  onAddSongToPlaylist: (playlistId: number, songId: number) => void
+  onAddSongsToPlaylist: (playlistId: number, songIds: number[]) => void
+  onCreatePlaylistWithSongs: (name: string, songIds: number[]) => void
+  onAddSongsToNowPlaying: (songIds: number[]) => void
+  onToggleFavorite: (songId: number, favorite: boolean) => void
+  onDeleteSongFromDisk: (songId: number) => void
+  onMoveSongsToFolder: (songIds: number[], folderPath: string) => void | Promise<void>
+  onMoveFolderToFolder: (sourceFolderPath: string, targetFolderPath: string) => void | Promise<void>
+  onDeleteLocalItems: (songIds: number[], folderPaths: string[]) => void | Promise<void>
+  onUpdateFolderSort: (folderPath: string, sortCriterion: LocalFolderSortCriterion) => void | Promise<void>
+  onSearchDirectory: (query: string, folderRelativePath: string) => void
 }) {
   const params = useParams()
   const currentRelativePath = decodeLocalRoute(params['*'])
 
   return (
-    <LocalBrowserPage
+    <LocalPage
       songs={songs}
+      folders={folders}
+      playlists={playlists}
       t={t}
       rootPath={rootPath}
       currentRelativePath={currentRelativePath}
       selectedTrackId={selectedTrackId}
+      isPlaying={isPlaying}
       searchQuery={searchQuery}
       loading={loading}
       scanning={scanning}
       error={error}
       onPickLibraryRoot={onPickLibraryRoot}
-      onScanLibrary={onScanLibrary}
+      onRefreshFolder={onRefreshFolder}
       onPlayTrack={onPlayTrack}
+      onMoveToMusicOrPlay={onMoveToMusicOrPlay}
+      onTogglePlayPause={onTogglePlayPause}
+      onPlayNext={onPlayNext}
       onRevealSong={onRevealSong}
+      onRevealFolder={onRevealFolder}
       onCreateFolder={onCreateFolder}
+      onRenameFolder={onRenameFolder}
+      onDeleteFolder={onDeleteFolder}
+      onHideFolder={onHideFolder}
+      onAddSongToPlaylist={onAddSongToPlaylist}
+      onAddSongsToPlaylist={onAddSongsToPlaylist}
+      onCreatePlaylistWithSongs={onCreatePlaylistWithSongs}
+      onAddSongsToNowPlaying={onAddSongsToNowPlaying}
+      onToggleFavorite={onToggleFavorite}
+      onDeleteSongFromDisk={onDeleteSongFromDisk}
+      onMoveSongsToFolder={onMoveSongsToFolder}
+      onMoveFolderToFolder={onMoveFolderToFolder}
+      onDeleteLocalItems={onDeleteLocalItems}
+      onUpdateFolderSort={onUpdateFolderSort}
+      onSearchDirectory={onSearchDirectory}
     />
   )
 }
@@ -1260,6 +2179,7 @@ function getPageTitle(
   t: Translator,
   showCount: boolean,
   searchQuery: string,
+  searchFolderName: string,
 ) {
   if (pathname.startsWith('/artists/')) {
     return t('detail.artistEyebrow')
@@ -1278,11 +2198,15 @@ function getPageTitle(
   if (pathname.startsWith('/albums')) {
     return showCount
       ? t('library.allAlbumsWithCount', { count: counts.albums })
-      : t('common.albums')
+      : t('library.allAlbums')
   }
 
   if (pathname.startsWith('/now-playing')) {
     return t('common.nowPlaying')
+  }
+
+  if (pathname.startsWith('/hidden-folders')) {
+    return t('local.hiddenFolders')
   }
 
   if (pathname.startsWith('/recent')) {
@@ -1303,6 +2227,9 @@ function getPageTitle(
 
   if (pathname.startsWith('/search')) {
     const query = searchQuery.trim()
+    if (query && searchFolderName) {
+      return t('search.directoryResultOf', { query, folder: searchFolderName })
+    }
     return query ? t('search.resultOf', { query }) : t('search.resultTitle')
   }
 
@@ -1313,4 +2240,21 @@ function getPageTitle(
   return showCount
     ? t('library.allSongsWithCount', { count: counts.songs })
     : t('library.allSongs')
+}
+
+function getSearchFolderPath(rootPath: string, folderRelativePath: string) {
+  if (!folderRelativePath) {
+    return ''
+  }
+
+  const separator = rootPath.includes('\\') ? '\\' : '/'
+  return `${rootPath.replace(/[\\/]+$/, '')}${separator}${folderRelativePath.split('/').join(separator)}`
+}
+
+function getSearchFolderName(rootPath: string, folderRelativePath: string) {
+  if (!folderRelativePath) {
+    return ''
+  }
+
+  return folderRelativePath.split('/').filter(Boolean).at(-1) ?? rootPath.split(/[\\/]+/).filter(Boolean).at(-1) ?? ''
 }

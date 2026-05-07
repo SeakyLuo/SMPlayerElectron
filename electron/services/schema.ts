@@ -59,7 +59,9 @@ export function initializeSchema(db: DatabaseSync) {
       RemotePlayPassword TEXT DEFAULT '',
       UseFilenameNotMusicName INTEGER DEFAULT 0,
       NotificationLyricsSource INTEGER DEFAULT 0,
+      PlayerLyricsSource INTEGER DEFAULT 3,
       SaveLyricsImmediately INTEGER DEFAULT 0,
+      PreserveInternetLyricsTimestamps INTEGER DEFAULT 1,
       QuitOnClose INTEGER DEFAULT 1
     );
 
@@ -159,6 +161,13 @@ export function initializeSchema(db: DatabaseSync) {
       SearchedAt TEXT DEFAULT ''
     );
 
+    CREATE TABLE IF NOT EXISTS HiddenStorageItem (
+      Id INTEGER PRIMARY KEY AUTOINCREMENT,
+      Type TEXT NOT NULL,
+      Path TEXT NOT NULL,
+      State INTEGER DEFAULT 1
+    );
+
     INSERT OR IGNORE INTO SearchState (Id, LastQuery)
     VALUES (1, '');
 
@@ -180,6 +189,8 @@ export function initializeSchema(db: DatabaseSync) {
     CREATE INDEX IF NOT EXISTS idx_recent_record_type ON RecentRecord(Type);
     CREATE INDEX IF NOT EXISTS idx_preference_item_type_item ON PreferenceItem(Type, ItemId);
     CREATE INDEX IF NOT EXISTS idx_search_history_time ON SearchHistory(SearchedAt);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_hidden_storage_item_type_path
+      ON HiddenStorageItem(Type, Path);
   `)
 
   addColumnIfMissing(db, 'Music', 'ArtworkPath', `ArtworkPath TEXT DEFAULT ''`)
@@ -189,8 +200,16 @@ export function initializeSchema(db: DatabaseSync) {
     ['RemotePlayPassword', `RemotePlayPassword TEXT DEFAULT ''`],
     ['UseFilenameNotMusicName', `UseFilenameNotMusicName INTEGER DEFAULT 0`],
     ['NotificationLyricsSource', `NotificationLyricsSource INTEGER DEFAULT 0`],
+    ['PlayerLyricsSource', `PlayerLyricsSource INTEGER DEFAULT 3`],
     ['SaveLyricsImmediately', `SaveLyricsImmediately INTEGER DEFAULT 0`],
+    ['PreserveInternetLyricsTimestamps', `PreserveInternetLyricsTimestamps INTEGER DEFAULT 1`],
     ['QuitOnClose', `QuitOnClose INTEGER DEFAULT 1`],
+    ['AlbumsCriterion', `AlbumsCriterion INTEGER DEFAULT -1`],
+    ['SearchArtistsCriterion', `SearchArtistsCriterion INTEGER DEFAULT -1`],
+    ['SearchAlbumsCriterion', `SearchAlbumsCriterion INTEGER DEFAULT -1`],
+    ['SearchSongsCriterion', `SearchSongsCriterion INTEGER DEFAULT -1`],
+    ['SearchPlaylistsCriterion', `SearchPlaylistsCriterion INTEGER DEFAULT -1`],
+    ['SearchFoldersCriterion', `SearchFoldersCriterion INTEGER DEFAULT -1`],
   ]) {
     addColumnIfMissing(db, 'Settings', columnName, columnDefinition)
   }

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 
 import { Icon } from '../components/icons'
+import { getReleaseNotes } from '../shared/releaseNotes'
 import type {
   AppSettingsUpdate,
   LibrarySnapshot,
@@ -72,25 +73,65 @@ function SelectSettingRow<T extends string>({
   options,
   onChange,
 }: SelectSettingRowProps<T>) {
+  const [open, setOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement | null>(null)
+  const selectedOption = options.find((option) => option.value === value)
+
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+
+    const closeMenu = (event: MouseEvent) => {
+      if (menuRef.current?.contains(event.target as Node)) {
+        return
+      }
+
+      setOpen(false)
+    }
+
+    document.addEventListener('mousedown', closeMenu)
+    return () => {
+      document.removeEventListener('mousedown', closeMenu)
+    }
+  }, [open])
+
   return (
-    <label className="settings-row settings-row-with-control">
+    <div className="settings-row settings-row-with-control" ref={menuRef}>
       <span className="settings-row-copy">
         <strong>{label}</strong>
       </span>
-      <select
-        className="settings-select"
-        value={value}
-        onChange={(event) => {
-          onChange(event.currentTarget.value as T)
-        }}
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </label>
+      <span className="settings-select-menu">
+        <button
+          type="button"
+          className={open ? 'settings-select-trigger is-open' : 'settings-select-trigger'}
+          onClick={() => {
+            setOpen((current) => !current)
+          }}
+        >
+          <span>{selectedOption?.label}</span>
+          <Icon name="chevronDown" />
+        </button>
+        {open ? (
+          <span className="settings-select-options">
+            {options.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className={option.value === value ? 'is-selected' : ''}
+                onClick={() => {
+                  onChange(option.value)
+                  setOpen(false)
+                }}
+              >
+                <Icon name={option.value === value ? 'check' : 'blank'} />
+                <span>{option.label}</span>
+              </button>
+            ))}
+          </span>
+        ) : null}
+      </span>
+    </div>
   )
 }
 
@@ -133,12 +174,11 @@ export function SettingsPage({
   t,
   snapshot,
   loading,
-  scanning,
   error,
   onPickLibraryRoot,
-  onScanLibrary,
   onUpdateSettings,
 }: SettingsPageProps) {
+  const showNotificationSettings = false
   const notificationSendOptions: Array<{
     value: NotificationSendMode
     label: string
@@ -154,14 +194,6 @@ export function SettingsPage({
     { value: 'normal', label: t('settings.notificationModeNormal') },
     { value: 'quick', label: t('settings.notificationModeQuick') },
   ]
-  const notificationLyricsSourceOptions: Array<{
-    value: LyricsRequestMode
-    label: string
-  }> = [
-    { value: 'internet', label: t('settings.sourceInternet') },
-    { value: 'local', label: t('settings.sourceLocal') },
-    { value: 'embedded', label: t('settings.sourceEmbedded') },
-  ]
   const preferredLanguageOptions: Array<{
     value: PreferredLanguage
     label: string
@@ -169,6 +201,15 @@ export function SettingsPage({
     { value: 'system', label: t('settings.languageSystem') },
     { value: 'en-US', label: t('settings.languageEnglish') },
     { value: 'zh-CN', label: t('settings.languageChinese') },
+  ]
+  const lyricsSourceOptions: Array<{
+    value: LyricsRequestMode
+    label: string
+  }> = [
+    { value: 'auto', label: t('song.lyrics.auto') },
+    { value: 'internet', label: t('settings.sourceInternet') },
+    { value: 'local', label: t('settings.sourceLocal') },
+    { value: 'embedded', label: t('settings.sourceEmbedded') },
   ]
   const showSystemLog = () => {
     void window.smplayer?.revealSystemLogs()
@@ -195,6 +236,12 @@ export function SettingsPage({
   const mountedRef = useRef(true)
   const lyricsJobActive = lyricsJob.status === 'running' || lyricsJob.status === 'stopping'
   const lyricsProgressRatio = lyricsJob.total > 0 ? lyricsJob.currentIndex / lyricsJob.total : 0
+  const releaseNoteLanguage =
+    snapshot.settings.preferredLanguage === 'zh-CN' ||
+    (snapshot.settings.preferredLanguage === 'system' && navigator.language.toLowerCase().startsWith('zh'))
+      ? 'zh'
+      : 'en'
+  const releaseNotes = getReleaseNotes(releaseNoteLanguage)
 
   useEffect(() => {
     return () => {
@@ -418,7 +465,7 @@ export function SettingsPage({
             <div className="settings-folder-row">
               <input
                 className="settings-path-input"
-                readOnly
+                disabled
                 placeholder={t('settings.musicFolderPlaceholder')}
                 value={snapshot.settings.rootPath}
               />
@@ -427,23 +474,53 @@ export function SettingsPage({
               </button>
             </div>
             {loading ? <p className="settings-inline-hint">{t('library.refreshing')}</p> : null}
-            <div className="settings-button-row">
-              <SettingsActionButton onClick={onPickLibraryRoot}>
-                {t('settings.reauthorize')}
-              </SettingsActionButton>
-              <SettingsActionButton onClick={onPickLibraryRoot}>
-                {t('settings.authorizeOtherFolder')}
-              </SettingsActionButton>
-              <SettingsActionButton
-                disabled={scanning || !snapshot.settings.rootPath}
-                onClick={onScanLibrary}
-              >
-                {scanning ? t('library.scanning') : t('settings.rescan')}
-              </SettingsActionButton>
-            </div>
+            <ToggleSettingRow
+              label={
+                snapshot.settings.useFilenameNotMusicName
+                  ? t('settings.loadUsingFilename')
+                  : t('settings.loadUsingMusicName')
+              }
+              checked={snapshot.settings.useFilenameNotMusicName}
+              onChange={(checked) => {
+                onUpdateSettings({ useFilenameNotMusicName: checked })
+              }}
+            />
           </SettingsCard>
 
-          <SettingsCard title={t('library.title')}>
+          <SettingsCard title={t('settings.lyrics')}>
+            <SelectSettingRow
+              label={t('settings.playerLyricsSource')}
+              value={snapshot.settings.playerLyricsSource}
+              options={lyricsSourceOptions}
+              onChange={(value) => {
+                onUpdateSettings({ playerLyricsSource: value })
+              }}
+            />
+            <ToggleSettingRow
+              label={t('settings.autoLyrics')}
+              checked={snapshot.settings.autoLyrics}
+              onChange={(checked) => {
+                onUpdateSettings({ autoLyrics: checked })
+              }}
+            />
+            <ToggleSettingRow
+              label={t('settings.preserveLyricsTimestamps')}
+              hint={t('settings.preserveLyricsTimestampsHint')}
+              checked={snapshot.settings.preserveInternetLyricsTimestamps}
+              onChange={(checked) => {
+                onUpdateSettings({ preserveInternetLyricsTimestamps: checked })
+              }}
+            />
+            <ToggleSettingRow
+              label={t('settings.saveFetchedLyrics')}
+              hint={t(
+                'settings.saveLyricsImmediatelyHint',
+              )}
+              checked={snapshot.settings.saveLyricsImmediately}
+              onChange={(checked) => {
+                onUpdateSettings({ saveLyricsImmediately: checked })
+              }}
+            />
             <div className="lyrics-action-row">
               <SettingsActionButton
                 disabled={lyricsJobActive || snapshot.songs.length === 0}
@@ -489,54 +566,32 @@ export function SettingsPage({
                 </div>
               </div>
             ) : null}
-            <ToggleSettingRow
-              label={
-                snapshot.settings.useFilenameNotMusicName
-                  ? t('settings.loadUsingFilename')
-                  : t('settings.loadUsingMusicName')
-              }
-              checked={snapshot.settings.useFilenameNotMusicName}
-              onChange={(checked) => {
-                onUpdateSettings({ useFilenameNotMusicName: checked })
-              }}
-            />
           </SettingsCard>
 
-          <SettingsCard title={t('settings.notification')}>
-            <SelectSettingRow
-              label={t('settings.notificationSend')}
-              value={snapshot.settings.notificationSend}
-              options={notificationSendOptions}
-              onChange={(value) => {
-                onUpdateSettings({ notificationSend: value, showNotifications: value !== 'never' })
-              }}
-            />
-            <SelectSettingRow
-              label={t('settings.notificationMode')}
-              value={snapshot.settings.notificationDisplay}
-              options={notificationDisplayOptions}
-              onChange={(value) => {
-                onUpdateSettings({ notificationDisplay: value })
-              }}
-            />
-            <ToggleSettingRow
-              label={t('settings.lyricsInNotifications')}
-              hint={t('settings.lyricsInNotificationsHint')}
-              checked={snapshot.settings.showLyricsInNotification}
-              onChange={(checked) => {
-                onUpdateSettings({ showLyricsInNotification: checked })
-              }}
-            />
-            <SelectSettingRow
-              label={t('settings.notificationLyricsSource')}
-              value={snapshot.settings.notificationLyricsSource}
-              options={notificationLyricsSourceOptions}
-              onChange={(value) => {
-                onUpdateSettings({ notificationLyricsSource: value })
-              }}
-            />
-          </SettingsCard>
+          {showNotificationSettings ? (
+            <SettingsCard title={t('settings.notification')}>
+              <SelectSettingRow
+                label={t('settings.notificationSend')}
+                value={snapshot.settings.notificationSend}
+                options={notificationSendOptions}
+                onChange={(value) => {
+                  onUpdateSettings({ notificationSend: value, showNotifications: value !== 'never' })
+                }}
+              />
+              <SelectSettingRow
+                label={t('settings.notificationMode')}
+                value={snapshot.settings.notificationDisplay}
+                options={notificationDisplayOptions}
+                onChange={(value) => {
+                  onUpdateSettings({ notificationDisplay: value })
+                }}
+              />
+            </SettingsCard>
+          ) : null}
 
+        </div>
+
+        <div className="settings-column">
           <SettingsCard title={t('settings.display')}>
             <SelectSettingRow
               label={t('settings.interfaceLanguage')}
@@ -561,18 +616,6 @@ export function SettingsPage({
               }}
             />
           </SettingsCard>
-        </div>
-
-        <div className="settings-column">
-          <SettingsCard title={t('common.recent')}>
-            <ToggleSettingRow
-              label={t('settings.autoLyrics')}
-              checked={snapshot.settings.autoLyrics}
-              onChange={(checked) => {
-                onUpdateSettings({ autoLyrics: checked })
-              }}
-            />
-          </SettingsCard>
 
           <SettingsCard title={t('settings.play')}>
             <ToggleSettingRow
@@ -582,18 +625,6 @@ export function SettingsPage({
                 onUpdateSettings({ autoPlay: checked })
               }}
             />
-            <div className="settings-button-row">
-              <SettingsActionButton
-                onClick={() => {
-                  setShowPreferenceSettings(true)
-                }}
-              >
-                {t('settings.preferenceSettings')}
-              </SettingsActionButton>
-            </div>
-          </SettingsCard>
-
-          <SettingsCard title={t('settings.save')}>
             <ToggleSettingRow
               label={t('settings.saveProgress')}
               checked={snapshot.settings.saveMusicProgress}
@@ -601,23 +632,14 @@ export function SettingsPage({
                 onUpdateSettings({ saveMusicProgress: checked })
               }}
             />
-            <ToggleSettingRow
-              label={t('settings.saveFetchedLyrics')}
-              hint={t(
-                'settings.saveLyricsImmediatelyHint',
-              )}
-              checked={snapshot.settings.saveLyricsImmediately}
-              onChange={(checked) => {
-                onUpdateSettings({ saveLyricsImmediately: checked })
-              }}
-            />
             <div className="settings-button-row">
               <SettingsActionButton
                 onClick={() => {
-                  onUpdateSettings({})
+                  setShowPreferenceSettings(true)
                 }}
               >
-                {t('settings.saveChanges')}
+                <Icon name="star" />
+                {t('settings.preferenceSettings')}
               </SettingsActionButton>
             </div>
           </SettingsCard>
@@ -709,12 +731,18 @@ export function SettingsPage({
               </button>
             </header>
             <div className="release-notes-list">
-              <p>{t('settings.releaseNotesIntro')}</p>
-              <ul>
-                <li>{t('settings.releaseNotesLibrary')}</li>
-                <li>{t('settings.releaseNotesArtists')}</li>
-                <li>{t('settings.releaseNotesUi')}</li>
-              </ul>
+              {releaseNotes.map((entry) => (
+                <section className="release-note-version" key={entry.version}>
+                  <h3>
+                    {entry.version === 'History Updates' ? t('settings.releaseNotesIntro') : `${t('settings.releaseNotesVersion')} ${entry.version}`}
+                  </h3>
+                  <ol>
+                    {entry.items.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ol>
+                </section>
+              ))}
             </div>
           </section>
         </div>

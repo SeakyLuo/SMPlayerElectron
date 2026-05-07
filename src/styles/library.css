@@ -5,6 +5,56 @@
   box-sizing: border-box;
 }
 
+.library-content-shell {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: 10px;
+}
+
+.library-quick-jump {
+  position: sticky;
+  top: 0;
+  display: grid;
+  align-self: stretch;
+  grid-template-rows: repeat(27, minmax(0, 1fr));
+  width: 22px;
+  min-height: 0;
+  padding: 4px 0 calc(var(--player-height) + 22px);
+  box-sizing: border-box;
+}
+
+.library-quick-jump button {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  min-height: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.library-quick-jump button:hover,
+.library-quick-jump button.is-active {
+  background: rgba(var(--accent-rgb), 0.12);
+  color: var(--accent-strong);
+}
+
+.library-quick-jump button:disabled {
+  color: rgba(91, 105, 122, 0.28);
+  cursor: default;
+}
+
+.library-quick-jump button:disabled:hover {
+  background: transparent;
+  color: rgba(91, 105, 122, 0.28);
+}
+
 .library-table-shell {
   flex: 1 1 auto;
   min-height: 0;
@@ -58,15 +108,26 @@
 
 .music-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   min-width: 1160px;
   table-layout: fixed;
+}
+
+.music-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+}
+
+.music-table thead tr {
+  background: #f9fafc;
 }
 
 .music-table thead th {
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 41;
   padding: 0;
   text-align: left;
   font-size: 12px;
@@ -74,9 +135,10 @@
   letter-spacing: 0;
   text-transform: none;
   color: #565656;
-  background: rgba(249, 250, 252, 0.95);
+  background: #f9fafc;
   border-bottom: 1px solid rgba(114, 126, 140, 0.14);
   border-left: 0;
+  box-shadow: 0 1px 0 rgba(114, 126, 140, 0.14);
 }
 
 .music-table thead th {
@@ -84,7 +146,7 @@
 }
 
 .music-table thead th:hover {
-  background: rgba(var(--accent-rgb), 0.08);
+  background: #eef3f8;
 }
 
 .music-table thead th.is-sorted {
@@ -108,7 +170,7 @@
 }
 
 .table-sort-button:hover {
-  background: rgba(var(--accent-rgb), 0.1);
+  background: #eef3f8;
 }
 
 .table-sort-indicator {
@@ -187,6 +249,10 @@
 
 .music-table tbody tr:hover {
   background: rgba(var(--accent-rgb), 0.1);
+}
+
+.music-table tbody tr.is-selected {
+  background: rgba(var(--accent-rgb), 0.16);
 }
 
 .music-table tbody tr.is-current {

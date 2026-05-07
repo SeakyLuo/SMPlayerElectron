@@ -18,51 +18,8 @@
   padding-right: 0;
 }
 
-.albums-search {
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr);
-  align-items: center;
-  gap: 10px;
+.albums-search-shell {
   width: 100%;
-  height: 42px;
-  border: 1px solid rgba(83, 99, 121, 0.14);
-  border-radius: 10px;
-  background: rgba(13, 24, 38, 0.035);
-  color: var(--text-muted);
-  padding: 0 14px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.38);
-  transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
-}
-
-.albums-search svg {
-  align-self: center;
-  width: 17px;
-  height: 17px;
-}
-
-.albums-search input {
-  align-self: center;
-  min-width: 0;
-  width: 100%;
-  height: 40px;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--text-strong);
-  font: inherit;
-  font-size: 14px;
-  line-height: 40px;
-  padding: 0;
-}
-
-.albums-search:focus-within {
-  border-color: rgba(var(--accent-rgb), 0.48);
-  background: #fff;
-  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.1);
-}
-
-.albums-search input::placeholder {
-  color: rgba(61, 73, 88, 0.62);
 }
 
 .albums-command-row {
@@ -209,6 +166,39 @@
     bottom 160ms ease,
     opacity 180ms ease,
     transform 180ms ease;
+}
+
+.albums-progress {
+  position: relative;
+  height: 3px;
+  margin: -6px 0 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(var(--accent-rgb), 0.12);
+}
+
+.albums-progress::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 34%;
+  border-radius: inherit;
+  background: var(--accent);
+  animation: page-progress-slide 900ms ease-in-out infinite;
+}
+
+@keyframes page-progress-slide {
+  0% {
+    transform: translateX(-120%);
+  }
+
+  50% {
+    transform: translateX(120%);
+  }
+
+  100% {
+    transform: translateX(340%);
+  }
 }
 
 .multi-select-command-anchor {

@@ -277,11 +277,6 @@
   transition: opacity 140ms ease;
 }
 
-.recent-song-hover-add svg {
-  width: 20px;
-  height: 20px;
-}
-
 .recent-song-tile:hover .recent-song-hover-add,
 .recent-song-tile:focus-visible .recent-song-hover-add,
 .recent-song-tile.is-selected .recent-song-hover-add {
@@ -316,6 +311,22 @@
 
 .recent-song-hover-add:hover {
   transform: translate(calc(-50% - 5px), calc(-50% - 5px)) scale(1.1);
+}
+
+.recent-song-hover-add span,
+.recent-song-hover-add span::after {
+  position: absolute;
+  width: 20px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+  content: '';
+}
+
+.recent-song-hover-add span::after {
+  left: 0;
+  top: 0;
+  transform: rotate(90deg);
 }
 
 .recent-song-playing-wave {

@@ -13,22 +13,24 @@ import {
   screen,
   shell,
 } from 'electron'
-import { copyFile, mkdir } from 'node:fs/promises'
+import { copyFile, mkdir, stat } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { basename, dirname, extname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import type { OpenDialogOptions, SaveDialogOptions } from 'electron'
 import type {
   AppInfo,
   GlobalMediaCommand,
+  HiddenStorageItem,
   PlaylistSortCriterion,
+  LocalFolderSortCriterion,
   PreferenceEntityType,
   PreferenceLevel,
   TrackNotificationPayload,
 } from '../src/shared/contracts'
 import { SmplayerDataStore } from './services/data-store'
-import { SMPLAYER_DB_NAME } from './services/constants'
+import { AUDIO_EXTENSIONS, SMPLAYER_DB_NAME } from './services/constants'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -98,6 +100,7 @@ protocol.registerSchemesAsPrivileged([
 const feedbackIssueUrl = 'https://github.com/SeakyLuo/SMPlayerEletron/issues'
 const feedbackEmailAddress = 'luokiss9@qq.com'
 const feedbackEmailSubject = 'Feedbacks about SMPlayer'
+const audioDialogExtensions = [...AUDIO_EXTENSIONS].map((extension) => extension.slice(1))
 
 function getPackagedAssetPath(assetName: string) {
   return app.isPackaged
@@ -129,6 +132,18 @@ function getAppInfo(): AppInfo {
     isPackaged: app.isPackaged,
     userDataPath: app.getPath('userData'),
   }
+}
+
+async function openVoiceAssistantPrivacySettings() {
+  if (process.platform === 'win32') {
+    await shell.openExternal('ms-settings:privacy-speech')
+    return
+  }
+
+  await shell.openExternal(process.platform === 'darwin'
+    ? 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone'
+    : 'https://support.microsoft.com/windows/manage-app-permissions-for-your-microphone-in-windows',
+  )
 }
 
 async function createWindow() {
@@ -195,6 +210,10 @@ async function createWindow() {
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url)
     return { action: 'deny' }
+  })
+  mainWindow.webContents.session.setPermissionRequestHandler((_webContents, permission, callback, details) => {
+    const mediaTypes = 'mediaTypes' in details ? details.mediaTypes : undefined
+    callback(permission === 'media' && mediaTypes?.includes('audio') === true)
   })
 
   if (process.env.VITE_DEV_SERVER_URL) {
@@ -362,6 +381,28 @@ async function revealSystemLogs() {
   shell.openPath(logsPath)
 }
 
+async function resolveMoveConflict(sourcePath: string, targetPath: string) {
+  const result = mainWindow
+    ? await dialog.showMessageBox(mainWindow, {
+        type: 'question',
+        buttons: ['Replace', 'Keep Both', 'Skip'],
+        defaultId: 1,
+        cancelId: 2,
+        message: `A file named "${basename(targetPath)}" already exists in the target folder.`,
+        detail: sourcePath,
+      })
+    : await dialog.showMessageBox({
+        type: 'question',
+        buttons: ['Replace', 'Keep Both', 'Skip'],
+        defaultId: 1,
+        cancelId: 2,
+        message: `A file named "${basename(targetPath)}" already exists in the target folder.`,
+        detail: sourcePath,
+      })
+
+  return result.response === 0 ? 'replace' : result.response === 1 ? 'keep-both' : 'skip'
+}
+
 app.whenReady().then(async () => {
   app.setAppUserModelId('com.seaky.smplayer')
   dataStore = new SmplayerDataStore(app.getPath('userData'))
@@ -370,6 +411,15 @@ app.whenReady().then(async () => {
   ipcMain.handle('app:get-info', () => getAppInfo())
   ipcMain.handle('library:get-snapshot', () => dataStore!.getLibrarySnapshot())
   ipcMain.handle('library:get-artwork', (_event, songId: number) => dataStore!.getSongArtwork(songId))
+  ipcMain.handle('library:get-song-properties', (_event, songId: number) =>
+    dataStore!.getSongProperties(songId),
+  )
+  ipcMain.handle('library:update-song-properties', (_event, songId: number, update) =>
+    dataStore!.updateSongProperties(songId, update),
+  )
+  ipcMain.handle('library:update-song-play-count', (_event, songId: number, playCount: number) =>
+    dataStore!.updateSongPlayCount(songId, playCount),
+  )
   ipcMain.handle('library:pick-album-artwork', async (_event, albumName: string) => {
     const result = mainWindow
       ? await dialog.showOpenDialog(mainWindow, {
@@ -387,16 +437,190 @@ app.whenReady().then(async () => {
       dataStore!.setAlbumArtwork(albumName, result.filePaths[0]!)
     }
   })
+  ipcMain.handle('library:pick-album-artwork-source', async () => {
+    const dialogOptions: OpenDialogOptions = {
+      title: 'Choose Album Artwork',
+      properties: ['openFile'],
+      filters: [
+        { name: 'Artwork or Music', extensions: ['jpg', 'jpeg', 'png', 'webp', 'bmp', ...audioDialogExtensions] },
+        { name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp', 'bmp'] },
+        { name: 'Music', extensions: audioDialogExtensions },
+      ],
+    }
+    const result = mainWindow
+      ? await dialog.showOpenDialog(mainWindow, dialogOptions)
+      : await dialog.showOpenDialog(dialogOptions)
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return { canceled: true, sourcePath: '', artworkUrl: '', sourceName: '' }
+    }
+
+    const sourcePath = result.filePaths[0]!
+    const sourceName = basename(sourcePath, extname(sourcePath))
+    const artworkSource = await dataStore!.prepareArtworkSource(sourcePath)
+    return {
+      canceled: false,
+      sourcePath: artworkSource.sourcePath,
+      artworkUrl: artworkSource.artworkUrl,
+      sourceName,
+    }
+  })
+  ipcMain.handle('library:save-album-artwork', (_event, albumName: string, sourcePath: string) =>
+    dataStore!.saveAlbumArtwork(albumName, sourcePath),
+  )
+  ipcMain.handle('library:delete-album-artwork', (_event, albumName: string) =>
+    dataStore!.deleteAlbumArtwork(albumName),
+  )
+  ipcMain.handle('library:pick-song-artwork-source', async () => {
+    const dialogOptions: OpenDialogOptions = {
+      title: 'Choose Album Artwork',
+      properties: ['openFile'],
+      filters: [
+        { name: 'Artwork or Music', extensions: ['jpg', 'jpeg', 'png', 'webp', 'bmp', ...audioDialogExtensions] },
+        { name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp', 'bmp'] },
+        { name: 'Music', extensions: audioDialogExtensions },
+      ],
+    }
+    const result = mainWindow
+      ? await dialog.showOpenDialog(mainWindow, dialogOptions)
+      : await dialog.showOpenDialog(dialogOptions)
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return { canceled: true, sourcePath: '', artworkUrl: '', sourceName: '' }
+    }
+
+    const sourcePath = result.filePaths[0]!
+    const sourceName = basename(sourcePath, extname(sourcePath))
+    try {
+      const artworkSource = await dataStore!.prepareArtworkSource(sourcePath)
+      return {
+        canceled: false,
+        sourcePath: artworkSource.sourcePath,
+        artworkUrl: artworkSource.artworkUrl,
+        sourceName,
+      }
+    } catch (error) {
+      if (!(error instanceof Error) || error.message !== 'No album art found in the selected music file.') {
+        return {
+          canceled: false,
+          sourcePath: '',
+          artworkUrl: '',
+          sourceName,
+          error: 'error',
+        }
+      }
+
+      return {
+        canceled: false,
+        sourcePath: '',
+        artworkUrl: '',
+        sourceName,
+        error: 'no-artwork',
+      }
+    }
+  })
+  ipcMain.handle('library:save-song-artwork', (_event, songId: number, sourcePath: string) =>
+    dataStore!.saveSongArtwork(songId, sourcePath),
+  )
+  ipcMain.handle('library:delete-song-artwork', (_event, songId: number) =>
+    dataStore!.deleteSongArtwork(songId),
+  )
   ipcMain.handle('library:delete-song-from-disk', async (_event, songId: number) => {
-    await shell.trashItem(dataStore!.getSongPath(songId))
+    const songPath = dataStore!.getSongPath(songId)
+    await stat(songPath)
+    await shell.trashItem(songPath)
     dataStore!.deleteSong(songId)
+  })
+  ipcMain.handle('library:hide-song', (_event, songId: number) => {
+    dataStore!.hideSong(songId)
+  })
+  ipcMain.handle('library:move-song-to-folder', (_event, songId: number, folderPath: string) =>
+    dataStore!.moveSongToFolder(songId, folderPath, resolveMoveConflict),
+  )
+  ipcMain.handle('library:move-songs-to-folder', (_event, songIds: number[], folderPath: string) =>
+    dataStore!.moveSongsToFolder(songIds, folderPath, resolveMoveConflict),
+  )
+  ipcMain.handle('library:move-local-folder-to-folder', (_event, sourceFolderPath: string, targetFolderPath: string) =>
+    dataStore!.moveLocalFolderToFolder(sourceFolderPath, targetFolderPath, resolveMoveConflict),
+  )
+  ipcMain.handle('library:delete-songs-from-disk', async (_event, songIds: number[]) => {
+    const songPaths = songIds.map((songId) => dataStore!.getSongPath(songId))
+    for (const songPath of songPaths) {
+      await stat(songPath)
+      await shell.trashItem(songPath)
+    }
+    dataStore!.deleteSongs(songIds)
+  })
+  ipcMain.handle('library:delete-local-items', async (_event, songIds: number[], folderPaths: string[]) => {
+    const songPaths = songIds
+      .map((songId) => dataStore!.getSongPath(songId))
+      .filter((songPath) => !folderPaths.some((folderPath) =>
+        songPath.startsWith(`${folderPath}\\`) || songPath.startsWith(`${folderPath}/`),
+      ))
+    for (const songPath of songPaths) {
+      await stat(songPath)
+      await shell.trashItem(songPath)
+    }
+    for (const folderPath of folderPaths) {
+      await stat(folderPath)
+      await shell.trashItem(folderPath)
+    }
+    dataStore!.deleteLocalItems(songIds, folderPaths)
+  })
+  ipcMain.handle('library:update-local-folder-sort', (_event, folderPath: string, sortCriterion: LocalFolderSortCriterion) =>
+    dataStore!.updateLocalFolderSort(folderPath, sortCriterion),
+  )
+  ipcMain.handle('library:rename-local-folder', (_event, folderPath: string, name: string) =>
+    dataStore!.renameLocalFolder(folderPath, name),
+  )
+  ipcMain.handle('library:delete-local-folder', async (_event, folderPath: string) => {
+    await stat(folderPath)
+    await shell.trashItem(folderPath)
+    dataStore!.deleteLocalFolder(folderPath)
+  })
+  ipcMain.handle('library:hide-local-folder', (_event, folderPath: string) => {
+    dataStore!.hideLocalFolder(folderPath)
+  })
+  ipcMain.handle('library:get-hidden-storage-items', () => dataStore!.getHiddenStorageItems())
+  ipcMain.handle('library:resume-hidden-storage-item', (_event, item: HiddenStorageItem) => {
+    dataStore!.resumeHiddenStorageItem(item)
   })
   ipcMain.handle('preferences:get-settings', () => dataStore!.getPreferenceSettings())
   ipcMain.handle('lyrics:get', (_event, songId: number, mode) => dataStore!.getLyrics(songId, mode))
+  ipcMain.handle('lyrics:import', async () => {
+    const dialogOptions: OpenDialogOptions = {
+      title: 'Import Lyrics',
+      properties: ['openFile'],
+      filters: [
+        { name: 'Lyrics or Music', extensions: ['lrc', 'txt', ...audioDialogExtensions] },
+        { name: 'Lyrics', extensions: ['lrc', 'txt'] },
+        { name: 'Music', extensions: audioDialogExtensions },
+      ],
+    }
+    const result = mainWindow
+      ? await dialog.showOpenDialog(mainWindow, dialogOptions)
+      : await dialog.showOpenDialog(dialogOptions)
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return { canceled: true, rawText: '' }
+    }
+
+    return {
+      canceled: false,
+      rawText: await dataStore!.readLyricsFromFile(result.filePaths[0]!),
+    }
+  })
+  ipcMain.handle('lyrics:save', (_event, songId: number, rawLyrics: string) =>
+    dataStore!.saveSongLyrics(songId, rawLyrics),
+  )
+  ipcMain.handle('lyrics:open-search-browser', (_event, songId: number) =>
+    shell.openExternal(dataStore!.getLyricsSearchUrl(songId)),
+  )
   ipcMain.handle('lyrics:save-internet-to-file', (_event, songId: number) =>
     dataStore!.saveInternetLyricsToFile(songId),
   )
-  ipcMain.handle('shell:reveal-item', (_event, itemPath: string) => {
+  ipcMain.handle('shell:reveal-item', async (_event, itemPath: string) => {
+    await stat(itemPath)
     shell.showItemInFolder(itemPath)
   })
   ipcMain.handle('window:start-drag', () => {
@@ -410,6 +634,7 @@ app.whenReady().then(async () => {
   })
   ipcMain.handle('shell:send-feedback-email', () => sendFeedbackEmail())
   ipcMain.handle('shell:open-feedback-browser', () => openFeedbackInBrowser())
+  ipcMain.handle('shell:open-voice-assistant-privacy-settings', () => openVoiceAssistantPrivacySettings())
   ipcMain.handle('shell:reveal-system-logs', () => revealSystemLogs())
   ipcMain.handle('shell:show-track-notification', async (_event, track: TrackNotificationPayload) => {
     if (!Notification.isSupported()) {
@@ -465,6 +690,9 @@ app.whenReady().then(async () => {
   })
   ipcMain.handle('library:scan', async (_event, requestedRootPath?: string) =>
     dataStore!.scanLibrary(requestedRootPath),
+  )
+  ipcMain.handle('library:scan-folder', async (_event, folderPath: string) =>
+    dataStore!.scanLocalFolder(folderPath),
   )
   ipcMain.handle('data:export', async () => {
     const dialogOptions: SaveDialogOptions = {

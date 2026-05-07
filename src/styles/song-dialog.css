@@ -1,0 +1,456 @@
+.song-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: grid;
+  place-items: center;
+  background: rgba(24, 30, 38, 0.24);
+  backdrop-filter: blur(12px);
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.song-dialog {
+  width: min(780px, calc(100vw - 48px));
+  height: min(760px, calc(100vh - 48px));
+  position: relative;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid rgba(185, 195, 210, 0.5);
+  border-radius: 12px;
+  background: rgba(250, 252, 255, 0.98);
+  box-shadow: 0 26px 80px rgba(35, 45, 60, 0.28);
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.song-dialog button {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 40px;
+  min-height: 40px;
+  border: 1px solid rgba(190, 200, 214, 0.62);
+  border-radius: 8px;
+  padding: 0 18px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--text-primary);
+  font-weight: 650;
+  box-shadow: 0 8px 18px rgba(40, 55, 76, 0.06);
+  cursor: pointer;
+}
+
+.song-dialog button:disabled {
+  cursor: default;
+}
+
+.song-dialog button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.song-dialog-icon-button {
+  width: 42px;
+  min-width: 42px;
+  padding: 0 !important;
+  color: var(--text-primary);
+}
+
+.song-dialog-icon-button svg {
+  width: 18px !important;
+  height: 18px !important;
+  display: block;
+}
+
+.song-dialog button:hover {
+  background: rgba(247, 250, 254, 0.98);
+}
+
+.song-dialog-tabs,
+.song-dialog-modebar {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  gap: 0;
+  padding: 22px 28px 18px;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.song-dialog-tabs .song-dialog-icon-button {
+  margin-left: auto;
+  border-radius: 10px;
+}
+
+.song-dialog-tabs button:not(.song-dialog-icon-button) {
+  min-width: 138px;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.song-dialog-tabs button:not(.song-dialog-icon-button):first-child {
+  border-top-left-radius: 8px;
+  border-bottom-left-radius: 8px;
+}
+
+.song-dialog-tabs button:not(.song-dialog-icon-button):nth-child(3) {
+  border-top-right-radius: 8px;
+  border-bottom-right-radius: 8px;
+}
+
+.song-dialog-tabs button + button:not(.song-dialog-icon-button) {
+  margin-left: -1px;
+}
+
+.song-dialog-tabs button.is-active {
+  z-index: 1;
+  border-color: rgba(var(--accent-rgb), 0.38);
+  background: rgba(239, 246, 255, 0.96);
+  color: var(--accent);
+}
+
+.song-dialog-modebar button.is-active {
+  border-color: rgba(58, 119, 232, 0.38);
+  background: rgba(239, 246, 255, 0.96);
+}
+
+.song-dialog-body {
+  min-height: 0;
+  overflow: auto;
+  padding: 0 28px 44px;
+}
+
+.song-dialog-loading {
+  width: 38px;
+  height: 38px;
+  margin: min(180px, 28vh) auto 0;
+  border: 3px solid rgba(var(--accent-rgb), 0.16);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: song-dialog-spinner 0.8s linear infinite;
+}
+
+@keyframes song-dialog-spinner {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.song-dialog-status {
+  position: absolute;
+  left: 22px;
+  bottom: 14px;
+  max-width: calc(100% - 44px);
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.music-info-save-progress {
+  position: absolute;
+  top: 82px;
+  left: 0;
+  right: 0;
+  height: 3px;
+  overflow: hidden;
+  background: rgba(var(--accent-rgb), 0.12);
+}
+
+.music-info-save-progress::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -36%;
+  width: 36%;
+  background: var(--accent);
+  animation: music-info-progress 1.05s ease-in-out infinite;
+}
+
+@keyframes music-info-progress {
+  0% {
+    transform: translateX(0);
+  }
+
+  100% {
+    transform: translateX(380%);
+  }
+}
+
+.song-dialog-commandbar {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 0 28px 18px;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.song-dialog-commandbar button,
+.song-dialog-tabs button {
+  height: 40px;
+  flex: 0 0 auto;
+}
+
+.song-dialog-primary-button {
+  border-color: rgba(var(--accent-rgb), 0.52) !important;
+  background: var(--accent) !important;
+  color: #fff !important;
+  box-shadow: 0 10px 22px var(--accent-shadow) !important;
+}
+
+.song-dialog-primary-button:disabled {
+  border-color: rgba(155, 166, 182, 0.38) !important;
+  background: rgba(230, 235, 243, 0.78) !important;
+  color: rgba(94, 103, 115, 0.72) !important;
+  box-shadow: none !important;
+}
+
+.song-dialog-property-list {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  column-gap: 18px;
+  row-gap: 10px;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  padding-top: 2px;
+}
+
+.song-dialog-property-row {
+  display: contents;
+}
+
+.song-dialog-property-label {
+  min-width: 110px;
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.song-dialog-property-control {
+  min-width: 0;
+}
+
+.song-dialog-artist-row .song-dialog-property-label {
+  align-items: flex-start;
+  padding-top: 12px;
+}
+
+.song-dialog input,
+.song-dialog textarea {
+  min-width: 0;
+  border: 1px solid rgba(192, 202, 216, 0.58);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--text-primary);
+  font: inherit;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65), 0 8px 18px rgba(37, 49, 67, 0.04);
+}
+
+.song-dialog input {
+  width: 100%;
+  height: 42px;
+  padding: 0 12px;
+}
+
+.song-dialog textarea {
+  width: 100%;
+  min-height: 340px;
+  resize: vertical;
+  padding: 12px;
+  line-height: 1.7;
+}
+
+.song-dialog-lyrics {
+  display: flex;
+  flex-direction: column;
+}
+
+.song-dialog-lyrics textarea {
+  flex: 1;
+  min-height: 0;
+  resize: none;
+}
+
+.song-dialog-lyrics-timestamp-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 12px;
+  color: var(--text-strong);
+  font-weight: 650;
+}
+
+.song-dialog-lyrics-timestamp-toggle input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+
+.song-dialog input:disabled,
+.song-dialog textarea:disabled {
+  border-color: rgba(190, 200, 214, 0.42);
+  background: rgba(230, 235, 243, 0.68);
+  color: rgba(83, 93, 108, 0.82);
+  opacity: 1;
+  box-shadow: none;
+  cursor: default;
+}
+
+.song-dialog-inline-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.song-dialog-artist-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  width: 100%;
+}
+
+.song-dialog-artist-grid {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.song-dialog-artist-cell {
+  position: relative;
+  min-width: 0;
+}
+
+.song-dialog-artist-cell .artist-text-box {
+  padding-right: 34px;
+}
+
+.song-dialog .song-dialog-artist-remove-button {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  box-shadow: none;
+}
+
+.song-dialog .song-dialog-artist-remove-button:hover {
+  background: rgba(224, 230, 240, 0.7);
+  color: var(--text-primary);
+}
+
+.song-dialog .song-dialog-artist-remove-button svg {
+  width: 14px !important;
+  height: 14px !important;
+}
+
+.song-dialog-add-artist-button:disabled {
+  opacity: 0.48;
+}
+
+.song-dialog-artwork {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 18px;
+  min-height: 0;
+}
+
+.song-dialog-artwork .album-art-control {
+  width: min(340px, calc(100vw - 92px));
+  height: min(340px, calc(100vw - 92px));
+  aspect-ratio: 1;
+  border-radius: 10px;
+  object-fit: cover;
+  box-shadow: 0 18px 42px rgba(32, 42, 58, 0.16);
+}
+
+.song-dialog-artwork .album-art-control-fallback {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  color: var(--text-muted);
+  font-weight: 650;
+}
+
+.song-dialog-warning {
+  width: min(360px, 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid rgba(176, 88, 74, 0.32);
+  border-radius: 8px;
+  background: rgba(255, 245, 242, 0.92);
+}
+
+.song-dialog-lyrics .save-lyrics-later-panel {
+  width: 100%;
+  justify-content: flex-start;
+  margin-bottom: 12px;
+}
+
+.song-dialog-lyrics .save-lyrics-later-panel p {
+  flex: 1 1 220px;
+}
+
+.song-dialog-warning p,
+.song-dialog-status {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+@media (max-width: 720px) {
+  .song-dialog {
+    width: calc(100vw - 20px);
+    height: calc(100vh - 20px);
+  }
+
+  .song-dialog-property-list {
+    grid-template-columns: 1fr;
+    width: 100%;
+    min-width: 0;
+    row-gap: 6px;
+  }
+
+  .song-dialog-property-label {
+    min-height: auto;
+  }
+
+  .song-dialog-inline-field {
+    grid-template-columns: 1fr;
+  }
+
+  .song-dialog-artist-editor {
+    grid-template-columns: 1fr;
+  }
+
+  .song-dialog-artist-grid {
+    grid-template-columns: 1fr !important;
+  }
+}

@@ -1,5 +1,7 @@
 ﻿import { useEffect, useState } from 'react'
 
+import { createPortal } from 'react-dom'
+
 import { Icon } from '../components/icons'
 import type {
   PreferenceEntityType,
@@ -98,7 +100,7 @@ export function PreferenceSettingsPage({ t, onClose }: PreferenceSettingsPagePro
   }
 
   if (!snapshot) {
-    return (
+    return createPortal(
       <div
         className="settings-modal-backdrop"
         role="presentation"
@@ -117,11 +119,12 @@ export function PreferenceSettingsPage({ t, onClose }: PreferenceSettingsPagePro
           </header>
           <div className="preference-loading">{error || t('preferences.loading')}</div>
         </section>
-      </div>
+      </div>,
+      document.body,
     )
   }
 
-  return (
+  return createPortal(
     <div
       className="settings-modal-backdrop"
       role="presentation"
@@ -229,7 +232,8 @@ export function PreferenceSettingsPage({ t, onClose }: PreferenceSettingsPagePro
           </section>
         </div>
       </section>
-    </div>
+    </div>,
+    document.body,
   )
 }
 

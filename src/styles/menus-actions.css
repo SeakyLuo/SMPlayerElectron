@@ -117,8 +117,8 @@
   visibility: hidden;
 }
 
-.library-context-submenu:hover .library-context-submenu-panel,
-.library-context-submenu:focus-within .library-context-submenu-panel {
+.library-context-submenu:hover > .library-context-submenu-panel,
+.library-context-submenu:focus-within > .library-context-submenu-panel {
   opacity: 1;
   pointer-events: auto;
   visibility: visible;

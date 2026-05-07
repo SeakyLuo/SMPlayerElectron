@@ -4,13 +4,15 @@ import { useRef } from 'react'
 import { Link } from 'react-router-dom'
 
 import { Icon } from '../components/icons'
+import { MenuFlyout } from '../components/MenuFlyout'
+import { getAddToPlaylistMenuFlyoutItem, type MenuFlyoutItem, type MenuFlyoutPosition } from '../components/MenuFlyoutHelper'
 import { MusicMenuFlyout, type MusicMenuFlyoutState } from '../components/MusicMenuFlyout'
-import type { AppSettingsUpdate, LibrarySnapshot, LibrarySong } from '../shared/contracts'
+import type { AppSettingsUpdate, LibrarySnapshot, LibrarySong, MusicLibrarySortCriterion } from '../shared/contracts'
 import { getDisplayArtists, getSongArtists } from '../shared/artists'
 import { formatDuration } from '../shared/formatters'
 import type { Translator } from '../shared/i18n'
 
-interface LibraryPageProps {
+interface MusicLibraryPageProps {
   snapshot: LibrarySnapshot
   t: Translator
   songs: LibrarySong[]
@@ -18,23 +20,31 @@ interface LibraryPageProps {
   scanning: boolean
   error: string | null
   selectedTrackId: number | null
+  isPlaying: boolean
   searchQuery: string
   onPickLibraryRoot: () => void
   onScanLibrary: () => void
   onPlayTrack: (trackId: number, queueSongIds: number[]) => void
+  onAddNextAndPlay: (trackId: number) => void
+  onMoveToMusicOrPlay: (songId: number) => void
+  onTogglePlayPause: () => void
   onPlayNext: (songId: number) => void
   onToggleFavorite: (songId: number, favorite: boolean) => void
   onAddSongToPlaylist: (playlistId: number, songId: number) => void
+  onAddSongsToPlaylist: (playlistId: number, songIds: number[]) => void
+  onAddSongsToNowPlaying: (songIds: number[]) => void
+  onCreatePlaylistWithSongs: (name: string, songIds: number[]) => void
   onRevealSong: (songPath: string) => void | Promise<void>
   onDeleteSongFromDisk: (songId: number) => void
   onUpdateSettings: (update: AppSettingsUpdate) => void
 }
 
 type LibrarySortColumn = 'title' | 'artist' | 'album' | 'duration' | 'favorite' | 'playCount' | 'dateAdded'
+type LibrarySortableColumn = Exclude<LibrarySortColumn, 'favorite'>
 type LibrarySortDirection = 'ascending' | 'descending'
 
 interface LibrarySortState {
-  column: LibrarySortColumn
+  column: LibrarySortableColumn
   direction: LibrarySortDirection
 }
 
@@ -43,6 +53,7 @@ type ColumnWidths = Record<LibrarySortColumn, number>
 const VIRTUAL_ROW_HEIGHT = 58
 const VIRTUAL_OVERSCAN_ROWS = 12
 const MIN_COLUMN_WIDTH = 86
+const QUICK_JUMP_KEYS = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
 const DEFAULT_COLUMN_WIDTHS: ColumnWidths = {
   title: 280,
   artist: 200,
@@ -53,32 +64,47 @@ const DEFAULT_COLUMN_WIDTHS: ColumnWidths = {
   dateAdded: 170,
 }
 
-export function LibraryPage({
+export function MusicLibraryPage({
   snapshot,
   t,
   songs,
   error,
   selectedTrackId,
+  isPlaying,
   searchQuery,
   onPlayTrack,
+  onAddNextAndPlay,
+  onMoveToMusicOrPlay,
+  onTogglePlayPause,
   onPlayNext,
   onToggleFavorite,
   onAddSongToPlaylist,
+  onAddSongsToPlaylist,
+  onAddSongsToNowPlaying,
+  onCreatePlaylistWithSongs,
   onRevealSong,
   onDeleteSongFromDisk,
-}: LibraryPageProps) {
+  onUpdateSettings,
+}: MusicLibraryPageProps) {
   const hasSongs = songs.length > 0
   const hasLibrary = snapshot.songs.length > 0
-  const [sortState, setSortState] = useState<LibrarySortState | null>(null)
+  const [sortState, setSortState] = useState<LibrarySortState>(() => ({
+    column: toLibrarySortColumn(snapshot.settings.musicLibrarySort),
+    direction: 'ascending',
+  }))
   const visibleSongs = useMemo(
-    () => sortState ? sortSongsByColumn(songs, sortState) : songs,
+    () => sortSongsByColumn(songs, sortState),
     [songs, sortState],
   )
   const tableShellRef = useRef<HTMLDivElement | null>(null)
   const [contextMenu, setContextMenu] = useState<MusicMenuFlyoutState | null>(null)
+  const [selectionMenu, setSelectionMenu] = useState<MenuFlyoutPosition | null>(null)
+  const [selectedSongIds, setSelectedSongIds] = useState<Set<number>>(new Set())
+  const [selectionAnchorSongId, setSelectionAnchorSongId] = useState<number | null>(null)
   const [columnWidths, setColumnWidths] = useState<ColumnWidths>(DEFAULT_COLUMN_WIDTHS)
   const [scrollTop, setScrollTop] = useState(0)
   const [viewportHeight, setViewportHeight] = useState(640)
+  const quickJumpColumn = sortState.column
   const visibleStartIndex = Math.max(0, Math.floor(scrollTop / VIRTUAL_ROW_HEIGHT) - VIRTUAL_OVERSCAN_ROWS)
   const visibleEndIndex = Math.min(
     visibleSongs.length,
@@ -88,19 +114,44 @@ export function LibraryPage({
   const topSpacerHeight = visibleStartIndex * VIRTUAL_ROW_HEIGHT
   const bottomSpacerHeight = (visibleSongs.length - visibleEndIndex) * VIRTUAL_ROW_HEIGHT
   const queueSongIds = useMemo(() => visibleSongs.map((song) => song.id), [visibleSongs])
+  const effectiveSelectedSongIds = useMemo(
+    () => queueSongIds.filter((songId) => selectedSongIds.has(songId)),
+    [queueSongIds, selectedSongIds],
+  )
   const tableWidth = Object.values(columnWidths).reduce((total, width) => total + width, 0)
+  const customPlaylists = snapshot.playlists.filter((playlist) => !playlist.isBuiltIn)
+  const favoritePlaylist = snapshot.playlists.find((playlist) => playlist.isBuiltIn && playlist.name === t('common.myFavorites'))!
+  const quickJumpMap = useMemo(
+    () => buildQuickJumpMap(visibleSongs, quickJumpColumn),
+    [quickJumpColumn, visibleSongs],
+  )
+  const quickJumpKeys = sortState.direction === 'descending'
+    ? QUICK_JUMP_KEYS.slice().reverse()
+    : QUICK_JUMP_KEYS
+  const activeQuickJumpKey = getQuickJumpBucket(
+    visibleSongs[Math.min(visibleSongs.length - 1, Math.max(0, Math.floor(scrollTop / VIRTUAL_ROW_HEIGHT)))],
+    quickJumpColumn,
+  )
 
-  const toggleSort = (column: LibrarySortColumn) => {
+  useEffect(() => {
+    setSortState((current) => ({
+      ...current,
+      column: toLibrarySortColumn(snapshot.settings.musicLibrarySort),
+    }))
+  }, [snapshot.settings.musicLibrarySort])
+
+  const toggleSort = (column: LibrarySortableColumn) => {
     setSortState((current) => {
       if (current?.column !== column) {
+        onUpdateSettings({ musicLibrarySort: toMusicLibrarySortCriterion(column) })
         return { column, direction: 'ascending' }
       }
 
-      if (current.direction === 'ascending') {
-        return { column, direction: 'descending' }
+      onUpdateSettings({ musicLibrarySort: toMusicLibrarySortCriterion(column) })
+      return {
+        column,
+        direction: current.direction === 'ascending' ? 'descending' : 'ascending',
       }
-
-      return null
     })
   }
 
@@ -109,6 +160,47 @@ export function LibraryPage({
       ...current,
       [column]: Math.max(MIN_COLUMN_WIDTH, current[column] + deltaX),
     }))
+  }
+
+  const jumpToKey = (key: string) => {
+    const targetIndex = quickJumpMap.get(key)
+    if (targetIndex == null) {
+      return
+    }
+
+    const tableShell = tableShellRef.current as HTMLDivElement
+    tableShell.scrollTo({
+      top: targetIndex * VIRTUAL_ROW_HEIGHT,
+    })
+  }
+
+  const selectSong = (songId: number, extendSelection: boolean, rangeSelection: boolean) => {
+    if (!extendSelection && !rangeSelection) {
+      setSelectedSongIds(new Set([songId]))
+      setSelectionAnchorSongId(songId)
+      return
+    }
+
+    if (rangeSelection && selectionAnchorSongId != null) {
+      const anchorIndex = queueSongIds.indexOf(selectionAnchorSongId)
+      const targetIndex = queueSongIds.indexOf(songId)
+      const [startIndex, endIndex] = anchorIndex < targetIndex
+        ? [anchorIndex, targetIndex]
+        : [targetIndex, anchorIndex]
+      setSelectedSongIds(new Set(queueSongIds.slice(startIndex, endIndex + 1)))
+      return
+    }
+
+    setSelectedSongIds((current) => {
+      const next = new Set(current)
+      if (next.has(songId)) {
+        next.delete(songId)
+      } else {
+        next.add(songId)
+      }
+      return next
+    })
+    setSelectionAnchorSongId(songId)
   }
 
   useEffect(() => {
@@ -147,22 +239,42 @@ export function LibraryPage({
           </p>
         </div>
       ) : (
-        <div
-          className="table-shell library-table-shell"
-          ref={tableShellRef}
-          onWheel={(event) => {
-            const horizontalDelta = event.shiftKey ? event.deltaY : event.deltaX
-            if (horizontalDelta === 0) {
-              return
-            }
+        <div className="library-content-shell">
+          <nav className="library-quick-jump" aria-label={t('common.search')}>
+            {quickJumpKeys.map((key) => {
+              const enabled = quickJumpMap.has(key)
 
-            event.currentTarget.scrollLeft += horizontalDelta
-            event.preventDefault()
-          }}
-          onScroll={(event) => {
-            setScrollTop(event.currentTarget.scrollTop)
-          }}
-        >
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  className={clsx({ 'is-active': activeQuickJumpKey === key })}
+                  disabled={!enabled}
+                  onClick={() => {
+                    jumpToKey(key)
+                  }}
+                >
+                  {key}
+                </button>
+              )
+            })}
+          </nav>
+          <div
+            className="table-shell library-table-shell"
+            ref={tableShellRef}
+            onWheel={(event) => {
+              const horizontalDelta = event.shiftKey ? event.deltaY : event.deltaX
+              if (horizontalDelta === 0) {
+                return
+              }
+
+              event.currentTarget.scrollLeft += horizontalDelta
+              event.preventDefault()
+            }}
+            onScroll={(event) => {
+              setScrollTop(event.currentTarget.scrollTop)
+            }}
+          >
           <table className="music-table" style={{ width: tableWidth }}>
             <colgroup>
               {(Object.keys(columnWidths) as LibrarySortColumn[]).map((column) => (
@@ -172,7 +284,7 @@ export function LibraryPage({
             <thead>
               <tr>
                 <SortableHeader column="title" sortState={sortState} onSort={toggleSort} onResize={resizeColumn}>
-                  {t('common.name')}
+                  {t('musicLibrary.titleHeader')}
                 </SortableHeader>
                 <SortableHeader column="artist" sortState={sortState} onSort={toggleSort} onResize={resizeColumn}>
                   {t('common.artist')}
@@ -183,9 +295,9 @@ export function LibraryPage({
                 <SortableHeader column="duration" sortState={sortState} onSort={toggleSort} onResize={resizeColumn}>
                   {t('common.duration')}
                 </SortableHeader>
-                <SortableHeader column="favorite" sortState={sortState} onSort={toggleSort} onResize={resizeColumn}>
+                <ResizableHeader column="favorite" onResize={resizeColumn}>
                   {t('common.favorite')}
-                </SortableHeader>
+                </ResizableHeader>
                 <SortableHeader column="playCount" sortState={sortState} onSort={toggleSort} onResize={resizeColumn}>
                   {t('common.playCount')}
                 </SortableHeader>
@@ -203,6 +315,7 @@ export function LibraryPage({
               {renderedSongs.map((song) => {
                 const isCurrent = song.id === selectedTrackId
                 const artistLabel = getDisplayArtists(song)
+                const artists = getSongArtists(song)
                 const albumLabel = song.album || t('common.albumUnknown')
                 const durationLabel = formatDuration(song.duration)
                 const playCountLabel = song.playCount ? String(song.playCount) : ''
@@ -211,12 +324,35 @@ export function LibraryPage({
                 return (
                   <tr
                     key={song.id}
-                    className={clsx({ 'is-current': isCurrent })}
-                    onClick={() => {
-                      void onPlayTrack(song.id, queueSongIds)
+                    className={clsx({
+                      'is-current': isCurrent,
+                      'is-selected': selectedSongIds.has(song.id),
+                    })}
+                    onClick={(event) => {
+                      if (event.ctrlKey || event.metaKey || event.shiftKey) {
+                        selectSong(song.id, event.ctrlKey || event.metaKey, event.shiftKey)
+                        return
+                      }
+
+                      setSelectedSongIds(new Set([song.id]))
+                      setSelectionAnchorSongId(song.id)
+                    }}
+                    onDoubleClick={() => {
+                      onAddNextAndPlay(song.id)
                     }}
                     onContextMenu={(event) => {
                       event.preventDefault()
+                      const selectedIds = selectedSongIds.has(song.id)
+                        ? effectiveSelectedSongIds
+                        : [song.id]
+                      if (selectedIds.length > 1) {
+                        setContextMenu(null)
+                        setSelectedSongIds(new Set(selectedIds))
+                        setSelectionMenu({ x: event.clientX, y: event.clientY })
+                        return
+                      }
+
+                      setSelectionMenu(null)
                       setContextMenu({
                         song,
                         x: event.clientX,
@@ -236,7 +372,7 @@ export function LibraryPage({
                     </td>
                     <td title={artistLabel}>
                       <div className="music-table-cell-content">
-                        {getSongArtists(song).map((artist, index) => (
+                        {artists.map((artist, index) => (
                           <span key={artist}>
                             {index > 0 ? ', ' : null}
                             <Link
@@ -301,6 +437,7 @@ export function LibraryPage({
               ) : null}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
@@ -309,20 +446,76 @@ export function LibraryPage({
           menu={contextMenu}
           playlists={snapshot.playlists}
           queueSongIds={queueSongIds}
+          currentTrackId={selectedTrackId}
+          isPlaying={isPlaying}
           t={t}
           onAddSongToPlaylist={onAddSongToPlaylist}
           onClose={() => {
             setContextMenu(null)
           }}
           onPlayTrack={onPlayTrack}
+          onMoveToMusicOrPlay={onMoveToMusicOrPlay}
+          onTogglePlayPause={onTogglePlayPause}
           onPlayNext={onPlayNext}
           onRevealSong={onRevealSong}
           onDeleteSongFromDisk={onDeleteSongFromDisk}
           onToggleFavorite={onToggleFavorite}
+          showSelect={false}
+        />
+      ) : null}
+      {selectionMenu ? (
+        <MenuFlyout
+          position={selectionMenu}
+          onClose={() => {
+            setSelectionMenu(null)
+          }}
+          items={[
+            {
+              key: 'shuffle',
+              text: t('nowPlaying.randomPlay'),
+              icon: 'shuffle',
+              disabled: effectiveSelectedSongIds.length === 0,
+              onClick: () => {
+                const shuffledSongIds = shuffleSongIds(effectiveSelectedSongIds)
+                onPlayTrack(shuffledSongIds[0]!, shuffledSongIds)
+              },
+            } satisfies MenuFlyoutItem,
+            getAddToPlaylistMenuFlyoutItem({
+              playlists: customPlaylists,
+              songIds: effectiveSelectedSongIds,
+              t,
+              includeNowPlaying: true,
+              includeFavorites: true,
+              defaultPlaylistName: t('common.songs'),
+              onAddToNowPlaying: () => {
+                onAddSongsToNowPlaying(effectiveSelectedSongIds)
+              },
+              onToggleFavorite: () => {
+                onAddSongsToPlaylist(favoritePlaylist.id, effectiveSelectedSongIds)
+              },
+              onCreatePlaylist: (name) => {
+                onCreatePlaylistWithSongs(name, effectiveSelectedSongIds)
+              },
+              onAddToPlaylist: (playlistId) => {
+                onAddSongsToPlaylist(playlistId, effectiveSelectedSongIds)
+              },
+            }),
+          ].filter((item) => item != null)}
         />
       ) : null}
     </section>
   )
+}
+
+function shuffleSongIds(songIds: number[]) {
+  const shuffled = songIds.slice()
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const targetIndex = Math.floor(Math.random() * (index + 1))
+    const current = shuffled[index]
+    shuffled[index] = shuffled[targetIndex]
+    shuffled[targetIndex] = current
+  }
+  return shuffled
 }
 
 function SortableHeader({
@@ -333,9 +526,9 @@ function SortableHeader({
   onResize,
 }: {
   children: string
-  column: LibrarySortColumn
+  column: LibrarySortableColumn
   sortState: LibrarySortState | null
-  onSort: (column: LibrarySortColumn) => void
+  onSort: (column: LibrarySortableColumn) => void
   onResize: (column: LibrarySortColumn, deltaX: number) => void
 }) {
   const direction = sortState?.column === column ? sortState.direction : null
@@ -382,6 +575,58 @@ function SortableHeader({
   )
 }
 
+function ResizableHeader({
+  children,
+  column,
+  onResize,
+}: {
+  children: string
+  column: LibrarySortColumn
+  onResize: (column: LibrarySortColumn, deltaX: number) => void
+}) {
+  return (
+    <th>
+      <span className="table-sort-button">
+        <span>{children}</span>
+      </span>
+      <ColumnResizer column={column} onResize={onResize} />
+    </th>
+  )
+}
+
+function ColumnResizer({
+  column,
+  onResize,
+}: {
+  column: LibrarySortColumn
+  onResize: (column: LibrarySortColumn, deltaX: number) => void
+}) {
+  return (
+    <span
+      className="table-column-resizer"
+      onPointerDown={(event) => {
+        event.preventDefault()
+        event.currentTarget.setPointerCapture(event.pointerId)
+        const startX = event.clientX
+        let lastDelta = 0
+
+        const onPointerMove = (moveEvent: PointerEvent) => {
+          const nextDelta = moveEvent.clientX - startX
+          onResize(column, nextDelta - lastDelta)
+          lastDelta = nextDelta
+        }
+        const onPointerUp = () => {
+          window.removeEventListener('pointermove', onPointerMove)
+          window.removeEventListener('pointerup', onPointerUp)
+        }
+
+        window.addEventListener('pointermove', onPointerMove)
+        window.addEventListener('pointerup', onPointerUp)
+      }}
+    />
+  )
+}
+
 function sortSongsByColumn(songs: LibrarySong[], sortState: LibrarySortState) {
   const direction = sortState.direction === 'ascending' ? 1 : -1
 
@@ -389,6 +634,75 @@ function sortSongsByColumn(songs: LibrarySong[], sortState: LibrarySortState) {
     const result = compareSongs(left, right, sortState.column)
     return direction * (result || compareText(left.title, right.title) || left.id - right.id)
   })
+}
+
+function toLibrarySortColumn(criterion: MusicLibrarySortCriterion): LibrarySortableColumn {
+  switch (criterion) {
+    case 'play-count':
+      return 'playCount'
+    case 'date-added':
+      return 'dateAdded'
+    default:
+      return criterion
+  }
+}
+
+function toMusicLibrarySortCriterion(column: LibrarySortableColumn): MusicLibrarySortCriterion {
+  switch (column) {
+    case 'playCount':
+      return 'play-count'
+    case 'dateAdded':
+      return 'date-added'
+    default:
+      return column
+  }
+}
+
+function buildQuickJumpMap(songs: LibrarySong[], column: LibrarySortColumn) {
+  const indexes = new Map<string, number>()
+
+  songs.forEach((song, index) => {
+    const bucket = getQuickJumpBucket(song, column)
+    if (!indexes.has(bucket)) {
+      indexes.set(bucket, index)
+    }
+  })
+
+  return indexes
+}
+
+function getQuickJumpBucket(song: LibrarySong | undefined, column: LibrarySortColumn) {
+  const firstChar = getQuickJumpValue(song, column)
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .charAt(0)
+    .toLocaleUpperCase()
+
+  return /^[A-Z]$/.test(firstChar) ? firstChar : '#'
+}
+
+function getQuickJumpValue(song: LibrarySong | undefined, column: LibrarySortColumn) {
+  if (!song) {
+    return ''
+  }
+
+  switch (column) {
+    case 'artist':
+      return getDisplayArtists(song)
+    case 'album':
+      return song.album
+    case 'duration':
+      return formatDuration(song.duration)
+    case 'favorite':
+      return song.favorite ? 'Favorite' : ''
+    case 'playCount':
+      return String(song.playCount)
+    case 'dateAdded':
+      return formatDateTime(song.dateAdded)
+    default:
+      return song.title
+  }
 }
 
 function compareSongs(left: LibrarySong, right: LibrarySong, column: LibrarySortColumn) {
