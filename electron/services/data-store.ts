@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, stat, unlink, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, rename, rmdir, stat, unlink, writeFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import { basename, dirname, extname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -10,7 +10,9 @@ import { parseFile } from 'music-metadata'
 import type {
   AppSettingsUpdate,
   LibraryCounts,
+  LibraryFolder,
   LibraryPlaylist,
+  HiddenStorageItem,
   LibrarySnapshot,
   LibrarySong,
   LyricsLine,
@@ -19,6 +21,8 @@ import type {
   LyricsSource,
   MusicLibrarySortCriterion,
   PlaylistSortCriterion,
+  AlbumSortCriterion,
+  LocalFolderSortCriterion,
   PlaybackMode,
   PlaybackSettingsUpdate,
   PreferenceEntityType,
@@ -31,9 +35,13 @@ import type {
   RecentLibrarySong,
   ScanLibraryResult,
   SearchHistoryEntry,
+  SearchSortCriterion,
   SettingsSnapshot,
+  SongPropertiesSnapshot,
+  SongPropertiesUpdate,
 } from '../../src/shared/contracts.ts'
 import { normalizeArtists } from '../../src/shared/artists.ts'
+import { stripLyricsTimestamps } from '../../src/shared/lyrics.ts'
 import { ACTIVE_STATE, AUDIO_EXTENSIONS, PLAYLIST_NAMES, SMPLAYER_DB_NAME } from './constants.ts'
 import { initializeSchema } from './schema.ts'
 
@@ -52,9 +60,17 @@ interface SettingsRow {
   ShowLyricsInNotification: number
   VoiceAssistantPreferredLanguage: number
   NotificationLyricsSource: number
+  PlayerLyricsSource: number
   SaveLyricsImmediately: number
+  PreserveInternetLyricsTimestamps: number
   UseFilenameNotMusicName: number
   MusicLibraryCriterion: number
+  AlbumsCriterion: number
+  SearchArtistsCriterion: number
+  SearchAlbumsCriterion: number
+  SearchSongsCriterion: number
+  SearchPlaylistsCriterion: number
+  SearchFoldersCriterion: number
   LastMusicIndex: number
   Volume: number
   IsMuted: number
@@ -79,6 +95,9 @@ interface ScannedSong {
   duration: number
   dateAdded: string
 }
+
+type MoveConflictAction = 'replace' | 'keep-both' | 'skip'
+type MoveConflictResolver = (sourcePath: string, targetPath: string) => Promise<MoveConflictAction>
 
 interface PlaylistRow {
   id: number
@@ -111,6 +130,7 @@ interface SearchStateRow {
 }
 
 interface SongPathRow {
+  id?: number
   title: string
   artist: string
   album: string
@@ -178,6 +198,7 @@ export class SmplayerDataStore {
   private readonly markFileInactiveStatement
   private readonly markFileByPathInactiveStatement
   private readonly markSongPlayedStatement
+  private readonly updateSongPlayCountStatement
   private readonly markRecentPlayedInactiveStatement
   private readonly clearRecentPlayedStatement
   private readonly cleanupInvalidRecentPlayedStatement
@@ -192,6 +213,7 @@ export class SmplayerDataStore {
   private readonly getPlaylistSongIdsStatement
   private readonly getPlaylistItemsStatement
   private readonly getSongsStatement
+  private readonly getFoldersStatement
   private readonly getSongArtistsStatement
   private readonly getSongPathStatement
   private readonly getRecentSongsStatement
@@ -220,9 +242,17 @@ export class SmplayerDataStore {
         ShowLyricsInNotification,
         VoiceAssistantPreferredLanguage,
         NotificationLyricsSource,
+        PlayerLyricsSource,
         SaveLyricsImmediately,
+        PreserveInternetLyricsTimestamps,
         UseFilenameNotMusicName,
         MusicLibraryCriterion,
+        AlbumsCriterion,
+        SearchArtistsCriterion,
+        SearchAlbumsCriterion,
+        SearchSongsCriterion,
+        SearchPlaylistsCriterion,
+        SearchFoldersCriterion,
         LastMusicIndex,
         Volume,
         IsMuted,
@@ -302,8 +332,16 @@ export class SmplayerDataStore {
         ShowLyricsInNotification = ?,
         VoiceAssistantPreferredLanguage = ?,
         NotificationLyricsSource = ?,
+        PlayerLyricsSource = ?,
         SaveLyricsImmediately = ?,
+        PreserveInternetLyricsTimestamps = ?,
         MusicLibraryCriterion = ?,
+        AlbumsCriterion = ?,
+        SearchArtistsCriterion = ?,
+        SearchAlbumsCriterion = ?,
+        SearchSongsCriterion = ?,
+        SearchPlaylistsCriterion = ?,
+        SearchFoldersCriterion = ?,
         AutoPlay = ?,
         SaveMusicProgress = ?,
         HideMultiSelectCommandBarAfterOperation = ?,
@@ -395,20 +433,26 @@ export class SmplayerDataStore {
           )
         )
     `)
-    this.markMusicInactiveStatement = this.db.prepare('UPDATE Music SET State = ?')
+    this.markMusicInactiveStatement = this.db.prepare('UPDATE Music SET State = ? WHERE State NOT IN (?, ?)')
     this.markSingleMusicInactiveStatement = this.db.prepare('UPDATE Music SET State = ? WHERE Id = ?')
     this.markSongArtistsInactiveStatement = this.db.prepare(`
       UPDATE MusicArtist
       SET State = ?
       WHERE MusicId = ?
     `)
-    this.markFolderInactiveStatement = this.db.prepare('UPDATE Folder SET State = ?')
-    this.markFileInactiveStatement = this.db.prepare('UPDATE File SET State = ?')
+    this.markFolderInactiveStatement = this.db.prepare('UPDATE Folder SET State = ? WHERE State NOT IN (?, ?)')
+    this.markFileInactiveStatement = this.db.prepare('UPDATE File SET State = ? WHERE State NOT IN (?, ?)')
     this.markFileByPathInactiveStatement = this.db.prepare('UPDATE File SET State = ? WHERE Path = ?')
     this.markSongPlayedStatement = this.db.prepare(`
       UPDATE Music
       SET PlayCount = PlayCount + 1
       WHERE Id = ?
+    `)
+    this.updateSongPlayCountStatement = this.db.prepare(`
+      UPDATE Music
+      SET PlayCount = ?
+      WHERE Id = ?
+        AND State = ?
     `)
     this.markRecentPlayedInactiveStatement = this.db.prepare(`
       UPDATE RecentRecord
@@ -565,6 +609,16 @@ export class SmplayerDataStore {
       WHERE Music.State = ?
       ORDER BY Music.Name COLLATE NOCASE, Music.Artist COLLATE NOCASE, Music.Id
     `)
+    this.getFoldersStatement = this.db.prepare(`
+      SELECT
+        Id AS id,
+        Path AS path,
+        ParentId AS parentId,
+        Criterion AS criterion
+      FROM Folder
+      WHERE State = ?
+      ORDER BY Path COLLATE NOCASE
+    `)
     this.getSongArtistsStatement = this.db.prepare(`
       SELECT
         MusicArtist.MusicId AS songId,
@@ -676,16 +730,24 @@ export class SmplayerDataStore {
       rootPath: settings.RootPath,
       useFilenameNotMusicName: Boolean(settings.UseFilenameNotMusicName),
       showCount: Boolean(settings.ShowCount),
-      themeColor: settings.ThemeColor || '#5b87b6',
+      themeColor: settings.ThemeColor || '#0078D7',
       notificationSend: this.mapNotificationSend(settings.NotificationSend),
       notificationDisplay: this.mapNotificationDisplay(settings.NotificationDisplay),
       showNotifications: this.mapNotificationSend(settings.NotificationSend) !== 'never',
       autoLyrics: Boolean(settings.AutoLyrics),
       showLyricsInNotification: Boolean(settings.ShowLyricsInNotification),
       notificationLyricsSource: this.mapLyricsRequestMode(settings.NotificationLyricsSource),
+      playerLyricsSource: this.mapLyricsRequestMode(settings.PlayerLyricsSource),
       saveLyricsImmediately: Boolean(settings.SaveLyricsImmediately),
+      preserveInternetLyricsTimestamps: Boolean(settings.PreserveInternetLyricsTimestamps),
       preferredLanguage: this.mapPreferredLanguage(settings.VoiceAssistantPreferredLanguage),
       musicLibrarySort: this.mapMusicLibrarySort(settings.MusicLibraryCriterion),
+      albumsSort: this.mapAlbumSort(settings.AlbumsCriterion),
+      searchArtistsCriterion: this.mapSearchSort(settings.SearchArtistsCriterion),
+      searchAlbumsCriterion: this.mapSearchSort(settings.SearchAlbumsCriterion),
+      searchSongsCriterion: this.mapSearchSort(settings.SearchSongsCriterion),
+      searchPlaylistsCriterion: this.mapSearchSort(settings.SearchPlaylistsCriterion),
+      searchFoldersCriterion: this.mapSearchSort(settings.SearchFoldersCriterion),
       lastMusicIndex: settings.LastMusicIndex,
       volume: settings.Volume,
       isMuted: Boolean(settings.IsMuted),
@@ -725,6 +787,7 @@ export class SmplayerDataStore {
       ACTIVE_STATE.active,
       ACTIVE_STATE.active,
     ) as unknown as StoredLibrarySong[]
+    const folders = this.getFoldersStatement.all(ACTIVE_STATE.active) as unknown as LibraryFolder[]
     const recentSongs = this.getRecentSongsStatement.all(
       settings.MyFavorites,
       ACTIVE_STATE.active,
@@ -758,16 +821,24 @@ export class SmplayerDataStore {
         rootPath: settings.RootPath,
         useFilenameNotMusicName: Boolean(settings.UseFilenameNotMusicName),
         showCount: Boolean(settings.ShowCount),
-        themeColor: settings.ThemeColor || '#5b87b6',
+        themeColor: settings.ThemeColor || '#0078D7',
         notificationSend: this.mapNotificationSend(settings.NotificationSend),
         notificationDisplay: this.mapNotificationDisplay(settings.NotificationDisplay),
         showNotifications: this.mapNotificationSend(settings.NotificationSend) !== 'never',
         autoLyrics: Boolean(settings.AutoLyrics),
         showLyricsInNotification: Boolean(settings.ShowLyricsInNotification),
         notificationLyricsSource: this.mapLyricsRequestMode(settings.NotificationLyricsSource),
+        playerLyricsSource: this.mapLyricsRequestMode(settings.PlayerLyricsSource),
         saveLyricsImmediately: Boolean(settings.SaveLyricsImmediately),
+        preserveInternetLyricsTimestamps: Boolean(settings.PreserveInternetLyricsTimestamps),
         preferredLanguage: this.mapPreferredLanguage(settings.VoiceAssistantPreferredLanguage),
         musicLibrarySort: this.mapMusicLibrarySort(settings.MusicLibraryCriterion),
+        albumsSort: this.mapAlbumSort(settings.AlbumsCriterion),
+        searchArtistsCriterion: this.mapSearchSort(settings.SearchArtistsCriterion),
+        searchAlbumsCriterion: this.mapSearchSort(settings.SearchAlbumsCriterion),
+        searchSongsCriterion: this.mapSearchSort(settings.SearchSongsCriterion),
+        searchPlaylistsCriterion: this.mapSearchSort(settings.SearchPlaylistsCriterion),
+        searchFoldersCriterion: this.mapSearchSort(settings.SearchFoldersCriterion),
         lastMusicIndex: settings.LastMusicIndex,
         volume: settings.Volume,
         isMuted: Boolean(settings.IsMuted),
@@ -787,6 +858,7 @@ export class SmplayerDataStore {
         folders: rawCounts?.folders ?? 0,
       },
       songs: librarySongs,
+      folders,
       recentSongs: recentLibrarySongs,
       nowPlaying: {
         playlistId: settings.NowPlaying,
@@ -821,6 +893,283 @@ export class SmplayerDataStore {
       WHERE Album = ?
         AND State = ?
     `).run(artworkPath, albumName, ACTIVE_STATE.active)
+  }
+
+  async saveAlbumArtwork(albumName: string, sourcePath: string) {
+    const songs = this.db.prepare(`
+      SELECT Path AS path
+      FROM Music
+      WHERE Album = ?
+        AND State = ?
+    `).all(albumName, ACTIVE_STATE.active) as Array<{ path: string }>
+    const artwork = await readFile(sourcePath)
+    const format = this.getArtworkFormat(sourcePath)
+
+    for (const song of songs) {
+      await this.writeSongArtwork(song.path, {
+        data: artwork,
+        format,
+      })
+    }
+
+    const artworkPath = await this.writeArtworkCache(albumName, {
+      data: artwork,
+      format,
+    })
+
+    this.db.prepare(`
+      UPDATE Music
+      SET ArtworkPath = ?
+      WHERE Album = ?
+        AND State = ?
+    `).run(artworkPath, albumName, ACTIVE_STATE.active)
+  }
+
+  async deleteAlbumArtwork(albumName: string) {
+    const songs = this.db.prepare(`
+      SELECT Path AS path
+      FROM Music
+      WHERE Album = ?
+        AND State = ?
+    `).all(albumName, ACTIVE_STATE.active) as Array<{ path: string }>
+
+    for (const song of songs) {
+      await this.writeSongArtwork(song.path, null)
+    }
+
+    this.db.prepare(`
+      UPDATE Music
+      SET ArtworkPath = ''
+      WHERE Album = ?
+        AND State = ?
+    `).run(albumName, ACTIVE_STATE.active)
+  }
+
+  async prepareArtworkSource(sourcePath: string) {
+    if (AUDIO_EXTENSIONS.has(extname(sourcePath).toLocaleLowerCase())) {
+      const metadata = await parseFile(sourcePath, {
+        duration: false,
+        skipCovers: false,
+      })
+      const artworkPath = await this.writeArtworkCache(`${sourcePath}:selected-artwork`, metadata.common.picture?.[0])
+      if (!artworkPath) {
+        throw new Error('No album art found in the selected music file.')
+      }
+
+      return {
+        sourcePath: artworkPath,
+        artworkUrl: pathToFileURL(artworkPath).href,
+      }
+    }
+
+    await stat(sourcePath)
+    return {
+      sourcePath,
+      artworkUrl: pathToFileURL(sourcePath).href,
+    }
+  }
+
+  async saveSongArtwork(songId: number, sourcePath: string) {
+    const song = this.getSongPathStatement.get(
+      songId,
+      ACTIVE_STATE.active,
+    ) as { path: string } | undefined
+    if (!song) {
+      throw new Error('Song not found.')
+    }
+
+    const artwork = await readFile(sourcePath)
+    const format = this.getArtworkFormat(sourcePath)
+
+    await this.writeSongArtwork(song.path, {
+      data: artwork,
+      format,
+    })
+
+    const artworkPath = await this.writeArtworkCache(song.path, {
+      data: artwork,
+      format,
+    })
+
+    this.db.prepare(`
+      UPDATE Music
+      SET ArtworkPath = ?
+      WHERE Id = ?
+        AND State = ?
+    `).run(artworkPath, songId, ACTIVE_STATE.active)
+  }
+
+  async deleteSongArtwork(songId: number) {
+    const song = this.getSongPathStatement.get(
+      songId,
+      ACTIVE_STATE.active,
+    ) as { path: string } | undefined
+    if (!song) {
+      throw new Error('Song not found.')
+    }
+
+    await this.writeSongArtwork(song.path, null)
+
+    this.db.prepare(`
+      UPDATE Music
+      SET ArtworkPath = ''
+      WHERE Id = ?
+        AND State = ?
+    `).run(songId, ACTIVE_STATE.active)
+  }
+
+  async getSongProperties(songId: number): Promise<SongPropertiesSnapshot> {
+    const song = this.db.prepare(`
+      SELECT
+        Id AS id,
+        Path AS path,
+        Name AS title,
+        Artist AS artist,
+        Album AS album,
+        Duration AS duration,
+        PlayCount AS playCount
+      FROM Music
+      WHERE Id = ?
+        AND State = ?
+      LIMIT 1
+    `).get(songId, ACTIVE_STATE.active) as {
+      id: number
+      path: string
+      title: string
+      artist: string
+      album: string
+      duration: number
+      playCount: number
+    }
+    const artistRows = this.db.prepare(`
+      SELECT MusicId AS songId, Name AS name
+      FROM MusicArtist
+      WHERE MusicId = ?
+        AND State = ?
+      ORDER BY Priority, Id
+    `).all(songId, ACTIVE_STATE.active) as unknown as SongArtistRow[]
+    const artists = normalizeArtists(
+      artistRows.filter((row) => row.songId === songId).map((row) => row.name),
+    )
+
+    const fileStats = await stat(song.path)
+    const fileType = extname(song.path).replace('.', '').toLocaleUpperCase()
+
+    try {
+      const metadata = await parseFile(song.path, {
+        duration: true,
+        skipCovers: true,
+      })
+      const common = metadata.common as typeof metadata.common & {
+        subtitle?: string
+        publisher?: string
+      }
+
+      return {
+        songId,
+        path: song.path,
+        title: common.title?.trim() || song.title,
+        subtitle: common.subtitle?.trim() || '',
+        artist: normalizeArtists([
+          ...(common.artists ?? []),
+          common.artist,
+        ]).join(', ') || song.artist,
+        artists: artists.length > 0 ? artists : normalizeArtists([song.artist]),
+        album: common.album?.trim() || song.album,
+        albumArtist: common.albumartist?.trim() || '',
+        publisher: common.publisher?.trim() || '',
+        trackNumber: common.track.no ?? 0,
+        year: common.year ?? 0,
+        genre: (common.genre ?? []).join(', '),
+        composers: (common.composer ?? []).join(', '),
+        duration: this.resolveDurationSeconds(metadata.format, 0) || song.duration,
+        bitrate: metadata.format.bitrate ? Math.round(metadata.format.bitrate) : 0,
+        fileSize: fileStats.size,
+        dateCreated: fileStats.birthtime.toISOString(),
+        dateModified: fileStats.mtime.toISOString(),
+        fileType,
+        playCount: song.playCount,
+      }
+    } catch {
+      return {
+        songId,
+        path: song.path,
+        title: song.title,
+        subtitle: '',
+        artist: song.artist,
+        artists: artists.length > 0 ? artists : normalizeArtists([song.artist]),
+        album: song.album,
+        albumArtist: '',
+        publisher: '',
+        trackNumber: 0,
+        year: 0,
+        genre: '',
+        composers: '',
+        duration: song.duration,
+        bitrate: 0,
+        fileSize: fileStats.size,
+        dateCreated: fileStats.birthtime.toISOString(),
+        dateModified: fileStats.mtime.toISOString(),
+        fileType,
+        playCount: song.playCount,
+      }
+    }
+  }
+
+  async updateSongProperties(songId: number, update: SongPropertiesUpdate) {
+    const song = this.getSongPathStatement.get(
+      songId,
+      ACTIVE_STATE.active,
+    ) as { path: string } | undefined
+    if (!song) {
+      throw new Error('Song not found.')
+    }
+    const title = update.title.trim()
+    const artists = normalizeArtists(update.artists ?? [update.artist]).slice(0, 6)
+    const artist = artists.join(', ')
+    const album = update.album.trim()
+
+    await this.writeSongTagProperties(song.path, {
+      title,
+      subtitle: update.subtitle?.trim() ?? '',
+      artist,
+      album,
+      albumArtist: update.albumArtist?.trim() ?? '',
+      publisher: update.publisher?.trim() ?? '',
+      trackNumber: update.trackNumber ?? 0,
+      year: update.year ?? 0,
+      genre: update.genre?.trim() ?? '',
+      composers: update.composers?.trim() ?? '',
+    })
+
+    this.db.exec('BEGIN')
+    try {
+      this.db.prepare(`
+        UPDATE Music
+        SET Name = ?, Artist = ?, Album = ?, PlayCount = ?
+        WHERE Id = ?
+          AND State = ?
+      `).run(
+        title,
+        artist,
+        album,
+        update.playCount ?? 0,
+        songId,
+        ACTIVE_STATE.active,
+      )
+      this.markSongArtistsInactiveStatement.run(ACTIVE_STATE.inactive, songId)
+      artists.forEach((artistName, index) => {
+        this.upsertSongArtistStatement.run(songId, artistName, index, ACTIVE_STATE.active)
+      })
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  updateSongPlayCount(songId: number, playCount: number) {
+    this.updateSongPlayCountStatement.run(playCount, songId, ACTIVE_STATE.active)
   }
 
   getSongFileUrl(songId: number) {
@@ -862,6 +1211,635 @@ export class SmplayerDataStore {
       this.markPlaylistItemsBySongInactiveStatement.run(ACTIVE_STATE.inactive, songId)
       this.markRecentPlayedInactiveStatement.run(ACTIVE_STATE.inactive, songId.toString())
       this.markFileByPathInactiveStatement.run(ACTIVE_STATE.inactive, songPath)
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  hideSong(songId: number) {
+    const songPath = this.getSongPath(songId)
+
+    this.db.exec('BEGIN')
+    try {
+      this.markSingleMusicInactiveStatement.run(ACTIVE_STATE.hidden, songId)
+      this.markFileByPathInactiveStatement.run(ACTIVE_STATE.hidden, songPath)
+      this.upsertHiddenStorageItem('file', songPath)
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  async moveSongToFolder(songId: number, folderPath: string, resolveConflict?: MoveConflictResolver) {
+    await this.moveSongsToFolder([songId], folderPath, resolveConflict)
+  }
+
+  async moveSongsToFolder(songIds: number[], folderPath: string, resolveConflict?: MoveConflictResolver) {
+    const targetFolderStats = await stat(folderPath)
+
+    if (!targetFolderStats.isDirectory()) {
+      throw new Error(`Target path is not a folder: ${folderPath}`)
+    }
+
+    const moves: Array<{ songId: number; songPath: string; targetPath: string; replacedPath?: string }> = []
+    for (const songId of songIds) {
+      const songPath = this.getSongPath(songId)
+      if (dirname(songPath) !== folderPath) {
+        let targetPath = join(folderPath, basename(songPath))
+        try {
+          await stat(targetPath)
+          const conflictAction = resolveConflict ? await resolveConflict(songPath, targetPath) : 'keep-both'
+          if (conflictAction === 'skip') {
+            continue
+          }
+          if (conflictAction === 'keep-both') {
+            targetPath = await this.getAvailableSiblingPath(targetPath)
+          }
+          moves.push({
+            songId,
+            songPath,
+            targetPath,
+            replacedPath: conflictAction === 'replace' ? targetPath : undefined,
+          })
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+            throw error
+          }
+          moves.push({ songId, songPath, targetPath })
+        }
+      }
+    }
+
+    for (const move of moves) {
+      await stat(move.songPath)
+      if (move.replacedPath) {
+        await unlink(move.replacedPath)
+      }
+      await rename(move.songPath, move.targetPath)
+    }
+
+    this.db.exec('BEGIN')
+    try {
+      const targetFolder = this.db.prepare(`
+        SELECT Id AS id
+        FROM Folder
+        WHERE Path = ?
+          AND State = ?
+        LIMIT 1
+      `).get(folderPath, ACTIVE_STATE.active) as { id: number } | undefined
+
+      const updateMusic = this.db.prepare(`
+        UPDATE Music
+        SET Path = ?
+        WHERE Id = ?
+          AND State = ?
+      `)
+      const updateFile = this.db.prepare(`
+        UPDATE File
+        SET Path = ?, ParentId = ?
+        WHERE Path = ?
+      `)
+
+      for (const move of moves) {
+        if (move.replacedPath) {
+          this.deleteSongAtPathInsideTransaction(move.replacedPath, move.songId)
+        }
+        updateMusic.run(move.targetPath, move.songId, ACTIVE_STATE.active)
+        updateFile.run(move.targetPath, targetFolder?.id ?? 0, move.songPath)
+      }
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  async moveLocalFolderToFolder(sourceFolderPath: string, targetFolderPath: string, resolveConflict?: MoveConflictResolver) {
+    const sourcePath = sourceFolderPath.replace(/[\\/]+$/, '')
+    const targetPath = targetFolderPath.replace(/[\\/]+$/, '')
+    const sourceStats = await stat(sourcePath)
+    const targetStats = await stat(targetPath)
+
+    if (!sourceStats.isDirectory() || !targetStats.isDirectory()) {
+      throw new Error('Source and target must be folders.')
+    }
+
+    if (sourcePath === targetPath || targetPath.startsWith(`${sourcePath}\\`) || targetPath.startsWith(`${sourcePath}/`)) {
+      return
+    }
+
+    const nextPath = join(targetPath, basename(sourcePath))
+    if (await this.pathExists(nextPath)) {
+      const existingTargetStats = await stat(nextPath)
+      if (!existingTargetStats.isDirectory()) {
+        throw new Error(`Target path already exists and is not a folder: ${nextPath}`)
+      }
+      await this.mergeFolderIntoExistingTarget(sourcePath, nextPath, resolveConflict)
+      return
+    }
+
+    await rename(sourcePath, nextPath)
+    this.replacePathReferences(sourcePath, nextPath)
+    this.updateMovedFolderParent(nextPath, targetPath)
+  }
+
+  deleteSongs(songIds: number[]) {
+    this.db.exec('BEGIN')
+    try {
+      for (const songId of songIds) {
+        this.deleteSongInsideTransaction(songId)
+      }
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  deleteLocalItems(songIds: number[], folderPaths: string[]) {
+    this.db.exec('BEGIN')
+    try {
+      for (const songId of songIds) {
+        this.deleteSongInsideTransaction(songId)
+      }
+      for (const folderPath of folderPaths) {
+        this.deleteLocalFolderInsideTransaction(folderPath)
+      }
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  updateLocalFolderSort(folderPath: string, sortCriterion: LocalFolderSortCriterion) {
+    this.db.prepare(`
+      UPDATE Folder
+      SET Criterion = ?
+      WHERE Path = ?
+        AND State = ?
+    `).run(this.toLocalFolderSortValue(sortCriterion), folderPath, ACTIVE_STATE.active)
+  }
+
+  async renameLocalFolder(folderPath: string, name: string) {
+    const nextPath = join(dirname(folderPath), name)
+    await rename(folderPath, nextPath)
+    this.replacePathReferences(folderPath, nextPath)
+  }
+
+  deleteLocalFolder(folderPath: string) {
+    this.db.exec('BEGIN')
+    try {
+      this.deleteLocalFolderInsideTransaction(folderPath)
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  private deleteSongInsideTransaction(songId: number) {
+    const songPath = this.getSongPath(songId)
+    this.markSingleMusicInactiveStatement.run(ACTIVE_STATE.inactive, songId)
+    this.markSongArtistsInactiveStatement.run(ACTIVE_STATE.inactive, songId)
+    this.markPlaylistItemsBySongInactiveStatement.run(ACTIVE_STATE.inactive, songId)
+    this.markRecentPlayedInactiveStatement.run(ACTIVE_STATE.inactive, songId.toString())
+    this.markFileByPathInactiveStatement.run(ACTIVE_STATE.inactive, songPath)
+    this.db.prepare(`
+      UPDATE HiddenStorageItem
+      SET State = ?
+      WHERE Type = 'file'
+        AND Path = ?
+    `).run(ACTIVE_STATE.inactive, songPath)
+  }
+
+  private deleteSongAtPathInsideTransaction(songPath: string, exceptSongId: number) {
+    const song = this.db.prepare(`
+      SELECT Id AS id
+      FROM Music
+      WHERE Path = ?
+        AND Id <> ?
+        AND State = ?
+      LIMIT 1
+    `).get(songPath, exceptSongId, ACTIVE_STATE.active) as { id: number } | undefined
+
+    if (song) {
+      this.deleteSongInsideTransaction(song.id)
+      return
+    }
+
+    this.markFileByPathInactiveStatement.run(ACTIVE_STATE.inactive, songPath)
+  }
+
+  private async mergeFolderIntoExistingTarget(
+    sourceFolderPath: string,
+    targetFolderPath: string,
+    resolveConflict?: MoveConflictResolver,
+  ): Promise<boolean> {
+    let movedAll = true
+    const entries = await readdir(sourceFolderPath, { withFileTypes: true })
+
+    for (const entry of entries) {
+      const sourceEntryPath = join(sourceFolderPath, entry.name)
+      const targetEntryPath = join(targetFolderPath, entry.name)
+
+      if (entry.isDirectory()) {
+        if (await this.pathExists(targetEntryPath)) {
+          const targetEntryStats = await stat(targetEntryPath)
+          if (!targetEntryStats.isDirectory()) {
+            throw new Error(`Target path already exists and is not a folder: ${targetEntryPath}`)
+          }
+          movedAll = await this.mergeFolderIntoExistingTarget(sourceEntryPath, targetEntryPath, resolveConflict) && movedAll
+        } else {
+          await rename(sourceEntryPath, targetEntryPath)
+          this.replacePathReferences(sourceEntryPath, targetEntryPath)
+          this.updateMovedFolderParent(targetEntryPath, targetFolderPath)
+        }
+        continue
+      }
+
+      if (entry.isFile()) {
+        movedAll = await this.moveFilePathToFolder(sourceEntryPath, targetFolderPath, resolveConflict) && movedAll
+        continue
+      }
+
+      movedAll = false
+    }
+
+    const remainingEntries = await readdir(sourceFolderPath)
+    if (remainingEntries.length === 0) {
+      await rmdir(sourceFolderPath)
+      this.markLocalFolderInactive(sourceFolderPath)
+      return movedAll
+    }
+
+    return false
+  }
+
+  private async moveFilePathToFolder(
+    sourceFilePath: string,
+    targetFolderPath: string,
+    resolveConflict?: MoveConflictResolver,
+  ) {
+    let targetFilePath = join(targetFolderPath, basename(sourceFilePath))
+    let replacedPath: string | undefined
+
+    if (await this.pathExists(targetFilePath)) {
+      const conflictAction = resolveConflict ? await resolveConflict(sourceFilePath, targetFilePath) : 'keep-both'
+      if (conflictAction === 'skip') {
+        return false
+      }
+      if (conflictAction === 'keep-both') {
+        targetFilePath = await this.getAvailableSiblingPath(targetFilePath)
+      } else {
+        replacedPath = targetFilePath
+      }
+    }
+
+    if (replacedPath) {
+      await unlink(replacedPath)
+    }
+    await rename(sourceFilePath, targetFilePath)
+    this.updateMovedFileReference(sourceFilePath, targetFilePath, targetFolderPath, replacedPath)
+    return true
+  }
+
+  private updateMovedFileReference(
+    sourceFilePath: string,
+    targetFilePath: string,
+    targetFolderPath: string,
+    replacedPath?: string,
+  ) {
+    this.db.exec('BEGIN')
+    try {
+      const sourceSong = this.db.prepare(`
+        SELECT Id AS id
+        FROM Music
+        WHERE Path = ?
+          AND State = ?
+        LIMIT 1
+      `).get(sourceFilePath, ACTIVE_STATE.active) as { id: number } | undefined
+
+      if (replacedPath) {
+        this.deleteSongAtPathInsideTransaction(replacedPath, sourceSong?.id ?? 0)
+      }
+
+      const targetFolderId = this.getActiveFolderId(targetFolderPath) ?? 0
+      if (sourceSong) {
+        this.db.prepare(`
+          UPDATE Music
+          SET Path = ?
+          WHERE Id = ?
+            AND State = ?
+        `).run(targetFilePath, sourceSong.id, ACTIVE_STATE.active)
+      }
+      this.db.prepare(`
+        UPDATE File
+        SET Path = ?, ParentId = ?
+        WHERE Path = ?
+      `).run(targetFilePath, targetFolderId, sourceFilePath)
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  private updateMovedFolderParent(folderPath: string, parentPath: string) {
+    this.db.prepare(`
+      UPDATE Folder
+      SET ParentId = ?
+      WHERE Path = ?
+        AND State = ?
+    `).run(this.getActiveFolderId(parentPath) ?? 0, folderPath, ACTIVE_STATE.active)
+  }
+
+  private markLocalFolderInactive(folderPath: string) {
+    this.db.prepare(`
+      UPDATE Folder
+      SET State = ?
+      WHERE Path = ?
+    `).run(ACTIVE_STATE.inactive, folderPath)
+    this.db.prepare(`
+      UPDATE HiddenStorageItem
+      SET State = ?
+      WHERE Type = 'folder'
+        AND Path = ?
+    `).run(ACTIVE_STATE.inactive, folderPath)
+  }
+
+  private deleteLocalFolderInsideTransaction(folderPath: string) {
+    this.db.prepare(`
+      UPDATE Folder
+      SET State = ?
+      WHERE Path = ?
+         OR Path LIKE ?
+         OR Path LIKE ?
+    `).run(ACTIVE_STATE.inactive, folderPath, `${folderPath}\\%`, `${folderPath}/%`)
+    this.db.prepare(`
+      UPDATE Music
+      SET State = ?
+      WHERE Path LIKE ?
+         OR Path LIKE ?
+    `).run(ACTIVE_STATE.inactive, `${folderPath}\\%`, `${folderPath}/%`)
+    this.db.prepare(`
+      UPDATE File
+      SET State = ?
+      WHERE Path LIKE ?
+         OR Path LIKE ?
+    `).run(ACTIVE_STATE.inactive, `${folderPath}\\%`, `${folderPath}/%`)
+    this.db.prepare(`
+      UPDATE HiddenStorageItem
+      SET State = ?
+      WHERE Path = ?
+         OR Path LIKE ?
+         OR Path LIKE ?
+    `).run(ACTIVE_STATE.inactive, folderPath, `${folderPath}\\%`, `${folderPath}/%`)
+  }
+
+  private upsertHiddenStorageItem(type: HiddenStorageItem['type'], itemPath: string) {
+    const result = this.db.prepare(`
+      UPDATE HiddenStorageItem
+      SET State = ?
+      WHERE Type = ?
+        AND Path = ?
+    `).run(ACTIVE_STATE.active, type, itemPath)
+
+    if (result.changes === 0) {
+      this.db.prepare(`
+        INSERT INTO HiddenStorageItem (Type, Path, State)
+        VALUES (?, ?, ?)
+      `).run(type, itemPath, ACTIVE_STATE.active)
+    }
+  }
+
+  private syncHiddenStorageItemsFromStorageState() {
+    this.db.prepare(`
+      INSERT INTO HiddenStorageItem (Type, Path, State)
+      SELECT 'folder', Path, ?
+      FROM Folder
+      WHERE State = ?
+      ON CONFLICT(Type, Path) DO UPDATE SET State = excluded.State
+    `).run(ACTIVE_STATE.active, ACTIVE_STATE.hidden)
+    this.db.prepare(`
+      INSERT INTO HiddenStorageItem (Type, Path, State)
+      SELECT 'file', Path, ?
+      FROM File
+      WHERE State = ?
+      ON CONFLICT(Type, Path) DO UPDATE SET State = excluded.State
+    `).run(ACTIVE_STATE.active, ACTIVE_STATE.hidden)
+  }
+
+  private syncStorageStateFromHiddenStorageItems() {
+    this.db.prepare(`
+      UPDATE Folder
+      SET State = ?
+      WHERE EXISTS (
+        SELECT 1
+        FROM HiddenStorageItem
+        WHERE HiddenStorageItem.Type = 'folder'
+          AND HiddenStorageItem.Path = Folder.Path
+          AND HiddenStorageItem.State = ?
+      )
+    `).run(ACTIVE_STATE.hidden, ACTIVE_STATE.active)
+    this.db.prepare(`
+      UPDATE Folder
+      SET State = ?
+      WHERE State != ?
+        AND EXISTS (
+          SELECT 1
+          FROM HiddenStorageItem
+          WHERE HiddenStorageItem.Type = 'folder'
+            AND HiddenStorageItem.State = ?
+            AND (
+              Folder.Path LIKE HiddenStorageItem.Path || '\\%'
+              OR Folder.Path LIKE HiddenStorageItem.Path || '/%'
+            )
+        )
+    `).run(ACTIVE_STATE.parentHidden, ACTIVE_STATE.hidden, ACTIVE_STATE.active)
+    this.db.prepare(`
+      UPDATE Music
+      SET State = ?
+      WHERE EXISTS (
+        SELECT 1
+        FROM HiddenStorageItem
+        WHERE HiddenStorageItem.Type = 'file'
+          AND HiddenStorageItem.Path = Music.Path
+          AND HiddenStorageItem.State = ?
+      )
+    `).run(ACTIVE_STATE.hidden, ACTIVE_STATE.active)
+    this.db.prepare(`
+      UPDATE File
+      SET State = ?
+      WHERE EXISTS (
+        SELECT 1
+        FROM HiddenStorageItem
+        WHERE HiddenStorageItem.Type = 'file'
+          AND HiddenStorageItem.Path = File.Path
+          AND HiddenStorageItem.State = ?
+      )
+    `).run(ACTIVE_STATE.hidden, ACTIVE_STATE.active)
+    this.db.prepare(`
+      UPDATE Music
+      SET State = ?
+      WHERE State != ?
+        AND EXISTS (
+          SELECT 1
+          FROM HiddenStorageItem
+          WHERE HiddenStorageItem.Type = 'folder'
+            AND HiddenStorageItem.State = ?
+            AND (
+              Music.Path LIKE HiddenStorageItem.Path || '\\%'
+              OR Music.Path LIKE HiddenStorageItem.Path || '/%'
+            )
+        )
+    `).run(ACTIVE_STATE.parentHidden, ACTIVE_STATE.hidden, ACTIVE_STATE.active)
+    this.db.prepare(`
+      UPDATE File
+      SET State = ?
+      WHERE State != ?
+        AND EXISTS (
+          SELECT 1
+          FROM HiddenStorageItem
+          WHERE HiddenStorageItem.Type = 'folder'
+            AND HiddenStorageItem.State = ?
+            AND (
+              File.Path LIKE HiddenStorageItem.Path || '\\%'
+              OR File.Path LIKE HiddenStorageItem.Path || '/%'
+            )
+        )
+    `).run(ACTIVE_STATE.parentHidden, ACTIVE_STATE.hidden, ACTIVE_STATE.active)
+  }
+
+  getHiddenStorageItems(): HiddenStorageItem[] {
+    this.syncStorageStateFromHiddenStorageItems()
+    this.syncHiddenStorageItemsFromStorageState()
+
+    const hiddenStorageItems = this.db.prepare(`
+      SELECT
+        Id AS id,
+        Type AS type,
+        Path AS path
+      FROM HiddenStorageItem
+      WHERE State = ?
+    `).all(ACTIVE_STATE.active) as unknown as HiddenStorageItem[]
+
+    const hiddenFolders = this.db.prepare(`
+      SELECT
+        Id AS id,
+        'folder' AS type,
+        Path AS path
+      FROM Folder
+      WHERE State = ?
+    `).all(ACTIVE_STATE.hidden) as unknown as HiddenStorageItem[]
+
+    const hiddenFiles = this.db.prepare(`
+      SELECT
+        Id AS id,
+        'file' AS type,
+        Path AS path
+      FROM File
+      WHERE State = ?
+    `).all(ACTIVE_STATE.hidden) as unknown as HiddenStorageItem[]
+
+    const itemsByKey = new Map<string, HiddenStorageItem>()
+    for (const item of [...hiddenStorageItems, ...hiddenFolders, ...hiddenFiles]) {
+      itemsByKey.set(`${item.type}:${item.path}`, item)
+    }
+
+    return [...itemsByKey.values()].sort((left, right) => {
+      const typeComparison = left.type.localeCompare(right.type)
+      return typeComparison === 0 ? left.path.localeCompare(right.path) : typeComparison
+    })
+  }
+
+  hideLocalFolder(folderPath: string) {
+    this.db.exec('BEGIN')
+    try {
+      this.upsertHiddenStorageItem('folder', folderPath)
+      this.db.prepare(`
+        UPDATE Folder
+        SET State = ?
+        WHERE Path = ?
+      `).run(ACTIVE_STATE.hidden, folderPath)
+      this.db.prepare(`
+        UPDATE Folder
+        SET State = ?
+        WHERE Path LIKE ?
+           OR Path LIKE ?
+      `).run(ACTIVE_STATE.parentHidden, `${folderPath}\\%`, `${folderPath}/%`)
+      this.db.prepare(`
+        UPDATE Music
+        SET State = ?
+        WHERE Path LIKE ?
+           OR Path LIKE ?
+      `).run(ACTIVE_STATE.parentHidden, `${folderPath}\\%`, `${folderPath}/%`)
+      this.db.prepare(`
+        UPDATE File
+        SET State = ?
+        WHERE Path LIKE ?
+           OR Path LIKE ?
+      `).run(ACTIVE_STATE.parentHidden, `${folderPath}\\%`, `${folderPath}/%`)
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  resumeHiddenStorageItem(item: HiddenStorageItem) {
+    this.db.exec('BEGIN')
+    try {
+      this.db.prepare(`
+        UPDATE HiddenStorageItem
+        SET State = ?
+        WHERE Type = ?
+          AND Path = ?
+      `).run(ACTIVE_STATE.inactive, item.type, item.path)
+
+      if (item.type === 'folder') {
+        this.db.prepare(`
+          UPDATE HiddenStorageItem
+          SET State = ?
+          WHERE Path = ?
+             OR Path LIKE ?
+             OR Path LIKE ?
+        `).run(ACTIVE_STATE.inactive, item.path, `${item.path}\\%`, `${item.path}/%`)
+        this.db.prepare(`
+          UPDATE Folder
+          SET State = ?
+          WHERE Path = ?
+             OR Path LIKE ?
+             OR Path LIKE ?
+        `).run(ACTIVE_STATE.active, item.path, `${item.path}\\%`, `${item.path}/%`)
+        this.db.prepare(`
+          UPDATE Music
+          SET State = ?
+          WHERE Path LIKE ?
+             OR Path LIKE ?
+        `).run(ACTIVE_STATE.active, `${item.path}\\%`, `${item.path}/%`)
+        this.db.prepare(`
+          UPDATE File
+          SET State = ?
+          WHERE Path LIKE ?
+             OR Path LIKE ?
+        `).run(ACTIVE_STATE.active, `${item.path}\\%`, `${item.path}/%`)
+      } else {
+        this.db.prepare(`
+          UPDATE Music
+          SET State = ?
+          WHERE Path = ?
+        `).run(ACTIVE_STATE.active, item.path)
+        this.db.prepare(`
+          UPDATE File
+          SET State = ?
+          WHERE Path = ?
+        `).run(ACTIVE_STATE.active, item.path)
+      }
+
       this.db.exec('COMMIT')
     } catch (error) {
       this.db.exec('ROLLBACK')
@@ -1149,6 +2127,10 @@ export class SmplayerDataStore {
       return
     }
 
+    this.replacePathReferences(originalPath, nextPath)
+  }
+
+  private replacePathReferences(originalPath: string, nextPath: string) {
     this.db.exec('BEGIN')
     try {
       this.db.prepare(`
@@ -1165,6 +2147,10 @@ export class SmplayerDataStore {
       `).run(originalPath, nextPath)
       this.db.prepare(`
         UPDATE File
+        SET Path = replace(Path, ?, ?)
+      `).run(originalPath, nextPath)
+      this.db.prepare(`
+        UPDATE HiddenStorageItem
         SET Path = replace(Path, ?, ?)
       `).run(originalPath, nextPath)
       this.db.exec('COMMIT')
@@ -1202,10 +2188,23 @@ export class SmplayerDataStore {
       this.toLyricsRequestModeValue(
         update.notificationLyricsSource ?? this.mapLyricsRequestMode(settings.NotificationLyricsSource),
       ),
+      this.toLyricsRequestModeValue(
+        update.playerLyricsSource ?? this.mapLyricsRequestMode(settings.PlayerLyricsSource),
+      ),
       Number(update.saveLyricsImmediately ?? Boolean(settings.SaveLyricsImmediately)),
+      Number(
+        update.preserveInternetLyricsTimestamps ??
+          Boolean(settings.PreserveInternetLyricsTimestamps),
+      ),
       this.toMusicLibrarySortValue(
         update.musicLibrarySort ?? this.mapMusicLibrarySort(settings.MusicLibraryCriterion),
       ),
+      this.toAlbumSortValue(update.albumsSort ?? this.mapAlbumSort(settings.AlbumsCriterion)),
+      this.toSearchSortValue(update.searchArtistsCriterion ?? this.mapSearchSort(settings.SearchArtistsCriterion)),
+      this.toSearchSortValue(update.searchAlbumsCriterion ?? this.mapSearchSort(settings.SearchAlbumsCriterion)),
+      this.toSearchSortValue(update.searchSongsCriterion ?? this.mapSearchSort(settings.SearchSongsCriterion)),
+      this.toSearchSortValue(update.searchPlaylistsCriterion ?? this.mapSearchSort(settings.SearchPlaylistsCriterion)),
+      this.toSearchSortValue(update.searchFoldersCriterion ?? this.mapSearchSort(settings.SearchFoldersCriterion)),
       Number(update.autoPlay ?? Boolean(settings.AutoPlay)),
       Number(nextSaveMusicProgress),
       Number(
@@ -1512,19 +2511,31 @@ export class SmplayerDataStore {
       return this.createLyricsSnapshot(embeddedLyrics, embeddedLyrics ? 'music-file' : 'none')
     }
 
+    if (mode === 'auto' && sidecarLyrics && !sidecarLyrics.isSynced) {
+      const internetLyrics = this.prepareInternetLyrics(
+        await this.searchInternetLyrics(song),
+        settings,
+      )
+      const snapshot = this.createLyricsSnapshot(internetLyrics, internetLyrics ? 'internet' : 'none')
+      if (snapshot.isSynced) {
+        await this.maybePersistFetchedLyrics(song.path, snapshot, settings)
+        return snapshot
+      }
+    }
+
     if (mode !== 'internet' && sidecarLyrics) {
       return sidecarLyrics
     }
 
     if (mode === 'internet') {
-      const internetLyrics = await this.searchInternetLyrics(song)
+      const internetLyrics = this.prepareInternetLyrics(await this.searchInternetLyrics(song), settings)
       const snapshot = this.createLyricsSnapshot(internetLyrics, internetLyrics ? 'internet' : 'none')
       await this.maybePersistFetchedLyrics(song.path, snapshot, settings)
       return snapshot
     }
 
     if (mode === 'auto' && settings.AutoLyrics) {
-      const internetLyrics = await this.searchInternetLyrics(song)
+      const internetLyrics = this.prepareInternetLyrics(await this.searchInternetLyrics(song), settings)
       if (internetLyrics) {
         const snapshot = this.createLyricsSnapshot(internetLyrics, 'internet')
         await this.maybePersistFetchedLyrics(song.path, snapshot, settings)
@@ -1551,14 +2562,54 @@ export class SmplayerDataStore {
       return { status: 'skipped' as const }
     }
 
-    const internetLyrics = await this.searchInternetLyrics(song)
+    const settings = this.getSettings()
+    const internetLyrics = this.prepareInternetLyrics(await this.searchInternetLyrics(song), settings)
     if (!internetLyrics.trim()) {
       return { status: 'missing' as const }
     }
 
-    await this.writeEmbeddedLyrics(song.path, internetLyrics)
+    await this.writeLyricsToSongPath(song.path, internetLyrics)
 
     return { status: 'saved' as const }
+  }
+
+  async readLyricsFromFile(filePath: string) {
+    if (AUDIO_EXTENSIONS.has(extname(filePath).toLocaleLowerCase())) {
+      return this.getEmbeddedLyrics(filePath)
+    }
+
+    return readFile(filePath, 'utf8')
+  }
+
+  async saveSongLyrics(songId: number, rawLyrics: string) {
+    const song = this.getSongPathStatement.get(
+      songId,
+      ACTIVE_STATE.active,
+    ) as SongPathRow | undefined
+
+    if (!song) {
+      throw new Error('Song not found.')
+    }
+
+    await this.writeLyricsToSongPath(song.path, rawLyrics)
+  }
+
+  getLyricsSearchUrl(songId: number) {
+    const song = this.getSongPathStatement.get(
+      songId,
+      ACTIVE_STATE.active,
+    ) as SongPathRow | undefined
+
+    if (!song) {
+      throw new Error('Song not found.')
+    }
+
+    const settings = this.getSettings()
+    const preferredLanguage = this.mapPreferredLanguage(settings.VoiceAssistantPreferredLanguage)
+    const keyword = preferredLanguage === 'zh-CN' ? '歌词' : 'lyrics'
+    const host = preferredLanguage === 'zh-CN' ? 'https://cn.bing.com/search' : 'https://www.bing.com/search'
+    const searchQuery = [keyword, song.title, song.artist].filter(Boolean).join(' ')
+    return `${host}?q=${encodeURIComponent(searchQuery)}`
   }
 
   private async getExistingLyrics(songPath: string) {
@@ -1571,22 +2622,8 @@ export class SmplayerDataStore {
     return this.createLyricsSnapshot(embeddedLyrics, embeddedLyrics ? 'music-file' : 'none')
   }
 
-  async getTrackNotificationBody(songId: number): Promise<string> {
-    const settings = this.getSettings()
-
-    if (!settings.ShowLyricsInNotification) {
-      return ''
-    }
-
-    try {
-      const lyrics = await this.getLyrics(
-        songId,
-        this.mapLyricsRequestMode(settings.NotificationLyricsSource),
-      )
-      return this.getLyricsPreviewLine(lyrics)
-    } catch {
-      return ''
-    }
+  async getTrackNotificationBody(_songId: number): Promise<string> {
+    return ''
   }
 
   markSongPlayed(songId: number) {
@@ -1639,9 +2676,18 @@ export class SmplayerDataStore {
     const startedAt = Date.now()
     const folders: string[] = []
     const audioFiles: string[] = []
+    const hiddenStorageItems = this.getHiddenStorageItems()
+    const hiddenFolderPaths = hiddenStorageItems
+      .filter((item) => item.type === 'folder')
+      .map((item) => item.path)
+    const hiddenFilePaths = new Set(
+      hiddenStorageItems
+        .filter((item) => item.type === 'file')
+        .map((item) => item.path),
+    )
 
     await mkdir(this.coverCachePath, { recursive: true })
-    await this.walkLibrary(rootPath, folders, audioFiles)
+    await this.walkLibrary(rootPath, folders, audioFiles, hiddenFolderPaths, hiddenFilePaths)
 
     const scannedSongs: ScannedSong[] = []
     const useFilenameNotMusicName = Boolean(settings.UseFilenameNotMusicName)
@@ -1652,9 +2698,9 @@ export class SmplayerDataStore {
 
     this.db.exec('BEGIN')
     try {
-      this.markMusicInactiveStatement.run(ACTIVE_STATE.inactive)
-      this.markFolderInactiveStatement.run(ACTIVE_STATE.inactive)
-      this.markFileInactiveStatement.run(ACTIVE_STATE.inactive)
+      this.markMusicInactiveStatement.run(ACTIVE_STATE.inactive, ACTIVE_STATE.hidden, ACTIVE_STATE.parentHidden)
+      this.markFolderInactiveStatement.run(ACTIVE_STATE.inactive, ACTIVE_STATE.hidden, ACTIVE_STATE.parentHidden)
+      this.markFileInactiveStatement.run(ACTIVE_STATE.inactive, ACTIVE_STATE.hidden, ACTIVE_STATE.parentHidden)
 
       const folderIds = new Map<string, number>()
       const sortedFolders = folders
@@ -1719,6 +2765,163 @@ export class SmplayerDataStore {
       songCount: scannedSongs.length,
       folderCount: folders.length,
       elapsedMs: Date.now() - startedAt,
+      filesAdded: [],
+      filesRemoved: [],
+      filesMoved: [],
+    }
+  }
+
+  async scanLocalFolder(folderPath: string): Promise<ScanLibraryResult> {
+    const settings = this.getSettings()
+    const rootPath = settings.RootPath
+    const folderStats = await stat(folderPath)
+
+    if (!folderStats.isDirectory()) {
+      throw new Error(`Selected path is not a directory: ${folderPath}`)
+    }
+
+    const startedAt = Date.now()
+    const folders: string[] = []
+    const audioFiles: string[] = []
+    const hiddenStorageItems = this.getHiddenStorageItems()
+    const hiddenFolderPaths = hiddenStorageItems
+      .filter((item) => item.type === 'folder')
+      .map((item) => item.path)
+    const hiddenFilePaths = new Set(
+      hiddenStorageItems
+        .filter((item) => item.type === 'file')
+        .map((item) => item.path),
+    )
+
+    await mkdir(this.coverCachePath, { recursive: true })
+    await this.walkLibrary(folderPath, folders, audioFiles, hiddenFolderPaths, hiddenFilePaths)
+
+    const scannedSongs: ScannedSong[] = []
+    const useFilenameNotMusicName = Boolean(settings.UseFilenameNotMusicName)
+
+    for (const filePath of audioFiles) {
+      scannedSongs.push(await this.readSong(filePath, useFilenameNotMusicName))
+    }
+
+    const previousSongPaths = (this.db.prepare(`
+      SELECT Path
+      FROM Music
+      WHERE State = ?
+        AND (Path LIKE ? OR Path LIKE ?)
+    `).all(ACTIVE_STATE.active, `${folderPath}\\%`, `${folderPath}/%`) as Array<{ Path: string }>).map((row) => row.Path)
+    const updateResult = this.buildFolderUpdateResult(previousSongPaths, scannedSongs.map((song) => song.path))
+
+    this.db.exec('BEGIN')
+    try {
+      this.db.prepare(`
+        UPDATE Music
+        SET State = ?
+        WHERE State NOT IN (?, ?)
+          AND (Path LIKE ? OR Path LIKE ?)
+      `).run(ACTIVE_STATE.inactive, ACTIVE_STATE.hidden, ACTIVE_STATE.parentHidden, `${folderPath}\\%`, `${folderPath}/%`)
+      this.db.prepare(`
+        UPDATE Folder
+        SET State = ?
+        WHERE State NOT IN (?, ?)
+          AND (Path = ? OR Path LIKE ? OR Path LIKE ?)
+      `).run(ACTIVE_STATE.inactive, ACTIVE_STATE.hidden, ACTIVE_STATE.parentHidden, folderPath, `${folderPath}\\%`, `${folderPath}/%`)
+      this.db.prepare(`
+        UPDATE File
+        SET State = ?
+        WHERE State NOT IN (?, ?)
+          AND (Path LIKE ? OR Path LIKE ?)
+      `).run(ACTIVE_STATE.inactive, ACTIVE_STATE.hidden, ACTIVE_STATE.parentHidden, `${folderPath}\\%`, `${folderPath}/%`)
+
+      const folderIds = new Map<string, number>()
+      const sortedFolders = folders
+        .slice()
+        .sort((left, right) => left.split(/[/\\]+/).length - right.split(/[/\\]+/).length)
+
+      for (const scannedFolderPath of sortedFolders) {
+        const parentId = scannedFolderPath === rootPath
+          ? 0
+          : (folderIds.get(dirname(scannedFolderPath)) ?? this.getActiveFolderId(dirname(scannedFolderPath)) ?? 0)
+        const row = this.upsertFolderStatement.get(
+          scannedFolderPath,
+          parentId,
+          ACTIVE_STATE.active,
+        ) as { Id: number }
+        folderIds.set(scannedFolderPath, row.Id)
+      }
+
+      for (const song of scannedSongs) {
+        const musicRow = this.upsertMusicStatement.get(
+          song.path,
+          song.title,
+          song.artist,
+          song.album,
+          song.artworkPath,
+          song.duration,
+          song.path,
+          song.path,
+          song.dateAdded,
+          ACTIVE_STATE.active,
+        ) as { Id: number }
+
+        this.markSongArtistsInactiveStatement.run(ACTIVE_STATE.inactive, musicRow.Id)
+        song.artists.forEach((artist, index) => {
+          this.upsertSongArtistStatement.run(
+            musicRow.Id,
+            artist,
+            index,
+            ACTIVE_STATE.active,
+          )
+        })
+
+        this.upsertFileStatement.get(
+          song.path,
+          folderIds.get(dirname(song.path)) ?? this.getActiveFolderId(dirname(song.path)) ?? 0,
+          musicRow.Id,
+          ACTIVE_STATE.active,
+        )
+      }
+
+      this.cleanupScanSideEffects(settings)
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
+
+    await this.pruneCoverCache(scannedSongs.map((song) => song.artworkPath))
+
+    return {
+      rootPath,
+      songCount: scannedSongs.length,
+      folderCount: folders.length,
+      elapsedMs: Date.now() - startedAt,
+      filesAdded: updateResult.filesAdded,
+      filesRemoved: updateResult.filesRemoved,
+      filesMoved: updateResult.filesMoved,
+    }
+  }
+
+  private buildFolderUpdateResult(previousSongPaths: string[], scannedSongPaths: string[]) {
+    const previousPaths = new Set(previousSongPaths)
+    const scannedPaths = new Set(scannedSongPaths)
+    const filesAdded = scannedSongPaths.filter((songPath) => !previousPaths.has(songPath))
+    const filesRemoved = previousSongPaths.filter((songPath) => !scannedPaths.has(songPath))
+    const filesMoved: string[] = []
+
+    for (const addedPath of filesAdded.slice()) {
+      const fileName = basename(addedPath)
+      const matchingRemovedCount = filesRemoved.filter((removedPath) => basename(removedPath) === fileName).length
+      const matchingAddedCount = filesAdded.filter((candidatePath) => basename(candidatePath) === fileName).length
+
+      if (matchingRemovedCount === 1 && matchingAddedCount === 1) {
+        filesMoved.push(addedPath)
+      }
+    }
+
+    return {
+      filesAdded: filesAdded.filter((songPath) => !filesMoved.includes(songPath)),
+      filesRemoved: filesRemoved.filter((songPath) => !filesMoved.some((movedPath) => basename(movedPath) === basename(songPath))),
+      filesMoved,
     }
   }
 
@@ -1761,6 +2964,43 @@ export class SmplayerDataStore {
     }
 
     return searchState
+  }
+
+  private getActiveFolderId(folderPath: string) {
+    const folder = this.db.prepare(`
+      SELECT Id AS id
+      FROM Folder
+      WHERE Path = ?
+        AND State = ?
+      LIMIT 1
+    `).get(folderPath, ACTIVE_STATE.active) as { id: number } | undefined
+    return folder?.id
+  }
+
+  private async getAvailableSiblingPath(targetPath: string) {
+    const extension = extname(targetPath)
+    const basePath = targetPath.slice(0, targetPath.length - extension.length)
+    let index = 1
+    let nextPath = `${basePath} (${index})${extension}`
+
+    while (await this.pathExists(nextPath)) {
+      index += 1
+      nextPath = `${basePath} (${index})${extension}`
+    }
+
+    return nextPath
+  }
+
+  private async pathExists(targetPath: string) {
+    try {
+      await stat(targetPath)
+      return true
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return false
+      }
+      throw error
+    }
   }
 
   private groupSongArtists(rows: SongArtistRow[]) {
@@ -1908,6 +3148,8 @@ export class SmplayerDataStore {
         return 'local'
       case 2:
         return 'embedded'
+      case 3:
+        return 'auto'
       default:
         return 'internet'
     }
@@ -1919,6 +3161,8 @@ export class SmplayerDataStore {
         return 1
       case 'embedded':
         return 2
+      case 'auto':
+        return 3
       default:
         return 0
     }
@@ -1967,6 +3211,38 @@ export class SmplayerDataStore {
     return this.mapMusicLibrarySort(criterionValue)
   }
 
+  private mapAlbumSort(criterionValue: number): AlbumSortCriterion {
+    switch (criterionValue) {
+      case 1:
+        return 'artist'
+      case 6:
+        return 'name'
+      default:
+        return 'default'
+    }
+  }
+
+  private mapSearchSort(criterionValue: number): SearchSortCriterion {
+    switch (criterionValue) {
+      case 0:
+        return 'title'
+      case 1:
+        return 'artist'
+      case 2:
+        return 'album'
+      case 3:
+        return 'duration'
+      case 4:
+        return 'play-count'
+      case 5:
+        return 'date-added'
+      case 6:
+        return 'name'
+      default:
+        return 'default'
+    }
+  }
+
   private toMusicLibrarySortValue(criterion: MusicLibrarySortCriterion) {
     switch (criterion) {
       case 'artist':
@@ -1986,6 +3262,47 @@ export class SmplayerDataStore {
 
   private toPlaylistSortValue(criterion: PlaylistSortCriterion) {
     return this.toMusicLibrarySortValue(criterion)
+  }
+
+  private toAlbumSortValue(criterion: AlbumSortCriterion) {
+    switch (criterion) {
+      case 'artist':
+        return 1
+      case 'name':
+        return 6
+      default:
+        return -1
+    }
+  }
+
+  private toSearchSortValue(criterion: SearchSortCriterion) {
+    switch (criterion) {
+      case 'title':
+        return 0
+      case 'artist':
+        return 1
+      case 'album':
+        return 2
+      case 'duration':
+        return 3
+      case 'play-count':
+        return 4
+      case 'date-added':
+        return 5
+      case 'name':
+        return 6
+      default:
+        return -1
+    }
+  }
+
+  private toLocalFolderSortValue(criterion: LocalFolderSortCriterion) {
+    return {
+      title: 0,
+      artist: 1,
+      album: 2,
+      reverse: 7,
+    }[criterion]
   }
 
   private toModeValue(mode: PlaybackMode) {
@@ -2035,6 +3352,8 @@ export class SmplayerDataStore {
     currentPath: string,
     folders: string[],
     audioFiles: string[],
+    hiddenFolderPaths: string[],
+    hiddenFilePaths: Set<string>,
   ): Promise<void> {
     folders.push(currentPath)
 
@@ -2048,7 +3367,15 @@ export class SmplayerDataStore {
       const fullPath = join(currentPath, entry.name)
 
       if (entry.isDirectory()) {
-        await this.walkLibrary(fullPath, folders, audioFiles)
+        const isHiddenFolder = hiddenFolderPaths.some((hiddenFolderPath) =>
+          fullPath === hiddenFolderPath ||
+          fullPath.startsWith(`${hiddenFolderPath}\\`) ||
+          fullPath.startsWith(`${hiddenFolderPath}/`),
+        )
+
+        if (!isHiddenFolder) {
+          await this.walkLibrary(fullPath, folders, audioFiles, hiddenFolderPaths, hiddenFilePaths)
+        }
         continue
       }
 
@@ -2056,7 +3383,7 @@ export class SmplayerDataStore {
         continue
       }
 
-      if (AUDIO_EXTENSIONS.has(extname(entry.name).toLowerCase())) {
+      if (AUDIO_EXTENSIONS.has(extname(entry.name).toLowerCase()) && !hiddenFilePaths.has(fullPath)) {
         audioFiles.push(fullPath)
       }
     }
@@ -2181,10 +3508,82 @@ export class SmplayerDataStore {
     }
 
     try {
-      await this.writeEmbeddedLyrics(songPath, lyrics.rawText)
+      await this.writeLyricsToSongPath(songPath, lyrics.rawText)
     } catch {
       // Ignore tag write failures so playback and lyric loading stay non-blocking.
     }
+  }
+
+  private async writeLyricsToSongPath(songPath: string, rawLyrics: string) {
+    if (extname(songPath).toLocaleLowerCase() === '.mp3') {
+      await this.writeEmbeddedLyrics(songPath, rawLyrics)
+      return
+    }
+
+    const basePath = songPath.slice(0, songPath.length - extname(songPath).length)
+    await writeFile(`${basePath}.lrc`, rawLyrics, 'utf8')
+  }
+
+  private async writeSongTagProperties(
+    songPath: string,
+    properties: {
+      title: string
+      subtitle: string
+      artist: string
+      album: string
+      albumArtist: string
+      publisher: string
+      trackNumber: number
+      year: number
+      genre: string
+      composers: string
+    },
+  ) {
+    if (extname(songPath).toLocaleLowerCase() !== '.mp3') {
+      return
+    }
+
+    const fileBuffer = await readFile(songPath)
+    const existingTag = this.readId3Tag(fileBuffer)
+    const audioBuffer = fileBuffer.subarray(existingTag.endOffset)
+    const tagVersion = existingTag.version === 4 ? 4 : 3
+    const replacedFrameIds = new Set([
+      'TIT2',
+      'TIT3',
+      'TPE1',
+      'TALB',
+      'TPE2',
+      'TRCK',
+      'TDRC',
+      'TYER',
+      'TCON',
+      'TCOM',
+      'TPUB',
+    ])
+    const textFrames = [
+      this.createTextId3Frame(tagVersion, 'TIT2', properties.title),
+      this.createTextId3Frame(tagVersion, 'TIT3', properties.subtitle),
+      this.createTextId3Frame(tagVersion, 'TPE1', properties.artist),
+      this.createTextId3Frame(tagVersion, 'TALB', properties.album),
+      this.createTextId3Frame(tagVersion, 'TPE2', properties.albumArtist),
+      this.createTextId3Frame(tagVersion, 'TRCK', properties.trackNumber ? String(properties.trackNumber) : ''),
+      this.createTextId3Frame(tagVersion, tagVersion === 4 ? 'TDRC' : 'TYER', properties.year ? String(properties.year) : ''),
+      this.createTextId3Frame(tagVersion, 'TCON', properties.genre),
+      this.createTextId3Frame(tagVersion, 'TCOM', properties.composers),
+      this.createTextId3Frame(tagVersion, 'TPUB', properties.publisher),
+    ].filter((frame) => frame.length > 10)
+    const preservedFrames = existingTag.frames.filter((frame) => !replacedFrameIds.has(frame.id))
+    const tagBody = Buffer.concat([...preservedFrames.map((frame) => frame.raw), ...textFrames])
+    const padding = Buffer.alloc(2048)
+    const header = Buffer.alloc(10)
+
+    header.write('ID3', 0, 'ascii')
+    header[3] = tagVersion
+    header[4] = 0
+    header[5] = 0
+    this.writeSynchsafeSize(header, 6, tagBody.length + padding.length)
+
+    await writeFile(songPath, Buffer.concat([header, tagBody, padding, audioBuffer]))
   }
 
   private async writeEmbeddedLyrics(songPath: string, rawLyrics: string) {
@@ -2199,13 +3598,53 @@ export class SmplayerDataStore {
     const preservedFrames = existingTag.frames.filter(
       (frame) => frame.id !== 'USLT' && frame.id !== 'SYLT',
     )
-    const lyricsFrame = this.createId3Frame(tagVersion, 'USLT', Buffer.concat([
-      Buffer.from([3]),
-      Buffer.from('eng', 'ascii'),
-      Buffer.from([0]),
-      Buffer.from(rawLyrics, 'utf8'),
-    ]))
-    const tagBody = Buffer.concat([...preservedFrames.map((frame) => frame.raw), lyricsFrame])
+    const lyricsFrames = rawLyrics.trim()
+      ? [
+          this.createId3Frame(tagVersion, 'USLT', Buffer.concat([
+            Buffer.from([3]),
+            Buffer.from('eng', 'ascii'),
+            Buffer.from([0]),
+            Buffer.from(rawLyrics, 'utf8'),
+          ])),
+        ]
+      : []
+    const tagBody = Buffer.concat([...preservedFrames.map((frame) => frame.raw), ...lyricsFrames])
+    const padding = Buffer.alloc(2048)
+    const header = Buffer.alloc(10)
+
+    header.write('ID3', 0, 'ascii')
+    header[3] = tagVersion
+    header[4] = 0
+    header[5] = 0
+    this.writeSynchsafeSize(header, 6, tagBody.length + padding.length)
+
+    await writeFile(songPath, Buffer.concat([header, tagBody, padding, audioBuffer]))
+  }
+
+  private async writeSongArtwork(
+    songPath: string,
+    picture: { data: Buffer; format: string } | null,
+  ) {
+    if (extname(songPath).toLocaleLowerCase() !== '.mp3') {
+      return
+    }
+
+    const fileBuffer = await readFile(songPath)
+    const existingTag = this.readId3Tag(fileBuffer)
+    const audioBuffer = fileBuffer.subarray(existingTag.endOffset)
+    const tagVersion = existingTag.version === 4 ? 4 : 3
+    const preservedFrames = existingTag.frames.filter((frame) => frame.id !== 'APIC')
+    const artworkFrames = picture
+      ? [
+          this.createId3Frame(tagVersion, 'APIC', Buffer.concat([
+            Buffer.from([3]),
+            Buffer.from(picture.format, 'ascii'),
+            Buffer.from([0, 3, 0]),
+            picture.data,
+          ])),
+        ]
+      : []
+    const tagBody = Buffer.concat([...preservedFrames.map((frame) => frame.raw), ...artworkFrames])
     const padding = Buffer.alloc(2048)
     const header = Buffer.alloc(10)
 
@@ -2277,6 +3716,15 @@ export class SmplayerDataStore {
     return frame
   }
 
+  private createTextId3Frame(version: number, id: string, text: string) {
+    const value = text.trim()
+    if (!value) {
+      return Buffer.alloc(0)
+    }
+
+    return this.createId3Frame(version, id, Buffer.concat([Buffer.from([3]), Buffer.from(value, 'utf8')]))
+  }
+
   private readSynchsafeSize(buffer: Buffer, offset: number) {
     return (
       (buffer[offset] << 21) |
@@ -2291,10 +3739,6 @@ export class SmplayerDataStore {
     buffer[offset + 1] = (size >> 14) & 0x7f
     buffer[offset + 2] = (size >> 7) & 0x7f
     buffer[offset + 3] = size & 0x7f
-  }
-
-  private getLyricsPreviewLine(lyrics: LyricsSnapshot) {
-    return lyrics.lines.find((line) => line.text.trim())?.text.trim() ?? ''
   }
 
   private cleanupScanSideEffects(settings: SettingsRow) {
@@ -2393,6 +3837,19 @@ export class SmplayerDataStore {
     }
 
     return 'jpg'
+  }
+
+  private getArtworkFormat(filePath: string) {
+    switch (extname(filePath).toLocaleLowerCase()) {
+      case '.png':
+        return 'image/png'
+      case '.webp':
+        return 'image/webp'
+      case '.bmp':
+        return 'image/bmp'
+      default:
+        return 'image/jpeg'
+    }
   }
 
   private async readTextIfExists(filePath: string) {
@@ -2568,6 +4025,12 @@ export class SmplayerDataStore {
     } catch {
       return ''
     }
+  }
+
+  private prepareInternetLyrics(rawLyrics: string, settings: SettingsRow) {
+    return settings.PreserveInternetLyricsTimestamps
+      ? rawLyrics
+      : stripLyricsTimestamps(rawLyrics)
   }
 
   private async getSongMid(song: SongPathRow) {

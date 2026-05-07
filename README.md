@@ -2,6 +2,8 @@
 
 Cross-platform Electron rebuild of the original UWP `SMPlayer` project.
 
+Original project for parity checks: `C:\Users\luoki\source\repos\SMPlayer\SMPlayer`
+
 ## Stack
 
 - Electron

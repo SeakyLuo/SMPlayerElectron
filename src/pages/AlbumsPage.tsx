@@ -4,15 +4,13 @@ import { useNavigate } from 'react-router-dom'
 import { AlbumArtControl } from '../components/AlbumArtControl'
 import { Icon } from '../components/icons'
 import { MenuFlyout } from '../components/MenuFlyout'
-import { getAddToPlaylistMenuFlyoutItem, type MenuFlyoutItem, type MenuFlyoutPosition } from '../components/MenuFlyoutHelper'
+import { getAddToPlaylistMenuFlyoutItem, getPreferenceMenuFlyoutItem, type MenuFlyoutItem, type MenuFlyoutPosition } from '../components/MenuFlyoutHelper'
 import { MultiSelectCommandBar } from '../components/MultiSelectCommandBar'
 import { getSongArtists } from '../shared/artists'
-import type { LibraryPlaylist, LibrarySong } from '../shared/contracts'
+import type { AlbumSortCriterion, AppSettingsUpdate, LibraryPlaylist, LibrarySong, PreferenceItemSnapshot } from '../shared/contracts'
 import { formatDuration } from '../shared/formatters'
 import type { Translator } from '../shared/i18n'
 import { useLibraryStore } from '../state/useLibraryStore'
-
-type AlbumSortCriterion = 'default' | 'name' | 'artist' | 'reverse'
 
 const ALBUM_TILE_WIDTH = 160
 const ALBUM_COLUMN_GAP = 18
@@ -23,6 +21,7 @@ const ALBUM_OVERSCAN_ROWS = 2
 interface AlbumView {
   name: string
   artist: string
+  artists: string[]
   songs: LibrarySong[]
   artworkUrl: string
   duration: number
@@ -32,28 +31,40 @@ interface AlbumsPageProps {
   songs: LibrarySong[]
   playlists: LibraryPlaylist[]
   t: Translator
+  loading: boolean
+  scanning: boolean
   onPlayTrack: (trackId: number, queueSongIds: number[]) => void
   onAddSongsToPlaylist: (playlistId: number, songIds: number[]) => void
+  onAddSongsToNowPlaying: (songIds: number[]) => void
   onCreatePlaylistWithSongs: (name: string, songIds: number[]) => void
+  onUpdateSettings: (update: AppSettingsUpdate) => void
 }
 
 export function AlbumsPage({
   songs,
   playlists,
   t,
+  loading,
+  scanning,
   onPlayTrack,
   onAddSongsToPlaylist,
+  onAddSongsToNowPlaying,
   onCreatePlaylistWithSongs,
+  onUpdateSettings,
 }: AlbumsPageProps) {
   const navigate = useNavigate()
   const [searchQuery, setSearchQuery] = useState('')
-  const [sortCriterion, setSortCriterion] = useState<AlbumSortCriterion>('default')
+  const [searchFocused, setSearchFocused] = useState(false)
+  const albumsSort = useLibraryStore((state) => state.snapshot.settings.albumsSort)
+  const [sortCriterion, setSortCriterion] = useState<AlbumSortCriterion>(albumsSort)
   const [sortMenuOpen, setSortMenuOpen] = useState(false)
+  const [processing, setProcessing] = useState(false)
   const [multiSelect, setMultiSelect] = useState(false)
   const [selectedAlbumNames, setSelectedAlbumNames] = useState<Set<string>>(new Set())
   const [albumContextMenu, setAlbumContextMenu] = useState<(MenuFlyoutPosition & { album: AlbumView }) | null>(null)
   const [addToMenu, setAddToMenu] = useState<(MenuFlyoutPosition & { songIds: number[]; defaultPlaylistName: string }) | null>(null)
   const [albumArtPreview, setAlbumArtPreview] = useState<AlbumView | null>(null)
+  const [albumPreferenceItems, setAlbumPreferenceItems] = useState<Map<string, PreferenceItemSnapshot>>(new Map())
   const albumGridRef = useRef<HTMLDivElement | null>(null)
   const [albumScrollTop, setAlbumScrollTop] = useState(0)
   const [albumViewportHeight, setAlbumViewportHeight] = useState(640)
@@ -63,16 +74,33 @@ export function AlbumsPage({
   )
 
   const albums = useMemo(() => buildAlbumViews(songs, t), [songs, t])
-  const visibleAlbums = useMemo(
-    () => sortAlbums(searchAlbums(albums, searchQuery), sortCriterion),
-    [albums, searchQuery, sortCriterion],
-  )
+  const [manualAlbumOrder, setManualAlbumOrder] = useState<string[] | null>(null)
+  const baseVisibleAlbums = useMemo(() => {
+    if (searchQuery.trim()) {
+      return searchAlbums(albums, searchQuery)
+    }
+
+    return sortAlbums(albums, sortCriterion === 'reverse' ? albumsSort : sortCriterion)
+  }, [albums, albumsSort, searchQuery, sortCriterion])
+  const visibleAlbums = useMemo(() => {
+    if (!manualAlbumOrder) {
+      return baseVisibleAlbums
+    }
+
+    const albumMap = new Map(baseVisibleAlbums.map((album) => [album.name, album]))
+    return manualAlbumOrder.map((albumName) => albumMap.get(albumName)).filter((album) => album != null)
+  }, [baseVisibleAlbums, manualAlbumOrder])
+  const albumSearchSuggestions = searchQuery.trim()
+    ? searchAlbums(albums, searchQuery).slice(0, 8)
+    : []
+  const showAlbumSearchSuggestions = searchFocused && albumSearchSuggestions.length > 0
   const selectedAlbums = useMemo(
     () => visibleAlbums.filter((album) => selectedAlbumNames.has(album.name)),
     [selectedAlbumNames, visibleAlbums],
   )
   const selectedSongIds = selectedAlbums.flatMap((album) => album.songs.map((song) => song.id))
   const customPlaylists = playlists.filter((playlist) => !playlist.isBuiltIn)
+  const favoritePlaylist = playlists.find((playlist) => playlist.isBuiltIn && playlist.name === t('common.myFavorites'))!
   const albumColumns = Math.max(1, Math.floor((albumGridWidth + ALBUM_COLUMN_GAP) / (ALBUM_TILE_WIDTH + ALBUM_COLUMN_GAP)))
   const albumRowCount = Math.ceil(visibleAlbums.length / albumColumns)
   const albumListHeight = albumRowCount * ALBUM_ROW_HEIGHT
@@ -100,6 +128,13 @@ export function AlbumsPage({
       setMultiSelect(false)
       clearSelection()
     }
+  }
+
+  const showProcessing = () => {
+    setProcessing(true)
+    window.setTimeout(() => {
+      setProcessing(false)
+    }, 180)
   }
 
   const toggleAlbumSelection = (albumName: string) => {
@@ -131,6 +166,11 @@ export function AlbumsPage({
     })
   }
 
+  const refreshAlbumPreferenceItems = async () => {
+    const settings = await window.smplayer!.getPreferenceSettings()
+    setAlbumPreferenceItems(new Map(settings.albums.map((item) => [item.itemId, item])))
+  }
+
   useEffect(() => {
     const albumGrid = albumGridRef.current
     if (!albumGrid) {
@@ -147,6 +187,18 @@ export function AlbumsPage({
     return () => {
       resizeObserver.disconnect()
     }
+  }, [])
+
+  useEffect(() => {
+    setSortCriterion(albumsSort)
+  }, [albumsSort])
+
+  useEffect(() => {
+    setManualAlbumOrder(null)
+  }, [searchQuery])
+
+  useEffect(() => {
+    void refreshAlbumPreferenceItems()
   }, [])
 
   useEffect(() => {
@@ -175,16 +227,63 @@ export function AlbumsPage({
   return (
     <section className="albums-page page-panel">
       <header className="albums-toolbar">
-        <div className="albums-search">
-          <Icon name="search" />
-          <input
-            value={searchQuery}
-            onChange={(event) => {
-              setSearchQuery(event.currentTarget.value)
-              scrollAlbumsToTop()
-            }}
-            placeholder={t('albums.searchPlaceholder')}
-          />
+        <div className="page-search-shell albums-search-shell">
+          <div className={`page-search-form${searchQuery ? ' has-query' : ''}`}>
+            <Icon name="search" />
+            <input
+              type="search"
+              value={searchQuery}
+              onFocus={() => {
+                setSearchFocused(true)
+              }}
+              onBlur={() => {
+                setSearchFocused(false)
+              }}
+              onChange={(event) => {
+                showProcessing()
+                setSearchQuery(event.currentTarget.value)
+                scrollAlbumsToTop()
+              }}
+              placeholder={t('albums.searchAlbumPlaceholder')}
+            />
+            {searchQuery ? (
+              <button
+                className="page-search-clear-button"
+                type="button"
+                aria-label={t('common.clear')}
+                onMouseDown={(event) => {
+                  event.preventDefault()
+                }}
+                onClick={() => {
+                  setSearchQuery('')
+                  scrollAlbumsToTop()
+                }}
+              >
+                <Icon name="close" />
+              </button>
+            ) : null}
+          </div>
+          {showAlbumSearchSuggestions ? (
+            <div className="page-search-suggestions">
+              {albumSearchSuggestions.map((album) => (
+                <button
+                  className="page-search-suggestion"
+                  type="button"
+                  key={album.name}
+                  onMouseDown={(event) => {
+                    event.preventDefault()
+                  }}
+                  onClick={() => {
+                    setSearchFocused(false)
+                    navigate(`/albums/${encodeURIComponent(album.name)}`)
+                  }}
+                >
+                  <span>{album.name}</span>
+                  <small>{album.artist || t('common.artistUnknown')}</small>
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
         <div className="albums-command-row">
           <button
@@ -195,7 +294,7 @@ export function AlbumsPage({
             }}
           >
             <Icon name="menu" />
-            {t('albums.multiSelect')}
+            {t('common.multiSelect')}
           </button>
           <AlbumSortMenu
             value={sortCriterion}
@@ -203,12 +302,24 @@ export function AlbumsPage({
             t={t}
             onOpenChange={setSortMenuOpen}
             onChange={(criterion) => {
+              showProcessing()
+              if (criterion === 'reverse') {
+                setSortCriterion('reverse')
+                setManualAlbumOrder(visibleAlbums.map((album) => album.name).reverse())
+                scrollAlbumsToTop()
+                return
+              }
+
               setSortCriterion(criterion)
+              setManualAlbumOrder(null)
+              onUpdateSettings({ albumsSort: criterion })
               scrollAlbumsToTop()
             }}
           />
         </div>
       </header>
+
+      {loading || scanning || processing ? <div className="albums-progress" aria-label={t('nowPlaying.loading')} /> : null}
 
       {visibleAlbums.length === 0 ? (
         <div className="empty-state compact">
@@ -296,15 +407,23 @@ export function AlbumsPage({
             playlists: customPlaylists,
             t,
             onPlay: () => {
-              onPlayTrack(albumContextMenu.album.songs[0].id, albumContextMenu.album.songs.map((song) => song.id))
+              const shuffledSongIds = shuffleSongIds(albumContextMenu.album.songs.map((song) => song.id))
+              onPlayTrack(shuffledSongIds[0]!, shuffledSongIds)
+            },
+            onAddToNowPlaying: () => {
+              onAddSongsToNowPlaying(albumContextMenu.album.songs.map((song) => song.id))
+            },
+            onAddToFavorites: () => {
+              onAddSongsToPlaylist(favoritePlaylist.id, albumContextMenu.album.songs.map((song) => song.id))
+            },
+            onCreatePlaylist: (name) => {
+              onCreatePlaylistWithSongs(name, albumContextMenu.album.songs.map((song) => song.id))
             },
             onAddToPlaylist: (playlistId) => {
               onAddSongsToPlaylist(playlistId, albumContextMenu.album.songs.map((song) => song.id))
             },
-            onSelect: () => {
-              setMultiSelect(true)
-              setSelectedAlbumNames(new Set([albumContextMenu.album.name]))
-            },
+            preferenceItem: albumPreferenceItems.get(albumContextMenu.album.name) ?? null,
+            onPreferenceChanged: refreshAlbumPreferenceItems,
             onSeeAlbumArt: () => {
               setAlbumArtPreview(albumContextMenu.album)
             },
@@ -323,6 +442,14 @@ export function AlbumsPage({
             songIds: addToMenu.songIds,
             defaultPlaylistName: addToMenu.defaultPlaylistName,
             t,
+            onAddToNowPlaying: () => {
+              onAddSongsToNowPlaying(addToMenu.songIds)
+              hideSelectionAfterOperation()
+            },
+            onAddToFavorites: () => {
+              onAddSongsToPlaylist(favoritePlaylist.id, addToMenu.songIds)
+              hideSelectionAfterOperation()
+            },
             onCreatePlaylist: (name) => {
               onCreatePlaylistWithSongs(name, addToMenu.songIds)
               hideSelectionAfterOperation()
@@ -362,7 +489,7 @@ export function AlbumsPage({
             >
               <Icon name="close" />
             </button>
-            <AlbumArtControl title={albumArtPreview.name} artworkUrl={albumArtPreview.artworkUrl} />
+            <AlbumArtControl title={albumArtPreview.name} artworkUrl={albumArtPreview.artworkUrl} songId={albumArtPreview.songs[0]!.id} />
             <strong title={albumArtPreview.name}>{albumArtPreview.name}</strong>
           </section>
         </div>
@@ -376,6 +503,8 @@ function getAddToPlaylistsMenuItems({
   songIds,
   defaultPlaylistName,
   t,
+  onAddToNowPlaying,
+  onAddToFavorites,
   onCreatePlaylist,
   onAddToPlaylist,
 }: {
@@ -383,10 +512,25 @@ function getAddToPlaylistsMenuItems({
   songIds: number[]
   defaultPlaylistName: string
   t: Translator
+  onAddToNowPlaying: () => void
+  onAddToFavorites: () => void
   onCreatePlaylist: (name: string) => void
   onAddToPlaylist: (playlistId: number) => void
 }) {
   const items: MenuFlyoutItem[] = [
+    {
+      key: 'now-playing',
+      text: t('common.nowPlaying'),
+      icon: 'next',
+      onClick: onAddToNowPlaying,
+    },
+    {
+      key: 'favorites',
+      text: t('common.myFavorites'),
+      icon: 'heart',
+      onClick: onAddToFavorites,
+    },
+    { key: 'built-in-separator', text: '', separator: true },
     {
       key: 'new-playlist',
       text: t('playlists.newName'),
@@ -513,7 +657,7 @@ function AlbumTile({
   const summary = t('albums.albumSummary', { songs: album.songs.length, duration: formatDuration(album.duration) })
   const content = (
     <>
-      <AlbumArtControl title={album.name} artworkUrl={album.artworkUrl} />
+      <AlbumArtControl title={album.name} artworkUrl={album.artworkUrl} songId={album.songs[0]!.id} />
       <div className="album-tile-copy">
         <strong title={album.name}>{album.name}</strong>
         <span title={album.artist}>{album.artist}</span>
@@ -573,32 +717,53 @@ function getAlbumContextMenuItems({
   playlists,
   t,
   onPlay,
+  onAddToNowPlaying,
+  onAddToFavorites,
+  onCreatePlaylist,
   onAddToPlaylist,
-  onSelect,
+  preferenceItem,
+  onPreferenceChanged,
   onSeeAlbumArt,
 }: {
   album: AlbumView
   playlists: LibraryPlaylist[]
   t: Translator
   onPlay: () => void
+  onAddToNowPlaying: () => void
+  onAddToFavorites: () => void
+  onCreatePlaylist: (name: string) => void
   onAddToPlaylist: (playlistId: number) => void
-  onSelect: () => void
+  preferenceItem: PreferenceItemSnapshot | null
+  onPreferenceChanged: () => void | Promise<void>
   onSeeAlbumArt: () => void
 }) {
   const songIds = album.songs.map((song) => song.id)
   const items: MenuFlyoutItem[] = [
-    { key: 'play', text: t('context.play'), icon: 'play', onClick: onPlay },
+    { key: 'shuffle', text: t('nowPlaying.randomPlay'), icon: 'shuffle', onClick: onPlay },
   ]
   const addToItem = getAddToPlaylistMenuFlyoutItem({
     playlists,
     songIds,
     t,
+    defaultPlaylistName: album.name,
+    includeNowPlaying: true,
+    includeFavorites: true,
+    onAddToNowPlaying,
+    onToggleFavorite: onAddToFavorites,
+    onCreatePlaylist,
     onAddToPlaylist,
   })
   if (addToItem) {
     items.push(addToItem)
   }
-  items.push({ key: 'select', text: t('context.select'), icon: 'menu', onClick: onSelect })
+  items.push(getPreferenceMenuFlyoutItem({
+    type: 'album',
+    itemId: album.name,
+    name: album.name,
+    preferenceItem,
+    t,
+    onUpdated: onPreferenceChanged,
+  }))
   items.push({
     key: 'see-album-art',
     text: t('context.seeAlbumArt'),
@@ -606,6 +771,19 @@ function getAlbumContextMenuItems({
     onClick: onSeeAlbumArt,
   })
   return items
+}
+
+function shuffleSongIds(songIds: number[]) {
+  const shuffledSongIds = songIds.slice()
+
+  for (let index = shuffledSongIds.length - 1; index > 0; index -= 1) {
+    const randomIndex = Math.floor(Math.random() * (index + 1))
+    const current = shuffledSongIds[index]
+    shuffledSongIds[index] = shuffledSongIds[randomIndex]
+    shuffledSongIds[randomIndex] = current
+  }
+
+  return shuffledSongIds
 }
 
 function buildAlbumViews(songs: LibrarySong[], t: Translator): AlbumView[] {
@@ -618,14 +796,15 @@ function buildAlbumViews(songs: LibrarySong[], t: Translator): AlbumView[] {
 
   return [...groups.entries()].map(([name, albumSongs]) => ({
     name,
-    artist: getAlbumArtist(albumSongs, t),
+    artists: getAlbumArtists(albumSongs),
+    artist: getAlbumArtistLabel(albumSongs, t),
     songs: albumSongs.slice().sort((left, right) => left.title.localeCompare(right.title)),
     artworkUrl: albumSongs.find((song) => song.artworkUrl)?.artworkUrl ?? '',
     duration: albumSongs.reduce((total, song) => total + song.duration, 0),
   }))
 }
 
-function getAlbumArtist(songs: LibrarySong[], t: Translator) {
+function getAlbumArtists(songs: LibrarySong[]) {
   const artistCounts = new Map<string, number>()
 
   for (const song of songs) {
@@ -634,7 +813,7 @@ function getAlbumArtist(songs: LibrarySong[], t: Translator) {
     }
   }
 
-  const artists = [...artistCounts.entries()]
+  return [...artistCounts.entries()]
     .sort((left, right) => {
       if (right[1] !== left[1]) {
         return right[1] - left[1]
@@ -643,6 +822,10 @@ function getAlbumArtist(songs: LibrarySong[], t: Translator) {
       return left[0].localeCompare(right[0])
     })
     .map(([artist]) => artist)
+}
+
+function getAlbumArtistLabel(songs: LibrarySong[], t: Translator) {
+  const artists = getAlbumArtists(songs)
 
   if (artists.length >= 3) {
     return t('albums.artistsAndMore', { first: artists[0], second: artists[1], count: artists.length })
@@ -652,15 +835,86 @@ function getAlbumArtist(songs: LibrarySong[], t: Translator) {
 }
 
 function searchAlbums(albums: AlbumView[], query: string) {
-  const normalizedQuery = query.trim().toLocaleLowerCase()
+  const normalizedQuery = query.trim()
 
   if (!normalizedQuery) {
     return albums
   }
 
-  return albums.filter((album) =>
-    `${album.name} ${album.artist}`.toLocaleLowerCase().includes(normalizedQuery),
+  return albums
+    .map((album) => ({ album, score: getAlbumSearchScore(album, normalizedQuery) }))
+    .filter((result) => result.score > 0)
+    .sort((left, right) => right.score - left.score)
+    .map((result) => result.album)
+}
+
+function getAlbumSearchScore(album: AlbumView, keyword: string) {
+  const artistScore = Math.max(...album.artists.map((artist) => Math.max(evaluateString(artist, keyword) - 10, 0)), 0)
+  return Math.max(evaluateString(album.name, keyword), artistScore)
+}
+
+function evaluateString(value: string, keyword: string, offset = 0) {
+  if (!value) {
+    return 0
+  }
+
+  if (value === keyword) {
+    return 100 + offset
+  }
+
+  const normalizedValue = value.toLocaleLowerCase()
+  const normalizedKeyword = keyword.toLocaleLowerCase()
+
+  if (normalizedValue === normalizedKeyword) {
+    return 95 + offset
+  }
+
+  if (value.startsWith(keyword)) {
+    return 90 + offset
+  }
+
+  if (normalizedValue.startsWith(normalizedKeyword)) {
+    return 85 + offset
+  }
+
+  if (value.includes(keyword)) {
+    return 80 + offset
+  }
+
+  if (normalizedValue.includes(normalizedKeyword)) {
+    return 75 + offset
+  }
+
+  if (normalizedKeyword.includes(normalizedValue)) {
+    return 70 + offset
+  }
+
+  const editDistance = getEditDistance(value, keyword)
+  const ratio = Math.floor((editDistance * 100) / Math.max(value.length, keyword.length))
+  return ratio <= 60 ? 70 - ratio + offset : 0
+}
+
+function getEditDistance(target: string, given: string) {
+  const rows = target.length
+  const columns = given.length
+  if (rows * columns === 0) {
+    return rows + columns
+  }
+
+  const dp = Array.from({ length: rows + 1 }, (_, rowIndex) =>
+    Array.from({ length: columns + 1 }, (_, columnIndex) => rowIndex === 0 ? columnIndex : columnIndex === 0 ? rowIndex : 0),
   )
+
+  for (let rowIndex = 1; rowIndex <= rows; rowIndex += 1) {
+    for (let columnIndex = 1; columnIndex <= columns; columnIndex += 1) {
+      const left = dp[rowIndex - 1][columnIndex] + 1
+      const down = dp[rowIndex][columnIndex - 1] + 1
+      const leftDown = dp[rowIndex - 1][columnIndex - 1] + (target[rowIndex - 1] === given[columnIndex - 1] ? 0 : 1)
+      dp[rowIndex][columnIndex] = Math.min(left, down, leftDown)
+    }
+  }
+
+  return dp[rows][columns]
 }
 
 function sortAlbums(albums: AlbumView[], criterion: AlbumSortCriterion) {

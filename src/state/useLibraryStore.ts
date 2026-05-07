@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-import type { AppSettingsUpdate, LibrarySnapshot, PlaylistSortCriterion, ViewStateUpdate } from '../shared/contracts'
+import type { AppSettingsUpdate, LibrarySnapshot, PlaylistSortCriterion, ScanLibraryResult, ViewStateUpdate } from '../shared/contracts'
 
 interface LibraryStoreState {
   snapshot: LibrarySnapshot
@@ -9,7 +9,8 @@ interface LibraryStoreState {
   error: string | null
   refresh: () => Promise<void>
   pickLibraryRoot: () => Promise<void>
-  scanLibrary: () => Promise<void>
+  scanLibrary: () => Promise<ScanLibraryResult | null>
+  scanLocalFolder: (folderPath: string) => Promise<ScanLibraryResult | null>
   setSongFavorite: (songId: number, favorite: boolean) => Promise<void>
   createPlaylist: (name: string, songIds?: number[]) => Promise<void>
   deletePlaylist: (playlistId: number) => Promise<void>
@@ -23,6 +24,11 @@ interface LibraryStoreState {
   replaceNowPlaying: (songIds: number[]) => Promise<void>
   removeSongFromNowPlaying: (songId: number) => Promise<void>
   deleteSongFromDisk: (songId: number) => Promise<void>
+  hideSong: (songId: number) => Promise<void>
+  moveSongToFolder: (songId: number, folderPath: string) => Promise<void>
+  renameLocalFolder: (folderPath: string, name: string) => Promise<void>
+  deleteLocalFolder: (folderPath: string) => Promise<void>
+  hideLocalFolder: (folderPath: string) => Promise<void>
   clearNowPlaying: () => Promise<void>
   saveSearchQuery: (query: string) => Promise<void>
   addRecentSearch: (query: string) => Promise<void>
@@ -40,16 +46,24 @@ const emptySnapshot: LibrarySnapshot = {
     rootPath: '',
     useFilenameNotMusicName: false,
     showCount: true,
-    themeColor: '#5b87b6',
+    themeColor: '#0078D7',
     notificationSend: 'music-changed',
     notificationDisplay: 'normal',
     showNotifications: true,
     autoLyrics: false,
     showLyricsInNotification: false,
     notificationLyricsSource: 'internet',
+    playerLyricsSource: 'auto',
     saveLyricsImmediately: false,
+    preserveInternetLyricsTimestamps: true,
     preferredLanguage: 'system',
     musicLibrarySort: 'title',
+    albumsSort: 'default',
+    searchArtistsCriterion: 'default',
+    searchAlbumsCriterion: 'default',
+    searchSongsCriterion: 'default',
+    searchPlaylistsCriterion: 'default',
+    searchFoldersCriterion: 'default',
     lastMusicIndex: -1,
     volume: 72,
     isMuted: false,
@@ -69,6 +83,7 @@ const emptySnapshot: LibrarySnapshot = {
     folders: 0,
   },
   songs: [],
+  folders: [],
   recentSongs: [],
   playlists: [],
   nowPlaying: {
@@ -130,16 +145,36 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
   },
   scanLibrary: async () => {
     if (!window.smplayer) {
-      return
+      return null
     }
 
     set({ scanning: true, error: null })
 
     try {
-      await window.smplayer.scanLibrary()
+      const result = await window.smplayer.scanLibrary()
       await get().refresh()
+      return result
     } catch (error) {
       set({ error: getErrorMessage(error) })
+      return null
+    } finally {
+      set({ scanning: false })
+    }
+  },
+  scanLocalFolder: async (folderPath) => {
+    if (!window.smplayer) {
+      return null
+    }
+
+    set({ scanning: true, error: null })
+
+    try {
+      const result = await window.smplayer.scanLocalFolder(folderPath)
+      await get().refresh()
+      return result
+    } catch (error) {
+      set({ error: getErrorMessage(error) })
+      return null
     } finally {
       set({ scanning: false })
     }
@@ -321,6 +356,76 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
 
     try {
       await window.smplayer.deleteSongFromDisk(songId)
+      await get().refresh()
+    } catch (error) {
+      set({ error: getErrorMessage(error) })
+    }
+  },
+  hideSong: async (songId) => {
+    if (!window.smplayer) {
+      return
+    }
+
+    set({ error: null })
+
+    try {
+      await window.smplayer.hideSong(songId)
+      await get().refresh()
+    } catch (error) {
+      set({ error: getErrorMessage(error) })
+    }
+  },
+  moveSongToFolder: async (songId, folderPath) => {
+    if (!window.smplayer) {
+      return
+    }
+
+    set({ error: null })
+
+    try {
+      await window.smplayer.moveSongToFolder(songId, folderPath)
+      await get().refresh()
+    } catch (error) {
+      set({ error: getErrorMessage(error) })
+    }
+  },
+  renameLocalFolder: async (folderPath, name) => {
+    if (!window.smplayer) {
+      return
+    }
+
+    set({ error: null })
+
+    try {
+      await window.smplayer.renameLocalFolder(folderPath, name)
+      await get().refresh()
+    } catch (error) {
+      set({ error: getErrorMessage(error) })
+    }
+  },
+  deleteLocalFolder: async (folderPath) => {
+    if (!window.smplayer) {
+      return
+    }
+
+    set({ error: null })
+
+    try {
+      await window.smplayer.deleteLocalFolder(folderPath)
+      await get().refresh()
+    } catch (error) {
+      set({ error: getErrorMessage(error) })
+    }
+  },
+  hideLocalFolder: async (folderPath) => {
+    if (!window.smplayer) {
+      return
+    }
+
+    set({ error: null })
+
+    try {
+      await window.smplayer.hideLocalFolder(folderPath)
       await get().refresh()
     } catch (error) {
       set({ error: getErrorMessage(error) })

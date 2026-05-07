@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import type { DragEventHandler, Ref } from 'react'
+import { useRef, useState, type CSSProperties, type DragEventHandler, type PointerEvent, type Ref } from 'react'
 
 import type { LibrarySong } from '../shared/contracts'
 import { formatDuration } from '../shared/formatters'
@@ -65,13 +65,83 @@ export function PlaylistControlItem({
   onAlbumClick,
   onToggleFavorite,
 }: PlaylistControlItemProps) {
+  const swipeStartRef = useRef<{ x: number; y: number; pointerId: number; enabled: boolean } | null>(null)
+  const swipeOffsetRef = useRef(0)
+  const suppressClickRef = useRef(false)
+  const [swipeOffset, setSwipeOffset] = useState(0)
+  const [isSwiping, setIsSwiping] = useState(false)
   const artistLabel = song.artists.join(', ') || song.artist
   const albumLabel = song.album || t('common.albumUnknown')
+  const canSwipeFavorite = !selectionMode && Boolean(onToggleFavorite)
+  const canSwipeRemove = !selectionMode && removable && Boolean(onRemoveFromListClick)
   const activate = () => {
     if (selectionMode) {
       onSelect?.(song.id)
     } else {
       onPlayTrack(song.id, queueSongIds)
+    }
+  }
+  const clampSwipeOffset = (offset: number) => {
+    const maxOffset = 92
+    if (offset > 0 && canSwipeFavorite) {
+      return Math.min(offset, maxOffset)
+    }
+    if (offset < 0 && canSwipeRemove) {
+      return Math.max(offset, -maxOffset)
+    }
+    return 0
+  }
+
+  const startSwipe = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) {
+      return
+    }
+
+    swipeStartRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+      pointerId: event.pointerId,
+      enabled: canSwipeFavorite || canSwipeRemove,
+    }
+  }
+
+  const moveSwipe = (event: PointerEvent<HTMLDivElement>) => {
+    const swipeStart = swipeStartRef.current
+    if (!swipeStart?.enabled) {
+      return
+    }
+
+    const deltaX = event.clientX - swipeStart.x
+    const deltaY = event.clientY - swipeStart.y
+    if (!isSwiping && Math.abs(deltaX) < 12) {
+      return
+    }
+    if (!isSwiping && Math.abs(deltaY) > Math.abs(deltaX)) {
+      return
+    }
+
+    event.preventDefault()
+    event.currentTarget.setPointerCapture(swipeStart.pointerId)
+    swipeOffsetRef.current = clampSwipeOffset(deltaX)
+    setIsSwiping(true)
+    setSwipeOffset(swipeOffsetRef.current)
+  }
+
+  const finishSwipe = () => {
+    const offset = swipeOffsetRef.current
+    swipeStartRef.current = null
+    swipeOffsetRef.current = 0
+    setIsSwiping(false)
+    setSwipeOffset(0)
+
+    if (Math.abs(offset) > 0) {
+      suppressClickRef.current = true
+    }
+    if (offset >= 64 && canSwipeFavorite) {
+      onToggleFavorite?.(song.id, !song.favorite)
+    }
+    if (offset <= -64 && canSwipeRemove) {
+      onRemoveFromListClick?.(song)
     }
   }
 
@@ -91,15 +161,37 @@ export function PlaylistControlItem({
         'is-playing': current && isPlaying,
         'is-selected': selected,
         'is-selecting': selectionMode,
+        'is-swiping': isSwiping,
         'has-artist': showArtist,
         'has-album': showAlbum,
         'has-favorite': showFavorite,
       })}
+      style={{ '--playlist-swipe-offset': `${swipeOffset}px` } as CSSProperties}
       draggable={draggable}
       role="button"
       tabIndex={0}
-      onClick={activate}
-      onDragStart={onDragStart}
+      onClick={(event) => {
+        if (suppressClickRef.current) {
+          event.preventDefault()
+          event.stopPropagation()
+          suppressClickRef.current = false
+          return
+        }
+
+        activate()
+      }}
+      onPointerDown={startSwipe}
+      onPointerMove={moveSwipe}
+      onPointerUp={finishSwipe}
+      onPointerCancel={finishSwipe}
+      onDragStart={(event) => {
+        if (isSwiping) {
+          event.preventDefault()
+          return
+        }
+
+        onDragStart?.(event)
+      }}
       onDragOver={onDragOver}
       onDrop={onDrop}
       onContextMenu={(event) => {
@@ -113,6 +205,18 @@ export function PlaylistControlItem({
         }
       }}
     >
+      {canSwipeFavorite ? (
+        <span className="playlist-control-swipe-action playlist-control-swipe-favorite" aria-hidden="true">
+          <Icon name={song.favorite ? 'heartFilled' : 'heart'} />
+          <span>{t('common.favorite')}</span>
+        </span>
+      ) : null}
+      {canSwipeRemove ? (
+        <span className="playlist-control-swipe-action playlist-control-swipe-remove" aria-hidden="true">
+          <Icon name="close" />
+          <span>{t('context.removeFromList')}</span>
+        </span>
+      ) : null}
       <span className="playlist-control-item-title">
         <span className="playlist-control-item-current-slot">
           {selectionMode ? (

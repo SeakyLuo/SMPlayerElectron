@@ -12,6 +12,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "test:voice": "node scripts/voice-assistant-parity.mjs",
     "pack": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder",
     "dist:win": "npm run build && electron-builder --win",

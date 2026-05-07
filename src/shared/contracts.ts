@@ -18,6 +18,17 @@ export type MusicLibrarySortCriterion =
   | 'date-added'
 
 export type PlaylistSortCriterion = MusicLibrarySortCriterion
+export type LocalFolderSortCriterion = 'title' | 'artist' | 'album' | 'reverse'
+export type AlbumSortCriterion = 'default' | 'name' | 'artist' | 'reverse'
+export type SearchSortCriterion =
+  | 'default'
+  | 'name'
+  | 'title'
+  | 'artist'
+  | 'album'
+  | 'play-count'
+  | 'duration'
+  | 'date-added'
 
 export interface LibrarySong {
   id: number
@@ -45,6 +56,19 @@ export interface LibraryPlaylist {
   songIds: number[]
   sortCriterion: PlaylistSortCriterion
   isBuiltIn: boolean
+}
+
+export interface LibraryFolder {
+  id: number
+  path: string
+  parentId: number
+  criterion: number
+}
+
+export interface HiddenStorageItem {
+  id: number
+  type: 'folder' | 'file'
+  path: string
 }
 
 export interface NowPlayingSnapshot {
@@ -97,6 +121,57 @@ export interface LyricsSaveResult {
   status: LyricsSaveStatus
 }
 
+export interface LyricsImportResult {
+  canceled: boolean
+  rawText: string
+}
+
+export interface SongArtworkPickResult {
+  canceled: boolean
+  sourcePath: string
+  artworkUrl: string
+  sourceName: string
+  error?: 'no-artwork' | 'error'
+}
+
+export interface SongPropertiesSnapshot {
+  songId: number
+  path: string
+  title: string
+  subtitle: string
+  artist: string
+  artists: string[]
+  album: string
+  albumArtist: string
+  publisher: string
+  trackNumber: number
+  year: number
+  genre: string
+  composers: string
+  duration: number
+  bitrate: number
+  fileSize: number
+  dateCreated: string
+  dateModified: string
+  fileType: string
+  playCount: number
+}
+
+export interface SongPropertiesUpdate {
+  title: string
+  subtitle?: string
+  artist: string
+  artists?: string[]
+  album: string
+  albumArtist?: string
+  publisher?: string
+  trackNumber?: number
+  year?: number
+  genre?: string
+  composers?: string
+  playCount?: number
+}
+
 export interface TrackNotificationPayload {
   songId: number
   title: string
@@ -122,9 +197,17 @@ export interface SettingsSnapshot {
   autoLyrics: boolean
   showLyricsInNotification: boolean
   notificationLyricsSource: LyricsRequestMode
+  playerLyricsSource: LyricsRequestMode
   saveLyricsImmediately: boolean
+  preserveInternetLyricsTimestamps: boolean
   preferredLanguage: PreferredLanguage
   musicLibrarySort: MusicLibrarySortCriterion
+  albumsSort: AlbumSortCriterion
+  searchArtistsCriterion: SearchSortCriterion
+  searchAlbumsCriterion: SearchSortCriterion
+  searchSongsCriterion: SearchSortCriterion
+  searchPlaylistsCriterion: SearchSortCriterion
+  searchFoldersCriterion: SearchSortCriterion
   lastMusicIndex: number
   volume: number
   isMuted: boolean
@@ -142,6 +225,7 @@ export interface LibrarySnapshot {
   settings: SettingsSnapshot
   counts: LibraryCounts
   songs: LibrarySong[]
+  folders: LibraryFolder[]
   recentSongs: RecentLibrarySong[]
   playlists: LibraryPlaylist[]
   nowPlaying: NowPlayingSnapshot
@@ -198,6 +282,9 @@ export interface ScanLibraryResult {
   songCount: number
   folderCount: number
   elapsedMs: number
+  filesAdded: string[]
+  filesRemoved: string[]
+  filesMoved: string[]
 }
 
 export interface DataTransferResult {
@@ -223,9 +310,17 @@ export interface AppSettingsUpdate {
   autoLyrics?: boolean
   showLyricsInNotification?: boolean
   notificationLyricsSource?: LyricsRequestMode
+  playerLyricsSource?: LyricsRequestMode
   saveLyricsImmediately?: boolean
+  preserveInternetLyricsTimestamps?: boolean
   preferredLanguage?: PreferredLanguage
   musicLibrarySort?: MusicLibrarySortCriterion
+  albumsSort?: AlbumSortCriterion
+  searchArtistsCriterion?: SearchSortCriterion
+  searchAlbumsCriterion?: SearchSortCriterion
+  searchSongsCriterion?: SearchSortCriterion
+  searchPlaylistsCriterion?: SearchSortCriterion
+  searchFoldersCriterion?: SearchSortCriterion
   autoPlay?: boolean
   saveMusicProgress?: boolean
   hideMultiSelectCommandBarAfterOperation?: boolean
@@ -241,7 +336,13 @@ export interface SmplayerApi {
   getAppInfo: () => Promise<AppInfo>
   getLibrarySnapshot: () => Promise<LibrarySnapshot>
   getPreferenceSettings: () => Promise<PreferenceSettingsSnapshot>
+  getSongProperties: (songId: number) => Promise<SongPropertiesSnapshot>
+  updateSongProperties: (songId: number, update: SongPropertiesUpdate) => Promise<void>
+  updateSongPlayCount: (songId: number, playCount: number) => Promise<void>
   getLyrics: (songId: number, mode?: LyricsRequestMode) => Promise<LyricsSnapshot>
+  importLyrics: () => Promise<LyricsImportResult>
+  saveSongLyrics: (songId: number, rawLyrics: string) => Promise<void>
+  openLyricsSearchInBrowser: (songId: number) => Promise<void>
   saveInternetLyricsToFile: (songId: number) => Promise<LyricsSaveResult>
   revealItemInFolder: (path: string) => Promise<void>
   startWindowDrag: () => Promise<void>
@@ -251,13 +352,33 @@ export interface SmplayerApi {
   showTrackNotification: (track: TrackNotificationPayload) => Promise<void>
   getSongArtwork: (songId: number) => Promise<string>
   pickAlbumArtwork: (albumName: string) => Promise<void>
+  pickAlbumArtworkSource: () => Promise<SongArtworkPickResult>
+  saveAlbumArtwork: (albumName: string, sourcePath: string) => Promise<void>
+  deleteAlbumArtwork: (albumName: string) => Promise<void>
+  pickSongArtworkSource: () => Promise<SongArtworkPickResult>
+  saveSongArtwork: (songId: number, sourcePath: string) => Promise<void>
+  deleteSongArtwork: (songId: number) => Promise<void>
   deleteSongFromDisk: (songId: number) => Promise<void>
+  hideSong: (songId: number) => Promise<void>
+  moveSongToFolder: (songId: number, folderPath: string) => Promise<void>
+  moveSongsToFolder: (songIds: number[], folderPath: string) => Promise<void>
+  moveLocalFolderToFolder: (sourceFolderPath: string, targetFolderPath: string) => Promise<void>
+  deleteSongsFromDisk: (songIds: number[]) => Promise<void>
+  deleteLocalItems: (songIds: number[], folderPaths: string[]) => Promise<void>
+  updateLocalFolderSort: (folderPath: string, sortCriterion: LocalFolderSortCriterion) => Promise<void>
+  renameLocalFolder: (folderPath: string, name: string) => Promise<void>
+  deleteLocalFolder: (folderPath: string) => Promise<void>
+  hideLocalFolder: (path: string) => Promise<void>
+  getHiddenStorageItems: () => Promise<HiddenStorageItem[]>
+  resumeHiddenStorageItem: (item: HiddenStorageItem) => Promise<void>
   pickLibraryRoot: () => Promise<ChooseLibraryRootResult>
   scanLibrary: (rootPath?: string) => Promise<ScanLibraryResult>
+  scanLocalFolder: (folderPath: string) => Promise<ScanLibraryResult>
   exportData: () => Promise<DataTransferResult>
   importData: () => Promise<DataTransferResult>
   sendFeedbackEmail: () => Promise<void>
   openFeedbackInBrowser: () => Promise<void>
+  openVoiceAssistantPrivacySettings: () => Promise<void>
   setSongFavorite: (songId: number, favorite: boolean) => Promise<void>
   createPlaylist: (name: string, songIds?: number[]) => Promise<void>
   deletePlaylist: (playlistId: number) => Promise<void>

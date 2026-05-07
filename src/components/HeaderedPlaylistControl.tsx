@@ -1,23 +1,28 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent, type RefObject } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent, type RefObject } from 'react'
 
 import { getDisplayArtists } from '../shared/artists'
-import type { LibraryPlaylist, LibrarySong, MusicLibrarySortCriterion, PlaylistSortCriterion, PreferenceEntityType, PreferenceLevel } from '../shared/contracts'
+import { extractArtworkColorRgb, getDefaultArtworkColorRgb } from '../shared/artworkColor'
+import type { LibraryPlaylist, LibrarySong, MusicLibrarySortCriterion, PlaylistSortCriterion, PreferenceEntityType, PreferenceItemSnapshot, PreferenceLevel } from '../shared/contracts'
+import { formatDuration } from '../shared/formatters'
 import type { Translator } from '../shared/i18n'
 import { useLibraryStore } from '../state/useLibraryStore'
+import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
 import { ArtworkImage } from './ArtworkImage'
 import { Icon } from './icons'
 import { MenuFlyout } from './MenuFlyout'
-import { getAddToPlaylistMenuFlyoutItem, type MenuFlyoutPosition } from './MenuFlyoutHelper'
+import { getAddToPlaylistMenuFlyoutItem, getMusicMenuFlyoutItems, getPreferenceMenuFlyoutItem, type MenuFlyoutPosition } from './MenuFlyoutHelper'
 import { MultiSelectCommandBar } from './MultiSelectCommandBar'
 import { PlaylistControlItem } from './PlaylistControlItem'
+import { MusicDialog } from './MusicDialog'
 
 type HeaderedPlaylistType = 'album' | 'playlist' | 'favorites'
 
 interface HeaderedPlaylistControlProps {
   type: HeaderedPlaylistType
   title: string
-  subtitle: string
-  caption: string
+  subtitle?: string
+  caption?: string
+  headerSongs?: LibrarySong[]
   t: Translator
   songs: LibrarySong[]
   selectedTrackId: number | null
@@ -49,16 +54,16 @@ interface HeaderedPlaylistControlProps {
   onArtistClick?: (artist: string) => void
   onAlbumClick?: (album: string) => void
   onToggleFavorite?: (songId: number, favorite: boolean) => void
+  onMoveToMusicOrPlay?: (songId: number) => void
+  onPlayNext?: (songId: number) => void
 }
 
 const sortOptions: MusicLibrarySortCriterion[] = ['title', 'artist', 'album', 'duration', 'play-count', 'date-added']
-const preferenceLevels: PreferenceLevel[] = ['very-high', 'higher', 'high', 'normal', 'dislike', 'do-not-appear']
 
 export function HeaderedPlaylistControl({
   type,
   title,
-  subtitle,
-  caption,
+  headerSongs,
   t,
   songs,
   selectedTrackId,
@@ -90,6 +95,8 @@ export function HeaderedPlaylistControl({
   onArtistClick,
   onAlbumClick,
   onToggleFavorite,
+  onMoveToMusicOrPlay,
+  onPlayNext,
 }: HeaderedPlaylistControlProps) {
   const controlRef = useRef<HTMLElement | null>(null)
   const onScrollbarPointerDown = useHeaderedPlaylistScroll(controlRef)
@@ -98,26 +105,98 @@ export function HeaderedPlaylistControl({
   const [addToMenu, setAddToMenu] = useState<(MenuFlyoutPosition & { songIds: number[] }) | null>(null)
   const [sortMenu, setSortMenu] = useState<MenuFlyoutPosition | null>(null)
   const [preferenceMenu, setPreferenceMenu] = useState<MenuFlyoutPosition | null>(null)
-  const [preferenceLevel, setPreferenceLevel] = useState<PreferenceLevel>('normal')
+  const [songMenu, setSongMenu] = useState<(MenuFlyoutPosition & { song: LibrarySong; songIndex: number }) | null>(null)
+  const [songDialog, setSongDialog] = useState<{ song: LibrarySong; mode: 'properties' | 'lyrics' | 'album-art' } | null>(null)
+  const [songPreferenceItem, setSongPreferenceItem] = useState<PreferenceItemSnapshot | null>(null)
+  const [headerPreferenceItem, setHeaderPreferenceItem] = useState<PreferenceItemSnapshot | null>(null)
   const [editingName, setEditingName] = useState(false)
   const [renameDraft, setRenameDraft] = useState(title)
   const [selectedSortCriterion, setSelectedSortCriterion] = useState<PlaylistSortCriterion | null>(null)
+  const [orderedSongIds, setOrderedSongIds] = useState<number[] | null>(null)
+  const [coverColorRgb, setCoverColorRgb] = useState(getDefaultArtworkColorRgb)
   const hideMultiSelectCommandBarAfterOperation = useLibraryStore(
     (state) => state.snapshot.settings.hideMultiSelectCommandBarAfterOperation,
   )
-  const queueSongIds = useMemo(() => songs.map((song) => song.id), [songs])
+  const refresh = useLibraryStore((state) => state.refresh)
+  const hideSong = useLibraryStore((state) => state.hideSong)
+  const deleteSongFromDisk = useLibraryStore((state) => state.deleteSongFromDisk)
+  const createPlaylist = useLibraryStore((state) => state.createPlaylist)
+  const folders = useLibraryStore((state) => state.snapshot.folders)
+  const nowPlayingSongIds = useLibraryStore((state) => state.snapshot.nowPlaying.songIds)
+  const moveSongToFolder = useLibraryStore((state) => state.moveSongToFolder)
+  const replaceNowPlaying = useLibraryStore((state) => state.replaceNowPlaying)
+  const removeSongFromPlaylist = useLibraryStore((state) => state.removeSongFromPlaylist)
+  const addSongsToPlaylist = useLibraryStore((state) => state.addSongsToPlaylist)
+  const setSongFavorite = useLibraryStore((state) => state.setSongFavorite)
+  const showUndoableNotification = useUndoableNotificationStore((state) => state.show)
+  const songsById = useMemo(() => new Map(songs.map((song) => [song.id, song])), [songs])
   const inferredSortCriterion = useMemo(() => inferSortCriterion(songs), [songs])
   const activeSortCriterion = selectedSortCriterion ?? sortCriterion ?? inferredSortCriterion
-  const visibleSongs = songs
+  const visibleSongs = useMemo(
+    () => orderedSongIds ? orderedSongIds.map((songId) => songsById.get(songId)!) : songs,
+    [orderedSongIds, songs, songsById],
+  )
+  const queueSongIds = useMemo(() => visibleSongs.map((song) => song.id), [visibleSongs])
   const visibleSongIds = visibleSongs.map((song) => song.id)
+  const headerInfo = getHeaderPlaylistInfo(headerSongs ?? songs, translateCaption)
   const effectiveSelectedSongIds = [...selectedSongIds].filter((songId) => queueSongIds.includes(songId))
   const customPlaylists = playlists.filter((playlist) => !playlist.isBuiltIn)
+  const currentSavedPlaylist = type === 'favorites'
+    ? playlists.find((playlist) => playlist.isBuiltIn)
+    : type === 'playlist'
+      ? playlists.find((playlist) => playlist.name === title)
+      : undefined
+  const currentPlaylistName = type === 'album' ? title : currentSavedPlaylist?.name
+  const defaultPlaylistName = getNextPlaylistName(
+    isBadNewPlaylistName(title, translateCaption) ? '' : title,
+    playlists,
+  )
+  const showUndo = (message: string, action: () => void | Promise<void>) => {
+    showUndoableNotification(message, translateCaption('common.undo'), action)
+  }
   const hasAddablePlaylist = (songIds: number[]) =>
     customPlaylists.some((playlist) => songIds.some((songId) => !playlist.songIds.includes(songId)))
   const multiSelectPlaylists =
     effectiveSelectedSongIds.length === 0 || hasAddablePlaylist(effectiveSelectedSongIds)
       ? customPlaylists
       : []
+
+  useEffect(() => {
+    let isDisposed = false
+
+    extractArtworkColorRgb(artworkUrl)
+      .then((nextColor) => {
+        if (!isDisposed) {
+          setCoverColorRgb(nextColor)
+        }
+      })
+      .catch(() => {
+        if (!isDisposed) {
+          setCoverColorRgb(getDefaultArtworkColorRgb())
+        }
+      })
+
+    return () => {
+      isDisposed = true
+    }
+  }, [artworkUrl])
+
+  useEffect(() => {
+    setOrderedSongIds(null)
+    setSelectedSortCriterion(null)
+  }, [songs])
+
+  const refreshSongPreferenceItem = async (songId: number) => {
+    const settings = await window.smplayer!.getPreferenceSettings()
+    setSongPreferenceItem(settings.songs.find((item) => item.itemId === String(songId)) ?? null)
+  }
+  const songMenuSongId = songMenu?.song.id
+
+  useEffect(() => {
+    if (songMenuSongId !== undefined) {
+      void refreshSongPreferenceItem(songMenuSongId)
+    }
+  }, [songMenuSongId])
 
   const shuffle = () => {
     const shuffledSongIds = shuffleSongIds(queueSongIds)
@@ -133,6 +212,25 @@ export function HeaderedPlaylistControl({
       setSelectionMode(false)
       clearSelection()
     }
+  }
+
+  const undoRemoveSongsFromCurrentPlaylist = (songIds: number[]) => {
+    if (!currentSavedPlaylist) {
+      return
+    }
+
+    showUndo(
+      songIds.length === 1
+        ? translateCaption('notification.removedFrom', {
+            title: songs.find((song) => song.id === songIds[0])!.title,
+            target: currentSavedPlaylist.name,
+          })
+        : translateCaption('notification.songsRemovedFrom', { count: songIds.length, target: currentSavedPlaylist.name }),
+      () =>
+        type === 'favorites'
+          ? Promise.all(songIds.map((songId) => setSongFavorite(songId, true))).then(() => undefined)
+          : addSongsToPlaylist(currentSavedPlaylist.id, songIds),
+    )
   }
 
   const reverseSelection = () => {
@@ -163,12 +261,14 @@ export function HeaderedPlaylistControl({
     const sortedSongs = criterion === activeSortCriterion
       ? visibleSongs.slice().reverse()
       : sortSongs(songs, criterion)
+    setOrderedSongIds(sortedSongs.map((song) => song.id))
     setSelectedSortCriterion(criterion)
     onSortSongs?.(sortedSongs.map((song) => song.id), criterion)
   }
 
   const reverseSort = () => {
     const reversedSongs = visibleSongs.slice().reverse()
+    setOrderedSongIds(reversedSongs.map((song) => song.id))
     setSelectedSortCriterion(activeSortCriterion)
     onSortSongs?.(reversedSongs.map((song) => song.id), activeSortCriterion)
   }
@@ -177,20 +277,21 @@ export function HeaderedPlaylistControl({
     setSortMenu(null)
     setPreferenceMenu({ x, y })
     if (preferenceType && preferenceItemId) {
-      void window.smplayer?.getPreferenceSettings().then((snapshot) => {
-        const item = [
-          ...snapshot.songs,
-          ...snapshot.artists,
-          ...snapshot.albums,
-          ...snapshot.playlists,
-          ...snapshot.folders,
-          ...snapshot.others,
-        ].find((preferenceItem) => preferenceItem.type === preferenceType && preferenceItem.itemId === preferenceItemId)
-        if (item) {
-          setPreferenceLevel(item.level)
-        }
-      })
+      void refreshHeaderPreferenceItem()
     }
+  }
+
+  const refreshHeaderPreferenceItem = async () => {
+    const snapshot = await window.smplayer!.getPreferenceSettings()
+    const item = [
+      ...snapshot.songs,
+      ...snapshot.artists,
+      ...snapshot.albums,
+      ...snapshot.playlists,
+      ...snapshot.folders,
+      ...snapshot.others,
+    ].find((preferenceItem) => preferenceItem.type === preferenceType && preferenceItem.itemId === preferenceItemId)
+    setHeaderPreferenceItem(item ?? null)
   }
 
   const startHeaderDrag = (event: PointerEvent<HTMLElement>) => {
@@ -212,14 +313,16 @@ export function HeaderedPlaylistControl({
   }
 
   return (
-    <section ref={controlRef} className={`headered-playlist-control headered-playlist-${type}`}>
+    <section
+      ref={controlRef}
+      className={`headered-playlist-control headered-playlist-${type}`}
+      style={{ '--header-cover-rgb': coverColorRgb } as CSSProperties}
+    >
       <div className="headered-playlist-drag-region" aria-hidden="true" />
       <div className="headered-playlist-scrollbar" aria-hidden="true">
         <div className="headered-playlist-scrollbar-thumb" onPointerDown={onScrollbarPointerDown} />
       </div>
-      <div className="headered-playlist-backdrop" aria-hidden="true">
-        {artworkUrl ? <img src={artworkUrl} alt="" /> : null}
-      </div>
+      <div className="headered-playlist-backdrop" aria-hidden="true" />
       <header
         className="headered-playlist-hero"
         onPointerDownCapture={startHeaderDrag}
@@ -273,8 +376,7 @@ export function HeaderedPlaylistControl({
             ) : (
               <h2 title={title}>{title}</h2>
             )}
-            <p>{subtitle}</p>
-            <p>{caption}</p>
+            <p>{headerInfo}</p>
             <div className="headered-playlist-commandbar">
               <button type="button" disabled={songs.length === 0} onClick={shuffle} title={captionFor('shuffle')}>
                 <Icon name="shuffle" />
@@ -305,7 +407,7 @@ export function HeaderedPlaylistControl({
                   }}
                   title={captionFor('preferenceSettings')}
                 >
-                  <Icon name="heart" />
+                  <Icon name="star" />
                   <span>{captionFor('preferenceSettings')}</span>
                 </button>
               ) : null}
@@ -402,6 +504,9 @@ export function HeaderedPlaylistControl({
               onPlayTrack={onPlayTrack}
               onTogglePlayPause={onTogglePlayPause}
               onSelect={toggleSongSelection}
+              onContextMenu={(contextSong, x, y) => {
+                setSongMenu({ song: contextSong, songIndex: queueSongIds.indexOf(contextSong.id), x, y })
+              }}
               onArtistClick={onArtistClick}
               onAlbumClick={onAlbumClick}
               onToggleFavorite={onToggleFavorite}
@@ -423,7 +528,9 @@ export function HeaderedPlaylistControl({
           setAddToMenu({ songIds: effectiveSelectedSongIds, x: event.clientX, y: event.clientY })
         }}
         onRemove={removable ? () => {
+          const removedSongIds = effectiveSelectedSongIds
           onRemoveSongs?.(effectiveSelectedSongIds)
+          undoRemoveSongsFromCurrentPlaylist(removedSongIds)
           clearSelection()
         } : undefined}
         onSelectAll={() => {
@@ -448,6 +555,43 @@ export function HeaderedPlaylistControl({
               playlists,
               songIds: addToMenu.songIds,
               t: translateCaption,
+              defaultPlaylistName,
+              currentPlaylistName,
+              excludePlaylistName: currentSavedPlaylist?.name ?? '',
+              includeNowPlaying: currentPlaylistName !== translateCaption('common.nowPlaying'),
+              includeFavorites: currentPlaylistName !== translateCaption('common.myFavorites'),
+              onAddToNowPlaying: () => {
+                const previousQueueSongIds = nowPlayingSongIds
+                void replaceNowPlaying([...nowPlayingSongIds, ...addToMenu.songIds])
+                showUndo(
+                  addToMenu.songIds.length === 1
+                    ? translateCaption('notification.songAddedTo', {
+                        title: songs.find((song) => song.id === addToMenu.songIds[0])!.title,
+                        target: translateCaption('common.nowPlaying'),
+                      })
+                    : translateCaption('notification.songsAddedTo', { count: addToMenu.songIds.length, target: translateCaption('common.nowPlaying') }),
+                  () => replaceNowPlaying(previousQueueSongIds),
+                )
+                hideSelectionAfterOperation()
+              },
+              onToggleFavorite: () => {
+                const favoritePlaylist = playlists.find((playlist) => playlist.isBuiltIn)!
+                void addSongsToPlaylist(favoritePlaylist.id, addToMenu.songIds)
+                showUndo(
+                  addToMenu.songIds.length === 1
+                    ? translateCaption('notification.songAddedTo', {
+                        title: songs.find((song) => song.id === addToMenu.songIds[0])!.title,
+                        target: translateCaption('common.myFavorites'),
+                      })
+                    : translateCaption('notification.songsAddedTo', { count: addToMenu.songIds.length, target: translateCaption('common.myFavorites') }),
+                  () => Promise.all(addToMenu.songIds.map((songId) => removeSongFromPlaylist(favoritePlaylist.id, songId))).then(() => undefined),
+                )
+                hideSelectionAfterOperation()
+              },
+              onCreatePlaylist: (name) => {
+                void createPlaylist(name, addToMenu.songIds)
+                hideSelectionAfterOperation()
+              },
               onAddToPlaylist: (playlistId) => {
                 if (addToMenu.songIds.length === 1) {
                   onAddSongToPlaylist(playlistId, addToMenu.songIds[0]!)
@@ -496,15 +640,172 @@ export function HeaderedPlaylistControl({
           onClose={() => {
             setPreferenceMenu(null)
           }}
-          items={preferenceLevels.map((level) => ({
-            key: `preference-${level}`,
-            text: t(`preferences.level.${level}`),
-            icon: level === preferenceLevel ? 'check' as const : undefined,
-            onClick: () => {
-              setPreferenceLevel(level)
-              onSetPreferred(level)
+          items={[
+            getPreferenceMenuFlyoutItem({
+              type: preferenceType!,
+              itemId: preferenceItemId!,
+              name: title,
+              preferenceItem: headerPreferenceItem,
+              t,
+              onUpdated: refreshHeaderPreferenceItem,
+            }),
+          ]}
+        />
+      ) : null}
+      {songMenu ? (
+        <MenuFlyout
+          position={songMenu}
+          onClose={() => {
+            setSongMenu(null)
+          }}
+          items={getMusicMenuFlyoutItems({
+            song: songMenu.song,
+            option: {
+              showRemove: removable,
+              showSelect: true,
+              showDelete: true,
+              showSeeArtistsAndSeeAlbum: true,
             },
-          }))}
+            playlists,
+            folders,
+            currentPlaylistName,
+            excludePlaylistName: currentSavedPlaylist?.name ?? '',
+            queueSongIds,
+            playbackSongIds: nowPlayingSongIds,
+            currentTrackId: selectedTrackId,
+            songIndex: songMenu.songIndex,
+            isPlaying,
+            t: translateCaption,
+            onPlay: () => {
+              if (onMoveToMusicOrPlay) {
+                onMoveToMusicOrPlay(songMenu.song.id)
+                return
+              }
+
+              onPlayTrack(songMenu.song.id, queueSongIds)
+            },
+            onPause: () => {
+              onTogglePlayPause?.()
+            },
+            onPlayNext: () => {
+              if (onPlayNext) {
+                onPlayNext(songMenu.song.id)
+                return
+              }
+
+              const nextQueue = nowPlayingSongIds.slice()
+              const currentIndex = selectedTrackId == null ? -1 : nextQueue.indexOf(selectedTrackId)
+              nextQueue.splice(Math.max(0, currentIndex + 1), 0, songMenu.song.id)
+              onPlayTrack(selectedTrackId ?? songMenu.song.id, nextQueue)
+            },
+            onAddToNowPlaying: () => {
+              const previousQueueSongIds = nowPlayingSongIds
+              void replaceNowPlaying([...nowPlayingSongIds, songMenu.song.id])
+              showUndo(translateCaption('notification.songAddedTo', { title: songMenu.song.title, target: translateCaption('common.nowPlaying') }), () =>
+                replaceNowPlaying(previousQueueSongIds),
+              )
+            },
+            onCreatePlaylist: (name) => {
+              void createPlaylist(name, [songMenu.song.id])
+            },
+            onAddToPlaylist: (playlistId) => {
+              const targetPlaylist = playlists.find((playlist) => playlist.id === playlistId)!
+              onAddSongToPlaylist(playlistId, songMenu.song.id)
+              showUndo(translateCaption('notification.songAddedTo', { title: songMenu.song.title, target: targetPlaylist.name }), () =>
+                removeSongFromPlaylist(playlistId, songMenu.song.id),
+              )
+            },
+            onRemove: () => {
+              onRemoveSongs?.([songMenu.song.id])
+              if (currentSavedPlaylist) {
+                showUndo(translateCaption('notification.removedFrom', { title: songMenu.song.title, target: currentSavedPlaylist.name }), () =>
+                  type === 'favorites'
+                    ? setSongFavorite(songMenu.song.id, true)
+                    : addSongsToPlaylist(currentSavedPlaylist.id, [songMenu.song.id]),
+                )
+              }
+            },
+            onSelect: () => {
+              setSelectionMode(true)
+              setSelectedSongIds(new Set([songMenu.song.id]))
+            },
+            preferenceItem: songPreferenceItem,
+            onUndoPreference: () => {
+              void window.smplayer?.removePreferenceItem(songPreferenceItem!.id).then(() => refreshSongPreferenceItem(songMenu.song.id))
+            },
+            onSetPreference: (level) => {
+              void window.smplayer?.addPreferenceItem('song', String(songMenu.song.id), songMenu.song.title, level).then(() => refreshSongPreferenceItem(songMenu.song.id))
+            },
+            onMoveToFolder: (folderPath) => {
+              const originalFolderPath = getParentFolderPath(songMenu.song.path)
+              void moveSongToFolder(songMenu.song.id, folderPath)
+              showUndo(translateCaption('notification.movedSong', { title: songMenu.song.title }), () =>
+                moveSongToFolder(songMenu.song.id, originalFolderPath),
+              )
+            },
+            onToggleFavorite: () => {
+              onToggleFavorite?.(songMenu.song.id, !songMenu.song.favorite)
+              const target = translateCaption('common.myFavorites')
+              showUndo(
+                songMenu.song.favorite
+                  ? translateCaption('notification.removedFrom', { title: songMenu.song.title, target })
+                  : translateCaption('notification.songAddedTo', { title: songMenu.song.title, target }),
+                () => setSongFavorite(songMenu.song.id, songMenu.song.favorite),
+              )
+            },
+            onReveal: () => {
+              void window.smplayer?.revealItemInFolder(songMenu.song.path)
+            },
+            onDelete: () => {
+              if (window.confirm(translateCaption('context.deleteSongConfirm', { title: songMenu.song.title }))) {
+                void deleteSongFromDisk(songMenu.song.id)
+              }
+            },
+            onHide: () => {
+              void hideSong(songMenu.song.id)
+              showUndo(translateCaption('notification.hiddenStorageItem', { name: songMenu.song.title }), async () => {
+                const hiddenItems = await window.smplayer!.getHiddenStorageItems()
+                const hiddenItem = hiddenItems.find((item) => item.path === songMenu.song.path)
+                await window.smplayer!.resumeHiddenStorageItem(hiddenItem!)
+                await refresh()
+              })
+            },
+            onSeeArtist: (artist) => {
+              onArtistClick?.(artist)
+            },
+            onSeeAlbum: () => {
+              onAlbumClick?.(songMenu.song.album || translateCaption('common.albumUnknown'))
+            },
+            onSeeMusicInfo: () => {
+              setSongDialog({ song: songMenu.song, mode: 'properties' })
+              setSongMenu(null)
+            },
+            onSeeLyrics: () => {
+              setSongDialog({ song: songMenu.song, mode: 'lyrics' })
+              setSongMenu(null)
+            },
+            onSeeAlbumArt: () => {
+              setSongDialog({ song: songMenu.song, mode: 'album-art' })
+              setSongMenu(null)
+            },
+          })}
+        />
+      ) : null}
+      {songDialog ? (
+        <MusicDialog
+          song={songDialog.song}
+          mode={songDialog.mode}
+          t={translateCaption}
+          currentTrackId={selectedTrackId}
+          isPlaying={isPlaying}
+          queueSongIds={queueSongIds}
+          onPlayTrack={onPlayTrack}
+          onTogglePlayPause={onTogglePlayPause}
+          onClose={() => {
+            setSongDialog(null)
+            setSongMenu(null)
+          }}
+          onSaved={refresh}
         />
       ) : null}
     </section>
@@ -616,6 +917,11 @@ function useHeaderedPlaylistScroll(controlRef: RefObject<HTMLElement | null>) {
   }
 }
 
+function getParentFolderPath(filePath: string) {
+  const index = Math.max(filePath.lastIndexOf('\\'), filePath.lastIndexOf('/'))
+  return filePath.slice(0, index)
+}
+
 const captions: Record<string, string> = {
   album: 'common.album',
   artist: 'common.artist',
@@ -633,6 +939,7 @@ const captions: Record<string, string> = {
   shuffle: 'nowPlaying.randomPlay',
   sort: 'common.sort',
   preferenceSettings: 'settings.preferenceSettings',
+  songsPrefix: 'headeredPlaylist.songsPrefix',
   'sort.album': 'table.album',
   'sort.artist': 'table.artist',
   'sort.date-added': 'table.dateAdded',
@@ -642,19 +949,29 @@ const captions: Record<string, string> = {
   'sort.title': 'table.title',
 }
 
+function getHeaderPlaylistInfo(songs: LibrarySong[], t: Translator) {
+  const countText = `${t('headeredPlaylist.songsPrefix')}${songs.length}`
+  if (songs.length < 2) {
+    return countText
+  }
+
+  const duration = songs.reduce((total, song) => total + song.duration, 0)
+  return `${countText} • ${formatDuration(duration)}`
+}
+
 function sortSongs(songs: LibrarySong[], criterion: MusicLibrarySortCriterion) {
   const sortedSongs = songs.slice().sort((left, right) => {
     switch (criterion) {
       case 'artist':
-        return getDisplayArtists(left).localeCompare(getDisplayArtists(right)) || left.title.localeCompare(right.title)
+        return getDisplayArtists(left).localeCompare(getDisplayArtists(right))
       case 'album':
-        return left.album.localeCompare(right.album) || left.title.localeCompare(right.title)
+        return left.album.localeCompare(right.album)
       case 'duration':
-        return left.duration - right.duration || left.title.localeCompare(right.title)
+        return left.duration - right.duration
       case 'play-count':
-        return right.playCount - left.playCount || left.title.localeCompare(right.title)
+        return left.playCount - right.playCount
       case 'date-added':
-        return right.dateAdded.localeCompare(left.dateAdded) || left.title.localeCompare(right.title)
+        return left.dateAdded.localeCompare(right.dateAdded)
       case 'title':
         return left.title.localeCompare(right.title)
     }
@@ -672,6 +989,27 @@ function inferSortCriterion(songs: LibrarySong[]) {
   }
 
   return 'title'
+}
+
+function isBadNewPlaylistName(name: string, t: Translator) {
+  return name === t('common.nowPlaying') || name === t('common.myFavorites')
+}
+
+function getNextPlaylistName(name: string, playlists: LibraryPlaylist[]) {
+  if (!name) {
+    return ''
+  }
+
+  const playlistNames = new Set(playlists.map((playlist) => playlist.name))
+  const siblingCount = playlists.filter((playlist) => playlist.name.startsWith(name)).length
+  for (let index = 1; index <= siblingCount; index += 1) {
+    const nextName = `${name} (${index})`
+    if (!playlistNames.has(nextName)) {
+      return nextName
+    }
+  }
+
+  return name
 }
 
 function shuffleSongIds(songIds: number[]) {

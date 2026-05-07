@@ -8,9 +8,9 @@
   --panel-strong: rgba(244, 246, 249, 0.88);
   --panel-border: rgba(255, 255, 255, 0.68);
   --panel-shadow: 0 26px 70px rgba(53, 73, 95, 0.14);
-  --accent: #0878d8;
-  --accent-rgb: 8, 120, 216;
-  --accent-strong: #0566b8;
+  --accent: #0078d7;
+  --accent-rgb: 0, 120, 215;
+  --accent-strong: #0063b1;
   --accent-soft: rgba(0, 120, 215, 0.12);
   --accent-surface: rgba(0, 120, 215, 0.2);
   --accent-shadow: rgba(0, 120, 215, 0.22);

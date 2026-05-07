@@ -12,3 +12,16 @@ export function formatDuration(totalSeconds: number) {
 
   return `${minutes}:${seconds.toString().padStart(2, '0')}`
 }
+
+export function formatBytes(bytes: number) {
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let value = bytes
+  let unitIndex = 0
+
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024
+    unitIndex += 1
+  }
+
+  return `${unitIndex === 0 ? value : value.toFixed(2)} ${units[unitIndex]}`
+}

@@ -1,10 +1,11 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { GridViewHolder } from '../components/GridViewHolder'
 import { HeaderedPlaylistControl } from '../components/HeaderedPlaylistControl'
-import type { LibrarySnapshot, PlaylistSortCriterion, PreferenceLevel } from '../shared/contracts'
-import { formatDuration } from '../shared/formatters'
+import { MenuFlyout } from '../components/MenuFlyout'
+import { getAddToPlaylistMenuFlyoutItem, getPreferenceMenuFlyoutItem, type MenuFlyoutItem } from '../components/MenuFlyoutHelper'
+import type { LibraryPlaylist, LibrarySnapshot, PlaylistSortCriterion, PreferenceItemSnapshot, PreferenceLevel } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
 
 interface PlaylistsPageProps {
@@ -16,10 +17,14 @@ interface PlaylistsPageProps {
   error: string | null
   initialPlaylistId: number
   onPlayTrack: (trackId: number, queueSongIds: number[]) => void
+  onMoveToMusicOrPlay: (songId: number) => void
+  onPlayNext: (songId: number) => void
   onTogglePlayPause: () => void
   onSelectPlaylist: (playlistId: number) => void
   onDeletePlaylist: (playlistId: number) => void
   onRenamePlaylist: (playlistId: number, name: string) => void
+  onCreatePlaylistWithSongs: (name: string, songIds: number[]) => void
+  onAddSongsToNowPlaying: (songIds: number[]) => void
   onReorderPlaylists: (playlistIds: number[]) => void
   onSetPlaylistPreferred: (playlistId: number, name: string, level: PreferenceLevel) => void
   onAddSongToPlaylist: (playlistId: number, songId: number) => void
@@ -48,10 +53,14 @@ export function PlaylistsPage({
   error,
   initialPlaylistId,
   onPlayTrack,
+  onMoveToMusicOrPlay,
+  onPlayNext,
   onTogglePlayPause,
   onSelectPlaylist,
   onDeletePlaylist,
   onRenamePlaylist,
+  onCreatePlaylistWithSongs,
+  onAddSongsToNowPlaying,
   onReorderPlaylists,
   onSetPlaylistPreferred,
   onAddSongToPlaylist,
@@ -61,6 +70,8 @@ export function PlaylistsPage({
 }: PlaylistsPageProps) {
   const navigate = useNavigate()
   const params = useParams()
+  const [playlistMenu, setPlaylistMenu] = useState<{ playlist: LibraryPlaylist; x: number; y: number } | null>(null)
+  const [playlistPreferenceItems, setPlaylistPreferenceItems] = useState<Map<string, PreferenceItemSnapshot>>(new Map())
   const routePlaylistId = params.playlistId ? Number(params.playlistId) : null
   const songsById = useMemo(
     () => new Map(snapshot.songs.map((song) => [song.id, song])),
@@ -101,20 +112,25 @@ export function PlaylistsPage({
       [song.title, song.artist, ...song.artists, song.album].join(' ').toLocaleLowerCase().includes(normalizedSearchQuery),
     )
   }, [searchQuery, selectedPlaylistSongs])
-  const playlistDuration = selectedPlaylistSongs.reduce((total, song) => total + song.duration, 0)
+  const refreshPlaylistPreferenceItems = async () => {
+    const settings = await window.smplayer!.getPreferenceSettings()
+    setPlaylistPreferenceItems(new Map([...settings.playlists, ...settings.others].map((item) => [`${item.type}:${item.itemId}`, item])))
+  }
+
+  useEffect(() => {
+    void window.smplayer!.getPreferenceSettings().then((settings) => {
+      setPlaylistPreferenceItems(new Map([...settings.playlists, ...settings.others].map((item) => [`${item.type}:${item.itemId}`, item])))
+    })
+  }, [])
 
   if (routePlaylistId != null && selectedPlaylist) {
     return (
-      <section className="playlists-page page-panel">
+      <section className="page-panel immersive-detail-page">
         {error ? <div className="error-banner">{error}</div> : null}
         <HeaderedPlaylistControl
           type={selectedPlaylist.isBuiltIn ? 'favorites' : 'playlist'}
           title={selectedPlaylist.name}
-          subtitle={t('albums.albumSummary', {
-            songs: selectedPlaylistSongs.length,
-            duration: formatDuration(playlistDuration),
-          })}
-          caption={selectedPlaylist.isBuiltIn ? t('playlists.builtIn') : t('common.playlists')}
+          headerSongs={selectedPlaylistSongs}
           t={t}
           songs={filteredPlaylistSongs}
           selectedTrackId={selectedTrackId}
@@ -132,6 +148,8 @@ export function PlaylistsPage({
           preferenceType={selectedPlaylist.isBuiltIn ? 'my-favorites' : 'playlist'}
           preferenceItemId={selectedPlaylist.isBuiltIn ? '6' : String(selectedPlaylist.id)}
           onPlayTrack={onPlayTrack}
+          onMoveToMusicOrPlay={onMoveToMusicOrPlay}
+          onPlayNext={onPlayNext}
           onTogglePlayPause={onTogglePlayPause}
           onAddSongToPlaylist={onAddSongToPlaylist}
           onAddSongsToPlaylist={onAddSongsToPlaylist}
@@ -214,11 +232,169 @@ export function PlaylistsPage({
                 onMoveDown={() => {
                   onReorderPlaylists(movePlaylist(customPlaylistIds, playlist.id, 1))
                 }}
+                onContextMenu={(x, y) => {
+                  setPlaylistMenu({ playlist, x, y })
+                }}
               />
             )
           })}
         </div>
       )}
+      {playlistMenu ? (
+        <MenuFlyout
+          position={playlistMenu}
+          onClose={() => {
+            setPlaylistMenu(null)
+          }}
+          items={getPlaylistCardMenuItems({
+            playlist: playlistMenu.playlist,
+            playlists: snapshot.playlists,
+            favoritePlaylist: snapshot.playlists.find((playlist) => playlist.isBuiltIn)!,
+            t,
+            onPlayTrack,
+            onAddSongsToNowPlaying,
+            onCreatePlaylistWithSongs,
+            onAddSongsToPlaylist,
+            preferenceItem: playlistPreferenceItems.get(`${playlistMenu.playlist.isBuiltIn ? 'my-favorites' : 'playlist'}:${playlistMenu.playlist.isBuiltIn ? '6' : String(playlistMenu.playlist.id)}`) ?? null,
+            onPreferenceChanged: refreshPlaylistPreferenceItems,
+            onRenamePlaylist,
+            onDeletePlaylist,
+          })}
+        />
+      ) : null}
     </section>
   )
+}
+
+function getPlaylistCardMenuItems({
+  playlist,
+  playlists,
+  favoritePlaylist,
+  t,
+  onPlayTrack,
+  onAddSongsToNowPlaying,
+  onCreatePlaylistWithSongs,
+  onAddSongsToPlaylist,
+  preferenceItem,
+  onPreferenceChanged,
+  onRenamePlaylist,
+  onDeletePlaylist,
+}: {
+  playlist: LibraryPlaylist
+  playlists: LibraryPlaylist[]
+  favoritePlaylist: LibraryPlaylist
+  t: Translator
+  onPlayTrack: (trackId: number, queueSongIds: number[]) => void
+  onAddSongsToNowPlaying: (songIds: number[]) => void
+  onCreatePlaylistWithSongs: (name: string, songIds: number[]) => void
+  onAddSongsToPlaylist: (playlistId: number, songIds: number[]) => void
+  preferenceItem: PreferenceItemSnapshot | null
+  onPreferenceChanged: () => void | Promise<void>
+  onRenamePlaylist: (playlistId: number, name: string) => void
+  onDeletePlaylist: (playlistId: number) => void
+}) {
+  const items: MenuFlyoutItem[] = [
+    {
+      key: 'shuffle',
+      text: t('nowPlaying.randomPlay'),
+      icon: 'shuffle',
+      disabled: playlist.songIds.length === 0,
+      onClick: () => {
+        const shuffledSongIds = shuffleSongIds(playlist.songIds)
+        onPlayTrack(shuffledSongIds[0]!, shuffledSongIds)
+      },
+    },
+  ]
+  const addToItem = getAddToPlaylistMenuFlyoutItem({
+    playlists,
+    songIds: playlist.songIds,
+    t,
+    defaultPlaylistName: playlist.name,
+    currentPlaylistName: playlist.name,
+    includeNowPlaying: true,
+    includeFavorites: playlist.name !== t('common.myFavorites'),
+    onAddToNowPlaying: () => {
+      onAddSongsToNowPlaying(playlist.songIds)
+    },
+    onToggleFavorite: () => {
+      onAddSongsToPlaylist(favoritePlaylist.id, playlist.songIds)
+    },
+    onCreatePlaylist: (name) => {
+      onCreatePlaylistWithSongs(name, playlist.songIds)
+    },
+    onAddToPlaylist: (playlistId) => {
+      onAddSongsToPlaylist(playlistId, playlist.songIds)
+    },
+  })
+
+  if (addToItem) {
+    items.push(addToItem)
+  }
+
+  items.push(getPreferenceMenuFlyoutItem({
+    type: playlist.isBuiltIn ? 'my-favorites' : 'playlist',
+    itemId: playlist.isBuiltIn ? '6' : String(playlist.id),
+    name: playlist.name,
+    preferenceItem,
+    t,
+    onUpdated: onPreferenceChanged,
+  }))
+
+  if (!playlist.isBuiltIn) {
+    items.push(
+      {
+        key: 'rename-playlist',
+        text: t('playlists.rename'),
+        icon: 'info',
+        onClick: () => {
+          const name = window.prompt(t('playlists.rename'), playlist.name)
+          const nextName = name?.trim()
+          if (nextName) {
+            onRenamePlaylist(playlist.id, nextName)
+          }
+        },
+      },
+      {
+        key: 'duplicate-playlist',
+        text: t('playlists.duplicate'),
+        icon: 'copy',
+        onClick: () => {
+          onCreatePlaylistWithSongs(getNextPlaylistName(playlist.name, playlists), playlist.songIds)
+        },
+      },
+      {
+        key: 'delete-playlist',
+        text: t('playlists.delete'),
+        icon: 'trash',
+        onClick: () => {
+          onDeletePlaylist(playlist.id)
+        },
+      },
+    )
+  }
+
+  return items
+}
+
+function shuffleSongIds(songIds: number[]) {
+  const shuffledSongIds = songIds.slice()
+
+  for (let index = shuffledSongIds.length - 1; index > 0; index -= 1) {
+    const randomIndex = Math.floor(Math.random() * (index + 1))
+    const current = shuffledSongIds[index]
+    shuffledSongIds[index] = shuffledSongIds[randomIndex]
+    shuffledSongIds[randomIndex] = current
+  }
+
+  return shuffledSongIds
+}
+
+function getNextPlaylistName(name: string, playlists: LibraryPlaylist[]) {
+  const existingNames = new Set(playlists.map((playlist) => playlist.name))
+  for (let index = 2; ; index += 1) {
+    const nextName = `${name} (${index})`
+    if (!existingNames.has(nextName)) {
+      return nextName
+    }
+  }
 }

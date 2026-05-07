@@ -54,20 +54,7 @@ export function MenuFlyout({
           event.stopPropagation()
         }}
       >
-        {items.map((item) =>
-          item.separator ? (
-            <div className="library-context-menu-separator" key={item.key} role="separator" />
-          ) : item.submenu ? (
-            <MenuFlyoutSubmenu
-              item={item}
-              key={item.key}
-              menuBoundaryHeight={menuBoundaryHeight}
-              onClose={onClose}
-            />
-          ) : (
-            <MenuFlyoutButton item={item} key={item.key} onClose={onClose} />
-          ),
-        )}
+        {items.map((item) => renderMenuItem(item, menuBoundaryHeight, onClose))}
       </div>
     </>,
     document.body,
@@ -137,12 +124,29 @@ function MenuFlyoutSubmenu({
           '--submenu-max-height': `${layout.maxHeight}px`,
         } as CSSProperties}
       >
-        {item.submenu!.map((subitem) => (
-          <MenuFlyoutButton item={subitem} key={subitem.key} onClose={onClose} />
-        ))}
+        {item.submenu!.map((subitem) => renderMenuItem(subitem, menuBoundaryHeight, onClose))}
       </div>
     </div>
   )
+}
+
+function renderMenuItem(item: MenuFlyoutItem, menuBoundaryHeight: number, onClose: () => void) {
+  if (item.separator) {
+    return <div className="library-context-menu-separator" key={item.key} role="separator" />
+  }
+
+  if (item.submenu) {
+    return (
+      <MenuFlyoutSubmenu
+        item={item}
+        key={item.key}
+        menuBoundaryHeight={menuBoundaryHeight}
+        onClose={onClose}
+      />
+    )
+  }
+
+  return <MenuFlyoutButton item={item} key={item.key} onClose={onClose} />
 }
 
 function MenuFlyoutButton({ item, onClose }: { item: MenuFlyoutItem; onClose: () => void }) {
@@ -160,11 +164,15 @@ function MenuFlyoutButton({ item, onClose }: { item: MenuFlyoutItem; onClose: ()
           try {
             await result
           } finally {
-            onClose()
+            if (!item.keepOpen) {
+              onClose()
+            }
           }
           return
         }
-        onClose()
+        if (!item.keepOpen) {
+          onClose()
+        }
       }}
     >
       {item.icon ? <Icon name={item.icon} /> : <span />}

@@ -94,7 +94,7 @@ export function GridViewMusicItemControl({
               onAddToPlaylistClick(event, song)
             }}
           >
-            <Icon name="plus" />
+            <span aria-hidden="true" />
           </button>
         ) : null}
       </span>

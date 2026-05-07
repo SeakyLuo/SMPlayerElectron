@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 
+import { AlbumArtControl } from '../components/AlbumArtControl'
 import { ArtworkImage } from '../components/ArtworkImage'
 import { Icon } from '../components/icons'
 import { MenuFlyout } from '../components/MenuFlyout'
-import { getAddToPlaylistMenuFlyoutItem, type MenuFlyoutItem } from '../components/MenuFlyoutHelper'
+import { getAddToPlaylistMenuFlyoutItem, getPreferenceMenuFlyoutItem, type MenuFlyoutItem } from '../components/MenuFlyoutHelper'
 import { MusicMenuFlyout, type MusicMenuFlyoutState } from '../components/MusicMenuFlyout'
 import { PlaylistControlItem } from '../components/PlaylistControlItem'
-import type { LibraryPlaylist, LibrarySong } from '../shared/contracts'
 import { getSongArtists } from '../shared/artists'
+import type { AppSettingsUpdate, LibraryFolder, LibraryPlaylist, LibrarySong, PreferenceEntityType, PreferenceItemSnapshot, SearchSortCriterion } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
-import { buildLocalRoute } from './localBrowserPaths'
+import { buildLocalRoute } from './localPagePaths'
 
 interface SearchPageProps {
   t: Translator
@@ -18,22 +19,31 @@ interface SearchPageProps {
   requestedQuery: string
   loading: boolean
   songs: LibrarySong[]
+  folders: LibraryFolder[]
   playlists: LibraryPlaylist[]
   rootPath: string
+  searchFolderPath: string
+  searchFolderName: string
   selectedTrackId: number | null
   isPlaying: boolean
   showCount: boolean
+  sortCriteria: SearchCriteria
   onPlayTrack: (trackId: number, queueSongIds: number[]) => void
+  onMoveToMusicOrPlay: (songId: number) => void
   onTogglePlayPause: () => void
   onPlayNext: (songId: number) => void
+  onAddSongsToNowPlaying: (songIds: number[]) => void
+  onCreatePlaylistWithSongs: (name: string, songIds: number[]) => void
   onAddSongToPlaylist: (playlistId: number, songId: number) => void
   onAddSongsToPlaylist: (playlistId: number, songIds: number[]) => void
   onRevealSong: (songPath: string) => void
   onDeleteSongFromDisk: (songId: number) => void
   onToggleFavorite: (songId: number, favorite: boolean) => void
+  onUpdateSettings: (update: AppSettingsUpdate) => void
+  onSearchDirectory: (query: string, folderRelativePath: string) => void
 }
 
-interface SearchCard {
+export interface SearchResult {
   title: string
   subtitle: string
   artworkUrl: string
@@ -44,78 +54,76 @@ interface SearchCard {
   duration: number
   albumCount: number
   songIds: number[]
+  sourceId?: string
   sourcePath?: string
 }
 
-interface SearchCardContextMenuState {
-  sectionKey: SearchSectionKey
-  card: SearchCard
+interface SearchResultContextMenuState {
+  sectionKey: SearchResultType
+  card: SearchResult
   x: number
   y: number
 }
 
-type SearchSectionKey = 'artists' | 'albums' | 'songs' | 'playlists' | 'folders'
-type SearchFilterKey = 'all' | SearchSectionKey
-type SearchSortCriterion =
-  | 'default'
-  | 'name'
-  | 'title'
-  | 'artist'
-  | 'album'
-  | 'play-count'
-  | 'duration'
-  | 'date-added'
+export type SearchResultType = 'artists' | 'albums' | 'songs' | 'playlists' | 'folders'
+type SearchFilterKey = 'all' | SearchResultType
+export type SearchCriteria = Record<SearchResultType, SearchSortCriterion>
 
 const ARTIST_PREVIEW_LIMIT = 10
 const PREVIEW_LIMIT = 5
 const SONG_PREVIEW_LIMIT = 5
-const INITIAL_SORT_CRITERIA: Record<SearchSectionKey, SearchSortCriterion> = {
-  artists: 'default',
-  albums: 'default',
-  songs: 'default',
-  playlists: 'default',
-  folders: 'default',
-}
-
 export function SearchPage({
   t,
   query,
   requestedQuery,
   loading,
   songs,
+  folders,
   playlists,
   rootPath,
+  searchFolderPath,
+  searchFolderName,
   selectedTrackId,
   isPlaying,
   showCount,
+  sortCriteria,
   onPlayTrack,
+  onMoveToMusicOrPlay,
   onTogglePlayPause,
   onPlayNext,
+  onAddSongsToNowPlaying,
+  onCreatePlaylistWithSongs,
   onAddSongToPlaylist,
   onAddSongsToPlaylist,
   onRevealSong,
   onDeleteSongFromDisk,
   onToggleFavorite,
+  onUpdateSettings,
+  onSearchDirectory,
 }: SearchPageProps) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
-  const [sortCriteria, setSortCriteria] = useState<Record<SearchSectionKey, SearchSortCriterion>>(INITIAL_SORT_CRITERIA)
   const [activeFilter, setActiveFilter] = useState<SearchFilterKey>('all')
   const [songContextMenu, setSongContextMenu] = useState<MusicMenuFlyoutState | null>(null)
-  const [cardContextMenu, setCardContextMenu] = useState<SearchCardContextMenuState | null>(null)
-  const navigate = useNavigate()
+  const [cardContextMenu, setCardContextMenu] = useState<SearchResultContextMenuState | null>(null)
+  const [albumArtPreview, setAlbumArtPreview] = useState<SearchResult | null>(null)
+  const [preferenceItems, setPreferenceItems] = useState<Map<string, PreferenceItemSnapshot>>(new Map())
   const normalizedQuery = query.trim().toLocaleLowerCase()
   const normalizedRequestedQuery = requestedQuery.trim().toLocaleLowerCase()
+  const searchableSongs = useMemo(
+    () => searchFolderPath ? songs.filter((song) => isSongUnderFolder(song.path, searchFolderPath)) : songs,
+    [searchFolderPath, songs],
+  )
   const results = useMemo(
-    () => buildSearchResults(songs, playlists, rootPath, normalizedQuery, t),
-    [normalizedQuery, playlists, rootPath, songs, t],
+    () => buildSearchResults(searchableSongs, songs, folders, playlists, rootPath, normalizedQuery, t),
+    [folders, normalizedQuery, playlists, rootPath, searchableSongs, songs, t],
   )
   const sortedResults = useMemo(
     () => ({
-      artists: sortCards(results.artists, sortCriteria.artists),
-      albums: sortCards(results.albums, sortCriteria.albums),
-      songs: sortSongs(results.songs, sortCriteria.songs),
-      playlists: sortCards(results.playlists, sortCriteria.playlists),
-      folders: sortCards(results.folders, sortCriteria.folders),
+      artists: sortSearchResults(results.artists, sortCriteria.artists),
+      albums: sortSearchResults(results.albums, sortCriteria.albums),
+      songs: sortSearchSongs(results.songs, sortCriteria.songs),
+      playlists: sortSearchResults(results.playlists, sortCriteria.playlists),
+      folders: sortSearchResults(results.folders, sortCriteria.folders),
     }),
     [results, sortCriteria],
   )
@@ -158,16 +166,26 @@ export function SearchPage({
       return next
     })
   }
-  const updateSortCriterion = (section: SearchSectionKey, criterion: SearchSortCriterion) => {
-    setSortCriteria((current) => ({
-      ...current,
-      [section]: criterion,
-    }))
+  const updateSortCriterion = (section: SearchResultType, criterion: SearchSortCriterion) => {
+    onUpdateSettings({ [getSearchCriterionSetting(section)]: criterion })
   }
-  const openCardContextMenu = (sectionKey: SearchSectionKey, card: SearchCard, x: number, y: number) => {
+  const openCardContextMenu = (sectionKey: SearchResultType, card: SearchResult, x: number, y: number) => {
     setSongContextMenu(null)
     setCardContextMenu({ sectionKey, card, x, y })
   }
+  const refreshPreferenceItems = async () => {
+    const settings = await window.smplayer!.getPreferenceSettings()
+    setPreferenceItems(new Map([
+      ...settings.artists,
+      ...settings.albums,
+      ...settings.playlists,
+      ...settings.folders,
+    ].map((item) => [`${item.type}:${item.itemId}`, item])))
+  }
+
+  useEffect(() => {
+    void refreshPreferenceItems()
+  }, [])
 
   return (
     <section className="page-panel search-page">
@@ -186,12 +204,50 @@ export function SearchPage({
         </div>
       ) : (
         <div className="search-result-stack">
+          {searchFolderName ? (
+            <div className="search-directory-context">
+              {t('search.directoryResultOf', { query: requestedQuery, folder: searchFolderName })}
+            </div>
+          ) : null}
           <SearchResultTabs
             activeFilter={activeFilter}
             counts={resultCounts}
             t={t}
             onChange={setActiveFilter}
           />
+          {showArtists ? (
+            <SearchResultSection
+              cards={sortedResults.artists}
+              sectionKey="artists"
+              title={showCount ? t('search.artistsWithCount', { count: results.artists.length }) : t('common.artists')}
+              viewAllLabel={t('search.viewAll')}
+              viewLessLabel={t('search.viewLess')}
+              sortOptions={getSortOptions('artists', t)}
+              sortCriterion={sortCriteria.artists}
+              previewLimit={ARTIST_PREVIEW_LIMIT}
+              usesPreview={usesPreview}
+              expanded={!usesPreview || isExpanded('artists')}
+              onToggleExpanded={toggleExpanded}
+              onSortChange={updateSortCriterion}
+              onOpenContextMenu={openCardContextMenu}
+            />
+          ) : null}
+          {showAlbums ? (
+            <SearchResultSection
+              cards={sortedResults.albums}
+              sectionKey="albums"
+              title={showCount ? t('search.albumsWithCount', { count: results.albums.length }) : t('common.albums')}
+              viewAllLabel={t('search.viewAll')}
+              viewLessLabel={t('search.viewLess')}
+              sortOptions={getSortOptions('albums', t)}
+              sortCriterion={sortCriteria.albums}
+              usesPreview={usesPreview}
+              expanded={!usesPreview || isExpanded('albums')}
+              onToggleExpanded={toggleExpanded}
+              onSortChange={updateSortCriterion}
+              onOpenContextMenu={openCardContextMenu}
+            />
+          ) : null}
           {showSongs ? (
             <section className="search-result-section">
               <SearchSectionHeader
@@ -231,7 +287,7 @@ export function SearchPage({
             </section>
           ) : null}
           {showPlaylists ? (
-            <SearchCardSection
+            <SearchResultSection
               cards={sortedResults.playlists}
               sectionKey="playlists"
               title={showCount ? t('search.playlistsWithCount', { count: results.playlists.length }) : t('common.playlists')}
@@ -247,7 +303,7 @@ export function SearchPage({
             />
           ) : null}
           {showFolders ? (
-            <SearchCardSection
+            <SearchResultSection
               cards={sortedResults.folders}
               sectionKey="folders"
               title={showCount ? t('search.foldersWithCount', { count: results.folders.length }) : t('common.folders')}
@@ -262,54 +318,26 @@ export function SearchPage({
               onOpenContextMenu={openCardContextMenu}
             />
           ) : null}
-          {showArtists ? (
-            <SearchCardSection
-              cards={sortedResults.artists}
-              sectionKey="artists"
-              title={showCount ? t('search.artistsWithCount', { count: results.artists.length }) : t('common.artists')}
-              viewAllLabel={t('search.viewAll')}
-              viewLessLabel={t('search.viewLess')}
-              sortOptions={getSortOptions('artists', t)}
-              sortCriterion={sortCriteria.artists}
-              previewLimit={ARTIST_PREVIEW_LIMIT}
-              usesPreview={usesPreview}
-              expanded={!usesPreview || isExpanded('artists')}
-              onToggleExpanded={toggleExpanded}
-              onSortChange={updateSortCriterion}
-              onOpenContextMenu={openCardContextMenu}
-            />
-          ) : null}
-          {showAlbums ? (
-            <SearchCardSection
-              cards={sortedResults.albums}
-              sectionKey="albums"
-              title={showCount ? t('search.albumsWithCount', { count: results.albums.length }) : t('common.albums')}
-              viewAllLabel={t('search.viewAll')}
-              viewLessLabel={t('search.viewLess')}
-              sortOptions={getSortOptions('albums', t)}
-              sortCriterion={sortCriteria.albums}
-              usesPreview={usesPreview}
-              expanded={!usesPreview || isExpanded('albums')}
-              onToggleExpanded={toggleExpanded}
-              onSortChange={updateSortCriterion}
-              onOpenContextMenu={openCardContextMenu}
-            />
-          ) : null}
           {songContextMenu ? (
             <MusicMenuFlyout
               menu={songContextMenu}
               playlists={playlists}
               queueSongIds={queueSongIds}
+              currentTrackId={selectedTrackId}
+              isPlaying={isPlaying}
               t={t}
               onAddSongToPlaylist={onAddSongToPlaylist}
               onClose={() => {
                 setSongContextMenu(null)
               }}
               onPlayTrack={onPlayTrack}
+              onMoveToMusicOrPlay={onMoveToMusicOrPlay}
+              onTogglePlayPause={onTogglePlayPause}
               onPlayNext={onPlayNext}
               onRevealSong={onRevealSong}
               onDeleteSongFromDisk={onDeleteSongFromDisk}
               onToggleFavorite={onToggleFavorite}
+              showSelect={false}
             />
           ) : null}
           {cardContextMenu ? (
@@ -318,15 +346,53 @@ export function SearchPage({
               onClose={() => {
                 setCardContextMenu(null)
               }}
-              items={getSearchCardMenuItems({
+              items={getSearchResultMenuItems({
                 menu: cardContextMenu,
                 playlists,
                 t,
-                onNavigate: navigate,
                 onPlayTrack,
+                onAddSongsToNowPlaying,
+                onCreatePlaylistWithSongs,
                 onAddSongsToPlaylist,
+                onSearchDirectory,
+                rootPath,
+                preferenceItem: getSearchResultExistingPreferenceItem(cardContextMenu, preferenceItems),
+                onPreferenceChanged: refreshPreferenceItems,
+                onSeeAlbumArt: setAlbumArtPreview,
               })}
             />
+          ) : null}
+          {albumArtPreview ? (
+            <div
+              className="album-art-preview-backdrop"
+              role="presentation"
+              onClick={() => {
+                setAlbumArtPreview(null)
+              }}
+            >
+              <section
+                className="album-art-preview-dialog"
+                role="dialog"
+                aria-modal="true"
+                aria-label={t('context.seeAlbumArt')}
+                onClick={(event) => {
+                  event.stopPropagation()
+                }}
+              >
+                <button
+                  type="button"
+                  className="album-art-preview-close"
+                  aria-label={t('common.close')}
+                  onClick={() => {
+                    setAlbumArtPreview(null)
+                  }}
+                >
+                  <Icon name="close" />
+                </button>
+                <AlbumArtControl title={albumArtPreview.title} artworkUrl={albumArtPreview.artworkUrl} songId={albumArtPreview.songIds[0]!} />
+                <strong title={albumArtPreview.title}>{albumArtPreview.title}</strong>
+              </section>
+            </div>
           ) : null}
         </div>
       )}
@@ -347,11 +413,11 @@ function SearchResultTabs({
 }) {
   const tabs: Array<{ key: SearchFilterKey; label: string }> = [
     { key: 'all', label: t('common.all') },
+    { key: 'artists', label: t('common.artists') },
+    { key: 'albums', label: t('common.albums') },
     { key: 'songs', label: t('common.songs') },
     { key: 'playlists', label: t('common.playlists') },
     { key: 'folders', label: t('common.folders') },
-    { key: 'artists', label: t('common.artists') },
-    { key: 'albums', label: t('common.albums') },
   ]
 
   return (
@@ -376,7 +442,7 @@ function SearchResultTabs({
   )
 }
 
-function SearchCardSection({
+function SearchResultSection({
   cards,
   sectionKey,
   title,
@@ -391,8 +457,8 @@ function SearchCardSection({
   onSortChange,
   onOpenContextMenu,
 }: {
-  cards: SearchCard[]
-  sectionKey: SearchSectionKey
+  cards: SearchResult[]
+  sectionKey: SearchResultType
   title: string
   viewAllLabel: string
   viewLessLabel: string
@@ -401,9 +467,9 @@ function SearchCardSection({
   previewLimit?: number
   usesPreview?: boolean
   expanded: boolean
-  onToggleExpanded: (section: SearchSectionKey) => void
-  onSortChange: (section: SearchSectionKey, criterion: SearchSortCriterion) => void
-  onOpenContextMenu: (sectionKey: SearchSectionKey, card: SearchCard, x: number, y: number) => void
+  onToggleExpanded: (section: SearchResultType) => void
+  onSortChange: (section: SearchResultType, criterion: SearchSortCriterion) => void
+  onOpenContextMenu: (sectionKey: SearchResultType, card: SearchResult, x: number, y: number) => void
 }) {
   if (cards.length === 0) {
     return null
@@ -444,7 +510,7 @@ function SearchCardSection({
   )
 }
 
-function SearchSectionHeader({
+export function SearchSectionHeader({
   sectionKey,
   title,
   viewAllLabel,
@@ -456,7 +522,7 @@ function SearchSectionHeader({
   onToggleExpanded,
   onSortChange,
 }: {
-  sectionKey: SearchSectionKey
+  sectionKey: SearchResultType
   title: string
   viewAllLabel: string
   viewLessLabel: string
@@ -464,8 +530,8 @@ function SearchSectionHeader({
   sortCriterion: SearchSortCriterion
   showViewAll: boolean
   expanded: boolean
-  onToggleExpanded: (section: SearchSectionKey) => void
-  onSortChange: (section: SearchSectionKey, criterion: SearchSortCriterion) => void
+  onToggleExpanded: (section: SearchResultType) => void
+  onSortChange: (section: SearchResultType, criterion: SearchSortCriterion) => void
 }) {
   const [isSortOpen, setIsSortOpen] = useState(false)
   const sortMenuRef = useRef<HTMLDivElement | null>(null)
@@ -544,7 +610,7 @@ function SearchSectionHeader({
   )
 }
 
-function SearchArtwork({ title, artworkUrl }: { title: string; artworkUrl: string }) {
+export function SearchArtwork({ title, artworkUrl }: { title: string; artworkUrl: string }) {
   return (
     <ArtworkImage
       className="search-card-artwork"
@@ -557,32 +623,35 @@ function SearchArtwork({ title, artworkUrl }: { title: string; artworkUrl: strin
   )
 }
 
-function getSearchCardMenuItems({
+function getSearchResultMenuItems({
   menu,
   playlists,
   t,
-  onNavigate,
   onPlayTrack,
+  onAddSongsToNowPlaying,
+  onCreatePlaylistWithSongs,
   onAddSongsToPlaylist,
+  onSearchDirectory,
+  rootPath,
+  preferenceItem,
+  onPreferenceChanged,
+  onSeeAlbumArt,
 }: {
-  menu: SearchCardContextMenuState
+  menu: SearchResultContextMenuState
   playlists: LibraryPlaylist[]
   t: Translator
-  onNavigate: (path: string) => void
   onPlayTrack: (trackId: number, queueSongIds: number[]) => void
+  onAddSongsToNowPlaying: (songIds: number[]) => void
+  onCreatePlaylistWithSongs: (name: string, songIds: number[]) => void
   onAddSongsToPlaylist: (playlistId: number, songIds: number[]) => void
+  onSearchDirectory: (query: string, folderRelativePath: string) => void
+  rootPath: string
+  preferenceItem: PreferenceItemSnapshot | null
+  onPreferenceChanged: () => void | Promise<void>
+  onSeeAlbumArt: (card: SearchResult) => void
 }) {
   const { card, sectionKey } = menu
   const items: MenuFlyoutItem[] = [
-    {
-      key: 'play',
-      text: t('context.play'),
-      icon: 'play',
-      disabled: card.songIds.length === 0,
-      onClick: () => {
-        onPlayTrack(card.songIds[0]!, card.songIds)
-      },
-    },
     {
       key: 'shuffle',
       text: t('nowPlaying.randomPlay'),
@@ -598,6 +667,19 @@ function getSearchCardMenuItems({
     playlists,
     songIds: card.songIds,
     t,
+    defaultPlaylistName: card.title,
+    includeNowPlaying: true,
+    includeFavorites: true,
+    onAddToNowPlaying: () => {
+      onAddSongsToNowPlaying(card.songIds)
+    },
+    onToggleFavorite: () => {
+      const favoritePlaylist = playlists.find((playlist) => playlist.isBuiltIn)!
+      onAddSongsToPlaylist(favoritePlaylist.id, card.songIds)
+    },
+    onCreatePlaylist: (name) => {
+      onCreatePlaylistWithSongs(name, card.songIds)
+    },
     onAddToPlaylist: (playlistId) => {
       onAddSongsToPlaylist(playlistId, card.songIds)
     },
@@ -607,28 +689,102 @@ function getSearchCardMenuItems({
     items.push(addToItem)
   }
 
-  items.push({
-    key: 'open',
-    text:
-      sectionKey === 'albums'
-        ? t('context.seeAlbum')
-        : sectionKey === 'artists'
-          ? t('context.seeArtist')
-          : sectionKey === 'folders'
-            ? t('context.reveal')
-            : t('common.playlists'),
-    pendingText: sectionKey === 'folders' ? t('context.openingLocal') : undefined,
-    icon: sectionKey === 'artists' ? 'users' : sectionKey === 'folders' ? 'folder' : sectionKey === 'playlists' ? 'playlists' : 'albums',
-    onClick: () => {
-      if (sectionKey === 'folders') {
-        return window.smplayer?.revealItemInFolder(card.sourcePath ?? card.path)
-      }
+  const preferenceMenuItem = getSearchResultPreferenceItem(sectionKey, card, t, preferenceItem, onPreferenceChanged)
+  if (preferenceMenuItem) {
+    items.push(preferenceMenuItem)
+  }
 
-      onNavigate(card.path)
-    },
-  })
+  if (sectionKey === 'albums') {
+    items.push({
+      key: 'see-album-art',
+      text: t('context.seeAlbumArt'),
+      icon: 'albums',
+      onClick: () => {
+        onSeeAlbumArt(card)
+      },
+    })
+  }
+
+  if (sectionKey === 'folders') {
+    items.push(
+      {
+        key: 'show-in-explorer',
+        text: t('context.reveal'),
+        pendingText: t('context.openingLocal'),
+        icon: 'folder',
+        onClick: () => window.smplayer?.revealItemInFolder(card.sourcePath!),
+      },
+      {
+        key: 'search-directory',
+        text: t('local.searchDirectory'),
+        icon: 'search',
+        onClick: () => {
+          const query = window.prompt(t('local.searchDirectoryPrompt', { name: card.title }))
+          if (query?.trim()) {
+            onSearchDirectory(query, getRelativeFolderPath(card.sourcePath!, rootPath))
+          }
+        },
+      },
+    )
+  }
 
   return items
+}
+
+function getSearchResultPreferenceItem(
+  sectionKey: SearchResultType,
+  card: SearchResult,
+  t: Translator,
+  preferenceItem: PreferenceItemSnapshot | null,
+  onPreferenceChanged: () => void | Promise<void>,
+): MenuFlyoutItem | null {
+  const preferenceTypeBySection = {
+    artists: 'artist',
+    albums: 'album',
+    playlists: 'playlist',
+    folders: 'folder',
+  } as const
+  const preferenceType = preferenceTypeBySection[sectionKey as keyof typeof preferenceTypeBySection]
+
+  if (!preferenceType) {
+    return null
+  }
+
+  return getPreferenceMenuFlyoutItem({
+    type: preferenceType,
+    itemId: getSearchResultPreferenceId(preferenceType, card),
+    name: card.title,
+    preferenceItem,
+    t,
+    onUpdated: onPreferenceChanged,
+  })
+}
+
+function getSearchResultExistingPreferenceItem(
+  menu: SearchResultContextMenuState,
+  preferenceItems: Map<string, PreferenceItemSnapshot>,
+) {
+  const type = getSearchResultPreferenceType(menu.sectionKey)
+  if (!type) {
+    return null
+  }
+
+  return preferenceItems.get(`${type}:${getSearchResultPreferenceId(type, menu.card)}`) ?? null
+}
+
+function getSearchResultPreferenceType(sectionKey: SearchResultType): PreferenceEntityType | null {
+  const preferenceTypeBySection = {
+    artists: 'artist',
+    albums: 'album',
+    playlists: 'playlist',
+    folders: 'folder',
+  } as const
+
+  return preferenceTypeBySection[sectionKey as keyof typeof preferenceTypeBySection] ?? null
+}
+
+function getSearchResultPreferenceId(type: PreferenceEntityType, card: SearchResult) {
+  return type === 'folder' || type === 'playlist' ? card.sourceId! : card.title
 }
 
 function shuffleSongIds(songIds: number[]) {
@@ -644,8 +800,8 @@ function shuffleSongIds(songIds: number[]) {
   return shuffledSongIds
 }
 
-function getSortOptions(
-  section: SearchSectionKey,
+export function getSortOptions(
+  section: SearchResultType,
   t: Translator,
 ): Array<{ value: SearchSortCriterion; label: string }> {
   const baseOptions: Array<{ value: SearchSortCriterion; label: string }> = [
@@ -690,7 +846,22 @@ function getSortOptions(
   }
 }
 
-function sortCards(cards: SearchCard[], criterion: SearchSortCriterion) {
+export function getSearchCriterionSetting(section: SearchResultType): keyof AppSettingsUpdate {
+  switch (section) {
+    case 'artists':
+      return 'searchArtistsCriterion'
+    case 'albums':
+      return 'searchAlbumsCriterion'
+    case 'songs':
+      return 'searchSongsCriterion'
+    case 'playlists':
+      return 'searchPlaylistsCriterion'
+    case 'folders':
+      return 'searchFoldersCriterion'
+  }
+}
+
+export function sortSearchResults(cards: SearchResult[], criterion: SearchSortCriterion) {
   const sorted = cards.slice()
 
   switch (criterion) {
@@ -708,7 +879,7 @@ function sortCards(cards: SearchCard[], criterion: SearchSortCriterion) {
   }
 }
 
-function sortSongs(songs: LibrarySong[], criterion: SearchSortCriterion) {
+export function sortSearchSongs(songs: LibrarySong[], criterion: SearchSortCriterion) {
   const sorted = songs.slice()
 
   switch (criterion) {
@@ -731,27 +902,29 @@ function sortSongs(songs: LibrarySong[], criterion: SearchSortCriterion) {
 }
 
 function getPrimaryArtist(song: LibrarySong) {
-  return song.artist || song.artists[0] || ''
+  return getSongArtists(song)[0]
 }
 
-function buildSearchResults(
-  songs: LibrarySong[],
+export function buildSearchResults(
+  scopedSongs: LibrarySong[],
+  allSongs: LibrarySong[],
+  folders: LibraryFolder[],
   playlists: LibraryPlaylist[],
   rootPath: string,
   normalizedQuery: string,
   t: Translator,
 ) {
   const matchedSongs = normalizedQuery
-    ? songs
+    ? scopedSongs
         .map((song) => ({ entity: song, score: matchSong(song, normalizedQuery) }))
         .filter((result) => result.score > 0)
         .sort(sortByScoreThenTitle)
         .map((result) => result.entity)
     : []
-  const artists = buildArtistResults(songs, matchedSongs, normalizedQuery, t)
-  const albums = buildAlbumResults(songs, matchedSongs, normalizedQuery, t)
-  const folders = buildFolderResults(songs, matchedSongs, rootPath, normalizedQuery, t)
-  const songsById = new Map(songs.map((song) => [song.id, song]))
+  const artists = buildArtistResults(scopedSongs, matchedSongs, normalizedQuery, t)
+  const albums = buildAlbumResults(scopedSongs, matchedSongs, normalizedQuery, t)
+  const folderResults = buildFolderResults(allSongs, folders, matchedSongs, rootPath, normalizedQuery, t)
+  const scopedSongsById = new Map(scopedSongs.map((song) => [song.id, song]))
   const playlistResults = playlists
     .map((playlist) => ({
       entity: playlist,
@@ -763,18 +936,19 @@ function buildSearchResults(
     .filter((result) => result.score > 0)
     .sort((left, right) => right.score - left.score || left.entity.name.localeCompare(right.entity.name))
     .map(({ entity, score }) => {
-      const playlistSongs = entity.songIds.map((songId) => songsById.get(songId)).filter((song) => song !== undefined)
+      const playlistSongs = entity.songIds.map((songId) => scopedSongsById.get(songId)).filter((song) => song !== undefined)
       return {
         score,
         title: entity.name,
         subtitle: t('cards.songCount', { count: entity.songCount }),
         artworkUrl: playlistSongs.find((song) => song.artworkUrl)?.artworkUrl ?? '',
-        path: '/playlists',
+        path: `/playlists/${entity.id}`,
         songCount: entity.songCount,
         playCount: playlistSongs.reduce((sum, song) => sum + song.playCount, 0),
         duration: playlistSongs.reduce((sum, song) => sum + song.duration, 0),
         albumCount: 0,
         songIds: playlistSongs.map((song) => song.id),
+        sourceId: String(entity.id),
       }
     })
 
@@ -783,7 +957,7 @@ function buildSearchResults(
     albums,
     songs: matchedSongs,
     playlists: playlistResults,
-    folders,
+    folders: folderResults,
   }
 }
 
@@ -877,27 +1051,39 @@ function buildAlbumResults(
 
 function buildFolderResults(
   allSongs: LibrarySong[],
+  folders: LibraryFolder[],
   matchedSongs: LibrarySong[],
   rootPath: string,
   normalizedQuery: string,
   t: Translator,
 ) {
   const matchedFolderPaths = new Set(matchedSongs.map((song) => getFolderPath(song.path)))
-  const groups = new Map<string, LibrarySong[]>()
-  for (const song of allSongs) {
-    const folderPath = getFolderPath(song.path)
-    const folderName = getPathLabel(folderPath)
-    if (
-      matchedFolderPaths.has(folderPath) ||
-      evaluateString(folderName, normalizedQuery) > 0 ||
-      evaluateString(folderPath, normalizedQuery) > 0
-    ) {
-      groups.set(folderPath, [...(groups.get(folderPath) ?? []), song])
+  const candidateFolderPaths = new Set<string>()
+  const folderByPath = new Map(folders.map((folder) => [folder.path, folder]))
+
+  for (const folder of folders) {
+    const folderName = getPathLabel(folder.path)
+    if (evaluateString(folderName, normalizedQuery) > 0 || evaluateString(folder.path, normalizedQuery) > 0) {
+      candidateFolderPaths.add(folder.path)
     }
   }
 
-  return [...groups.entries()]
-    .map(([folderPath, folderSongs]) => {
+  for (const folderPath of matchedFolderPaths) {
+    candidateFolderPaths.add(folderPath)
+  }
+
+  const songsByFolder = new Map<string, LibrarySong[]>()
+  for (const song of allSongs) {
+    for (const candidateFolderPath of candidateFolderPaths) {
+      if (isSongUnderFolder(song.path, candidateFolderPath)) {
+        songsByFolder.set(candidateFolderPath, [...(songsByFolder.get(candidateFolderPath) ?? []), song])
+      }
+    }
+  }
+
+  return [...candidateFolderPaths]
+    .map((folderPath) => {
+      const folderSongs = songsByFolder.get(folderPath) ?? []
       const folderName = getPathLabel(folderPath) || t('local.libraryRoot')
       return {
         folderPath,
@@ -922,15 +1108,13 @@ function buildFolderResults(
       duration: folderSongs.reduce((sum, song) => sum + song.duration, 0),
       albumCount: 0,
       songIds: folderSongs.map((song) => song.id),
+      sourceId: String(folderByPath.get(folderPath)!.id),
       sourcePath: folderPath,
     }))
 }
 
 function matchSong(song: LibrarySong, normalizedQuery: string) {
-  const artistScore = Math.max(
-    evaluateString(song.artist, normalizedQuery),
-    ...song.artists.map((artist) => evaluateString(artist, normalizedQuery)),
-  )
+  const artistScore = Math.max(...getSongArtists(song).map((artist) => evaluateString(artist, normalizedQuery)))
   const baseScore = Math.max(
     evaluateString(song.title, normalizedQuery),
     artistScore - 10,
@@ -1025,4 +1209,11 @@ function getRelativeFolderPath(folderPath: string, rootPath: string) {
   }
 
   return folderPath
+}
+
+function isSongUnderFolder(songPath: string, folderPath: string) {
+  const normalizedSongPath = songPath.replace(/\\/g, '/')
+  const normalizedFolderPath = folderPath.replace(/\\/g, '/').replace(/\/+$/, '')
+
+  return normalizedSongPath.startsWith(`${normalizedFolderPath}/`)
 }

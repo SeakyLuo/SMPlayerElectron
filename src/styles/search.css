@@ -13,6 +13,12 @@
   padding: 2px 0 22px;
 }
 
+.search-directory-context {
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 650;
+}
+
 .search-result-tabs {
   display: flex;
   align-items: center;

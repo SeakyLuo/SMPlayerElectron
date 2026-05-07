@@ -15,6 +15,7 @@ interface GridViewHolderProps {
   onPlay: () => void
   onMoveUp: () => void
   onMoveDown: () => void
+  onContextMenu?: (x: number, y: number) => void
 }
 
 export function GridViewHolder({
@@ -28,6 +29,7 @@ export function GridViewHolder({
   onPlay,
   onMoveUp,
   onMoveDown,
+  onContextMenu,
 }: GridViewHolderProps) {
   const artworks = songs.map((song) => song.artworkUrl).filter(Boolean).slice(0, 4)
   const openOnKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -44,6 +46,10 @@ export function GridViewHolder({
       className={`grid-view-holder${selected ? ' is-selected' : ''}`}
       title={playlist.name}
       onClick={onOpen}
+      onContextMenu={(event) => {
+        event.preventDefault()
+        onContextMenu?.(event.clientX, event.clientY)
+      }}
       onKeyDown={openOnKeyDown}
     >
       <span className={`grid-view-holder-cover artwork-count-${artworks.length}`} aria-hidden="true">

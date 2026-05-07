@@ -1,7 +1,8 @@
+import { useState } from 'react'
+
+import { AlbumArtworkDialog } from '../components/AlbumArtworkDialog'
 import { HeaderedPlaylistControl } from '../components/HeaderedPlaylistControl'
 import type { LibraryPlaylist, LibrarySong, PreferenceLevel } from '../shared/contracts'
-import { getSongArtists } from '../shared/artists'
-import { formatDuration } from '../shared/formatters'
 import type { Translator } from '../shared/i18n'
 
 interface AlbumDetailPageProps {
@@ -9,13 +10,19 @@ interface AlbumDetailPageProps {
   t: Translator
   songs: LibrarySong[]
   selectedTrackId: number | null
+  isPlaying: boolean
   playlists: LibraryPlaylist[]
   onPlayTrack: (trackId: number, queueSongIds: number[]) => void
+  onMoveToMusicOrPlay: (songId: number) => void
+  onPlayNext: (songId: number) => void
+  onTogglePlayPause: () => void
   onAddSongToPlaylist: (playlistId: number, songId: number) => void
   onAddSongsToPlaylist: (playlistId: number, songIds: number[]) => void
   onToggleFavorite: (songId: number, favorite: boolean) => void
   onSetAlbumPreferred: (albumName: string, level: PreferenceLevel) => void
-  onEditAlbumArtwork: (albumName: string) => void
+  onAlbumArtworkSaved: () => void
+  onArtistClick: (artist: string) => void
+  onAlbumClick: (album: string) => void
 }
 
 export function AlbumDetailPage({
@@ -23,34 +30,32 @@ export function AlbumDetailPage({
   t,
   songs,
   selectedTrackId,
+  isPlaying,
   playlists,
   onPlayTrack,
+  onMoveToMusicOrPlay,
+  onPlayNext,
+  onTogglePlayPause,
   onAddSongToPlaylist,
   onAddSongsToPlaylist,
   onToggleFavorite,
   onSetAlbumPreferred,
-  onEditAlbumArtwork,
+  onAlbumArtworkSaved,
+  onArtistClick,
+  onAlbumClick,
 }: AlbumDetailPageProps) {
+  const [showArtworkDialog, setShowArtworkDialog] = useState(false)
   const artworkUrl = songs.find((song) => song.artworkUrl)?.artworkUrl ?? ''
-  const artists = [...new Set(songs.flatMap((song) => getSongArtists(song)))].sort(
-    (left, right) => left.localeCompare(right),
-  )
-  const subtitle = t('albums.albumSummary', {
-    songs: songs.length,
-    duration: formatDuration(songs.reduce((sum, song) => sum + song.duration, 0)),
-  })
-  const caption = artists.slice(0, 3).join(t('albums.artistSeparator')) || t('common.artistUnknown')
 
   return (
     <section className="page-panel immersive-detail-page">
       <HeaderedPlaylistControl
         type="album"
         title={albumName}
-        subtitle={subtitle}
-        caption={caption}
         t={t}
         songs={songs}
         selectedTrackId={selectedTrackId}
+        isPlaying={isPlaying}
         playlists={playlists}
         artworkUrl={artworkUrl}
         showAlbum={false}
@@ -60,16 +65,32 @@ export function AlbumDetailPage({
         preferenceType="album"
         preferenceItemId={albumName}
         onPlayTrack={onPlayTrack}
+        onMoveToMusicOrPlay={onMoveToMusicOrPlay}
+        onPlayNext={onPlayNext}
+        onTogglePlayPause={onTogglePlayPause}
         onAddSongToPlaylist={onAddSongToPlaylist}
         onAddSongsToPlaylist={onAddSongsToPlaylist}
         onToggleFavorite={onToggleFavorite}
+        onArtistClick={onArtistClick}
+        onAlbumClick={onAlbumClick}
         onSetPreferred={(level) => {
           onSetAlbumPreferred(albumName, level)
         }}
         onEditArtwork={() => {
-          onEditAlbumArtwork(albumName)
+          setShowArtworkDialog(true)
         }}
       />
+      {showArtworkDialog ? (
+        <AlbumArtworkDialog
+          albumName={albumName}
+          artworkUrl={artworkUrl}
+          t={t}
+          onClose={() => {
+            setShowArtworkDialog(false)
+          }}
+          onSaved={onAlbumArtworkSaved}
+        />
+      ) : null}
     </section>
   )
 }

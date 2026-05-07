@@ -61,11 +61,11 @@ export function MultiSelectCommandBar({
 
     const updateLayout = () => {
       const contentRect = workspaceContent.getBoundingClientRect()
-      const playerRect = playerBar.getBoundingClientRect()
+      const playerRect = playerBar?.getBoundingClientRect()
       setLayout({
         left: contentRect.left,
         width: contentRect.width,
-        bottom: window.innerHeight - playerRect.top,
+        bottom: playerRect ? window.innerHeight - playerRect.top : 12,
       })
     }
 

@@ -10,6 +10,7 @@
 @import './styles/album-tile.css';
 @import './styles/playlist-control.css';
 @import './styles/menus-actions.css';
+@import './styles/song-dialog.css';
 @import './styles/collection.css';
 @import './styles/search.css';
 @import './styles/local.css';
@@ -18,6 +19,7 @@
 @import './styles/headered-playlist.css';
 @import './styles/immersive-detail.css';
 @import './styles/now-playing.css';
+@import './styles/now-playing-full.css';
 @import './styles/detail.css';
 @import './styles/settings.css';
 @import './styles/preferences.css';

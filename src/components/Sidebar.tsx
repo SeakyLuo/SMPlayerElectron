@@ -267,11 +267,11 @@ export function Sidebar({
 
       <nav className="nav-section playlist-nav-section" aria-label={t('common.playlists')}>
         {collapsed ? (
-          <NavItem to="/playlists" icon="playlists" label={t('common.playlists')} targetTo={getRestoredNavTarget('/playlists')} />
+          <NavItem to="/playlists" icon="playlists" label={t('common.playlists')} />
         ) : (
           <>
             <div className="playlist-nav-heading">
-              <NavItem to="/playlists" icon="playlists" label={t('common.playlists')} targetTo={getRestoredNavTarget('/playlists')} />
+              <NavItem to="/playlists" icon="playlists" label={t('common.playlists')} />
               <button
                 type="button"
                 className="playlist-nav-toggle"

@@ -22,4 +22,6 @@ export const PLAYLIST_NAMES = {
 export const ACTIVE_STATE = {
   inactive: 0,
   active: 1,
+  hidden: -1,
+  parentHidden: -2,
 } as const
