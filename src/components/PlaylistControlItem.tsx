@@ -1,6 +1,7 @@
 import clsx from 'clsx'
 import { useRef, useState, type CSSProperties, type DragEventHandler, type PointerEvent, type Ref } from 'react'
 
+import { getSongArtists } from '../shared/artists'
 import type { LibrarySong } from '../shared/contracts'
 import { formatDuration } from '../shared/formatters'
 import type { Translator } from '../shared/i18n'
@@ -70,7 +71,8 @@ export function PlaylistControlItem({
   const suppressClickRef = useRef(false)
   const [swipeOffset, setSwipeOffset] = useState(0)
   const [isSwiping, setIsSwiping] = useState(false)
-  const artistLabel = song.artists.join(', ') || song.artist
+  const artists = getSongArtists(song)
+  const artistLabel = artists.join(', ')
   const albumLabel = song.album || t('common.albumUnknown')
   const canSwipeFavorite = !selectionMode && Boolean(onToggleFavorite)
   const canSwipeRemove = !selectionMode && removable && Boolean(onRemoveFromListClick)
@@ -288,7 +290,7 @@ export function PlaylistControlItem({
           className="playlist-control-item-meta"
           onClick={(event) => {
             event.stopPropagation()
-            onArtistClick?.(artistLabel)
+            onArtistClick?.(artists[0]!)
           }}
         >
           {artistLabel}

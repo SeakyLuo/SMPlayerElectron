@@ -104,6 +104,7 @@ export function MusicLibraryPage({
   const [columnWidths, setColumnWidths] = useState<ColumnWidths>(DEFAULT_COLUMN_WIDTHS)
   const [scrollTop, setScrollTop] = useState(0)
   const [viewportHeight, setViewportHeight] = useState(640)
+  const [viewportWidth, setViewportWidth] = useState(1160)
   const quickJumpColumn = sortState.column
   const visibleStartIndex = Math.max(0, Math.floor(scrollTop / VIRTUAL_ROW_HEIGHT) - VIRTUAL_OVERSCAN_ROWS)
   const visibleEndIndex = Math.min(
@@ -118,7 +119,10 @@ export function MusicLibraryPage({
     () => queueSongIds.filter((songId) => selectedSongIds.has(songId)),
     [queueSongIds, selectedSongIds],
   )
-  const tableWidth = Object.values(columnWidths).reduce((total, width) => total + width, 0)
+  const tableWidth = Math.max(
+    Object.values(columnWidths).reduce((total, width) => total + width, 0),
+    viewportWidth,
+  )
   const customPlaylists = snapshot.playlists.filter((playlist) => !playlist.isBuiltIn)
   const favoritePlaylist = snapshot.playlists.find((playlist) => playlist.isBuiltIn && playlist.name === t('common.myFavorites'))!
   const quickJumpMap = useMemo(
@@ -209,11 +213,12 @@ export function MusicLibraryPage({
       return
     }
 
-    const updateViewportHeight = () => {
+    const updateViewport = () => {
       setViewportHeight(tableShell.clientHeight)
+      setViewportWidth(tableShell.clientWidth)
     }
-    const resizeObserver = new ResizeObserver(updateViewportHeight)
-    updateViewportHeight()
+    const resizeObserver = new ResizeObserver(updateViewport)
+    updateViewport()
     resizeObserver.observe(tableShell)
 
     return () => {

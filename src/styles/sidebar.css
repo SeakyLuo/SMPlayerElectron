@@ -14,6 +14,13 @@
   box-shadow: none;
   backdrop-filter: none;
   overflow: hidden;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.sidebar * {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 .sidebar.is-collapsed {

@@ -42,6 +42,17 @@ const paths = {
     <path key="bottomRightH" d="M20 15v5h-5" />,
     <path key="bottomRightD" d="m20 20-6-6" />,
   ],
+  grip: [
+    <circle key="a1" cx="8" cy="6" r="1" fill="currentColor" stroke="none" />,
+    <circle key="a2" cx="12" cy="6" r="1" fill="currentColor" stroke="none" />,
+    <circle key="a3" cx="16" cy="6" r="1" fill="currentColor" stroke="none" />,
+    <circle key="b1" cx="8" cy="12" r="1" fill="currentColor" stroke="none" />,
+    <circle key="b2" cx="12" cy="12" r="1" fill="currentColor" stroke="none" />,
+    <circle key="b3" cx="16" cy="12" r="1" fill="currentColor" stroke="none" />,
+    <circle key="c1" cx="8" cy="18" r="1" fill="currentColor" stroke="none" />,
+    <circle key="c2" cx="12" cy="18" r="1" fill="currentColor" stroke="none" />,
+    <circle key="c3" cx="16" cy="18" r="1" fill="currentColor" stroke="none" />,
+  ],
   folder: [
     <path key="tab" d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v1H3z" />,
     <path key="body" d="M3 10h18l-2 9H5z" />,
@@ -124,6 +135,12 @@ const paths = {
     <path key="topLine" d="M20 11a8 8 0 0 0-14.9-4" />,
     <path key="bottom" d="M4 18v-5h5" />,
     <path key="bottomLine" d="M4 13a8 8 0 0 0 14.9 4" />,
+  ],
+  refreshClock: [
+    <path key="clock" d="M3 12a9 9 0 1 0 3-6.7" />,
+    <path key="back" d="M3 4v5h5" />,
+    <path key="hand1" d="M12 7v5" />,
+    <path key="hand2" d="m12 12 3 2" />,
   ],
   repeat: [
     <path key="top" d="m17 2 4 4-4 4" />,

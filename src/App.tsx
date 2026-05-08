@@ -19,10 +19,9 @@ import { PlaylistsPage } from './pages/PlaylistsPage'
 import { RecentPage } from './pages/RecentPage'
 import { SearchPage } from './pages/SearchPage'
 import { SettingsPage } from './pages/SettingsPage'
-import { decodeLocalRoute } from './pages/localPagePaths'
+import { buildLocalRoute, decodeLocalRoute } from './pages/localPagePaths'
 import type { LibraryCounts, LibraryFolder, LibraryPlaylist, LibrarySong, LocalFolderSortCriterion, PreferenceLevel, ScanLibraryResult } from './shared/contracts'
 import { getDisplayArtists, getSongArtists } from './shared/artists'
-import { formatDuration } from './shared/formatters'
 import { createTranslator, resolveLocale, type Translator } from './shared/i18n'
 import { sortLibrarySongs } from './shared/sorting'
 import { addNextAndPlay as setQueueAddNextAndPlay, moveToMusicOrPlay as setQueueMoveToMusicOrPlay, playNext as setQueuePlayNext, quickPlay, setMusicAndPlayFromPlaylist } from './shared/mediaHelper'
@@ -111,6 +110,10 @@ function getRouteSection(pathname: string) {
   }
 
   return null
+}
+
+function isAlbumDetailRoute(pathname: string) {
+  return pathname.startsWith('/albums/')
 }
 
 function getScrollElementKey(root: HTMLElement, element: HTMLElement) {
@@ -367,20 +370,31 @@ function App() {
   const playback = usePlaybackController(snapshot)
   const routeScrollKey = `${location.pathname}${location.search}`
   const currentRouteSection = getRouteSection(location.pathname)
+  const isInAlbumDetail = isAlbumDetailRoute(location.pathname)
 
-  if (currentRouteSection) {
+  if (currentRouteSection && currentRouteSection !== '/albums') {
     routeMemoryRef.current.set(currentRouteSection, location.pathname)
   }
 
   const getRestoredNavTarget = (target: string) => {
-    if (target === '/playlists' && snapshot.settings.lastPlaylistId > 0) {
-      const hasLastPlaylist = snapshot.playlists.some((playlist) => playlist.id === snapshot.settings.lastPlaylistId)
-      if (hasLastPlaylist) {
-        return routeMemoryRef.current.get(target) ?? `/playlists/${snapshot.settings.lastPlaylistId}`
-      }
+    if (target === '/albums') {
+      return target
+    }
+
+    if (target === '/playlists') {
+      return target
     }
 
     return routeMemoryRef.current.get(target) ?? target
+  }
+
+  const goBackFromSidebar = () => {
+    if (isInAlbumDetail && navigationDepth === 0) {
+      navigate('/albums', { replace: true })
+      return
+    }
+
+    navigate(-1)
   }
 
   const saveScrollElement = (element: HTMLElement) => {
@@ -479,17 +493,6 @@ function App() {
         artworkUrl:
           playback.currentTrack.artworkUrl ||
           (resolvedArtwork?.trackId === playback.currentTrack.id ? resolvedArtwork.artworkUrl : ''),
-        elapsedLabel: formatDuration(playback.progressSeconds),
-        durationLabel: formatDuration(
-          playback.durationSeconds || playback.currentTrack.duration,
-        ),
-        progressSeconds: playback.progressSeconds,
-        durationSeconds: playback.durationSeconds || playback.currentTrack.duration,
-        progressRatio:
-          playback.durationSeconds > 0
-            ? playback.progressSeconds / playback.durationSeconds
-            : 0,
-        isReady: playback.durationSeconds > 0 || playback.currentTrack.duration > 0,
         isLoading: playback.status === 'loading' || playback.status === 'buffering',
         favorite: playback.currentTrack.favorite,
       }
@@ -498,12 +501,6 @@ function App() {
         title: '',
         artist: '',
         artworkUrl: '',
-        elapsedLabel: '0:00',
-        durationLabel: '0:00',
-        progressSeconds: 0,
-        durationSeconds: 0,
-        progressRatio: 0,
-        isReady: false,
         isLoading: false,
         favorite: false,
       }
@@ -1121,10 +1118,17 @@ function App() {
         collapsed={isNavigationCollapsed}
         appName={t('app.shell')}
         playlists={snapshot.playlists}
-        canGoBack={navigationDepth > 0}
+        canGoBack={navigationDepth > 0 || isInAlbumDetail}
         searchQuery={searchInput}
         recentSearches={snapshot.search.recentSearches}
         getRestoredNavTarget={getRestoredNavTarget}
+        onGoBack={goBackFromSidebar}
+        onNavigate={() => {
+          setShowNowPlayingFullPage(false)
+        }}
+        onReorderPlaylists={(playlistIds) => {
+          void reorderPlaylists(playlistIds)
+        }}
         onSearchChange={setSearchInput}
         onSearchCommit={(value) => {
           void commitSearchQuery(value)
@@ -1144,7 +1148,7 @@ function App() {
         }}
       />
       <div className={
-        location.pathname === '/recent' || location.pathname === '/playlists'
+        location.pathname === '/recent'
           ? 'workspace is-headerless-route'
           : location.pathname.startsWith('/albums/') ||
             location.pathname.startsWith('/playlists/') ||
@@ -1165,6 +1169,9 @@ function App() {
               currentRelativePath={currentLocalRelativePath}
               onHiddenFoldersListButtonClick={() => {
                 navigate('/hidden-folders')
+              }}
+              onOpenFolder={(targetRelativePath) => {
+                navigate(buildLocalRoute(targetRelativePath), { replace: true })
               }}
               onRevealFolder={(folderPath) => window.smplayer?.revealItemInFolder(folderPath)}
               onSearchDirectory={(query, folderRelativePath) => {
@@ -1198,7 +1205,15 @@ function App() {
               <h1>
                 {location.pathname === '/' && !initialLoadComplete
                   ? ''
-                  : getPageTitle(location.pathname, snapshot.counts, t, showCount, submittedSearchQuery, searchFolderName)}
+                  : getPageTitle(
+                    location.pathname,
+                    snapshot.counts,
+                    t,
+                    showCount,
+                    submittedSearchQuery,
+                    searchFolderName,
+                    snapshot.nowPlaying.songIds.length,
+                  )}
               </h1>
             </div>
           )}
@@ -1399,7 +1414,7 @@ function App() {
               }
             />
             <Route
-              path="/albums/:albumName"
+              path="/albums/*"
               element={
                 <AlbumDetailRoute
                   songs={snapshot.songs}
@@ -1481,6 +1496,9 @@ function App() {
                   }}
                   onClearQueue={() => {
                     void clearNowPlaying()
+                  }}
+                  onOpenImmersiveMode={() => {
+                    setShowNowPlayingFullPage(true)
                   }}
                 />
               }
@@ -1657,7 +1675,6 @@ function App() {
                   isPlaying={playback.isPlaying}
                   searchQuery=""
                   error={error}
-                  initialPlaylistId={snapshot.settings.lastPlaylistId}
                   onPlayTrack={(trackId, queueSongIds) => {
                     void playTrackInQueue(trackId, queueSongIds)
                   }}
@@ -1852,8 +1869,6 @@ function App() {
           selectedTrackId={playback.currentTrackId}
           selectedQueueIndex={playback.currentQueueIndex}
           isPlaying={playback.isPlaying}
-          progressSeconds={playback.progressSeconds}
-          durationSeconds={playback.durationSeconds}
           volume={playback.volume}
           isMuted={playback.isMuted}
           mode={playback.mode}
@@ -2005,9 +2020,9 @@ function AlbumDetailRoute({
   onSetAlbumPreferred: (albumName: string, level: PreferenceLevel) => void
   onAlbumArtworkSaved: () => void
 }) {
-  const params = useParams()
+  const location = useLocation()
   const navigate = useNavigate()
-  const albumName = params.albumName ?? ''
+  const albumName = decodeURIComponent(location.pathname.slice('/albums/'.length))
   const albumSongs = songs
     .filter((song) => (song.album || t('common.albumUnknown')) === albumName)
     .sort((left, right) => left.title.localeCompare(right.title))
@@ -2180,6 +2195,7 @@ function getPageTitle(
   showCount: boolean,
   searchQuery: string,
   searchFolderName: string,
+  nowPlayingCount: number,
 ) {
   if (pathname.startsWith('/artists/')) {
     return t('detail.artistEyebrow')
@@ -2202,7 +2218,9 @@ function getPageTitle(
   }
 
   if (pathname.startsWith('/now-playing')) {
-    return t('common.nowPlaying')
+    return showCount
+      ? t('nowPlaying.titleWithCount', { count: nowPlayingCount })
+      : t('common.nowPlaying')
   }
 
   if (pathname.startsWith('/hidden-folders')) {

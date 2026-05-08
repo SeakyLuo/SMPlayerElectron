@@ -2,7 +2,7 @@
   display: grid;
   grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
   gap: 0;
-  height: 100%;
+  height: calc(100% - var(--player-height));
   min-height: 0;
   padding: 0;
   overflow: hidden;
@@ -29,7 +29,7 @@
 }
 
 .artists-progress {
-  margin: 0 0 10px;
+  margin: 8px 0 0;
 }
 
 .artist-detail-progress {
@@ -101,6 +101,16 @@
   box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.1);
 }
 
+.artists-search-shell .page-search-form:focus-within,
+.albums-search-shell .page-search-form:focus-within {
+  background: #fff;
+}
+
+.artists-search-shell .page-search-form:focus-within input,
+.albums-search-shell .page-search-form:focus-within input {
+  background: #fff;
+}
+
 .page-search-form input::placeholder {
   color: rgba(61, 73, 88, 0.62);
 }
@@ -155,8 +165,8 @@
 .page-search-suggestion {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 2px;
   min-height: 42px;
+  align-items: center;
   border: 0;
   border-radius: 10px;
   background: transparent;
@@ -271,6 +281,7 @@
 .artist-list-copy strong {
   font-size: 14px;
   font-weight: 520;
+  line-height: 34px;
 }
 
 .artist-list-copy small {
@@ -283,7 +294,7 @@
   min-width: 0;
   min-height: 0;
   overflow: auto;
-  padding: 22px 28px 0;
+  padding: 0 28px 22px;
 }
 
 .artists-detail.is-empty {
@@ -301,14 +312,17 @@
 .artist-detail-header {
   position: sticky;
   top: 0;
-  z-index: 2;
+  z-index: 4;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 18px;
-  padding: 4px 0 18px;
-  background: transparent;
-  backdrop-filter: blur(18px);
+  margin: 0 -28px;
+  padding: 22px 28px 18px;
+  background:
+    linear-gradient(to bottom, rgba(248, 251, 254, 0.96), rgba(248, 251, 254, 0.88));
+  backdrop-filter: blur(18px) saturate(120%);
+  box-shadow: 0 12px 24px rgba(68, 88, 112, 0.04);
 }
 
 .artist-detail-header h2 {
@@ -352,26 +366,37 @@
 .artist-album-list {
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: 0;
+  padding-top: 22px;
+}
+
+.artist-album-virtual-spacer {
+  flex: 0 0 auto;
 }
 
 .artist-album-section {
-  border-top: 1px solid rgba(106, 118, 132, 0.16);
-  padding-top: 10px;
+  overflow: hidden;
+  margin-bottom: 22px;
+  border: 1px solid rgba(126, 139, 154, 0.18);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.64);
+  box-shadow: 0 16px 38px rgba(68, 88, 112, 0.08);
 }
 
 .artist-album-header {
+  box-sizing: border-box;
   display: grid;
   grid-template-columns: 80px minmax(0, 1fr) 40px;
   align-items: center;
-  gap: 12px;
-  padding: 0 10px 10px;
+  gap: 16px;
+  min-height: 112px;
+  padding: 16px 18px;
 }
 
 .artist-album-artwork {
   width: 80px;
   height: 80px;
-  border-radius: 4px;
+  border-radius: 6px;
   object-fit: cover;
   background: rgba(129, 139, 152, 0.14);
 }
@@ -380,11 +405,13 @@
   display: grid;
   place-items: center;
   color: var(--text-muted);
+  overflow: hidden;
 }
 
-.artist-album-artwork-fallback svg {
-  width: 30px;
-  height: 30px;
+.artist-album-artwork-fallback-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .artist-album-copy {
@@ -408,7 +435,7 @@
 
 .artist-album-copy p {
   margin: 8px 0 0;
-  color: #111;
+  color: var(--text-muted);
   font-size: 14px;
 }
 
@@ -433,4 +460,25 @@
   display: flex;
   flex-direction: column;
   gap: 0;
+}
+
+.artist-song-list .playlist-control-item {
+  grid-template-columns: minmax(0, 1fr) 72px;
+  min-height: 48px;
+  border-top: 1px solid rgba(126, 139, 154, 0.16);
+  border-radius: 0;
+  padding: 0 18px;
+  background: transparent;
+}
+
+.artist-song-list .playlist-control-item-title {
+  grid-template-columns: 34px minmax(0, 1fr);
+}
+
+.artist-song-list .playlist-control-item-title-text {
+  padding-right: 84px;
+}
+
+.artist-song-list .playlist-control-item time {
+  justify-self: end;
 }

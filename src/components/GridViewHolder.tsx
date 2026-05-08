@@ -1,5 +1,6 @@
-import type { KeyboardEvent } from 'react'
+import type { DragEvent, KeyboardEvent } from 'react'
 
+import { GridArtworkCardContent } from './GridArtworkCardContent'
 import { Icon } from './icons'
 import type { LibraryPlaylist, LibrarySong } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
@@ -8,13 +9,14 @@ interface GridViewHolderProps {
   playlist: LibraryPlaylist
   songs: LibrarySong[]
   selected: boolean
+  dragging: boolean
   t: Translator
-  canMoveUp: boolean
-  canMoveDown: boolean
   onOpen: () => void
   onPlay: () => void
-  onMoveUp: () => void
-  onMoveDown: () => void
+  onDragStart: (event: DragEvent<HTMLDivElement>) => void
+  onDragEnd: () => void
+  onDragOver: (event: DragEvent<HTMLDivElement>) => void
+  onDrop: (event: DragEvent<HTMLDivElement>) => void
   onContextMenu?: (x: number, y: number) => void
 }
 
@@ -22,121 +24,81 @@ export function GridViewHolder({
   playlist,
   songs,
   selected,
+  dragging,
   t,
-  canMoveUp,
-  canMoveDown,
   onOpen,
   onPlay,
-  onMoveUp,
-  onMoveDown,
+  onDragStart,
+  onDragEnd,
+  onDragOver,
+  onDrop,
   onContextMenu,
 }: GridViewHolderProps) {
-  const artworks = songs.map((song) => song.artworkUrl).filter(Boolean).slice(0, 4)
+  const artworks = getDisplayArtworks(songs)
   const openOnKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
       onOpen()
     }
   }
+  const startDragging = (event: DragEvent<HTMLDivElement>) => {
+    if (!(event.target instanceof Element) || !event.target.closest('.grid-view-holder-drag-handle')) {
+      event.preventDefault()
+      return
+    }
+
+    onDragStart(event)
+  }
 
   return (
     <div
       role="button"
       tabIndex={0}
-      className={`grid-view-holder${selected ? ' is-selected' : ''}`}
+      draggable
+      className={`grid-view-holder${selected ? ' is-selected' : ''}${dragging ? ' is-dragging' : ''}`}
       title={playlist.name}
       onClick={onOpen}
+      onDragStart={startDragging}
+      onDragEnd={onDragEnd}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
       onContextMenu={(event) => {
         event.preventDefault()
         onContextMenu?.(event.clientX, event.clientY)
       }}
       onKeyDown={openOnKeyDown}
     >
-      <span className={`grid-view-holder-cover artwork-count-${artworks.length}`} aria-hidden="true">
-        {artworks.length > 0 ? (
-          artworks.map((artworkUrl) => <img key={artworkUrl} src={artworkUrl} alt="" />)
-        ) : (
-          <span className="grid-view-holder-cover-fallback">
-            <Icon name="playlists" />
-          </span>
-        )}
-      </span>
-      <span className="grid-view-holder-copy">
-        <strong>{playlist.name}</strong>
-        <small>
-          {t('playlists.songCount', { count: playlist.songCount })}
-          {playlist.isBuiltIn ? ` · ${t('playlists.builtIn')}` : ''}
-        </small>
-      </span>
-      <span className="grid-view-holder-actions">
-        <span
-          role="button"
-          tabIndex={0}
-          className="grid-view-holder-action"
-          title={t('context.play')}
-          onClick={(event) => {
-            event.stopPropagation()
-            onPlay()
-          }}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' || event.key === ' ') {
-              event.preventDefault()
-              event.stopPropagation()
-              onPlay()
-            }
-          }}
-        >
-          <Icon name="play" />
-        </span>
-        {!playlist.isBuiltIn ? (
-          <>
-            <span
-              role="button"
-              tabIndex={0}
-              className="grid-view-holder-action"
-              aria-disabled={!canMoveUp}
-              title={t('playlists.up')}
-              onClick={(event) => {
-                event.stopPropagation()
-                if (canMoveUp) {
-                  onMoveUp()
-                }
-              }}
-              onKeyDown={(event) => {
-                if ((event.key === 'Enter' || event.key === ' ') && canMoveUp) {
-                  event.preventDefault()
-                  event.stopPropagation()
-                  onMoveUp()
-                }
-              }}
-            >
-              <Icon name="chevronUp" />
-            </span>
-            <span
-              role="button"
-              tabIndex={0}
-              className="grid-view-holder-action"
-              aria-disabled={!canMoveDown}
-              title={t('playlists.down')}
-              onClick={(event) => {
-                event.stopPropagation()
-                if (canMoveDown) {
-                  onMoveDown()
-                }
-              }}
-              onKeyDown={(event) => {
-                if ((event.key === 'Enter' || event.key === ' ') && canMoveDown) {
-                  event.preventDefault()
-                  event.stopPropagation()
-                  onMoveDown()
-                }
-              }}
-            >
-              <Icon name="chevronDown" />
-            </span>
-          </>
-        ) : null}
-      </span>
+      <GridArtworkCardContent
+        actions={[
+          {
+            key: 'play',
+            title: t('context.play'),
+            icon: 'play',
+            disabled: songs.length === 0,
+            onClick: () => onPlay(),
+          },
+        ]}
+        artworkUrls={artworks}
+        fallbackIcon="playlists"
+        subtitle={t('playlists.songCount', { count: playlist.songCount })}
+        title={playlist.name}
+      />
+      <button
+        aria-label={t('playlists.dragToSort')}
+        className="grid-view-holder-drag-handle"
+        title={t('playlists.dragToSort')}
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation()
+        }}
+      >
+        <Icon name="grip" />
+      </button>
     </div>
   )
+}
+
+function getDisplayArtworks(songs: LibrarySong[]) {
+  const songWithArtwork = songs.find((song) => song.artworkUrl)
+  return songWithArtwork ? [songWithArtwork.artworkUrl] : []
 }

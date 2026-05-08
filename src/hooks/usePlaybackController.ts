@@ -10,6 +10,7 @@ import {
   samePlaylist,
   shuffleOthers,
 } from '../shared/mediaHelper'
+import { setPlaybackProgress, usePlaybackProgress } from '../state/playbackProgressStore'
 
 interface PlaybackController {
   currentTrack: LibrarySong | null
@@ -52,7 +53,25 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
 }
 
+function updateMediaSessionPosition(durationSeconds: number, progressSeconds: number) {
+  if (!('mediaSession' in navigator) || typeof navigator.mediaSession.setPositionState !== 'function') {
+    return
+  }
+
+  if (durationSeconds <= 0) {
+    navigator.mediaSession.setPositionState()
+    return
+  }
+
+  navigator.mediaSession.setPositionState({
+    duration: durationSeconds,
+    playbackRate: 1,
+    position: clamp(progressSeconds, 0, durationSeconds),
+  })
+}
+
 export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackController {
+  const { progressSeconds, durationSeconds } = usePlaybackProgress()
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const loadedTrackIdRef = useRef<number | null>(null)
   const pendingStartSecondsRef = useRef(0)
@@ -65,7 +84,7 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
   const isUserSeekingRef = useRef(false)
   const statusRef = useRef<PlaybackStatus>('idle')
   const stalledTimerRef = useRef<number | null>(null)
-  const progressAnimationFrameRef = useRef<number | null>(null)
+  const progressSyncTimerRef = useRef<number | null>(null)
   const failedTrackIdsRef = useRef(new Set<number>())
   const loadTrackRef = useRef<(trackId: number, options: LoadTrackOptions) => Promise<void>>(
     async () => {},
@@ -75,8 +94,6 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
   const [currentQueueIndex, setCurrentQueueIndex] = useState<number | null>(null)
   const [status, setStatusState] = useState<PlaybackStatus>('idle')
   const [isPlaying, setIsPlaying] = useState(false)
-  const [progressSeconds, setProgressSeconds] = useState(0)
-  const [durationSeconds, setDurationSeconds] = useState(0)
   const [volume, setVolume] = useState(72)
   const [isMuted, setIsMuted] = useState(false)
   const [mode, setMode] = useState<PlaybackMode>('once')
@@ -85,8 +102,8 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
   const currentTrackIdRef = useRef(currentTrackId)
   const currentQueueIndexRef = useRef<number | null>(currentQueueIndex)
   const isPlayingRef = useRef(isPlaying)
-  const progressSecondsRef = useRef(progressSeconds)
-  const durationSecondsRef = useRef(durationSeconds)
+  const progressSecondsRef = useRef(0)
+  const durationSecondsRef = useRef(0)
   const volumeRef = useRef(volume)
   const isMutedRef = useRef(isMuted)
   const modeRef = useRef(mode)
@@ -104,8 +121,6 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
     currentQueueIndexRef.current = currentQueueIndex
     statusRef.current = status
     isPlayingRef.current = isPlaying
-    progressSecondsRef.current = progressSeconds
-    durationSecondsRef.current = durationSeconds
     volumeRef.current = volume
     isMutedRef.current = isMuted
     modeRef.current = mode
@@ -121,11 +136,9 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
   }, [
     currentTrackId,
     currentQueueIndex,
-    durationSeconds,
     isMuted,
     isPlaying,
     mode,
-    progressSeconds,
     snapshot,
     snapshotQueueSongIds,
     status,
@@ -194,35 +207,48 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
     }
   }, [])
 
-  const cancelProgressAnimation = useCallback(() => {
-    if (progressAnimationFrameRef.current != null) {
-      window.cancelAnimationFrame(progressAnimationFrameRef.current)
-      progressAnimationFrameRef.current = null
+  const stopProgressSync = useCallback(() => {
+    if (progressSyncTimerRef.current != null) {
+      window.clearInterval(progressSyncTimerRef.current)
+      progressSyncTimerRef.current = null
     }
   }, [])
 
-  const updateProgressFromAudio = useCallback(() => {
+  const updateProgressFromAudio = useCallback((force = false) => {
     const audio = audioRef.current
     if (!audio || isUserSeekingRef.current) {
       return
     }
 
-    setProgressSeconds(audio.currentTime)
-  }, [])
-
-  const startProgressAnimation = useCallback(() => {
-    cancelProgressAnimation()
-
-    const tick = () => {
-      updateProgressFromAudio()
-      const audio = audioRef.current
-      if (audio && !audio.paused && !audio.ended) {
-        progressAnimationFrameRef.current = window.requestAnimationFrame(tick)
-      }
+    const nextProgressSeconds = audio.currentTime
+    if (!force && Math.abs(nextProgressSeconds - progressSecondsRef.current) < 0.2) {
+      return
     }
 
-    progressAnimationFrameRef.current = window.requestAnimationFrame(tick)
-  }, [cancelProgressAnimation, updateProgressFromAudio])
+    progressSecondsRef.current = nextProgressSeconds
+    setPlaybackProgress({ progressSeconds: nextProgressSeconds })
+    updateMediaSessionPosition(durationSecondsRef.current, nextProgressSeconds)
+  }, [])
+
+  const setProgressFromPlayback = useCallback((nextProgressSeconds: number) => {
+    progressSecondsRef.current = nextProgressSeconds
+    setPlaybackProgress({ progressSeconds: nextProgressSeconds })
+    updateMediaSessionPosition(durationSecondsRef.current, nextProgressSeconds)
+  }, [])
+
+  const setDurationFromPlayback = useCallback((nextDurationSeconds: number) => {
+    durationSecondsRef.current = nextDurationSeconds
+    setPlaybackProgress({ durationSeconds: nextDurationSeconds })
+    updateMediaSessionPosition(nextDurationSeconds, progressSecondsRef.current)
+  }, [])
+
+  const startProgressSync = useCallback(() => {
+    stopProgressSync()
+    updateProgressFromAudio(true)
+    progressSyncTimerRef.current = window.setInterval(() => {
+      updateProgressFromAudio()
+    }, 500)
+  }, [stopProgressSync, updateProgressFromAudio])
 
   const recoverFromPlaybackFailure = useCallback(
     async () => {
@@ -293,8 +319,8 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
       currentQueueIndexRef.current = queueIndex > -1 ? queueIndex : null
       setCurrentTrackId(trackId)
       setCurrentQueueIndex(queueIndex > -1 ? queueIndex : null)
-      setProgressSeconds(options.startAt)
-      setDurationSeconds(track.duration)
+      setProgressFromPlayback(options.startAt)
+      setDurationFromPlayback(track.duration)
       setStatus(options.autoplay ? 'loading' : 'ready')
       pendingStartSecondsRef.current = options.startAt
       pendingAutoplayRef.current = options.autoplay
@@ -325,7 +351,7 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
         musicProgress: options.startAt,
       })
     }
-  }, [clearStalledTimer, getPlaybackSongIds, persistPlaybackSettings, recoverFromPlaybackFailure, setStatus])
+  }, [clearStalledTimer, getPlaybackSongIds, persistPlaybackSettings, recoverFromPlaybackFailure, setDurationFromPlayback, setProgressFromPlayback, setStatus])
 
   useEffect(() => {
     const audio = new Audio()
@@ -346,7 +372,7 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
           ? audio.duration
           : activeTrack?.duration ?? 0
 
-      setDurationSeconds(nextDuration)
+      setDurationFromPlayback(nextDuration)
       persistResolvedDuration(nextDuration)
 
       if (pendingStartSecondsRef.current > 0) {
@@ -355,7 +381,7 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
           0,
           nextDuration || pendingStartSecondsRef.current,
         )
-        setProgressSeconds(audio.currentTime)
+        setProgressFromPlayback(audio.currentTime)
         pendingStartSecondsRef.current = 0
       }
 
@@ -380,7 +406,7 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
 
     const handleDurationChange = () => {
       if (Number.isFinite(audio.duration) && audio.duration > 0) {
-        setDurationSeconds(audio.duration)
+        setDurationFromPlayback(audio.duration)
         persistResolvedDuration(audio.duration)
       }
     }
@@ -388,7 +414,7 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
     const handlePlay = () => {
       setIsPlaying(true)
       setStatus('playing')
-      startProgressAnimation()
+      startProgressSync()
     }
 
     const handlePlaying = () => {
@@ -396,12 +422,12 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
       failedTrackIdsRef.current.clear()
       setIsPlaying(true)
       setStatus('playing')
-      startProgressAnimation()
+      startProgressSync()
     }
 
     const handlePause = () => {
       setIsPlaying(false)
-      cancelProgressAnimation()
+      stopProgressSync()
       clearStalledTimer()
       if (statusRef.current !== 'loading' && statusRef.current !== 'seeking' && statusRef.current !== 'buffering') {
         setStatus('paused')
@@ -437,7 +463,7 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
       updateProgressFromAudio()
       if (!audio.paused) {
         setStatus('playing')
-        startProgressAnimation()
+        startProgressSync()
         return
       }
 
@@ -445,7 +471,7 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
     }
 
     const handlePlaybackFailure = () => {
-      cancelProgressAnimation()
+      stopProgressSync()
       setStatus('buffering')
       void recoverFromPlaybackFailure()
     }
@@ -487,7 +513,7 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
 
       setIsPlaying(false)
       setStatus('paused')
-      setProgressSeconds(durationSecondsRef.current)
+      setProgressFromPlayback(durationSecondsRef.current)
       await persistPlaybackSettings({ musicProgress: durationSecondsRef.current })
     }
 
@@ -514,7 +540,7 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload)
       clearStalledTimer()
-      cancelProgressAnimation()
+      stopProgressSync()
       audio.pause()
       audio.src = ''
       audio.removeEventListener('loadstart', handleLoadStart)
@@ -535,14 +561,16 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
     }
   }, [
     armStalledTimer,
-    cancelProgressAnimation,
     clearStalledTimer,
     getPlaybackSongIds,
     persistPlaybackSettings,
     persistResolvedDuration,
     recoverFromPlaybackFailure,
+    setDurationFromPlayback,
+    setProgressFromPlayback,
     setStatus,
-    startProgressAnimation,
+    startProgressSync,
+    stopProgressSync,
     updateProgressFromAudio,
   ])
 
@@ -577,8 +605,8 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
       startTransition(() => {
         setCurrentTrackId(null)
         setCurrentQueueIndex(null)
-        setProgressSeconds(0)
-        setDurationSeconds(0)
+        setProgressFromPlayback(0)
+        setDurationFromPlayback(0)
         setStatus('idle')
       })
       return
@@ -620,8 +648,33 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
       queueSongIdsRef.current = queueOverrideRef.current
     }
 
+    const audio = audioRef.current
+    if (audio && loadedTrackIdRef.current === trackId && currentTrackIdRef.current === trackId) {
+      const nextQueueIndex = currentIndex(getPlaybackSongIds(), trackId, queueIndex)
+      currentQueueIndexRef.current = nextQueueIndex > -1 ? nextQueueIndex : null
+      setCurrentQueueIndex(nextQueueIndex > -1 ? nextQueueIndex : null)
+      await persistPlaybackSettings({
+        lastMusicIndex: nextQueueIndex,
+        musicProgress: audio.currentTime,
+      })
+
+      if (!audio.paused) {
+        setStatus('playing')
+        startProgressSync()
+        return
+      }
+
+      setStatus('loading')
+      try {
+        await audio.play()
+      } catch {
+        await recoverFromPlaybackFailure()
+      }
+      return
+    }
+
     await loadTrackRef.current(trackId, { autoplay: true, queueIndex, startAt: 0 })
-  }, [])
+  }, [getPlaybackSongIds, persistPlaybackSettings, recoverFromPlaybackFailure, setStatus, startProgressSync])
 
   const togglePlayPause = useCallback(async () => {
     const audio = audioRef.current
@@ -690,10 +743,10 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
       const nextTime = clamp(ratio, 0, 1) * safeDuration
       setStatus('seeking')
       audio.currentTime = nextTime
-      setProgressSeconds(nextTime)
+      setProgressFromPlayback(nextTime)
       void persistPlaybackSettings({ musicProgress: nextTime })
     },
-    [persistPlaybackSettings, setStatus],
+    [persistPlaybackSettings, setProgressFromPlayback, setStatus],
   )
 
   const seekToSeconds = useCallback(
@@ -707,10 +760,10 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
       const nextTime = clamp(seconds, 0, safeDuration)
       setStatus('seeking')
       audio.currentTime = nextTime
-      setProgressSeconds(nextTime)
+      setProgressFromPlayback(nextTime)
       void persistPlaybackSettings({ musicProgress: nextTime })
     },
-    [persistPlaybackSettings, setStatus],
+    [persistPlaybackSettings, setProgressFromPlayback, setStatus],
   )
 
   const beginSeek = useCallback(() => {
@@ -739,12 +792,12 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
 
     if (wasPlayingBeforeSeekRef.current && !audio.paused) {
       setStatus('playing')
-      startProgressAnimation()
+      startProgressSync()
       return
     }
 
     setStatus(audio.paused ? 'paused' : 'playing')
-  }, [setStatus, startProgressAnimation, updateProgressFromAudio])
+  }, [setStatus, startProgressSync, updateProgressFromAudio])
 
   const seekBySeconds = useCallback(
     (offsetSeconds: number) => {
@@ -758,10 +811,10 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
       const nextTime = clamp(audio.currentTime + offsetSeconds, 0, safeDuration)
       setStatus('seeking')
       audio.currentTime = nextTime
-      setProgressSeconds(nextTime)
+      setProgressFromPlayback(nextTime)
       void persistPlaybackSettings({ musicProgress: nextTime })
     },
-    [persistPlaybackSettings, setStatus],
+    [persistPlaybackSettings, setProgressFromPlayback, setStatus],
   )
 
   const setVolumeLevel = useCallback(
@@ -877,23 +930,6 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
         : [],
     })
   }, [currentTrack])
-
-  useEffect(() => {
-    if (!('mediaSession' in navigator) || typeof navigator.mediaSession.setPositionState !== 'function') {
-      return
-    }
-
-    if (!currentTrack || durationSeconds <= 0) {
-      navigator.mediaSession.setPositionState()
-      return
-    }
-
-    navigator.mediaSession.setPositionState({
-      duration: durationSeconds,
-      playbackRate: 1,
-      position: clamp(progressSeconds, 0, durationSeconds),
-    })
-  }, [currentTrack, durationSeconds, progressSeconds])
 
   useEffect(() => {
     if (!('mediaSession' in navigator)) {

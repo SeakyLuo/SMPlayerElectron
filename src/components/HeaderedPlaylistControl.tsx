@@ -8,6 +8,7 @@ import type { Translator } from '../shared/i18n'
 import { useLibraryStore } from '../state/useLibraryStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
 import { ArtworkImage } from './ArtworkImage'
+import { DefaultAlbumArtwork } from './DefaultAlbumArtwork'
 import { Icon } from './icons'
 import { MenuFlyout } from './MenuFlyout'
 import { getAddToPlaylistMenuFlyoutItem, getMusicMenuFlyoutItems, getPreferenceMenuFlyoutItem, type MenuFlyoutPosition } from './MenuFlyoutHelper'
@@ -316,7 +317,11 @@ export function HeaderedPlaylistControl({
     <section
       ref={controlRef}
       className={`headered-playlist-control headered-playlist-${type}`}
-      style={{ '--header-cover-rgb': coverColorRgb } as CSSProperties}
+      style={{
+        '--header-cover-rgb': coverColorRgb,
+        '--playlist-control-row-count': visibleSongs.length,
+        '--playlist-control-height': `${44 + visibleSongs.length * 58}px`,
+      } as CSSProperties}
     >
       <div className="headered-playlist-drag-region" aria-hidden="true" />
       <div className="headered-playlist-scrollbar" aria-hidden="true">
@@ -338,7 +343,7 @@ export function HeaderedPlaylistControl({
             title={title}
             renderFallback={() => (
               <div className="headered-playlist-cover headered-playlist-cover-fallback" aria-hidden="true">
-                <Icon name={type === 'album' ? 'albums' : 'playlists'} />
+                {type === 'album' ? <DefaultAlbumArtwork className="headered-playlist-cover-fallback-image" /> : <Icon name="playlists" />}
               </div>
             )}
           />
@@ -465,7 +470,7 @@ export function HeaderedPlaylistControl({
         </div>
       </header>
 
-      <section className={`headered-playlist-list${showAlbum ? ' has-album' : ''}`}>
+      <section className={`PlaylistControl headered-playlist-list${showAlbum ? ' has-album' : ''}`}>
         <div className="headered-playlist-list-header">
           <span className="headered-playlist-title-head">
             <span>#</span>
@@ -514,6 +519,7 @@ export function HeaderedPlaylistControl({
           ))}
         </div>
       </section>
+      <div className="headered-playlist-bottom-spacer" aria-hidden="true" />
 
       <MultiSelectCommandBar
         visible={selectionMode}
@@ -825,6 +831,7 @@ export function HeaderedPlaylistControl({
 
 function useHeaderedPlaylistScroll(controlRef: RefObject<HTMLElement | null>) {
   const scrollContainerRef = useRef<HTMLElement | null>(null)
+  const headerCollapsedRef = useRef(false)
 
   useEffect(() => {
     const control = controlRef.current as HTMLElement
@@ -837,16 +844,24 @@ function useHeaderedPlaylistScroll(controlRef: RefObject<HTMLElement | null>) {
       const scrollTop = scrollContainer.scrollTop
       const maxScrollTop = scrollContainer.scrollHeight - scrollContainer.clientHeight
       const collapseProgress = Math.min(scrollTop / 210, 1)
-      const isCollapsed = collapseProgress >= 1
+      const isCollapsed = headerCollapsedRef.current
+        ? scrollTop > 186
+        : scrollTop >= 224
+      headerCollapsedRef.current = isCollapsed
       const heroHeight = Math.round(326 - collapseProgress * 200)
       const heroPaddingTop = Math.round(50 - collapseProgress * 26)
       const coverSize = Math.round(240 - collapseProgress * 154)
       const titleSize = Math.round(48 - collapseProgress * 22)
       const commandMargin = Math.round(30 - collapseProgress * 22)
       const scrollbarTop = Math.round(heroHeight + 4)
-      const scrollbarHeight = Math.max(48, scrollContainer.clientHeight - scrollbarTop - 10)
+      const scrollContainerRect = scrollContainer.getBoundingClientRect()
+      const playerRect = document.querySelector('.player-bar')?.getBoundingClientRect()
+      const scrollbarBottom = Math.max(10, Math.round(window.innerHeight - (playerRect?.top ?? scrollContainerRect.bottom) + 10))
+      const scrollbarHeight = Math.max(48, window.innerHeight - scrollbarTop - scrollbarBottom)
+      const visibleViewportHeight = Math.max(48, scrollbarHeight)
+      const scrollbarRight = Math.max(2, Math.round(window.innerWidth - scrollContainerRect.right + 2))
       const thumbHeight = maxScrollTop > 0
-        ? Math.max(38, Math.round((scrollContainer.clientHeight / scrollContainer.scrollHeight) * scrollbarHeight))
+        ? Math.max(38, Math.round((visibleViewportHeight / scrollContainer.scrollHeight) * scrollbarHeight))
         : scrollbarHeight
       const thumbTop = maxScrollTop > 0
         ? Math.round((scrollTop / maxScrollTop) * (scrollbarHeight - thumbHeight))
@@ -859,6 +874,8 @@ function useHeaderedPlaylistScroll(controlRef: RefObject<HTMLElement | null>) {
       control.style.setProperty('--header-title-size', `${titleSize}px`)
       control.style.setProperty('--header-command-margin', `${commandMargin}px`)
       control.style.setProperty('--header-scrollbar-top', `${scrollbarTop}px`)
+      control.style.setProperty('--header-scrollbar-bottom', `${scrollbarBottom}px`)
+      control.style.setProperty('--header-scrollbar-right', `${scrollbarRight}px`)
       control.style.setProperty('--header-scrollbar-height', `${scrollbarHeight}px`)
       control.style.setProperty('--header-scrollbar-thumb-height', `${thumbHeight}px`)
       control.style.setProperty('--header-scrollbar-thumb-top', `${thumbTop}px`)
@@ -899,7 +916,7 @@ function useHeaderedPlaylistScroll(controlRef: RefObject<HTMLElement | null>) {
     const style = getComputedStyle(control)
     const scrollbarHeight = parseFloat(style.getPropertyValue('--header-scrollbar-height'))
     const thumbHeight = parseFloat(style.getPropertyValue('--header-scrollbar-thumb-height'))
-    const scrollPerPixel = maxScrollTop / (scrollbarHeight - thumbHeight)
+    const scrollPerPixel = maxScrollTop / Math.max(1, scrollbarHeight - thumbHeight)
 
     const move = (moveEvent: globalThis.PointerEvent) => {
       scrollContainer.scrollTop = startScrollTop + (moveEvent.clientY - startY) * scrollPerPixel

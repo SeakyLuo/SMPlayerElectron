@@ -9,15 +9,13 @@
 
 .immersive-detail-page {
   position: relative;
-  height: 100%;
-  min-height: 100%;
+  height: calc(100% - var(--player-height));
+  min-height: 0;
   overflow: auto;
+  overflow-x: hidden;
   margin: 0;
   padding: 0;
-  background:
-    radial-gradient(circle at 82% 14%, rgba(127, 207, 209, 0.22), transparent 34%),
-    radial-gradient(circle at 24% 12%, rgba(239, 168, 158, 0.24), transparent 34%),
-    rgba(246, 249, 252, 0.58);
+  background: rgba(246, 249, 252, 0.98);
   scrollbar-gutter: auto;
   scrollbar-width: none;
   -webkit-app-region: no-drag;
@@ -50,16 +48,20 @@
   --header-title-size: 48px;
   --header-command-margin: 30px;
   --header-scrollbar-top: 358px;
+  --header-scrollbar-bottom: calc(var(--player-height) + 10px);
+  --header-scrollbar-right: 2px;
   --header-scrollbar-height: 240px;
   --header-scrollbar-thumb-height: 64px;
   --header-scrollbar-thumb-top: 0px;
   --header-scrollbar-opacity: 0;
+  --playlist-control-row-count: 0;
+  --playlist-control-height: 44px;
   position: relative;
   display: flex;
   flex-direction: column;
   min-height: 100%;
   gap: 18px;
-  padding: 50px 40px calc(var(--player-height) + 34px);
+  padding: 50px 40px 34px;
   box-sizing: border-box;
   -webkit-app-region: no-drag;
   app-region: no-drag;
@@ -68,10 +70,10 @@
 .headered-playlist-scrollbar {
   position: fixed;
   top: var(--header-scrollbar-top);
-  right: 0;
+  right: var(--header-scrollbar-right);
+  bottom: var(--header-scrollbar-bottom);
   z-index: 8;
   width: 10px;
-  height: var(--header-scrollbar-height);
   opacity: var(--header-scrollbar-opacity);
   pointer-events: none;
   transition: opacity 140ms ease;
@@ -98,14 +100,15 @@
 .headered-playlist-backdrop {
   position: absolute;
   inset: 0 -40px auto 0;
-  height: 760px;
+  height: var(--header-hero-height);
   overflow: hidden;
   border-radius: inherit;
   pointer-events: none;
   z-index: 0;
   background:
-    linear-gradient(to bottom, rgba(246, 249, 252, 0.14), rgba(246, 249, 252, 0.72) 100%),
-    rgba(246, 249, 252, 0.58);
+    radial-gradient(circle at 20% 22%, rgba(var(--header-cover-rgb), 0.24), transparent 40%),
+    radial-gradient(circle at 78% 10%, rgba(var(--header-cover-rgb), 0.08), transparent 42%),
+    rgba(246, 249, 252, 0.98);
 }
 
 .headered-playlist-backdrop::before {
@@ -123,12 +126,7 @@
 }
 
 .headered-playlist-backdrop::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.16), transparent 36%),
-    linear-gradient(to bottom, transparent 0%, rgba(246, 249, 252, 0.72) 70%, rgba(246, 249, 252, 0.92) 100%);
+  content: none;
 }
 
 .headered-playlist-hero {
@@ -141,13 +139,10 @@
   padding: var(--header-hero-padding-top) 0 10px;
   box-sizing: border-box;
   background:
-    radial-gradient(circle at 22% 12%, rgba(var(--header-cover-rgb), calc(0.24 * var(--header-collapse-progress))), transparent 42%),
-    radial-gradient(circle at 82% 14%, rgba(var(--header-cover-rgb), calc(0.12 * var(--header-collapse-progress))), transparent 42%),
-    rgba(246, 249, 252, calc(0.92 * var(--header-collapse-progress)));
+    radial-gradient(circle at 22% 12%, rgba(var(--header-cover-rgb), calc(0.16 * var(--header-collapse-progress))), transparent 48%),
+    rgba(246, 249, 252, calc(0.98 * var(--header-collapse-progress)));
   backdrop-filter: blur(calc(18px * var(--header-collapse-progress)));
-  box-shadow:
-    0 1px 0 rgba(126, 139, 154, calc(0.16 * var(--header-collapse-progress))),
-    0 14px 30px rgba(45, 58, 76, calc(0.08 * var(--header-collapse-progress)));
+  box-shadow: none;
   -webkit-app-region: drag;
   app-region: drag;
   user-select: none;
@@ -184,24 +179,13 @@
   user-select: none;
 }
 
-.headered-playlist-control.is-header-collapsed {
-  padding-top: 176px;
-}
-
 .headered-playlist-control.is-header-collapsed .headered-playlist-hero {
-  position: fixed;
-  top: 0;
-  right: auto;
-  left: 0;
-  width: 100vw;
-  margin: 0;
   z-index: 30;
   -webkit-app-region: drag;
   app-region: drag;
 }
 
 .headered-playlist-control.is-header-collapsed .headered-playlist-hero-inner {
-  width: calc(100% - 80px);
   max-width: none;
 }
 
@@ -255,11 +239,18 @@
   place-items: center;
   background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.2), rgba(255, 255, 255, 0.72));
   color: var(--accent);
+  overflow: hidden;
 }
 
 .headered-playlist-cover-fallback svg {
   width: 78px;
   height: 78px;
+}
+
+.headered-playlist-cover-fallback-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .headered-playlist-copy {
@@ -370,15 +361,26 @@
   position: relative;
   z-index: 1;
   display: flex;
+  flex: 0 0 auto;
   flex-direction: column;
-  gap: 4px;
-  padding: 12px 0;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.62);
-  border: 1px solid rgba(255, 255, 255, 0.58);
+  align-self: stretch;
+  gap: 0;
+  height: var(--playlist-control-height);
+  min-height: 0;
+  max-height: none;
+  padding: 0 10px;
+  box-sizing: border-box;
+  overflow: hidden;
+  overflow-x: hidden;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(126, 139, 154, 0.18);
+  box-shadow: 0 14px 34px rgba(68, 88, 112, 0.08);
 }
 
 .headered-playlist-list-header {
+  flex: 0 0 42px;
+  box-sizing: border-box;
   display: grid;
   grid-template-columns: var(--headered-playlist-grid);
   column-gap: 8px;
@@ -403,8 +405,9 @@
 
 .headered-playlist-song-list {
   display: flex;
+  flex: 0 0 auto;
   flex-direction: column;
-  gap: 2px;
+  gap: 0;
 }
 
 .headered-playlist-list.has-album {
@@ -414,11 +417,20 @@
 .headered-playlist-list .playlist-control-item,
 .headered-playlist-list .playlist-control-item.has-artist,
 .headered-playlist-list .playlist-control-item.has-artist.has-favorite {
+  flex: 0 0 58px;
+  height: 58px;
+  box-sizing: border-box;
+  margin: 0;
   grid-template-columns: var(--headered-playlist-grid);
-  min-height: 58px;
-  border-radius: 14px;
+  min-height: 0;
+  border-bottom: 1px solid rgba(126, 139, 154, 0.16);
+  border-radius: 0;
   padding: 0 28px;
   background: transparent;
+}
+
+.headered-playlist-list .playlist-control-item:last-child {
+  border-bottom: 0;
 }
 
 .headered-playlist-list.has-album .playlist-control-item,
@@ -435,14 +447,13 @@
   justify-self: end;
 }
 
-.headered-playlist-list .playlist-control-item:hover,
-.headered-playlist-list .playlist-control-item.is-current,
-.headered-playlist-list .playlist-control-item.is-selected {
-  background: rgba(234, 240, 249, 0.78);
-}
-
 .headered-playlist-list .playlist-control-item:nth-child(odd) {
   background: transparent;
+}
+
+.headered-playlist-bottom-spacer {
+  flex: 0 0 34px;
+  min-height: 34px;
 }
 
 .playlist-detail-panel-headered {

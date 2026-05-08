@@ -14,6 +14,14 @@ export function decodeLocalRoute(routeValue: string | undefined) {
   return (routeValue ?? '')
     .split('/')
     .filter(Boolean)
-    .map((segment) => decodeURIComponent(segment))
+    .map(decodeLocalRouteSegment)
     .join('/')
+}
+
+function decodeLocalRouteSegment(segment: string) {
+  try {
+    return decodeURIComponent(segment)
+  } catch {
+    return segment
+  }
 }

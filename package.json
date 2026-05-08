@@ -1,7 +1,7 @@
 {
   "name": "smplayer",
   "private": true,
-  "version": "0.1.0",
+  "version": "2.11.0",
   "description": "Local music player",
   "type": "module",
   "main": "dist-electron/main.js",
@@ -16,6 +16,7 @@
     "pack": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder",
     "dist:win": "npm run build && electron-builder --win",
+    "dist:win:store": "npm run build && electron-builder --win appx",
     "dist:mac": "npm run build && electron-builder --mac",
     "dist:linux": "npm run build && electron-builder --linux"
   },
@@ -100,6 +101,30 @@
         }
       ],
       "requestedExecutionLevel": "asInvoker"
+    },
+    "appx": {
+      "identityName": "23778SeakyTheLoner.SMPlayer",
+      "applicationId": "App",
+      "publisher": "CN=CFBE922A-0341-4A7E-B15B-A6DEF6C9E3AF",
+      "publisherDisplayName": "SeakyTheLoner",
+      "displayName": "SMPlayer",
+      "backgroundColor": "#F8F8F8",
+      "languages": [
+        "en-US",
+        "zh-CN"
+      ],
+      "minVersion": "10.0.17763.0",
+      "maxVersionTested": "10.0.17763.0",
+      "capabilities": [
+        "runFullTrust",
+        "musicLibrary",
+        "removableStorage",
+        "backgroundMediaPlayback",
+        "internetClient",
+        "internetClientServer",
+        "privateNetworkClientServer",
+        "microphone"
+      ]
     },
     "nsis": {
       "oneClick": false,

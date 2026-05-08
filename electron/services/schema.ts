@@ -17,6 +17,17 @@ function addColumnIfMissing(
   }
 }
 
+function renameColumnIfPresent(
+  db: DatabaseSync,
+  tableName: string,
+  oldColumnName: string,
+  newColumnName: string,
+) {
+  if (columnExists(db, tableName, oldColumnName) && !columnExists(db, tableName, newColumnName)) {
+    db.exec(`ALTER TABLE ${tableName} RENAME COLUMN ${oldColumnName} TO ${newColumnName}`)
+  }
+}
+
 export function initializeSchema(db: DatabaseSync) {
   db.exec(`
     PRAGMA journal_mode = WAL;
@@ -71,7 +82,7 @@ export function initializeSchema(db: DatabaseSync) {
       Name TEXT DEFAULT '',
       Artist TEXT DEFAULT '',
       Album TEXT DEFAULT '',
-      ArtworkPath TEXT DEFAULT '',
+      ThumbnailPath TEXT DEFAULT '',
       Duration INTEGER DEFAULT 0,
       PlayCount INTEGER DEFAULT 0,
       DateAdded TEXT DEFAULT '',
@@ -193,7 +204,8 @@ export function initializeSchema(db: DatabaseSync) {
       ON HiddenStorageItem(Type, Path);
   `)
 
-  addColumnIfMissing(db, 'Music', 'ArtworkPath', `ArtworkPath TEXT DEFAULT ''`)
+  renameColumnIfPresent(db, 'Music', 'ArtworkPath', 'ThumbnailPath')
+  addColumnIfMissing(db, 'Music', 'ThumbnailPath', `ThumbnailPath TEXT DEFAULT ''`)
 
   for (const [columnName, columnDefinition] of [
     ['LastReleaseNotesVersion', `LastReleaseNotesVersion TEXT DEFAULT ''`],

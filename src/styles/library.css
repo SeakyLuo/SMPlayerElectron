@@ -5,11 +5,25 @@
   box-sizing: border-box;
 }
 
+.workspace-content:has(.library-page) {
+  scrollbar-gutter: auto;
+}
+
 .library-content-shell {
   display: flex;
   flex: 1 1 auto;
   min-height: 0;
-  gap: 10px;
+  gap: 0;
+  padding: 10px;
+  margin-bottom: calc(var(--player-height) + 18px);
+  border: 1px solid rgba(103, 116, 134, 0.16);
+  border-radius: 18px;
+  background: #fff;
+  box-shadow:
+    0 1px 1px rgba(31, 42, 56, 0.04),
+    0 22px 52px rgba(31, 42, 56, 0.12);
+  backdrop-filter: blur(18px);
+  overflow: hidden;
 }
 
 .library-quick-jump {
@@ -18,9 +32,11 @@
   display: grid;
   align-self: stretch;
   grid-template-rows: repeat(27, minmax(0, 1fr));
-  width: 22px;
+  width: 58px;
   min-height: 0;
-  padding: 4px 0 calc(var(--player-height) + 22px);
+  padding: 42px 16px 16px 10px;
+  border-right: 1px solid rgba(103, 116, 134, 0.1);
+  background: #fff;
   box-sizing: border-box;
 }
 
@@ -59,11 +75,14 @@
   flex: 1 1 auto;
   min-height: 0;
   height: auto;
-  margin-bottom: calc(var(--player-height) + 18px);
-  padding-bottom: 0;
+  margin-bottom: 0;
+  padding: 0;
+  border: 0;
   border-radius: 0;
-  border-color: transparent;
   background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  scrollbar-gutter: auto;
 }
 
 .playlist-detail-header {
@@ -121,7 +140,7 @@
 }
 
 .music-table thead tr {
-  background: #f9fafc;
+  background: transparent;
 }
 
 .music-table thead th {
@@ -135,10 +154,10 @@
   letter-spacing: 0;
   text-transform: none;
   color: #565656;
-  background: #f9fafc;
-  border-bottom: 1px solid rgba(114, 126, 140, 0.14);
+  background: #fff;
+  border-bottom: 0;
   border-left: 0;
-  box-shadow: 0 1px 0 rgba(114, 126, 140, 0.14);
+  box-shadow: none;
 }
 
 .music-table thead th {
@@ -170,7 +189,7 @@
 }
 
 .table-sort-button:hover {
-  background: #eef3f8;
+  background: transparent;
 }
 
 .table-sort-indicator {
@@ -213,7 +232,7 @@
 
 .music-table tbody td {
   padding: 10px 14px;
-  border-top: 0;
+  border-top: 1px solid rgba(114, 126, 140, 0.13);
   color: #111;
   font-size: 14px;
   height: 38px;
@@ -222,9 +241,13 @@
 }
 
 .music-table tbody tr {
+  position: relative;
   height: 58px;
   cursor: pointer;
-  transition: background-color 100ms ease;
+  background: transparent;
+  transition:
+    background-color 100ms ease,
+    box-shadow 120ms ease;
 }
 
 .music-table tbody tr.virtual-spacer-row {
@@ -243,24 +266,28 @@
   border: 0;
 }
 
-.music-table tbody tr:nth-child(even) {
-  background: rgba(232, 235, 239, 0.72);
-}
-
 .music-table tbody tr:hover {
-  background: rgba(var(--accent-rgb), 0.1);
+  background: rgba(var(--accent-rgb), 0.055);
 }
 
 .music-table tbody tr.is-selected {
-  background: rgba(var(--accent-rgb), 0.16);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow:
+    inset 3px 0 0 var(--accent),
+    inset 0 0 0 1px rgba(var(--accent-rgb), 0.22),
+    0 8px 22px rgba(var(--accent-rgb), 0.12);
 }
 
 .music-table tbody tr.is-current {
-  background: linear-gradient(90deg, rgba(var(--accent-rgb), 0.88), rgba(var(--accent-rgb), 0.72));
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow:
+    inset 3px 0 0 var(--accent),
+    inset 0 0 0 1px rgba(var(--accent-rgb), 0.22),
+    0 8px 24px rgba(31, 42, 56, 0.1);
 }
 
 .music-table tbody tr.is-current td {
-  color: #fff;
+  color: #111;
 }
 
 .cell-title {
@@ -309,7 +336,7 @@
 }
 
 .music-table tbody tr.is-current .song-name {
-  color: #fff;
+  color: var(--text-strong);
 }
 
 .favorite-pill {
@@ -360,12 +387,12 @@
 }
 
 .music-table tbody tr.is-current .favorite-pill {
-  background: rgba(255, 255, 255, 0.18);
-  color: #fff;
+  background: rgba(217, 65, 78, 0.16);
+  color: #bf3f4d;
 }
 
 .music-table tbody tr.is-current .favorite-icon-button {
-  color: #fff;
+  color: #e33420;
 }
 
 .favorite-icon-button svg {

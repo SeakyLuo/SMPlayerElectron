@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState, type DragEvent, type MouseEvent } from 'react'
+import { useEffect, useMemo, useState, type DragEvent, type KeyboardEvent, type MouseEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
 import { ArtworkImage } from '../components/ArtworkImage'
+import { DefaultAlbumArtwork } from '../components/DefaultAlbumArtwork'
+import { GridArtworkCardContent } from '../components/GridArtworkCardContent'
 import { Icon } from '../components/icons'
 import { MenuFlyout } from '../components/MenuFlyout'
 import { getAddToPlaylistMenuFlyoutItem, type MenuFlyoutItem, type MenuFlyoutPosition } from '../components/MenuFlyoutHelper'
@@ -60,11 +62,25 @@ interface FolderNode {
   relativePath: string
   path: string
   name: string
-  artworkUrls: string[]
+  thumbnailUrls: string[]
   childPaths: string[]
   directSongIds: number[]
   subtreeSongIds: number[]
   criterion: number
+}
+
+const localTextCollator = new Intl.Collator('zh-Hans-CN-u-co-pinyin', {
+  numeric: true,
+  sensitivity: 'base',
+})
+
+function getLocalTextSortBucket(value: string) {
+  const trimmedValue = value.trim()
+  if (!trimmedValue) {
+    return 0
+  }
+
+  return /^[0-9A-Za-z]/.test(trimmedValue) ? 1 : 2
 }
 
 interface FolderChainItem {
@@ -102,7 +118,7 @@ interface LocalSongAddMenuState extends MenuFlyoutPosition {
   song: LibrarySong
 }
 
-interface LocalSelectionAddMenuState extends MenuFlyoutPosition {}
+type LocalSelectionAddMenuState = MenuFlyoutPosition
 
 interface LocalToolbarMenuState extends MenuFlyoutPosition {
   kind: 'sort' | 'view'
@@ -151,17 +167,89 @@ function createFolderNode(relativePath: string, rootPath: string): FolderNode {
     id: 0,
     path: getFolderAbsolutePath(relativePath, rootPath),
     name: getFolderDisplayName(relativePath, rootPath),
-    artworkUrls: [],
+    thumbnailUrls: [],
     childPaths: [],
     directSongIds: [],
     subtreeSongIds: [],
-    criterion: 6,
+    criterion: 0,
   }
 }
 
-function addArtwork(node: FolderNode, artworkUrl: string) {
-  if (artworkUrl && !node.artworkUrls.includes(artworkUrl) && node.artworkUrls.length < 4) {
-    node.artworkUrls.push(artworkUrl)
+function addOriginalFolderThumbnails(thumbnailUrls: string[], songIds: number[], songsById: Map<number, LibrarySong>) {
+  const albumSongs = new Map<string, LibrarySong[]>()
+
+  for (const songId of songIds) {
+    const song = songsById.get(songId)!
+    albumSongs.set(song.album, [...(albumSongs.get(song.album) ?? []), song])
+  }
+
+  for (const groupSongs of albumSongs.values()) {
+    const songWithThumbnail = groupSongs.find((song) => song.artworkUrl)
+    if (songWithThumbnail) {
+      thumbnailUrls.push(songWithThumbnail.artworkUrl)
+    }
+    if (thumbnailUrls.length === 4) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function getOriginalFolderThumbnailUrls(node: FolderNode, nodes: Map<string, FolderNode>, songsById: Map<number, LibrarySong>) {
+  const thumbnailUrls: string[] = []
+
+  if (addOriginalFolderThumbnails(thumbnailUrls, node.directSongIds, songsById)) {
+    return thumbnailUrls
+  }
+
+  for (const childPath of node.childPaths) {
+    const childNode = nodes.get(childPath)!
+    if (addOriginalFolderThumbnails(thumbnailUrls, childNode.subtreeSongIds, songsById)) {
+      return thumbnailUrls
+    }
+  }
+
+  return thumbnailUrls
+}
+
+function compareLocalText(left: string, right: string) {
+  const leftBucket = getLocalTextSortBucket(left)
+  const rightBucket = getLocalTextSortBucket(right)
+
+  if (leftBucket !== rightBucket) {
+    return leftBucket - rightBucket
+  }
+
+  return localTextCollator.compare(left, right)
+}
+
+function getFolderFlattenedSongIds(node: FolderNode, nodes: Map<string, FolderNode>): number[] {
+  return [
+    ...node.childPaths.flatMap((childPath) => getFolderFlattenedSongIds(nodes.get(childPath)!, nodes)),
+    ...node.directSongIds,
+  ]
+}
+
+function compareSongByFolderCriterion(left: LibrarySong, right: LibrarySong, criterion: number): number {
+  switch (criterion) {
+    case 1:
+      return compareLocalText(getDisplayArtists(left), getDisplayArtists(right))
+    case 2:
+      return compareLocalText(left.album, right.album)
+    case 3:
+      return left.duration - right.duration
+    case 4:
+      return left.playCount - right.playCount
+    case 5:
+      return left.dateAdded.localeCompare(right.dateAdded)
+    case 7:
+      return -compareSongByFolderCriterion(left, right, 0)
+    case 0:
+    case 6:
+      return compareLocalText(left.title, right.title)
+    default:
+      return left.id - right.id
   }
 }
 
@@ -245,22 +333,24 @@ function buildFolderIndex(songs: LibrarySong[], folders: LibraryFolder[], rootPa
       }
 
       ancestorNode.subtreeSongIds.push(song.id)
-      addArtwork(ancestorNode, song.artworkUrl)
     }
   }
 
   for (const node of nodes.values()) {
-    node.childPaths.sort((left, right) => left.localeCompare(right))
+    node.childPaths.sort((left, right) => compareLocalText(nodes.get(left)!.name, nodes.get(right)!.name))
     node.directSongIds.sort((left, right) => {
       const leftSong = songsById.get(left)!
       const rightSong = songsById.get(right)!
-      return leftSong.title.localeCompare(rightSong.title)
+      return compareSongByFolderCriterion(leftSong, rightSong, node.criterion)
     })
-    node.subtreeSongIds.sort((left, right) => {
-      const leftSong = songsById.get(left)!
-      const rightSong = songsById.get(right)!
-      return leftSong.path.localeCompare(rightSong.path)
-    })
+  }
+
+  for (const node of nodes.values()) {
+    node.subtreeSongIds = getFolderFlattenedSongIds(node, nodes)
+  }
+
+  for (const node of nodes.values()) {
+    node.thumbnailUrls = getOriginalFolderThumbnailUrls(node, nodes, songsById)
   }
 
   return { nodes, songsById }
@@ -376,6 +466,7 @@ export function FolderChainListView({
   rootPath,
   currentRelativePath,
   onDropLocalItems,
+  onOpenFolder,
   onOpenFolderMenu,
 }: {
   songs: LibrarySong[]
@@ -384,6 +475,7 @@ export function FolderChainListView({
   rootPath: string
   currentRelativePath: string
   onDropLocalItems?: (payload: FolderChainDropPayload, targetRelativePath: string) => void | Promise<void>
+  onOpenFolder: (targetRelativePath: string) => void
   onOpenFolderMenu?: (targetRelativePath: string, x: number, y: number) => void
 }) {
   const [openedFolderChainItemPath, setOpenedFolderChainItemPath] = useState<string | null>(null)
@@ -423,18 +515,19 @@ export function FolderChainListView({
         />
       ) : null}
       <nav className="folder-chain-list-view" aria-label={t('local.path')}>
-        <span className="folder-chain-root-icon" title={t('common.local')}>
-          <Icon name="local" />
-        </span>
         {folderChain.map((folderChainItem) => {
           const isFlyoutOpen = openedFolderChainItemPath === folderChainItem.path
+          const segmentClassName = [
+            'folder-chain-item',
+            folderChainItem.isCurrentItem ? 'is-current' : '',
+            isFlyoutOpen ? 'is-open' : '',
+          ].filter(Boolean).join(' ')
 
           return (
             <span
-              className={folderChainItem.isCurrentItem ? 'folder-chain-item is-current' : 'folder-chain-item'}
+              className={segmentClassName}
               key={folderChainItem.path || rootPath}
             >
-              <Icon className="folder-chain-item-separator" name="chevronRight" />
               {folderChainItem.isCurrentItem ? (
                 <button
                   className="folder-chain-item-path-button"
@@ -448,9 +541,9 @@ export function FolderChainListView({
                   {folderChainItem.name}
                 </button>
               ) : (
-                <Link
+                <button
                   className="folder-chain-item-path-button"
-                  to={buildLocalRoute(folderChainItem.path)}
+                  type="button"
                   onDragOver={(event) => {
                     event.preventDefault()
                     event.dataTransfer.dropEffect = 'move'
@@ -460,50 +553,51 @@ export function FolderChainListView({
                     event.preventDefault()
                     onOpenFolderMenu?.(folderChainItem.path, event.clientX, event.clientY)
                   }}
+                  onClick={() => {
+                    onOpenFolder(folderChainItem.path)
+                  }}
                 >
                   {folderChainItem.name}
-                </Link>
+                </button>
               )}
-              {folderChainItem.isLastItem ? (
-                <span className={isFlyoutOpen ? 'folder-chain-item-dropdown-button is-open' : 'folder-chain-item-dropdown-button'}>
-                  <button
-                    aria-label={folderChainItem.name}
-                    type="button"
-                    onClick={() => {
-                      setOpenedFolderChainItemPath((current) =>
-                        current === folderChainItem.path ? null : folderChainItem.path,
-                      )
-                    }}
-                  >
-                    <Icon name={isFlyoutOpen ? 'chevronUp' : 'chevronDown'} />
-                  </button>
-                  {isFlyoutOpen ? (
-                    <div className="folder-chain-item-flyout">
-                      {folderChainItem.children.map((child) => (
-                        <Link
-                          className={child.isHighlighted ? 'folder-chain-item-flyout-button is-highlighted' : 'folder-chain-item-flyout-button'}
-                          key={child.path}
-                          title={child.path}
-                          to={buildLocalRoute(child.path)}
-                          onDragOver={(event) => {
-                            event.preventDefault()
-                            event.dataTransfer.dropEffect = 'move'
-                          }}
-                          onDrop={(event) => dropLocalItems(event, child.path)}
-                          onContextMenu={(event) => {
-                            event.preventDefault()
-                            onOpenFolderMenu?.(child.path, event.clientX, event.clientY)
-                          }}
-                          onClick={() => {
-                            setOpenedFolderChainItemPath(null)
-                          }}
-                        >
-                          {child.name}
-                        </Link>
-                      ))}
-                    </div>
-                  ) : null}
-                </span>
+              <button
+                aria-label={folderChainItem.name}
+                className="folder-chain-item-dropdown-button"
+                type="button"
+                onClick={() => {
+                  setOpenedFolderChainItemPath((current) =>
+                    current === folderChainItem.path ? null : folderChainItem.path,
+                  )
+                }}
+              >
+                <Icon name={isFlyoutOpen ? 'chevronDown' : 'chevronRight'} />
+              </button>
+              {isFlyoutOpen ? (
+                <div className="folder-chain-item-flyout">
+                  {folderChainItem.children.map((child) => (
+                    <button
+                      className={child.isHighlighted ? 'folder-chain-item-flyout-button is-highlighted' : 'folder-chain-item-flyout-button'}
+                      key={child.path}
+                      title={child.path}
+                      type="button"
+                      onDragOver={(event) => {
+                        event.preventDefault()
+                        event.dataTransfer.dropEffect = 'move'
+                      }}
+                      onDrop={(event) => dropLocalItems(event, child.path)}
+                      onContextMenu={(event) => {
+                        event.preventDefault()
+                        onOpenFolderMenu?.(child.path, event.clientX, event.clientY)
+                      }}
+                      onClick={() => {
+                        onOpenFolder(child.path)
+                        setOpenedFolderChainItemPath(null)
+                      }}
+                    >
+                      {child.name}
+                    </button>
+                  ))}
+                </div>
               ) : null}
             </span>
           )
@@ -522,6 +616,7 @@ export function LocalTitleGrid({
   currentRelativePath,
   onHiddenFoldersListButtonClick,
   onDropLocalItems,
+  onOpenFolder,
   onRevealFolder,
   onSearchDirectory,
   onPlayTrack,
@@ -537,6 +632,7 @@ export function LocalTitleGrid({
   currentRelativePath: string
   onHiddenFoldersListButtonClick: () => void
   onDropLocalItems?: (payload: FolderChainDropPayload, targetRelativePath: string) => void | Promise<void>
+  onOpenFolder: (targetRelativePath: string) => void
   onRevealFolder: (folderPath: string) => void | Promise<void>
   onSearchDirectory: (query: string, folderRelativePath: string) => void
   onPlayTrack: (trackId: number, queueSongIds: number[]) => void
@@ -620,6 +716,7 @@ export function LocalTitleGrid({
         rootPath={rootPath}
         currentRelativePath={currentRelativePath}
         onDropLocalItems={onDropLocalItems}
+        onOpenFolder={onOpenFolder}
         onOpenFolderMenu={(targetRelativePath, x, y) => {
           setFolderChainMenu({ folder: nodes.get(targetRelativePath)!, x, y })
         }}
@@ -683,7 +780,7 @@ export function LocalTitleGrid({
 }
 
 function sortFolders(folders: FolderNode[]) {
-  return folders.slice().sort((left, right) => left.name.localeCompare(right.name))
+  return folders.slice().sort((left, right) => compareLocalText(left.name, right.name))
 }
 
 function sortSongs(songs: LibrarySong[], mode: LocalSortMode, baseMode: LocalSortMode = mode): LibrarySong[] {
@@ -693,14 +790,14 @@ function sortSongs(songs: LibrarySong[], mode: LocalSortMode, baseMode: LocalSor
 
   return songs.slice().sort((left, right) => {
     if (mode === 'artist') {
-      return getDisplayArtists(left).localeCompare(getDisplayArtists(right)) || left.title.localeCompare(right.title)
+      return compareLocalText(getDisplayArtists(left), getDisplayArtists(right))
     }
 
     if (mode === 'album') {
-      return (left.album || '').localeCompare(right.album || '') || left.title.localeCompare(right.title)
+      return compareLocalText(left.album || '', right.album || '')
     }
 
-    return left.title.localeCompare(right.title)
+    return compareLocalText(left.title, right.title)
   })
 }
 
@@ -736,7 +833,7 @@ export function LocalPage({
   playlists,
   t,
   rootPath,
-  currentRelativePath,
+  currentRelativePath: routeRelativePath,
   searchQuery,
   selectedTrackId,
   isPlaying,
@@ -768,6 +865,7 @@ export function LocalPage({
   onSearchDirectory,
 }: LocalPageProps) {
   const navigate = useNavigate()
+  const [currentRelativePath, setCurrentRelativePath] = useState(routeRelativePath)
   const [sortMode, setSortMode] = useState<LocalSortMode>('title')
   const [viewMode, setViewMode] = useState<LocalViewMode>(() =>
     window.localStorage.getItem('smplayer:local-view-mode') === 'list' ? 'list' : 'grid',
@@ -799,6 +897,15 @@ export function LocalPage({
   )
   const currentNode = nodes.get(currentRelativePath) ?? null
   const currentSortMode = currentNode ? localSortModeFromCriterion(currentNode.criterion) : 'title'
+
+  useEffect(() => {
+    setCurrentRelativePath(routeRelativePath)
+  }, [routeRelativePath])
+
+  const openFolder = (targetRelativePath: string) => {
+    setCurrentRelativePath(targetRelativePath)
+    navigate(buildLocalRoute(targetRelativePath), { replace: true })
+  }
 
   const currentSongs = useMemo(() => {
     if (!currentNode) {
@@ -961,11 +1068,6 @@ export function LocalPage({
 
     const shuffledSongIds = shuffleSongIds(queueSongIds)
     onPlayTrack(shuffledSongIds[0]!, shuffledSongIds)
-  }
-
-  const playFolder = (folder: FolderNode) => {
-    const folderSongIds = folder.subtreeSongIds
-    onPlayTrack(folderSongIds[0]!, folderSongIds)
   }
 
   const shuffleFolder = (folder: FolderNode) => {
@@ -1591,16 +1693,12 @@ export function LocalPage({
                   selected={selectedFolderPaths.has(folder.relativePath)}
                   multiSelect={multiSelect}
                   t={t}
-                  onPlayFolder={playFolder}
-                  onShuffleFolder={shuffleFolder}
+                  onPlayFolder={shuffleFolder}
                   onAddFolder={(event, folder) => {
                     setFolderAddMenu({ folder, x: event.clientX, y: event.clientY })
                   }}
-                  onRefreshFolder={refreshFolderWithResult}
-                  onSearchFolder={searchDirectory}
-                  onRevealFolder={onRevealFolder}
+                  onOpenFolder={openFolder}
                   onToggleSelection={toggleFolderSelection}
-                  onHideFolder={hideFolder}
                   onDragStart={(event, folder) => {
                     event.dataTransfer.setData('application/x-smplayer-local-items', JSON.stringify(dragPayloadForFolder(folder)))
                     event.dataTransfer.effectAllowed = 'move'
@@ -1623,15 +1721,12 @@ export function LocalPage({
                   song={song}
                   selected={selectedSongIds.has(song.id)}
                   current={song.id === selectedTrackId}
-                  playing={song.id === selectedTrackId && isPlaying}
                   multiSelect={multiSelect}
                   queueSongIds={queueSongIds}
                   t={t}
                   onPlayTrack={onPlayTrack}
-                  onTogglePlayPause={onTogglePlayPause}
-                  onPlayNext={onPlayNext}
+                  onMoveToMusicOrPlay={onMoveToMusicOrPlay}
                   onToggleSelection={toggleSongSelection}
-                  onRevealSong={onRevealSong}
                   onOpenAddMenu={(event, song) => {
                     setSongAddMenu({ song, x: event.clientX, y: event.clientY })
                   }}
@@ -1689,7 +1784,7 @@ export function LocalPage({
                   }}
                   onDoubleClick={() => {
                     if (!multiSelect) {
-                      navigate(buildLocalRoute(folder.relativePath))
+                      openFolder(folder.relativePath)
                     }
                   }}
                   onContextMenu={(event) => {
@@ -2078,13 +2173,9 @@ function LocalFolderCard({
   multiSelect,
   t,
   onPlayFolder,
-  onShuffleFolder,
   onAddFolder,
-  onRefreshFolder,
-  onSearchFolder,
-  onRevealFolder,
+  onOpenFolder,
   onToggleSelection,
-  onHideFolder,
   onDragStart,
   onDrop,
   onOpenFolderMenu,
@@ -2094,32 +2185,55 @@ function LocalFolderCard({
   multiSelect: boolean
   t: Translator
   onPlayFolder: (folder: FolderNode) => void
-  onShuffleFolder: (folder: FolderNode) => void
   onAddFolder: (event: MouseEvent, folder: FolderNode) => void
-  onRefreshFolder: (folder: FolderNode) => void | Promise<void>
-  onSearchFolder: (folder: FolderNode) => void
-  onRevealFolder: (folderPath: string) => void | Promise<void>
+  onOpenFolder: (targetRelativePath: string) => void
   onToggleSelection: (folderPath: string) => void
-  onHideFolder: (folder: FolderNode) => void | Promise<void>
   onDragStart: (event: DragEvent, folder: FolderNode) => void
   onDrop: (event: DragEvent, folder: FolderNode) => void
   onOpenFolderMenu: (folder: FolderNode, x: number, y: number) => void
 }) {
+  const openFolder = () => onOpenFolder(folder.relativePath)
+  const openFolderOnKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.target !== event.currentTarget) {
+      return
+    }
+
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      openFolder()
+    }
+  }
   const content = (
-    <>
-      <FolderArtwork folder={folder} />
-      {multiSelect ? (
+    <GridArtworkCardContent
+      actions={multiSelect ? [] : [
+        {
+          key: 'play',
+          title: t('local.gridFolderPlayInfo', { name: folder.name }),
+          icon: 'play',
+          disabled: folder.subtreeSongIds.length === 0,
+          onClick: () => onPlayFolder(folder),
+        },
+        {
+          key: 'add',
+          title: t('context.addToPlaylist'),
+          icon: 'plus',
+          disabled: folder.subtreeSongIds.length === 0,
+          onClick: (event) => onAddFolder(event, folder),
+        },
+      ]}
+      artworkUrls={folder.thumbnailUrls}
+      badge={<FolderTypeBadge />}
+      fallbackIcon="folder"
+      selectedMark={multiSelect ? (
         <span className={selected ? 'local-card-check is-selected' : 'local-card-check'}>
           {selected ? <Icon name="check" /> : null}
         </span>
       ) : null}
-      <strong>{folder.name}</strong>
-      <span>
-        {folder.childPaths.length > 0
-          ? t('local.folderCardStats', { folders: folder.childPaths.length, songs: folder.subtreeSongIds.length })
-          : t('local.folderSongsShort', { count: folder.subtreeSongIds.length })}
-      </span>
-    </>
+      subtitle={folder.childPaths.length > 0
+        ? t('local.folderCardStats', { folders: folder.childPaths.length, songs: folder.subtreeSongIds.length })
+        : t('local.folderSongsShort', { count: folder.subtreeSongIds.length })}
+      title={folder.name}
+    />
   )
 
   if (multiSelect) {
@@ -2149,6 +2263,8 @@ function LocalFolderCard({
 
   return (
     <article
+      role="button"
+      tabIndex={0}
       className="local-folder-card"
       draggable
       onDragStart={(event) => onDragStart(event, folder)}
@@ -2161,109 +2277,20 @@ function LocalFolderCard({
         event.preventDefault()
         onOpenFolderMenu(folder, event.clientX, event.clientY)
       }}
+      onClick={openFolder}
+      onKeyDown={openFolderOnKeyDown}
     >
-      <Link className="local-folder-card-main" to={buildLocalRoute(folder.relativePath)}>
+      <span className="local-folder-card-main">
         {content}
-      </Link>
-      <span className="local-folder-card-actions">
-        <button
-          type="button"
-          title={t('context.play')}
-          disabled={folder.subtreeSongIds.length === 0}
-          onClick={(event) => {
-            event.stopPropagation()
-            onPlayFolder(folder)
-          }}
-        >
-          <Icon name="play" />
-        </button>
-        <button
-          type="button"
-          title={t('nowPlaying.randomPlay')}
-          disabled={folder.subtreeSongIds.length === 0}
-          onClick={(event) => {
-            event.stopPropagation()
-            onShuffleFolder(folder)
-          }}
-        >
-          <Icon name="shuffle" />
-        </button>
-        <button
-          type="button"
-          title={t('context.addToPlaylist')}
-          disabled={folder.subtreeSongIds.length === 0}
-          onClick={(event) => {
-            event.stopPropagation()
-            onAddFolder(event, folder)
-          }}
-        >
-          <Icon name="plus" />
-        </button>
-        <button
-          type="button"
-          title={t('settings.rescan')}
-          onClick={(event) => {
-            event.stopPropagation()
-            void onRefreshFolder(folder)
-          }}
-        >
-          <Icon name="recent" />
-        </button>
-        <button
-          type="button"
-          title={t('local.searchDirectory')}
-          onClick={(event) => {
-            event.stopPropagation()
-            onSearchFolder(folder)
-          }}
-        >
-          <Icon name="search" />
-        </button>
-        <button
-          type="button"
-          title={t('context.reveal')}
-          onClick={(event) => {
-            event.stopPropagation()
-            void onRevealFolder(folder.path)
-          }}
-        >
-          <Icon name="folder" />
-        </button>
       </span>
-      <button
-        className="local-folder-card-action"
-        title={t('local.hideFolder')}
-        type="button"
-        onClick={() => {
-          void onHideFolder(folder)
-        }}
-      >
-        <Icon name="hiddenFolders" />
-      </button>
     </article>
   )
 }
 
-function FolderArtwork({ folder }: { folder: FolderNode }) {
-  if (folder.artworkUrls.length === 0) {
-    return (
-      <span className="local-folder-artwork local-folder-artwork-fallback">
-        <Icon name="folder" />
-      </span>
-    )
-  }
-
+function FolderTypeBadge() {
   return (
-    <span className={`local-folder-artwork local-folder-artwork-${Math.min(folder.artworkUrls.length, 4)}`}>
-      {folder.artworkUrls.slice(0, 4).map((artworkUrl) => (
-        <ArtworkImage
-          className="local-folder-artwork-image"
-          key={artworkUrl}
-          src={artworkUrl}
-          title={folder.name}
-          renderFallback={() => <span className="local-folder-artwork-image" />}
-        />
-      ))}
+    <span className="local-folder-type-badge" aria-hidden="true">
+      <img src="/folder.png" alt="" />
     </span>
   )
 }
@@ -2272,15 +2299,12 @@ function LocalSongCard({
   song,
   selected,
   current,
-  playing,
   multiSelect,
   queueSongIds,
   t,
   onPlayTrack,
-  onTogglePlayPause,
-  onPlayNext,
+  onMoveToMusicOrPlay,
   onToggleSelection,
-  onRevealSong,
   onOpenAddMenu,
   onDragStart,
   onOpenSongMenu,
@@ -2288,36 +2312,47 @@ function LocalSongCard({
   song: LibrarySong
   selected: boolean
   current: boolean
-  playing: boolean
   multiSelect: boolean
   queueSongIds: number[]
   t: Translator
   onPlayTrack: (trackId: number, queueSongIds: number[]) => void
-  onTogglePlayPause: () => void
-  onPlayNext: (songId: number) => void
+  onMoveToMusicOrPlay: (songId: number) => void
   onToggleSelection: (songId: number) => void
-  onRevealSong: (songPath: string) => void | Promise<void>
   onOpenAddMenu: (event: MouseEvent, song: LibrarySong) => void
   onDragStart: (event: DragEvent, song: LibrarySong) => void
   onOpenSongMenu: (song: LibrarySong, x: number, y: number) => void
 }) {
+  const openSong = () => {
+    if (multiSelect) {
+      onToggleSelection(song.id)
+    } else {
+      onPlayTrack(song.id, queueSongIds)
+    }
+  }
+  const openSongOnKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.target !== event.currentTarget) {
+      return
+    }
+
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      openSong()
+    }
+  }
+
   return (
-    <button
-      type="button"
+    <article
+      role="button"
+      tabIndex={0}
       className={selected ? 'local-song-card is-selected' : current ? 'local-song-card is-current' : 'local-song-card'}
       draggable
       onDragStart={(event) => onDragStart(event, song)}
-      onClick={() => {
-        if (multiSelect) {
-          onToggleSelection(song.id)
-        } else {
-          onPlayTrack(song.id, queueSongIds)
-        }
-      }}
+      onClick={openSong}
       onContextMenu={(event) => {
         event.preventDefault()
         onOpenSongMenu(song, event.clientX, event.clientY)
       }}
+      onKeyDown={openSongOnKeyDown}
     >
       <ArtworkImage
         className="local-song-artwork"
@@ -2325,7 +2360,7 @@ function LocalSongCard({
         title={song.title}
         renderFallback={() => (
           <span className="local-song-artwork local-song-artwork-fallback">
-            <Icon name="songs" />
+            <DefaultAlbumArtwork className="local-song-artwork-fallback-image" />
           </span>
         )}
       />
@@ -2336,56 +2371,30 @@ function LocalSongCard({
       ) : null}
       <strong>{song.title}</strong>
       <span>{getDisplayArtists(song)}</span>
-      <span className="local-song-card-actions">
-        <span>{formatDuration(song.duration)}</span>
-        <span
-          role="button"
-          tabIndex={0}
-          title={playing ? t('context.pause') : t('context.play')}
-          onClick={(event) => {
-            event.stopPropagation()
-            if (playing) {
-              onTogglePlayPause()
-            } else {
-              onPlayTrack(song.id, queueSongIds)
-            }
-          }}
-        >
-          <Icon name={playing ? 'pause' : 'play'} />
+      {!multiSelect ? (
+        <span className="local-song-card-actions">
+          <button
+            title={t('local.gridMusicPlayInfo', { name: song.title })}
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation()
+              onMoveToMusicOrPlay(song.id)
+            }}
+          >
+            <Icon name="play" />
+          </button>
+          <button
+            title={t('context.addToPlaylist')}
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation()
+              onOpenAddMenu(event, song)
+            }}
+          >
+            <Icon name="plus" />
+          </button>
         </span>
-        <span
-          role="button"
-          tabIndex={0}
-          title={t('context.addToPlaylist')}
-          onClick={(event) => {
-            event.stopPropagation()
-            onOpenAddMenu(event, song)
-          }}
-        >
-          <Icon name="plus" />
-        </span>
-        <span
-          role="button"
-          tabIndex={0}
-          title={t('context.playNext')}
-          onClick={(event) => {
-            event.stopPropagation()
-            onPlayNext(song.id)
-          }}
-        >
-          <Icon name="next" />
-        </span>
-        <span
-          role="button"
-          tabIndex={0}
-          onClick={(event) => {
-            event.stopPropagation()
-            onRevealSong(song.path)
-          }}
-        >
-          {t('local.reveal')}
-        </span>
-      </span>
-    </button>
+      ) : null}
+    </article>
   )
 }

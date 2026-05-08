@@ -185,11 +185,6 @@
   background: transparent;
 }
 
-.immersive-song-list .playlist-control-item:hover,
-.immersive-song-list .playlist-control-item.is-current {
-  background: rgba(234, 240, 249, 0.78);
-}
-
 .immersive-song-list .playlist-control-item:nth-child(odd) {
   background: transparent;
 }

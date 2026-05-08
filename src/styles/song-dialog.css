@@ -124,6 +124,10 @@
   padding: 0 28px 44px;
 }
 
+.song-dialog-loading-placeholder {
+  min-height: min(180px, 28vh);
+}
+
 .song-dialog-loading {
   width: 38px;
   height: 38px;
@@ -153,12 +157,12 @@
 }
 
 .music-info-save-progress {
-  position: absolute;
-  top: 82px;
-  left: 0;
-  right: 0;
+  position: relative;
+  flex: 0 0 100%;
   height: 3px;
+  margin-top: 2px;
   overflow: hidden;
+  border-radius: 999px;
   background: rgba(var(--accent-rgb), 0.12);
 }
 

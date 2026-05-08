@@ -2,6 +2,7 @@ import clsx from 'clsx'
 import type { KeyboardEvent, MouseEvent } from 'react'
 
 import { ArtworkImage } from './ArtworkImage'
+import { DefaultAlbumArtwork } from './DefaultAlbumArtwork'
 import { Icon } from './icons'
 import { getDisplayArtists } from '../shared/artists'
 import type { LibrarySong } from '../shared/contracts'
@@ -74,7 +75,7 @@ export function GridViewMusicItemControl({
           title={song.title}
           renderFallback={() => (
             <span className="recent-song-artwork recent-song-artwork-fallback" aria-hidden="true">
-              <Icon name="songs" />
+              <DefaultAlbumArtwork className="recent-song-artwork-fallback-image" />
             </span>
           )}
         />
