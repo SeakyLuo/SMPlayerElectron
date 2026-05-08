@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 
 import { AlbumArtControl } from '../components/AlbumArtControl'
 import { ArtworkImage } from '../components/ArtworkImage'
+import { DefaultAlbumArtwork } from '../components/DefaultAlbumArtwork'
 import { Icon } from '../components/icons'
 import { MenuFlyout } from '../components/MenuFlyout'
 import { getAddToPlaylistMenuFlyoutItem, getPreferenceMenuFlyoutItem, type MenuFlyoutItem } from '../components/MenuFlyoutHelper'
@@ -617,7 +618,9 @@ export function SearchArtwork({ title, artworkUrl }: { title: string; artworkUrl
       src={artworkUrl}
       title={title}
       renderFallback={() => (
-        <span className="search-card-artwork search-card-artwork-fallback">{title.slice(0, 2).toUpperCase()}</span>
+        <span className="search-card-artwork search-card-artwork-fallback" aria-hidden="true">
+          <DefaultAlbumArtwork className="search-card-artwork-fallback-image" />
+        </span>
       )}
     />
   )

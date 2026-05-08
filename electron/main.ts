@@ -13,7 +13,7 @@ import {
   screen,
   shell,
 } from 'electron'
-import { copyFile, mkdir, stat } from 'node:fs/promises'
+import { copyFile, mkdir, readdir, stat } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { basename, dirname, extname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -101,6 +101,56 @@ const feedbackIssueUrl = 'https://github.com/SeakyLuo/SMPlayerEletron/issues'
 const feedbackEmailAddress = 'luokiss9@qq.com'
 const feedbackEmailSubject = 'Feedbacks about SMPlayer'
 const audioDialogExtensions = [...AUDIO_EXTENSIONS].map((extension) => extension.slice(1))
+const legacyUwpPackageIdentityName = '23778SeakyTheLoner.SMPlayer'
+
+function isWindowsStorePackage() {
+  return Boolean((process as NodeJS.Process & { windowsStore?: boolean }).windowsStore)
+}
+
+async function findLegacyUwpLocalStatePath() {
+  if (process.platform !== 'win32') {
+    return null
+  }
+
+  const localAppDataPath = process.env.LOCALAPPDATA
+  if (!localAppDataPath) {
+    return null
+  }
+
+  const packagesPath = join(localAppDataPath, 'Packages')
+  let packageEntries: Array<{ name: string; isDirectory: () => boolean }>
+  try {
+    packageEntries = await readdir(packagesPath, { withFileTypes: true, encoding: 'utf8' })
+  } catch {
+    return null
+  }
+
+  for (const entry of packageEntries) {
+    if (!entry.isDirectory() || !entry.name.startsWith(`${legacyUwpPackageIdentityName}_`)) {
+      continue
+    }
+
+    const localStatePath = join(packagesPath, entry.name, 'LocalState')
+    if (existsSync(join(localStatePath, SMPLAYER_DB_NAME))) {
+      return localStatePath
+    }
+  }
+
+  return null
+}
+
+async function resolveUserDataPath() {
+  const defaultUserDataPath = app.getPath('userData')
+  const legacyLocalStatePath = await findLegacyUwpLocalStatePath()
+
+  if (legacyLocalStatePath && (isWindowsStorePackage() || !existsSync(join(defaultUserDataPath, SMPLAYER_DB_NAME)))) {
+    await mkdir(legacyLocalStatePath, { recursive: true })
+    return legacyLocalStatePath
+  }
+
+  await mkdir(defaultUserDataPath, { recursive: true })
+  return defaultUserDataPath
+}
 
 function getPackagedAssetPath(assetName: string) {
   return app.isPackaged
@@ -359,8 +409,16 @@ function registerMediaProtocols() {
       return new Response(null, { status: 404 })
     }
 
-    return net.fetch(artworkUrl, {
+    const response = await net.fetch(artworkUrl, {
       headers: request.headers,
+    })
+    const headers = new Headers(response.headers)
+    headers.set('cache-control', 'no-store')
+
+    return new Response(response.body, {
+      headers,
+      status: response.status,
+      statusText: response.statusText,
     })
   })
 }
@@ -405,6 +463,7 @@ async function resolveMoveConflict(sourcePath: string, targetPath: string) {
 
 app.whenReady().then(async () => {
   app.setAppUserModelId('com.seaky.smplayer')
+  app.setPath('userData', await resolveUserDataPath())
   dataStore = new SmplayerDataStore(app.getPath('userData'))
   registerMediaProtocols()
 

@@ -8,6 +8,7 @@ import { extractArtworkColorRgb, getDefaultArtworkColorRgb } from '../shared/art
 import type { Translator } from '../shared/i18n'
 import { getCurrentLyricsLine } from '../shared/lyrics'
 import { useLibraryStore } from '../state/useLibraryStore'
+import { usePlaybackProgress } from '../state/playbackProgressStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
 import { Icon } from './icons'
 import { formatDuration } from '../shared/formatters'
@@ -20,12 +21,6 @@ interface PlayerBarTrack {
   title: string
   artist: string
   artworkUrl: string
-  elapsedLabel: string
-  durationLabel: string
-  progressRatio: number
-  progressSeconds: number
-  durationSeconds: number
-  isReady: boolean
   isLoading: boolean
   favorite?: boolean
 }
@@ -124,9 +119,12 @@ export function PlayerBar({
   const [isProgressSeeking, setIsProgressSeeking] = useState(false)
   const [draftProgressSeconds, setDraftProgressSeconds] = useState(0)
   const isProgressSeekingRef = useRef(false)
-  const displayProgressSeconds = isProgressSeeking ? draftProgressSeconds : track.progressSeconds
-  const progressValue = disabled || !track.isReady ? 0 : Math.min(Math.max(displayProgressSeconds, 0), track.durationSeconds)
-  const progressMax = Math.max(track.durationSeconds, 0)
+  const { progressSeconds, durationSeconds } = usePlaybackProgress()
+  const effectiveDurationSeconds = durationSeconds || currentSong?.duration || 0
+  const progressRatio = effectiveDurationSeconds > 0 ? progressSeconds / effectiveDurationSeconds : 0
+  const displayProgressSeconds = isProgressSeeking ? draftProgressSeconds : progressSeconds
+  const progressValue = disabled || effectiveDurationSeconds <= 0 ? 0 : Math.min(Math.max(displayProgressSeconds, 0), effectiveDurationSeconds)
+  const progressMax = Math.max(effectiveDurationSeconds, 0)
   const progressFill = progressMax > 0 ? (progressValue / progressMax) * 100 : 0
   const volumeValue = disabled ? 0 : Math.min(Math.max(volume, 0), 100)
   const volumeTitle = isMuted ? t('player.unmute') : t('player.mute')
@@ -164,8 +162,8 @@ export function PlayerBar({
     showUndoableNotification(message, t('common.undo'), action)
   }
   const currentLyricsLine = useMemo(
-    () => getCurrentLyricsLine(lyrics, track.progressSeconds, track.progressRatio),
-    [lyrics, track.progressRatio, track.progressSeconds],
+    () => getCurrentLyricsLine(lyrics, progressSeconds, progressRatio),
+    [lyrics, progressRatio, progressSeconds],
   )
 
   const closeVoiceAssistant = () => {
@@ -461,7 +459,7 @@ export function PlayerBar({
           </button>
         </div>
         <div className="progress-row">
-          <span>{track.elapsedLabel}</span>
+          <span>{formatDuration(progressSeconds)}</span>
           {track.isLoading ? (
             <div className="media-progress-loading" aria-hidden="true" />
           ) : (
@@ -490,12 +488,12 @@ export function PlayerBar({
               onLostPointerCapture={(event) => {
                 commitProgressSeek(Number(event.currentTarget.value))
               }}
-              disabled={disabled || !track.isReady}
+              disabled={disabled || effectiveDurationSeconds <= 0}
               aria-label={t('player.trackProgress')}
               title={formatDuration(progressValue)}
             />
           )}
-          <span>{track.durationLabel}</span>
+          <span>{formatDuration(effectiveDurationSeconds)}</span>
         </div>
       </div>
 
@@ -775,7 +773,7 @@ function getPlayerMoreMenuItems({
     songIds: [song.id],
     t,
     defaultPlaylistName: song.title,
-    includeNowPlaying: true,
+    includeNowPlaying: false,
     includeFavorites: !song.favorite,
     onAddToNowPlaying,
     onToggleFavorite,

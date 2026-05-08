@@ -109,6 +109,7 @@
 
 .keep-alive-pane[hidden] {
   display: none;
+  pointer-events: none;
 }
 
 .workspace-content::-webkit-scrollbar {

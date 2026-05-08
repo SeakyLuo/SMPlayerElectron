@@ -22,7 +22,7 @@
   inset: 0;
   z-index: 1;
   border-radius: inherit;
-  background: rgba(250, 252, 255, 0.96);
+  background: transparent;
   transform: translateX(var(--playlist-swipe-offset, 0));
   transition: transform 170ms ease, background-color 120ms ease;
 }
@@ -75,14 +75,6 @@
   right: 0;
   justify-content: flex-end;
   background: #c63d3d;
-}
-
-.playlist-control-item:nth-child(odd) {
-  background: transparent;
-}
-
-.playlist-control-item:nth-child(odd)::before {
-  background: #f1f5f9;
 }
 
 .playlist-control-item:hover {

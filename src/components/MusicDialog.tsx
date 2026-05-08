@@ -91,6 +91,7 @@ export function MusicDialog({
   const isCurrentSong = currentTrackId === song.id
   const canPause = isCurrentSong && isPlaying
   const controlsDisabled = saving || loading
+  const showBusy = loading || saving
   const playQueue = useMemo(() => {
     return queueSongIds.includes(song.id) ? queueSongIds : [...queueSongIds, song.id]
   }, [queueSongIds, song.id])
@@ -128,7 +129,7 @@ export function MusicDialog({
     return () => {
       canceled = true
     }
-  }, [song.id])
+  }, [song.id, t])
 
   useEffect(() => {
     const previous = latestLyricsRef.current
@@ -175,7 +176,7 @@ export function MusicDialog({
     return () => {
       canceled = true
     }
-  }, [song.id])
+  }, [song.id, t])
 
   useEffect(() => {
     const previousTrackId = previousTrackIdRef.current
@@ -683,17 +684,12 @@ export function MusicDialog({
             <Icon name="close" />
           </button>
         </nav>
-        {(loading || saving) ? <div className="music-info-save-progress SaveProgress" /> : null}
         {statusMessage ? <p className="song-dialog-status">{statusMessage}</p> : null}
         {activeMode === 'properties' ? (
           <div className="song-dialog-commandbar music-info-control-commandbar MusicInfoControllerCommandBar" role="toolbar">
-            <button type="button" className="PlayButton" hidden={canPause} onClick={play}>
-              <Icon name="play" />
-              {t('context.play')}
-            </button>
-            <button type="button" className="PauseButton" hidden={!canPause} onClick={play}>
-              <Icon name="pause" />
-              {t('context.pause')}
+            <button type="button" className={canPause ? 'PauseButton' : 'PlayButton'} onClick={play}>
+              <Icon name={canPause ? 'pause' : 'play'} />
+              {canPause ? t('context.pause') : t('context.play')}
             </button>
             <button type="button" className="song-dialog-primary-button save-music-properties-button SaveMusicPropertiesButton" disabled={controlsDisabled} onClick={() => void saveProperties()}>
               {t('settings.save')}
@@ -701,6 +697,7 @@ export function MusicDialog({
             <button type="button" className="reset-music-properties-button ResetMusicPropertiesButton" disabled={controlsDisabled} onClick={resetActivePage}>
               {t('common.reset')}
             </button>
+            {showBusy ? <div className="music-info-save-progress SaveProgress" /> : null}
           </div>
         ) : null}
         {activeMode === 'lyrics' ? (
@@ -720,6 +717,7 @@ export function MusicDialog({
               />
               {t('song.showLyricsTimestamps')}
             </label>
+            {showBusy ? <div className="music-info-save-progress SaveProgress" /> : null}
           </div>
         ) : null}
         {activeMode === 'album-art' ? (
@@ -727,12 +725,13 @@ export function MusicDialog({
             <button type="button" className="change-album-art-button ChangeAlbumArtButton" disabled={saving} onClick={() => void changeArtwork()}>{t('song.changeArtwork')}</button>
             <button type="button" className="song-dialog-primary-button save-album-art-button SaveAlbumArtButton" disabled={saving} onClick={() => void saveArtwork()}>{t('settings.save')}</button>
             <button type="button" className="delete-album-art-button DeleteAlbumArtButton" disabled={saving} onClick={() => setShowArtworkDeleteConfirm(true)}>{t('playlists.delete')}</button>
+            {showBusy ? <div className="music-info-save-progress SaveProgress" /> : null}
           </div>
         ) : null}
         {activeMode === 'properties' ? (
           <div className="song-dialog-body music-info-control-scroll-viewer MusicInfoController">
             {loading || !properties ? (
-              <div className="song-dialog-loading" aria-label={t('nowPlaying.loading')} />
+              <div className="song-dialog-loading-placeholder" aria-label={t('nowPlaying.loading')} />
             ) : (
               <div className="song-dialog-property-list music-info-control-properties-grid MusicInfoControlPropertiesGrid">
                 <PropertyRow label={t('table.title')} className="TitlePropertyRow" labelClassName="TitleTextBlock">

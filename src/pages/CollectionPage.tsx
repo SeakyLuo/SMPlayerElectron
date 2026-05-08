@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 
 import { ArtworkImage } from '../components/ArtworkImage'
+import { DefaultAlbumArtwork } from '../components/DefaultAlbumArtwork'
 import type { CollectionCardData } from '../data/mockLibrary'
 import type { Translator } from '../shared/i18n'
 
@@ -89,7 +90,7 @@ function CollectionArtwork({
       title={title}
       renderFallback={() => (
         <div className="collection-artwork collection-artwork-fallback" aria-hidden="true">
-          <span>{title.slice(0, 2).toUpperCase()}</span>
+          <DefaultAlbumArtwork className="collection-artwork-fallback-image" />
         </div>
       )}
     />

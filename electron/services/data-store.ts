@@ -47,6 +47,8 @@ import { initializeSchema } from './schema.ts'
 
 const LYRICS_REQUEST_TIMEOUT_MS = 10_000
 const RECENT_PLAYED_LIMIT = 1000
+const SHELL_THUMBNAIL_SIZE = 1024
+const SHELL_THUMBNAIL_CACHE_VERSION = `shell-thumbnail-${SHELL_THUMBNAIL_SIZE}`
 
 interface SettingsRow {
   Id: number
@@ -87,7 +89,7 @@ interface SettingsRow {
 
 interface ScannedSong {
   path: string
-  artworkPath: string
+  thumbnailPath: string
   title: string
   artist: string
   artists: string[]
@@ -113,11 +115,11 @@ interface PlaylistItemRow {
 }
 
 interface StoredLibrarySong extends Omit<LibrarySong, 'mediaUrl' | 'artworkUrl' | 'artists'> {
-  artworkPath: string
+  thumbnailPath: string
 }
 
 interface StoredRecentLibrarySong extends Omit<RecentLibrarySong, 'mediaUrl' | 'artworkUrl' | 'artists'> {
-  artworkPath: string
+  thumbnailPath: string
 }
 
 interface SongArtistRow {
@@ -164,7 +166,7 @@ interface PreferenceItemRow {
 
 export class SmplayerDataStore {
   private readonly db: DatabaseSync
-  private readonly coverCachePath: string
+  private readonly thumbnailCachePath: string
 
   private readonly getSettingsStatement
   private readonly getPlaylistIdStatement
@@ -225,7 +227,7 @@ export class SmplayerDataStore {
 
   constructor(userDataPath: string) {
     this.db = new DatabaseSync(join(userDataPath, SMPLAYER_DB_NAME))
-    this.coverCachePath = join(userDataPath, 'cover-cache')
+    this.thumbnailCachePath = join(userDataPath, 'cover-cache')
 
     initializeSchema(this.db)
 
@@ -489,7 +491,7 @@ export class SmplayerDataStore {
       RETURNING Id
     `)
     this.upsertMusicStatement = this.db.prepare(`
-      INSERT INTO Music (Path, Name, Artist, Album, ArtworkPath, Duration, PlayCount, DateAdded, State)
+      INSERT INTO Music (Path, Name, Artist, Album, ThumbnailPath, Duration, PlayCount, DateAdded, State)
       VALUES (
         ?, ?, ?, ?, ?, ?,
         COALESCE((SELECT PlayCount FROM Music WHERE Path = ?), 0),
@@ -500,7 +502,7 @@ export class SmplayerDataStore {
         Name = excluded.Name,
         Artist = excluded.Artist,
         Album = excluded.Album,
-        ArtworkPath = excluded.ArtworkPath,
+        ThumbnailPath = excluded.ThumbnailPath,
         Duration = excluded.Duration,
         State = excluded.State
       RETURNING Id
@@ -591,7 +593,7 @@ export class SmplayerDataStore {
       SELECT
         Music.Id AS id,
         Music.Path AS path,
-        Music.ArtworkPath AS artworkPath,
+        Music.ThumbnailPath AS thumbnailPath,
         Music.Name AS title,
         Music.Artist AS artist,
         Music.Album AS album,
@@ -645,7 +647,7 @@ export class SmplayerDataStore {
       SELECT
         Music.Id AS id,
         Music.Path AS path,
-        Music.ArtworkPath AS artworkPath,
+        Music.ThumbnailPath AS thumbnailPath,
         Music.Name AS title,
         Music.Artist AS artist,
         Music.Album AS album,
@@ -882,17 +884,17 @@ export class SmplayerDataStore {
   }
 
   async getSongArtwork(songId: number) {
-    const artworkUrl = await this.getSongArtworkFileUrl(songId)
-    return artworkUrl ? this.getSongArtworkUrl(songId) : ''
+    const thumbnailUrl = await this.getSongArtworkFileUrl(songId)
+    return thumbnailUrl ? this.getSongArtworkUrl(songId) : ''
   }
 
-  setAlbumArtwork(albumName: string, artworkPath: string) {
+  setAlbumArtwork(albumName: string, thumbnailPath: string) {
     this.db.prepare(`
       UPDATE Music
-      SET ArtworkPath = ?
+      SET ThumbnailPath = ?
       WHERE Album = ?
         AND State = ?
-    `).run(artworkPath, albumName, ACTIVE_STATE.active)
+    `).run(thumbnailPath, albumName, ACTIVE_STATE.active)
   }
 
   async saveAlbumArtwork(albumName: string, sourcePath: string) {
@@ -912,17 +914,17 @@ export class SmplayerDataStore {
       })
     }
 
-    const artworkPath = await this.writeArtworkCache(albumName, {
+    const thumbnailPath = await this.writeArtworkCache(albumName, {
       data: artwork,
       format,
     })
 
     this.db.prepare(`
       UPDATE Music
-      SET ArtworkPath = ?
+      SET ThumbnailPath = ?
       WHERE Album = ?
         AND State = ?
-    `).run(artworkPath, albumName, ACTIVE_STATE.active)
+    `).run(thumbnailPath, albumName, ACTIVE_STATE.active)
   }
 
   async deleteAlbumArtwork(albumName: string) {
@@ -939,7 +941,7 @@ export class SmplayerDataStore {
 
     this.db.prepare(`
       UPDATE Music
-      SET ArtworkPath = ''
+      SET ThumbnailPath = ''
       WHERE Album = ?
         AND State = ?
     `).run(albumName, ACTIVE_STATE.active)
@@ -951,14 +953,14 @@ export class SmplayerDataStore {
         duration: false,
         skipCovers: false,
       })
-      const artworkPath = await this.writeArtworkCache(`${sourcePath}:selected-artwork`, metadata.common.picture?.[0])
-      if (!artworkPath) {
+      const thumbnailPath = await this.writeArtworkCache(`${sourcePath}:selected-artwork`, metadata.common.picture?.[0])
+      if (!thumbnailPath) {
         throw new Error('No album art found in the selected music file.')
       }
 
       return {
-        sourcePath: artworkPath,
-        artworkUrl: pathToFileURL(artworkPath).href,
+        sourcePath: thumbnailPath,
+        artworkUrl: pathToFileURL(thumbnailPath).href,
       }
     }
 
@@ -986,17 +988,17 @@ export class SmplayerDataStore {
       format,
     })
 
-    const artworkPath = await this.writeArtworkCache(song.path, {
+    const thumbnailPath = await this.writeArtworkCache(song.path, {
       data: artwork,
       format,
     })
 
     this.db.prepare(`
       UPDATE Music
-      SET ArtworkPath = ?
+      SET ThumbnailPath = ?
       WHERE Id = ?
         AND State = ?
-    `).run(artworkPath, songId, ACTIVE_STATE.active)
+    `).run(thumbnailPath, songId, ACTIVE_STATE.active)
   }
 
   async deleteSongArtwork(songId: number) {
@@ -1012,7 +1014,7 @@ export class SmplayerDataStore {
 
     this.db.prepare(`
       UPDATE Music
-      SET ArtworkPath = ''
+      SET ThumbnailPath = ''
       WHERE Id = ?
         AND State = ?
     `).run(songId, ACTIVE_STATE.active)
@@ -1851,43 +1853,43 @@ export class SmplayerDataStore {
     const song = this.db.prepare(`
       SELECT
         Path AS path,
-        ArtworkPath AS artworkPath
+        ThumbnailPath AS thumbnailPath
       FROM Music
       WHERE Id = ?
         AND State = ?
       LIMIT 1
-    `).get(songId, ACTIVE_STATE.active) as { path: string; artworkPath: string } | undefined
+    `).get(songId, ACTIVE_STATE.active) as { path: string; thumbnailPath: string } | undefined
 
     if (!song) {
       throw new Error('Song not found.')
     }
 
-    if (song.artworkPath) {
+    if (song.thumbnailPath) {
       try {
-        await stat(song.artworkPath)
-        return pathToFileURL(song.artworkPath).href
+        await stat(song.thumbnailPath)
+        if (!this.shouldRebuildShellThumbnail(song.path, song.thumbnailPath)) {
+          return pathToFileURL(song.thumbnailPath).href
+        }
       } catch {
-        // Rebuild stale artwork cache entries below.
+        // Rebuild stale thumbnail cache entries below.
       }
     }
 
     try {
-      const artworkPath =
-        (await this.writeShellThumbnailCache(song.path)) ||
-        (await this.writeEmbeddedArtworkCache(song.path))
+      const thumbnailPath = await this.writeShellThumbnailCache(song.path)
 
-      if (!artworkPath) {
+      if (!thumbnailPath) {
         return ''
       }
 
       this.db.prepare(`
         UPDATE Music
-        SET ArtworkPath = ?
+        SET ThumbnailPath = ?
         WHERE Id = ?
           AND State = ?
-      `).run(artworkPath, songId, ACTIVE_STATE.active)
+      `).run(thumbnailPath, songId, ACTIVE_STATE.active)
 
-      return pathToFileURL(artworkPath).href
+      return pathToFileURL(thumbnailPath).href
     } catch {
       return ''
     }
@@ -2623,6 +2625,7 @@ export class SmplayerDataStore {
   }
 
   async getTrackNotificationBody(_songId: number): Promise<string> {
+    void _songId
     return ''
   }
 
@@ -2686,7 +2689,7 @@ export class SmplayerDataStore {
         .map((item) => item.path),
     )
 
-    await mkdir(this.coverCachePath, { recursive: true })
+    await mkdir(this.thumbnailCachePath, { recursive: true })
     await this.walkLibrary(rootPath, folders, audioFiles, hiddenFolderPaths, hiddenFilePaths)
 
     const scannedSongs: ScannedSong[] = []
@@ -2724,7 +2727,7 @@ export class SmplayerDataStore {
           song.title,
           song.artist,
           song.album,
-          song.artworkPath,
+          song.thumbnailPath,
           song.duration,
           song.path,
           song.path,
@@ -2758,7 +2761,7 @@ export class SmplayerDataStore {
       throw error
     }
 
-    await this.pruneCoverCache(scannedSongs.map((song) => song.artworkPath))
+    await this.pruneThumbnailCache(scannedSongs.map((song) => song.thumbnailPath))
 
     return {
       rootPath,
@@ -2793,7 +2796,7 @@ export class SmplayerDataStore {
         .map((item) => item.path),
     )
 
-    await mkdir(this.coverCachePath, { recursive: true })
+    await mkdir(this.thumbnailCachePath, { recursive: true })
     await this.walkLibrary(folderPath, folders, audioFiles, hiddenFolderPaths, hiddenFilePaths)
 
     const scannedSongs: ScannedSong[] = []
@@ -2855,7 +2858,7 @@ export class SmplayerDataStore {
           song.title,
           song.artist,
           song.album,
-          song.artworkPath,
+          song.thumbnailPath,
           song.duration,
           song.path,
           song.path,
@@ -2888,7 +2891,7 @@ export class SmplayerDataStore {
       throw error
     }
 
-    await this.pruneCoverCache(scannedSongs.map((song) => song.artworkPath))
+    await this.pruneThumbnailCache(scannedSongs.map((song) => song.thumbnailPath))
 
     return {
       rootPath,
@@ -3025,7 +3028,7 @@ export class SmplayerDataStore {
       id: song.id,
       path: song.path,
       mediaUrl: this.getSongMediaUrl(song.id),
-      artworkUrl: this.getSongArtworkUrl(song.id),
+      artworkUrl: song.thumbnailPath ? this.getSongArtworkUrl(song.id) : '',
       title: song.title,
       artist: song.artist,
       artists,
@@ -3396,11 +3399,12 @@ export class SmplayerDataStore {
     const fileStats = await stat(filePath)
     const filename = basename(filePath, extname(filePath))
     const dateAdded = fileStats.birthtime.toISOString()
+    const thumbnailPath = await this.writeShellThumbnailCache(filePath)
 
     try {
       const metadata = await parseFile(filePath, {
         duration: true,
-        skipCovers: false,
+        skipCovers: true,
       })
       const artists = normalizeArtists([
         ...(metadata.common.artists ?? []),
@@ -3409,9 +3413,7 @@ export class SmplayerDataStore {
 
       return {
         path: filePath,
-        artworkPath:
-          (await this.writeShellThumbnailCache(filePath)) ||
-          (await this.writeArtworkCache(filePath, metadata.common.picture?.[0])),
+        thumbnailPath,
         title: useFilenameNotMusicName ? filename : metadata.common.title?.trim() || filename,
         artist: artists.join(', '),
         artists,
@@ -3422,7 +3424,7 @@ export class SmplayerDataStore {
     } catch {
       return {
         path: filePath,
-        artworkPath: '',
+        thumbnailPath,
         title: filename,
         artist: '',
         artists: [],
@@ -3458,44 +3460,49 @@ export class SmplayerDataStore {
 
     const extension = this.getArtworkExtension(picture.format)
     const artworkHash = createHash('sha1').update(filePath).digest('hex')
-    const artworkPath = join(this.coverCachePath, `${artworkHash}.${extension}`)
+    const thumbnailPath = join(this.thumbnailCachePath, `${artworkHash}.${extension}`)
 
-    await mkdir(this.coverCachePath, { recursive: true })
-    await writeFile(artworkPath, picture.data)
+    await mkdir(this.thumbnailCachePath, { recursive: true })
+    await writeFile(thumbnailPath, picture.data)
 
-    return artworkPath
-  }
-
-  private async writeEmbeddedArtworkCache(filePath: string) {
-    const metadata = await parseFile(filePath, {
-      duration: false,
-      skipCovers: false,
-    })
-
-    return this.writeArtworkCache(filePath, metadata.common.picture?.[0])
+    return thumbnailPath
   }
 
   private async writeShellThumbnailCache(filePath: string) {
     try {
       const thumbnail = await nativeImage.createThumbnailFromPath(filePath, {
-        width: 100,
-        height: 100,
+        width: SHELL_THUMBNAIL_SIZE,
+        height: SHELL_THUMBNAIL_SIZE,
       })
 
       if (thumbnail.isEmpty()) {
         return ''
       }
 
-      const artworkHash = createHash('sha1').update(`${filePath}:shell-thumbnail`).digest('hex')
-      const artworkPath = join(this.coverCachePath, `${artworkHash}.png`)
+      const thumbnailPath = this.getShellThumbnailCachePath(filePath)
 
-      await mkdir(this.coverCachePath, { recursive: true })
-      await writeFile(artworkPath, thumbnail.toPNG())
+      await mkdir(this.thumbnailCachePath, { recursive: true })
+      await writeFile(thumbnailPath, thumbnail.toPNG())
 
-      return artworkPath
+      return thumbnailPath
     } catch {
       return ''
     }
+  }
+
+  private shouldRebuildShellThumbnail(filePath: string, thumbnailPath: string) {
+    const cachedFilename = basename(thumbnailPath)
+    return cachedFilename === basename(this.getLegacyShellThumbnailCachePath(filePath))
+  }
+
+  private getShellThumbnailCachePath(filePath: string) {
+    const thumbnailHash = createHash('sha1').update(`${filePath}:${SHELL_THUMBNAIL_CACHE_VERSION}`).digest('hex')
+    return join(this.thumbnailCachePath, `${thumbnailHash}.png`)
+  }
+
+  private getLegacyShellThumbnailCachePath(filePath: string) {
+    const thumbnailHash = createHash('sha1').update(`${filePath}:shell-thumbnail`).digest('hex')
+    return join(this.thumbnailCachePath, `${thumbnailHash}.png`)
   }
 
   private async maybePersistFetchedLyrics(
@@ -3792,11 +3799,11 @@ export class SmplayerDataStore {
     }
   }
 
-  private async pruneCoverCache(activeArtworkPaths: string[]) {
-    const activeArtworkPathSet = new Set(activeArtworkPaths.filter(Boolean))
+  private async pruneThumbnailCache(activeThumbnailPaths: string[]) {
+    const activeThumbnailPathSet = new Set(activeThumbnailPaths.filter(Boolean))
 
     try {
-      const cacheEntries = await readdir(this.coverCachePath, { withFileTypes: true })
+      const cacheEntries = await readdir(this.thumbnailCachePath, { withFileTypes: true })
 
       await Promise.all(
         cacheEntries.map(async (entry) => {
@@ -3804,13 +3811,13 @@ export class SmplayerDataStore {
             return
           }
 
-          const cachedArtworkPath = join(this.coverCachePath, entry.name)
-          if (activeArtworkPathSet.has(cachedArtworkPath)) {
+          const cachedThumbnailPath = join(this.thumbnailCachePath, entry.name)
+          if (activeThumbnailPathSet.has(cachedThumbnailPath)) {
             return
           }
 
           try {
-            await unlink(cachedArtworkPath)
+            await unlink(cachedThumbnailPath)
           } catch {
             // Ignore cache cleanup failures so the library scan itself stays successful.
           }

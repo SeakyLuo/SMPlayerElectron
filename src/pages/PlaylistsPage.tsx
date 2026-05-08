@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { GridViewHolder } from '../components/GridViewHolder'
 import { HeaderedPlaylistControl } from '../components/HeaderedPlaylistControl'
+import { Icon } from '../components/icons'
 import { MenuFlyout } from '../components/MenuFlyout'
 import { getAddToPlaylistMenuFlyoutItem, getPreferenceMenuFlyoutItem, type MenuFlyoutItem } from '../components/MenuFlyoutHelper'
 import type { LibraryPlaylist, LibrarySnapshot, PlaylistSortCriterion, PreferenceItemSnapshot, PreferenceLevel } from '../shared/contracts'
@@ -15,7 +16,6 @@ interface PlaylistsPageProps {
   isPlaying: boolean
   searchQuery: string
   error: string | null
-  initialPlaylistId: number
   onPlayTrack: (trackId: number, queueSongIds: number[]) => void
   onMoveToMusicOrPlay: (songId: number) => void
   onPlayNext: (songId: number) => void
@@ -33,14 +33,10 @@ interface PlaylistsPageProps {
   onReorderPlaylistSongs: (playlistId: number, songIds: number[], sortCriterion?: PlaylistSortCriterion) => void
 }
 
-function movePlaylist(playlistIds: number[], playlistId: number, offset: -1 | 1) {
-  const currentIndex = playlistIds.findIndex((value) => value === playlistId)
-  const nextPlaylistIds = playlistIds.slice()
-  ;[nextPlaylistIds[currentIndex], nextPlaylistIds[currentIndex + offset]] = [
-    nextPlaylistIds[currentIndex + offset],
-    nextPlaylistIds[currentIndex],
-  ]
-
+function reorderPlaylistByDrop(playlistIds: number[], draggedPlaylistId: number, targetPlaylistId: number, insertAfter: boolean) {
+  const nextPlaylistIds = playlistIds.filter((playlistId) => playlistId !== draggedPlaylistId)
+  const targetIndex = nextPlaylistIds.indexOf(targetPlaylistId)
+  nextPlaylistIds.splice(targetIndex + (insertAfter ? 1 : 0), 0, draggedPlaylistId)
   return nextPlaylistIds
 }
 
@@ -51,7 +47,6 @@ export function PlaylistsPage({
   isPlaying,
   searchQuery,
   error,
-  initialPlaylistId,
   onPlayTrack,
   onMoveToMusicOrPlay,
   onPlayNext,
@@ -70,31 +65,42 @@ export function PlaylistsPage({
 }: PlaylistsPageProps) {
   const navigate = useNavigate()
   const params = useParams()
+  const draggedPlaylistIdRef = useRef<number | null>(null)
   const [playlistMenu, setPlaylistMenu] = useState<{ playlist: LibraryPlaylist; x: number; y: number } | null>(null)
+  const [draggingPlaylistId, setDraggingPlaylistId] = useState<number | null>(null)
+  const [previewPlaylistIds, setPreviewPlaylistIds] = useState<number[] | null>(null)
   const [playlistPreferenceItems, setPlaylistPreferenceItems] = useState<Map<string, PreferenceItemSnapshot>>(new Map())
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+  const [pendingCreatedPlaylistName, setPendingCreatedPlaylistName] = useState('')
   const routePlaylistId = params.playlistId ? Number(params.playlistId) : null
   const songsById = useMemo(
     () => new Map(snapshot.songs.map((song) => [song.id, song])),
     [snapshot.songs],
   )
   const visiblePlaylists = useMemo(() => {
+    const customPlaylists = snapshot.playlists.filter((playlist) => !playlist.isBuiltIn)
     const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase()
     if (!normalizedSearchQuery) {
-      return snapshot.playlists
+      return customPlaylists
     }
 
-    return snapshot.playlists.filter((playlist) => playlist.name.toLocaleLowerCase().includes(normalizedSearchQuery))
+    return customPlaylists.filter((playlist) => playlist.name.toLocaleLowerCase().includes(normalizedSearchQuery))
   }, [searchQuery, snapshot.playlists])
   const selectedPlaylistId =
     routePlaylistId != null && snapshot.playlists.some((playlist) => playlist.id === routePlaylistId)
       ? routePlaylistId
-      : snapshot.playlists.some((playlist) => playlist.id === initialPlaylistId)
-        ? initialPlaylistId
-        : (snapshot.playlists[0]?.id ?? 0)
+      : 0
   const selectedPlaylist = snapshot.playlists.find((playlist) => playlist.id === selectedPlaylistId) ?? null
   const customPlaylistIds = snapshot.playlists
     .filter((playlist) => !playlist.isBuiltIn)
     .map((playlist) => playlist.id)
+  const orderedVisiblePlaylists = useMemo(() => {
+    const visiblePlaylistMap = new Map(visiblePlaylists.map((playlist) => [playlist.id, playlist]))
+    const orderedIds = previewPlaylistIds ?? customPlaylistIds
+    return orderedIds
+      .map((playlistId) => visiblePlaylistMap.get(playlistId))
+      .filter((playlist) => playlist !== undefined)
+  }, [customPlaylistIds, previewPlaylistIds, visiblePlaylists])
   const selectedPlaylistSongs = useMemo(
     () =>
       (selectedPlaylist?.songIds ?? [])
@@ -122,6 +128,19 @@ export function PlaylistsPage({
       setPlaylistPreferenceItems(new Map([...settings.playlists, ...settings.others].map((item) => [`${item.type}:${item.itemId}`, item])))
     })
   }, [])
+
+  useEffect(() => {
+    if (!pendingCreatedPlaylistName) {
+      return
+    }
+
+    const playlist = snapshot.playlists.find((item) => item.name === pendingCreatedPlaylistName)
+    if (playlist) {
+      navigate(`/playlists/${playlist.id}`)
+      onSelectPlaylist(playlist.id)
+      setPendingCreatedPlaylistName('')
+    }
+  }, [navigate, onSelectPlaylist, pendingCreatedPlaylistName, snapshot.playlists])
 
   if (routePlaylistId != null && selectedPlaylist) {
     return (
@@ -185,57 +204,109 @@ export function PlaylistsPage({
 
   return (
     <section className="playlists-page page-panel">
-      <header className="playlists-header">
-        <h2>{t('common.playlists')}</h2>
-      </header>
+      <div className="now-playing-commandbar playlists-commandbar">
+        <button
+          type="button"
+          className="now-playing-command"
+          onClick={() => {
+            setIsCreateDialogOpen(true)
+          }}
+        >
+          <Icon name="plus" />
+          {t('playlists.newName')}
+        </button>
+      </div>
 
       {error ? <div className="error-banner">{error}</div> : null}
 
-      {visiblePlaylists.length === 0 ? (
+      {orderedVisiblePlaylists.length === 0 ? (
         <div className="empty-state compact">
           <h3>{t('playlists.none')}</h3>
           <p>{t('playlists.noneCopy')}</p>
         </div>
       ) : (
         <div className="grid-view-holder-grid">
-          {visiblePlaylists.map((playlist) => {
+          {orderedVisiblePlaylists.map((playlist) => {
             const playlistSongs = playlist.songIds
               .map((songId) => songsById.get(songId))
               .filter((song) => song !== undefined)
-            const customPlaylistIndex = customPlaylistIds.indexOf(playlist.id)
-            const canMovePlaylistUp = customPlaylistIndex > 0
-            const canMovePlaylistDown =
-              customPlaylistIndex >= 0 && customPlaylistIndex < customPlaylistIds.length - 1
 
             return (
-              <GridViewHolder
-                key={playlist.id}
-                playlist={playlist}
-                songs={playlistSongs}
-                selected={playlist.id === selectedPlaylistId}
-                t={t}
-                canMoveUp={canMovePlaylistUp}
-                canMoveDown={canMovePlaylistDown}
-                onOpen={() => {
-                  navigate(`/playlists/${playlist.id}`)
-                  onSelectPlaylist(playlist.id)
-                }}
-                onPlay={() => {
-                  const [firstSong] = playlistSongs
-                  if (firstSong) {
-                    onPlayTrack(firstSong.id, playlistSongs.map((song) => song.id))
-                  }
-                }}
-                onMoveUp={() => {
-                  onReorderPlaylists(movePlaylist(customPlaylistIds, playlist.id, -1))
-                }}
-                onMoveDown={() => {
-                  onReorderPlaylists(movePlaylist(customPlaylistIds, playlist.id, 1))
-                }}
-                onContextMenu={(x, y) => {
-                  setPlaylistMenu({ playlist, x, y })
-                }}
-              />
+              <Fragment key={playlist.id}>
+                {draggingPlaylistId === playlist.id ? (
+                  <div
+                    className="grid-view-holder-drop-target"
+                    aria-hidden="true"
+                    onDragOver={(event) => {
+                      event.preventDefault()
+                      event.dataTransfer.dropEffect = 'move'
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault()
+                      const nextPlaylistIds = previewPlaylistIds ?? customPlaylistIds
+                      draggedPlaylistIdRef.current = null
+                      setDraggingPlaylistId(null)
+                      setPreviewPlaylistIds(null)
+                      onReorderPlaylists(nextPlaylistIds)
+                    }}
+                  >
+                    <Icon name="plus" />
+                    <span>{t('playlists.dropHere')}</span>
+                  </div>
+                ) : null}
+                <GridViewHolder
+                  playlist={playlist}
+                  songs={playlistSongs}
+                  selected={false}
+                  dragging={draggingPlaylistId === playlist.id}
+                  t={t}
+                  onOpen={() => {
+                    navigate(`/playlists/${playlist.id}`)
+                    onSelectPlaylist(playlist.id)
+                  }}
+                  onPlay={() => {
+                    const [firstSong] = playlistSongs
+                    if (firstSong) {
+                      onPlayTrack(firstSong.id, playlistSongs.map((song) => song.id))
+                    }
+                  }}
+                  onDragStart={(event) => {
+                    draggedPlaylistIdRef.current = playlist.id
+                    setDraggingPlaylistId(playlist.id)
+                    setPreviewPlaylistIds(customPlaylistIds)
+                    event.dataTransfer.effectAllowed = 'move'
+                    event.dataTransfer.setData('application/x-smplayer-playlist-id', String(playlist.id))
+                    event.dataTransfer.setData('text/plain', String(playlist.id))
+                  }}
+                  onDragEnd={() => {
+                    draggedPlaylistIdRef.current = null
+                    setDraggingPlaylistId(null)
+                    setPreviewPlaylistIds(null)
+                  }}
+                  onDragOver={(event) => {
+                    event.preventDefault()
+                    event.dataTransfer.dropEffect = 'move'
+                    const draggedPlaylistId = draggedPlaylistIdRef.current
+                    if (draggedPlaylistId === null || draggedPlaylistId === playlist.id) {
+                      return
+                    }
+                    const targetRect = event.currentTarget.getBoundingClientRect()
+                    const insertAfter = event.clientX > targetRect.left + targetRect.width / 2
+                    setPreviewPlaylistIds((current) => reorderPlaylistByDrop(current ?? customPlaylistIds, draggedPlaylistId, playlist.id, insertAfter))
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault()
+                    const nextPlaylistIds = previewPlaylistIds ?? customPlaylistIds
+                    draggedPlaylistIdRef.current = null
+                    setDraggingPlaylistId(null)
+                    setPreviewPlaylistIds(null)
+                    onReorderPlaylists(nextPlaylistIds)
+                  }}
+                  onContextMenu={(x, y) => {
+                    setPlaylistMenu({ playlist, x, y })
+                  }}
+                />
+              </Fragment>
             )
           })}
         </div>
@@ -262,7 +333,90 @@ export function PlaylistsPage({
           })}
         />
       ) : null}
+      {isCreateDialogOpen ? (
+        <PlaylistNameDialog
+          t={t}
+          playlists={snapshot.playlists}
+          defaultName={getNextPlaylistName(t('common.playlist'), snapshot.playlists, t)}
+          onCancel={() => {
+            setIsCreateDialogOpen(false)
+          }}
+          onConfirm={(name) => {
+            setIsCreateDialogOpen(false)
+            setPendingCreatedPlaylistName(name)
+            onCreatePlaylistWithSongs(name, [])
+          }}
+        />
+      ) : null}
     </section>
+  )
+}
+
+function PlaylistNameDialog({
+  t,
+  playlists,
+  defaultName,
+  onCancel,
+  onConfirm,
+}: {
+  t: Translator
+  playlists: LibraryPlaylist[]
+  defaultName: string
+  onCancel: () => void
+  onConfirm: (name: string) => void
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null)
+  const [name, setName] = useState(defaultName)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    inputRef.current?.focus()
+    inputRef.current?.select()
+  }, [])
+
+  const confirm = () => {
+    const nextName = name.trim()
+    const validationError = validatePlaylistName(nextName, playlists, t)
+    if (validationError) {
+      setError(validationError)
+      return
+    }
+
+    onConfirm(nextName)
+  }
+
+  return (
+    <div className="playlist-name-dialog-overlay" role="presentation">
+      <section className="playlist-name-dialog" role="dialog" aria-modal="true" aria-labelledby="playlist-name-dialog-title">
+        <h3 id="playlist-name-dialog-title">{t('playlists.createNew')}</h3>
+        <input
+          ref={inputRef}
+          type="text"
+          value={name}
+          placeholder={t('playlists.namePlaceholder')}
+          onChange={(event) => {
+            setName(event.currentTarget.value)
+            setError('')
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              confirm()
+            } else if (event.key === 'Escape') {
+              onCancel()
+            }
+          }}
+        />
+        {error ? <p className="playlist-name-dialog-error">{error}</p> : null}
+        <div className="playlist-name-dialog-actions">
+          <button type="button" className="playlist-name-dialog-primary" onClick={confirm}>
+            {t('common.confirm')}
+          </button>
+          <button type="button" onClick={onCancel}>
+            {t('common.cancel')}
+          </button>
+        </div>
+      </section>
+    </div>
   )
 }
 
@@ -359,7 +513,7 @@ function getPlaylistCardMenuItems({
         text: t('playlists.duplicate'),
         icon: 'copy',
         onClick: () => {
-          onCreatePlaylistWithSongs(getNextPlaylistName(playlist.name, playlists), playlist.songIds)
+          onCreatePlaylistWithSongs(getNextPlaylistName(playlist.name, playlists, t), playlist.songIds)
         },
       },
       {
@@ -389,12 +543,36 @@ function shuffleSongIds(songIds: number[]) {
   return shuffledSongIds
 }
 
-function getNextPlaylistName(name: string, playlists: LibraryPlaylist[]) {
+function getNextPlaylistName(name: string, playlists: LibraryPlaylist[], t: Translator) {
   const existingNames = new Set(playlists.map((playlist) => playlist.name))
-  for (let index = 2; ; index += 1) {
-    const nextName = `${name} (${index})`
+  if (!existingNames.has(name)) {
+    return name
+  }
+
+  for (let index = 1; ; index += 1) {
+    const nextName = t('playlists.nameTemplate', { name, index })
     if (!existingNames.has(nextName)) {
       return nextName
     }
   }
+}
+
+function validatePlaylistName(name: string, playlists: LibraryPlaylist[], t: Translator) {
+  if (!name) {
+    return t('playlists.nameEmpty')
+  }
+
+  if (name.length > 50) {
+    return t('playlists.nameTooLong')
+  }
+
+  if (playlists.some((playlist) => playlist.name === name)) {
+    return t('playlists.nameUsed')
+  }
+
+  if (name.includes('+++++') || name.includes('{0}') || name.includes('{1}')) {
+    return t('playlists.nameSpecial')
+  }
+
+  return ''
 }

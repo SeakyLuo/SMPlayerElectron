@@ -3,6 +3,7 @@ import clsx from 'clsx'
 import { Link, useNavigate } from 'react-router-dom'
 
 import { ArtworkImage } from '../components/ArtworkImage'
+import { DefaultAlbumArtwork } from '../components/DefaultAlbumArtwork'
 import { Icon } from '../components/icons'
 import { MenuFlyout } from '../components/MenuFlyout'
 import { getAddToPlaylistMenuFlyoutItem, getPreferenceMenuFlyoutItem, type MenuFlyoutItem, type MenuFlyoutPosition } from '../components/MenuFlyoutHelper'
@@ -56,6 +57,10 @@ interface AlbumGroup {
 
 const ARTIST_ROW_HEIGHT = 48
 const ARTIST_OVERSCAN_ROWS = 10
+const ARTIST_ALBUM_CARD_HEADER_HEIGHT = 112
+const ARTIST_ALBUM_SONG_ROW_HEIGHT = 48
+const ARTIST_ALBUM_CARD_GAP = 22
+const ARTIST_ALBUM_OVERSCAN_ROWS = 2
 
 export function ArtistsPage({
   t,
@@ -89,8 +94,13 @@ export function ArtistsPage({
   const [songContextMenu, setSongContextMenu] = useState<MusicMenuFlyoutState | null>(null)
   const [groupMenu, setGroupMenu] = useState<GroupContextMenuState | null>(null)
   const artistListRef = useRef<HTMLDivElement | null>(null)
+  const artistDetailRef = useRef<HTMLElement | null>(null)
+  const artistAlbumListRef = useRef<HTMLDivElement | null>(null)
   const [artistScrollTop, setArtistScrollTop] = useState(0)
   const [artistViewportHeight, setArtistViewportHeight] = useState(640)
+  const [artistDetailScrollTop, setArtistDetailScrollTop] = useState(0)
+  const [artistDetailViewportHeight, setArtistDetailViewportHeight] = useState(640)
+  const [artistAlbumListOffsetTop, setArtistAlbumListOffsetTop] = useState(0)
   const [loadingArtistName, setLoadingArtistName] = useState('')
   const navigate = useNavigate()
   const refresh = useLibraryStore((state) => state.refresh)
@@ -117,6 +127,22 @@ export function ArtistsPage({
     [selectedQueueSongIds, selectedSongIds],
   )
   const selectedAlbums = useMemo(() => buildAlbumGroups(selectedArtistSongs, t), [selectedArtistSongs, t])
+  const artistAlbumHeights = useMemo(
+    () => selectedAlbums.map((album) => getEstimatedArtistAlbumHeight(album)),
+    [selectedAlbums],
+  )
+  const artistAlbumVirtualWindow = useMemo(
+    () => getArtistAlbumVirtualWindow(
+      artistAlbumHeights,
+      Math.max(0, artistDetailScrollTop - artistAlbumListOffsetTop),
+      artistDetailViewportHeight,
+    ),
+    [artistAlbumHeights, artistAlbumListOffsetTop, artistDetailScrollTop, artistDetailViewportHeight],
+  )
+  const renderedArtistAlbums = selectedAlbums.slice(
+    artistAlbumVirtualWindow.startIndex,
+    artistAlbumVirtualWindow.endIndex,
+  )
   const customPlaylists = playlists.filter((playlist) => !playlist.isBuiltIn)
   const favoritePlaylist = playlists.find((playlist) => playlist.isBuiltIn && playlist.name === t('common.myFavorites'))!
   const artistListHeight = visibleArtists.length * ARTIST_ROW_HEIGHT
@@ -233,6 +259,31 @@ export function ArtistsPage({
   }, [])
 
   useEffect(() => {
+    const artistDetail = artistDetailRef.current
+    if (!artistDetail) {
+      return
+    }
+
+    const updateDetailMetrics = () => {
+      setArtistDetailViewportHeight(artistDetail.clientHeight)
+      setArtistAlbumListOffsetTop(artistAlbumListRef.current?.offsetTop ?? 0)
+    }
+    const resizeObserver = new ResizeObserver(updateDetailMetrics)
+
+    updateDetailMetrics()
+    resizeObserver.observe(artistDetail)
+
+    return () => {
+      resizeObserver.disconnect()
+    }
+  }, [selectedArtistName, selectedAlbums.length])
+
+  useEffect(() => {
+    artistDetailRef.current?.scrollTo({ top: 0 })
+    setArtistDetailScrollTop(0)
+  }, [selectedArtistName])
+
+  useEffect(() => {
     if (targetArtistName) {
       if (!artistGroups.some((artist) => artist.name === targetArtistName)) {
         showNotification(t('collection.artistNotFound'), t('common.close'), () => {}, 3200)
@@ -280,11 +331,7 @@ export function ArtistsPage({
                 setArtistSearchFocused(false)
               }}
               onChange={(event) => {
-                const nextValue = event.currentTarget.value
-                setArtistSearch(nextValue)
-                if (artistGroups.some((artist) => artist.name === nextValue)) {
-                  chooseArtist(nextValue)
-                }
+                setArtistSearch(event.currentTarget.value)
               }}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') {
@@ -375,7 +422,13 @@ export function ArtistsPage({
         </div>
       </aside>
 
-      <main className={clsx('artists-detail', { 'is-empty': !selectedArtist })}>
+      <main
+        className={clsx('artists-detail', { 'is-empty': !selectedArtist })}
+        ref={artistDetailRef}
+        onScroll={(event) => {
+          setArtistDetailScrollTop(event.currentTarget.scrollTop)
+        }}
+      >
         {selectedArtist ? (
           <>
             <header className="artist-detail-header">
@@ -405,71 +458,80 @@ export function ArtistsPage({
               {loadingArtistName === selectedArtist.name ? <div className="artist-detail-progress" aria-label={t('nowPlaying.loading')} /> : null}
             </header>
 
-            <div className="artist-album-list">
-              {selectedAlbums.map((album) => (
-                <section className="artist-album-section" key={album.name}>
-                  <header className="artist-album-header">
-                    <AlbumArtwork title={album.name} artworkUrl={album.artworkUrl} songId={album.songs[0]!.id} />
-                    <div className="artist-album-copy">
-                      <Link to={`/albums/${encodeURIComponent(album.name)}`}>{album.name}</Link>
-                      <p>
-                        {t('artists.albumSummary', {
-                          songs: album.songs.length,
-                          duration: formatDuration(album.duration),
-                        })}
-                      </p>
-                    </div>
-                    <button
-                      className="artist-album-more"
-                      type="button"
-                      title={album.name}
-                      onClick={(event) => {
-                        openGroupMenu(event, 'album', album.name, album.songs)
-                      }}
-                      onContextMenu={(event) => {
-                        openGroupMenu(event, 'album', album.name, album.songs)
-                      }}
-                    >
-                      <Icon name="moreHorizontal" />
-                    </button>
-                  </header>
+            <div className="artist-album-list" ref={artistAlbumListRef}>
+              {artistAlbumVirtualWindow.topSpacerHeight > 0 ? (
+                <div className="artist-album-virtual-spacer" style={{ height: artistAlbumVirtualWindow.topSpacerHeight }} />
+              ) : null}
+              {renderedArtistAlbums.map((album) => {
+                return (
+                  <section className="artist-album-section" key={album.name}>
+                    <header className="artist-album-header">
+                      <AlbumArtwork title={album.name} artworkUrl={album.artworkUrl} songId={album.songs[0]!.id} />
+                      <div className="artist-album-copy">
+                        <Link to={`/albums/${encodeURIComponent(album.name)}`}>{album.name}</Link>
+                        <p>
+                          {t('artists.albumSummary', {
+                            songs: album.songs.length,
+                            duration: formatDuration(album.duration),
+                          })}
+                        </p>
+                      </div>
+                      <button
+                        className="artist-album-more"
+                        type="button"
+                        title={album.name}
+                        onClick={(event) => {
+                          openGroupMenu(event, 'album', album.name, album.songs)
+                        }}
+                        onContextMenu={(event) => {
+                          openGroupMenu(event, 'album', album.name, album.songs)
+                        }}
+                      >
+                        <Icon name="moreHorizontal" />
+                      </button>
+                    </header>
 
-                  <div className="artist-song-list">
-                    {album.songs.map((song) => (
-                      <PlaylistControlItem
-                        key={song.id}
-                        song={song}
-                        t={t}
-                        current={song.id === selectedTrackId}
-                        isPlaying={isPlaying}
-                        queueSongIds={selectedQueueSongIds}
-                        selectionMode={multiSelect}
-                        selected={selectedSongIds.has(song.id)}
-                        onPlayTrack={onPlayTrack}
-                        onTogglePlayPause={onTogglePlayPause}
-                        onToggleFavorite={onToggleFavorite}
-                        onSelect={toggleSongSelection}
-                        onAddToPlaylistClick={(contextSong, x, y) => {
-                          setGroupMenu(null)
-                          setSongContextMenu({
-                            song: contextSong,
-                            x,
-                            y,
-                          })
-                        }}
-                        onContextMenu={(contextSong, x, y) => {
-                          setGroupMenu(null)
-                          setSongContextMenu({
-                            song: contextSong,
-                            x,
-                            y,
-                          })
-                        }}
-                      />
-                    ))}
-                  </div>
-                </section>
-              ))}
+                    <div className="artist-song-list">
+                      {album.songs.map((song, index) => (
+                        <PlaylistControlItem
+                          key={song.id}
+                          song={song}
+                          t={t}
+                          rowNumber={index + 1}
+                          current={song.id === selectedTrackId}
+                          isPlaying={isPlaying}
+                          queueSongIds={selectedQueueSongIds}
+                          selectionMode={multiSelect}
+                          selected={selectedSongIds.has(song.id)}
+                          onPlayTrack={onPlayTrack}
+                          onTogglePlayPause={onTogglePlayPause}
+                          onToggleFavorite={onToggleFavorite}
+                          onSelect={toggleSongSelection}
+                          onAddToPlaylistClick={(contextSong, x, y) => {
+                            setGroupMenu(null)
+                            setSongContextMenu({
+                              song: contextSong,
+                              x,
+                              y,
+                            })
+                          }}
+                          onContextMenu={(contextSong, x, y) => {
+                            setGroupMenu(null)
+                            setSongContextMenu({
+                              song: contextSong,
+                              x,
+                              y,
+                            })
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                )
+              })}
+              {artistAlbumVirtualWindow.bottomSpacerHeight > 0 ? (
+                <div className="artist-album-virtual-spacer" style={{ height: artistAlbumVirtualWindow.bottomSpacerHeight }} />
+              ) : null}
             </div>
           </>
         ) : (
@@ -870,6 +932,50 @@ function buildAlbumGroups(songs: LibrarySong[], t: Translator): AlbumGroup[] {
   return [...groups.values()].sort((left, right) => left.name.localeCompare(right.name))
 }
 
+function getEstimatedArtistAlbumHeight(album: AlbumGroup) {
+  return ARTIST_ALBUM_CARD_HEADER_HEIGHT + album.songs.length * ARTIST_ALBUM_SONG_ROW_HEIGHT + ARTIST_ALBUM_CARD_GAP
+}
+
+function getArtistAlbumVirtualWindow(heights: number[], scrollTop: number, viewportHeight: number) {
+  const overscanHeight = ARTIST_ALBUM_OVERSCAN_ROWS * (ARTIST_ALBUM_CARD_HEADER_HEIGHT + ARTIST_ALBUM_SONG_ROW_HEIGHT)
+  const windowTop = Math.max(0, scrollTop - overscanHeight)
+  const windowBottom = scrollTop + viewportHeight + overscanHeight
+  let startIndex = 0
+  let endIndex = heights.length
+  let offset = 0
+  let topSpacerHeight = 0
+
+  for (let index = 0; index < heights.length; index += 1) {
+    const nextOffset = offset + heights[index]!
+    if (nextOffset > windowTop) {
+      startIndex = index
+      topSpacerHeight = offset
+      break
+    }
+    offset = nextOffset
+  }
+
+  offset = topSpacerHeight
+  for (let index = startIndex; index < heights.length; index += 1) {
+    offset += heights[index]!
+    if (offset >= windowBottom) {
+      endIndex = index + 1
+      break
+    }
+  }
+
+  const totalHeight = heights.reduce((sum, height) => sum + height, 0)
+  const renderedHeight = heights.slice(startIndex, endIndex).reduce((sum, height) => sum + height, 0)
+  const bottomSpacerHeight = Math.max(0, totalHeight - topSpacerHeight - renderedHeight)
+
+  return {
+    startIndex,
+    endIndex,
+    topSpacerHeight,
+    bottomSpacerHeight,
+  }
+}
+
 function AlbumArtwork({ title, artworkUrl, songId }: { title: string; artworkUrl: string; songId: number }) {
   const [resolvedArtworkUrl, setResolvedArtworkUrl] = useState('')
   const effectiveArtworkUrl = artworkUrl || resolvedArtworkUrl
@@ -892,7 +998,7 @@ function AlbumArtwork({ title, artworkUrl, songId }: { title: string; artworkUrl
       title={title}
       renderFallback={() => (
         <div className="artist-album-artwork artist-album-artwork-fallback" aria-hidden="true">
-          <Icon name="albums" />
+          <DefaultAlbumArtwork className="artist-album-artwork-fallback-image" />
         </div>
       )}
     />

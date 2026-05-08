@@ -2,6 +2,7 @@ import clsx from 'clsx'
 import { Link } from 'react-router-dom'
 
 import { ArtworkImage } from '../components/ArtworkImage'
+import { DefaultAlbumArtwork } from '../components/DefaultAlbumArtwork'
 import type { LibrarySong } from '../shared/contracts'
 import { formatDuration } from '../shared/formatters'
 import type { Translator } from '../shared/i18n'
@@ -166,7 +167,7 @@ function DetailArtwork({
       title={title}
       renderFallback={() => (
         <div className="detail-artwork detail-artwork-fallback" aria-hidden="true">
-          <span>{title.slice(0, 2).toUpperCase()}</span>
+          <DefaultAlbumArtwork className="detail-artwork-fallback-image" />
         </div>
       )}
     />

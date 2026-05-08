@@ -1,6 +1,6 @@
-import { Icon } from './icons'
 import { ArtworkImage } from './ArtworkImage'
 import { useEffect, useState } from 'react'
+import { DefaultAlbumArtwork } from './DefaultAlbumArtwork'
 
 interface AlbumArtControlProps {
   title: string
@@ -39,7 +39,7 @@ export function AlbumArtControl({ title, artworkUrl, songId, className, fallback
       title={title}
       renderFallback={() => (
         <div className={`album-art-control album-art-control-fallback${className ? ` ${className}` : ''}${fallbackClassName ? ` ${fallbackClassName}` : ''}`} aria-hidden="true">
-          <Icon name="albums" />
+          <DefaultAlbumArtwork className="album-art-control-fallback-image" />
           {fallbackText ? <span>{fallbackText}</span> : null}
         </div>
       )}

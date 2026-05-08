@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
-import { NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { NavLink, useLocation } from 'react-router-dom'
 
 import { Icon, type IconName } from './icons'
 import type { LibraryPlaylist, SearchHistoryEntry } from '../shared/contracts'
@@ -46,6 +46,9 @@ interface SidebarProps {
   onRecentSearchesClear: () => void
   onSearchClear: () => void
   onToggleCollapsed: () => void
+  onGoBack: () => void
+  onNavigate: () => void
+  onReorderPlaylists: (playlistIds: number[]) => void
   getRestoredNavTarget: (target: string) => string
 }
 
@@ -63,17 +66,23 @@ export function Sidebar({
   onRecentSearchRemove,
   onRecentSearchesClear,
   onToggleCollapsed,
+  onGoBack,
+  onNavigate,
+  onReorderPlaylists,
   getRestoredNavTarget,
 }: SidebarProps) {
   const [isSearchFocused, setIsSearchFocused] = useState(false)
   const [isPlaylistNavExpanded, setIsPlaylistNavExpanded] = useState(false)
+  const [draggingPlaylistId, setDraggingPlaylistId] = useState<number | null>(null)
+  const [dropIndicator, setDropIndicator] = useState<{ playlistId: number; position: 'before' | 'after' } | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const focusSearchAfterExpandRef = useRef(false)
-  const navigate = useNavigate()
+  const draggedPlaylistIdRef = useRef<number | null>(null)
   const location = useLocation()
 
   const visibleRecentSearches = recentSearches.slice(0, 10)
   const customPlaylists = playlists.filter((playlist) => !playlist.isBuiltIn)
+  const customPlaylistIds = useMemo(() => customPlaylists.map((playlist) => playlist.id), [customPlaylists])
   const isPlaylistRoute = location.pathname.startsWith('/playlists')
 
   const showRecentSearches = isSearchFocused && visibleRecentSearches.length > 0
@@ -100,6 +109,26 @@ export function Sidebar({
     onToggleCollapsed()
   }
 
+  const clearPlaylistDragState = () => {
+    draggedPlaylistIdRef.current = null
+    setDraggingPlaylistId(null)
+    setDropIndicator(null)
+  }
+
+  const reorderDraggedPlaylist = (targetPlaylistId: number, insertAfter: boolean) => {
+    const draggedPlaylistId = draggedPlaylistIdRef.current
+    if (draggedPlaylistId == null || draggedPlaylistId === targetPlaylistId) {
+      clearPlaylistDragState()
+      return
+    }
+
+    const nextPlaylistIds = customPlaylistIds.filter((playlistId) => playlistId !== draggedPlaylistId)
+    const targetIndex = nextPlaylistIds.indexOf(targetPlaylistId)
+    nextPlaylistIds.splice(targetIndex + (insertAfter ? 1 : 0), 0, draggedPlaylistId)
+    clearPlaylistDragState()
+    onReorderPlaylists(nextPlaylistIds)
+  }
+
   return (
     <aside className={`sidebar${collapsed ? ' is-collapsed' : ''}`}>
       <div className="sidebar-titlebar">
@@ -109,9 +138,7 @@ export function Sidebar({
             type="button"
             aria-label={t('sidebar.back')}
             data-tooltip={t('sidebar.back')}
-            onClick={() => {
-              navigate(-1)
-            }}
+            onClick={onGoBack}
           >
             <Icon name="arrowLeft" />
           </button>
@@ -251,7 +278,7 @@ export function Sidebar({
         <span className="nav-section-label">{t('sidebar.library')}</span>
         <div className="nav-links">
           {primaryLinks.map((item) => (
-            <NavItem key={item.to} {...item} label={t(item.labelKey)} targetTo={getRestoredNavTarget(item.to)} />
+            <NavItem key={item.to} {...item} label={t(item.labelKey)} targetTo={getRestoredNavTarget(item.to)} onNavigate={onNavigate} />
           ))}
         </div>
       </nav>
@@ -260,18 +287,18 @@ export function Sidebar({
         <span className="nav-section-label">{t('sidebar.playback')}</span>
         <div className="nav-links">
           {secondaryLinks.map((item) => (
-            <NavItem key={item.to} {...item} label={t(item.labelKey)} targetTo={getRestoredNavTarget(item.to)} />
+            <NavItem key={item.to} {...item} label={t(item.labelKey)} targetTo={getRestoredNavTarget(item.to)} onNavigate={onNavigate} />
           ))}
         </div>
       </nav>
 
       <nav className="nav-section playlist-nav-section" aria-label={t('common.playlists')}>
         {collapsed ? (
-          <NavItem to="/playlists" icon="playlists" label={t('common.playlists')} />
+          <NavItem to="/playlists" icon="playlists" label={t('common.playlists')} onNavigate={onNavigate} />
         ) : (
           <>
             <div className="playlist-nav-heading">
-              <NavItem to="/playlists" icon="playlists" label={t('common.playlists')} />
+              <NavItem to="/playlists" icon="playlists" label={t('common.playlists')} onNavigate={onNavigate} />
               <button
                 type="button"
                 className="playlist-nav-toggle"
@@ -288,9 +315,37 @@ export function Sidebar({
               {customPlaylists.map((playlist) => (
                 <NavLink
                   key={playlist.id}
-                  className={({ isActive }) => `playlist-nav-child${isActive ? ' active' : ''}`}
+                  className={({ isActive }) =>
+                    `playlist-nav-child${isActive ? ' active' : ''}${draggingPlaylistId === playlist.id ? ' is-dragging' : ''}${dropIndicator?.playlistId === playlist.id ? ` is-drop-${dropIndicator.position}` : ''}`
+                  }
                   to={`/playlists/${playlist.id}`}
                   title={playlist.name}
+                  draggable
+                  onClick={onNavigate}
+                  onDragStart={(event) => {
+                    draggedPlaylistIdRef.current = playlist.id
+                    setDraggingPlaylistId(playlist.id)
+                    event.dataTransfer.effectAllowed = 'move'
+                    event.dataTransfer.setData('text/plain', playlist.name)
+                  }}
+                  onDragOver={(event) => {
+                    event.preventDefault()
+                    event.dataTransfer.dropEffect = 'move'
+                    const rect = event.currentTarget.getBoundingClientRect()
+                    setDropIndicator({
+                      playlistId: playlist.id,
+                      position: event.clientY > rect.top + rect.height / 2 ? 'after' : 'before',
+                    })
+                  }}
+                  onDragLeave={() => {
+                    setDropIndicator((current) => current?.playlistId === playlist.id ? null : current)
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault()
+                    const rect = event.currentTarget.getBoundingClientRect()
+                    reorderDraggedPlaylist(playlist.id, event.clientY > rect.top + rect.height / 2)
+                  }}
+                  onDragEnd={clearPlaylistDragState}
                 >
                   <span className="playlist-nav-child-icon" aria-hidden="true">
                     <Icon name="playlists" />
@@ -304,7 +359,7 @@ export function Sidebar({
       </nav>
 
       <div className="sidebar-footer">
-        <NavItem {...settingsLink} label={t(settingsLink.labelKey)} targetTo={getRestoredNavTarget(settingsLink.to)} />
+        <NavItem {...settingsLink} label={t(settingsLink.labelKey)} targetTo={getRestoredNavTarget(settingsLink.to)} onNavigate={onNavigate} />
       </div>
     </aside>
   )
@@ -315,9 +370,10 @@ interface NavItemProps {
   targetTo?: string
   label: string
   icon: IconName
+  onNavigate?: () => void
 }
 
-function NavItem({ to, targetTo = to, label, icon }: NavItemProps) {
+function NavItem({ to, targetTo = to, label, icon, onNavigate }: NavItemProps) {
   const location = useLocation()
   const isActive = location.pathname === to || location.pathname.startsWith(`${to}/`)
 
@@ -326,6 +382,7 @@ function NavItem({ to, targetTo = to, label, icon }: NavItemProps) {
       className={() => `nav-link${isActive ? ' active' : ''}`}
       to={targetTo}
       data-tooltip={label}
+      onClick={onNavigate}
     >
       <span className="nav-tag" aria-hidden="true">
         <Icon name={icon} />

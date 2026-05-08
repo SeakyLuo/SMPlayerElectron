@@ -191,11 +191,13 @@
   place-items: center;
   border: 1px solid rgba(116, 132, 153, 0.18);
   color: var(--accent);
+  overflow: hidden;
 }
 
-.recent-song-artwork-fallback svg {
-  width: 42px;
-  height: 42px;
+.recent-song-artwork-fallback-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .recent-song-copy {
