@@ -1,0 +1,240 @@
+import clsx from 'clsx'
+import type { DragEventHandler, KeyboardEvent, Ref } from 'react'
+
+import { getSongArtists } from '../shared/artists'
+import type { LibrarySong } from '../shared/contracts'
+import { formatDuration } from '../shared/formatters'
+import type { Translator } from '../shared/i18n'
+import { ArtworkImage } from './ArtworkImage'
+import { DefaultAlbumArtwork } from './DefaultAlbumArtwork'
+import { Icon } from './icons'
+
+interface NowPlayingQueueItemProps {
+  song: LibrarySong
+  t: Translator
+  current: boolean
+  playing: boolean
+  selected: boolean
+  selectionMode: boolean
+  dropPosition: 'before' | 'after' | null
+  queueSongIds: number[]
+  rowNumber?: number
+  containerRef?: Ref<HTMLDivElement>
+  onPlayTrack: (trackId: number, queueSongIds: number[]) => void
+  onTogglePlayPause: () => void
+  onToggleSelection: () => void
+  onToggleFavorite: (songId: number, favorite: boolean) => void
+  onRemoveFromListClick: (song: LibrarySong) => void
+  onAddToPlaylistClick: (song: LibrarySong, x: number, y: number) => void
+  onContextMenu: (song: LibrarySong, x: number, y: number) => void
+  onSeeAlbum: (song: LibrarySong) => void
+  onSeeArtist: (artist: string) => void
+  onDragStart: DragEventHandler<HTMLDivElement>
+  onDragOver: DragEventHandler<HTMLDivElement>
+  onDragLeave: DragEventHandler<HTMLDivElement>
+  onDrop: DragEventHandler<HTMLDivElement>
+  onDragEnd: DragEventHandler<HTMLDivElement>
+}
+
+export function NowPlayingQueueItem({
+  song,
+  t,
+  current,
+  playing,
+  selected,
+  selectionMode,
+  dropPosition,
+  queueSongIds,
+  rowNumber,
+  containerRef,
+  onPlayTrack,
+  onTogglePlayPause,
+  onToggleSelection,
+  onToggleFavorite,
+  onRemoveFromListClick,
+  onAddToPlaylistClick,
+  onContextMenu,
+  onSeeAlbum,
+  onSeeArtist,
+  onDragStart,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  onDragEnd,
+}: NowPlayingQueueItemProps) {
+  const artists = getSongArtists(song)
+  const artistLabel = artists.join(', ')
+  const open = () => {
+    if (selectionMode) {
+      onToggleSelection()
+    } else {
+      onPlayTrack(song.id, queueSongIds)
+    }
+  }
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      open()
+    }
+  }
+
+  return (
+    <div
+      ref={containerRef}
+      role="button"
+      tabIndex={0}
+      draggable
+      className={clsx('now-playing-queue-item', {
+        'is-current': current,
+        'is-playing': current && playing,
+        'is-selected': selected,
+        'is-selecting': selectionMode,
+        'is-drop-before': dropPosition === 'before',
+        'is-drop-after': dropPosition === 'after',
+      })}
+      onClick={open}
+      onKeyDown={handleKeyDown}
+      onContextMenu={(event) => {
+        event.preventDefault()
+        onContextMenu(song, event.clientX, event.clientY)
+      }}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
+    >
+      <span className="now-playing-queue-status">
+        {current ? (
+          <span className="playlist-control-item-playing-wave" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+            <span />
+          </span>
+        ) : rowNumber ? (
+          <span className="now-playing-queue-index">{rowNumber}</span>
+        ) : null}
+      </span>
+      <span className="now-playing-queue-artwork-wrap">
+        <ArtworkImage
+          className="now-playing-queue-artwork"
+          src={song.artworkUrl}
+          title={song.title}
+          renderFallback={() => (
+            <span className="now-playing-queue-artwork now-playing-queue-artwork-fallback" aria-hidden="true">
+              <DefaultAlbumArtwork className="now-playing-queue-artwork-fallback-image" />
+            </span>
+          )}
+        />
+        {selectionMode ? (
+          <span className="now-playing-queue-select-mark" aria-hidden="true">
+            {selected ? <Icon name="check" /> : null}
+          </span>
+        ) : null}
+        {!selectionMode ? (
+          <button
+            type="button"
+            className="now-playing-queue-play"
+            aria-label={current && playing ? t('context.pause') : t('context.play')}
+            title={current && playing ? t('context.pause') : t('context.play')}
+            onClick={(event) => {
+              event.stopPropagation()
+              if (current && playing) {
+                onTogglePlayPause()
+              } else {
+                onPlayTrack(song.id, queueSongIds)
+              }
+            }}
+          >
+            <Icon name={current && playing ? 'pause' : 'play'} />
+          </button>
+        ) : null}
+      </span>
+      <span className="now-playing-queue-copy">
+        <strong title={song.title}>{song.title}</strong>
+        <span className="now-playing-queue-artists" title={artistLabel}>
+          {artists.map((artist, index) => (
+            <span key={`${song.id}-${artist}`}>
+              {index > 0 ? ', ' : null}
+              <button
+                type="button"
+                className="now-playing-queue-artist"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onSeeArtist(artist)
+                }}
+              >
+                {artist}
+              </button>
+            </span>
+          ))}
+        </span>
+      </span>
+      <span className="now-playing-queue-actions">
+        <button
+          type="button"
+          className={clsx('now-playing-queue-action', 'favorite', { 'is-active': song.favorite })}
+          aria-label={t('common.favorite')}
+          title={t('common.favorite')}
+          onClick={(event) => {
+            event.stopPropagation()
+            onToggleFavorite(song.id, !song.favorite)
+          }}
+        >
+          <Icon name={song.favorite ? 'heartFilled' : 'heart'} />
+        </button>
+        <button
+          type="button"
+          className="now-playing-queue-action is-hover-action"
+          aria-label={t('context.addToPlaylist')}
+          title={t('context.addToPlaylist')}
+          onClick={(event) => {
+            event.stopPropagation()
+            const rect = event.currentTarget.getBoundingClientRect()
+            onAddToPlaylistClick(song, rect.left, rect.bottom + 8)
+          }}
+        >
+          <Icon name="plus" />
+        </button>
+        <button
+          type="button"
+          className="now-playing-queue-action is-hover-action"
+          aria-label={t('nowPlaying.remove')}
+          title={t('nowPlaying.remove')}
+          onClick={(event) => {
+            event.stopPropagation()
+            onRemoveFromListClick(song)
+          }}
+        >
+          <Icon name="close" />
+        </button>
+        <button
+          type="button"
+          className="now-playing-queue-action is-hover-action"
+          aria-label={t('player.more')}
+          title={t('player.more')}
+          onClick={(event) => {
+            event.stopPropagation()
+            const rect = event.currentTarget.getBoundingClientRect()
+            onContextMenu(song, rect.left, rect.bottom + 8)
+          }}
+        >
+          <Icon name="moreHorizontal" />
+        </button>
+      </span>
+      <button
+        type="button"
+        className="now-playing-queue-album"
+        title={song.album || t('common.albumUnknown')}
+        onClick={(event) => {
+          event.stopPropagation()
+          onSeeAlbum(song)
+        }}
+      >
+        {song.album || t('common.albumUnknown')}
+      </button>
+      <time>{formatDuration(song.duration)}</time>
+    </div>
+  )
+}

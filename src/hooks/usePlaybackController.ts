@@ -1,7 +1,6 @@
 import { startTransition, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 import type { LibrarySnapshot, LibrarySong, PlaybackMode } from '../shared/contracts'
-import { getDisplayArtists } from '../shared/artists'
 import {
   currentIndex,
   moveNext,
@@ -10,7 +9,15 @@ import {
   samePlaylist,
   shuffleOthers,
 } from '../shared/mediaHelper'
+import { getNextRecoverableTrackId } from '../shared/playbackRecovery'
+import { createTranslator } from '../shared/i18n'
 import { setPlaybackProgress, usePlaybackProgress } from '../state/playbackProgressStore'
+import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
+import { useLibraryStore } from '../state/useLibraryStore'
+import { usePlaybackAudioElement } from './usePlaybackAudioElement'
+import { updateMediaSessionPosition, useMediaSession } from './useMediaSession'
+import { usePlaybackPersistence } from './usePlaybackPersistence'
+import { usePlaybackShortcuts } from './usePlaybackShortcuts'
 
 interface PlaybackController {
   currentTrack: LibrarySong | null
@@ -49,25 +56,11 @@ interface LoadTrackOptions {
 
 type PlaybackStatus = 'idle' | 'loading' | 'ready' | 'playing' | 'paused' | 'buffering' | 'seeking'
 
+const PLAYBACK_STALL_TIMEOUT_MS = 8_000
+const PLAYBACK_PROGRESS_EPSILON_SECONDS = 0.05
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
-}
-
-function updateMediaSessionPosition(durationSeconds: number, progressSeconds: number) {
-  if (!('mediaSession' in navigator) || typeof navigator.mediaSession.setPositionState !== 'function') {
-    return
-  }
-
-  if (durationSeconds <= 0) {
-    navigator.mediaSession.setPositionState()
-    return
-  }
-
-  navigator.mediaSession.setPositionState({
-    duration: durationSeconds,
-    playbackRate: 1,
-    position: clamp(progressSeconds, 0, durationSeconds),
-  })
 }
 
 export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackController {
@@ -79,13 +72,17 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
   const hydratedRef = useRef(false)
   const queueOverrideRef = useRef<number[] | null>(null)
   const queueSongIdsRef = useRef<number[]>([])
-  const persistedDurationByTrackRef = useRef(new Map<number, number>())
   const wasPlayingBeforeSeekRef = useRef(false)
   const isUserSeekingRef = useRef(false)
+  const pendingSeekSecondsRef = useRef<number | null>(null)
   const statusRef = useRef<PlaybackStatus>('idle')
   const stalledTimerRef = useRef<number | null>(null)
   const progressSyncTimerRef = useRef<number | null>(null)
+  const stalledProgressStartedAtRef = useRef<number | null>(null)
+  const stalledProgressSecondsRef = useRef(0)
   const failedTrackIdsRef = useRef(new Set<number>())
+  const retriedTrackIdsRef = useRef(new Set<number>())
+  const recoverFromPlaybackFailureRef = useRef<() => Promise<void>>(async () => {})
   const loadTrackRef = useRef<(trackId: number, options: LoadTrackOptions) => Promise<void>>(
     async () => {},
   )
@@ -151,54 +148,26 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
       : snapshot.songs.find((song) => song.id === currentTrackId) ?? null
 
   const getPlaybackSongIds = useCallback(() => queueSongIdsRef.current, [])
+  const getSeekableDuration = useCallback(() => {
+    const audio = audioRef.current
+    const audioDuration = audio && Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 0
+    const trackDuration =
+      currentTrackIdRef.current == null
+        ? 0
+        : snapshotRef.current.songs.find((song) => song.id === currentTrackIdRef.current)?.duration ?? 0
 
-  const persistPlaybackSettings = useCallback(
-    async (
-      override: Partial<{
-        lastMusicIndex: number
-        volume: number
-        isMuted: boolean
-        mode: PlaybackMode
-        musicProgress: number
-      }> = {},
-    ) => {
-      if (!window.smplayer) {
-        return
-      }
-
-      const lastMusicIndex =
-        override.lastMusicIndex ?? currentIndex(getPlaybackSongIds(), currentTrackIdRef.current, currentQueueIndexRef.current ?? -1)
-      const shouldSaveProgress = snapshotRef.current.settings.saveMusicProgress
-      const nextMusicProgress = shouldSaveProgress
-        ? override.musicProgress ?? progressSecondsRef.current
-        : 0
-
-      await window.smplayer.savePlaybackSettings({
-        lastMusicIndex,
-        volume: override.volume ?? volumeRef.current,
-        isMuted: override.isMuted ?? isMutedRef.current,
-        mode: override.mode ?? modeRef.current,
-        musicProgress: nextMusicProgress,
-      })
-    },
-    [getPlaybackSongIds],
-  )
-
-  const persistResolvedDuration = useCallback((duration: number) => {
-    const trackId = currentTrackIdRef.current
-    const nextDuration = Math.round(duration)
-
-    if (!window.smplayer || trackId == null || !Number.isFinite(nextDuration) || nextDuration <= 0) {
-      return
-    }
-
-    if (persistedDurationByTrackRef.current.get(trackId) === nextDuration) {
-      return
-    }
-
-    persistedDurationByTrackRef.current.set(trackId, nextDuration)
-    void window.smplayer.updateSongDuration(trackId, nextDuration)
+    return durationSecondsRef.current || audioDuration || trackDuration
   }, [])
+  const { persistPlaybackSettings, persistResolvedDuration, markSongPlayed } = usePlaybackPersistence({
+    snapshotRef,
+    currentTrackIdRef,
+    currentQueueIndexRef,
+    progressSecondsRef,
+    volumeRef,
+    isMutedRef,
+    modeRef,
+    getPlaybackSongIds,
+  })
 
   const clearStalledTimer = useCallback(() => {
     if (stalledTimerRef.current != null) {
@@ -221,6 +190,11 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
     }
 
     const nextProgressSeconds = audio.currentTime
+    if (pendingSeekSecondsRef.current != null && Math.abs(nextProgressSeconds - pendingSeekSecondsRef.current) > 0.25) {
+      return
+    }
+
+    pendingSeekSecondsRef.current = null
     if (!force && Math.abs(nextProgressSeconds - progressSecondsRef.current) < 0.2) {
       return
     }
@@ -245,10 +219,42 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
   const startProgressSync = useCallback(() => {
     stopProgressSync()
     updateProgressFromAudio(true)
+    stalledProgressStartedAtRef.current = null
+    stalledProgressSecondsRef.current = audioRef.current?.currentTime ?? 0
     progressSyncTimerRef.current = window.setInterval(() => {
       updateProgressFromAudio()
+      const audio = audioRef.current
+      if (!audio || audio.paused || audio.ended || isUserSeekingRef.current) {
+        stalledProgressStartedAtRef.current = null
+        stalledProgressSecondsRef.current = audio?.currentTime ?? 0
+        return
+      }
+
+      const nextProgressSeconds = audio.currentTime
+      if (Math.abs(nextProgressSeconds - stalledProgressSecondsRef.current) > PLAYBACK_PROGRESS_EPSILON_SECONDS) {
+        stalledProgressSecondsRef.current = nextProgressSeconds
+        stalledProgressStartedAtRef.current = null
+        if (currentTrackIdRef.current != null) {
+          retriedTrackIdsRef.current.delete(currentTrackIdRef.current)
+        }
+        return
+      }
+
+      stalledProgressStartedAtRef.current ??= Date.now()
+      if (Date.now() - stalledProgressStartedAtRef.current >= PLAYBACK_STALL_TIMEOUT_MS) {
+        stalledProgressStartedAtRef.current = null
+        const t = createTranslator(snapshotRef.current.settings.preferredLanguage)
+        useUndoableNotificationStore.getState().show(
+          t('notification.playbackStalled'),
+          t('common.close'),
+          () => {},
+          4000,
+        )
+        setStatus('buffering')
+        void recoverFromPlaybackFailureRef.current()
+      }
     }, 500)
-  }, [stopProgressSync, updateProgressFromAudio])
+  }, [setStatus, stopProgressSync, updateProgressFromAudio])
 
   const recoverFromPlaybackFailure = useCallback(
     async () => {
@@ -264,6 +270,18 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
       setIsPlaying(false)
 
       if (activeTrackId != null) {
+        const retryProgressSeconds = audio?.currentTime ?? progressSecondsRef.current
+        if (!retriedTrackIdsRef.current.has(activeTrackId)) {
+          retriedTrackIdsRef.current.add(activeTrackId)
+          loadedTrackIdRef.current = null
+          await loadTrackRef.current(activeTrackId, {
+            autoplay: true,
+            queueIndex: currentQueueIndexRef.current ?? -1,
+            startAt: retryProgressSeconds,
+          })
+          return
+        }
+
         failedTrackIdsRef.current.add(activeTrackId)
       }
 
@@ -279,12 +297,13 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
         return
       }
 
-      const activeIndex = currentIndex(playbackSongIds, activeTrackId, currentQueueIndexRef.current ?? -1)
-      const shouldWrap = modeRef.current === 'repeat' || modeRef.current === 'shuffle'
-      const orderedSongIds = shouldWrap
-        ? [...playbackSongIds.slice(activeIndex + 1), ...playbackSongIds.slice(0, activeIndex + 1)]
-        : playbackSongIds.slice(activeIndex + 1)
-      const nextTrackId = orderedSongIds.find((songId) => !failedTrackIdsRef.current.has(songId))
+      const nextTrackId = getNextRecoverableTrackId({
+        playbackSongIds,
+        activeTrackId,
+        activeQueueIndex: currentQueueIndexRef.current ?? -1,
+        mode: modeRef.current,
+        failedTrackIds: failedTrackIdsRef.current,
+      })
 
       if (nextTrackId == null) {
         setStatus('paused')
@@ -297,6 +316,7 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
     },
     [clearStalledTimer, getPlaybackSongIds, persistPlaybackSettings, setStatus],
   )
+  recoverFromPlaybackFailureRef.current = recoverFromPlaybackFailure
 
   const armStalledTimer = useCallback(() => {
     clearStalledTimer()
@@ -353,226 +373,38 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
     }
   }, [clearStalledTimer, getPlaybackSongIds, persistPlaybackSettings, recoverFromPlaybackFailure, setDurationFromPlayback, setProgressFromPlayback, setStatus])
 
-  useEffect(() => {
-    const audio = new Audio()
-    audio.preload = 'metadata'
-    audio.volume = clamp(volumeRef.current / 100, 0, 1)
-    audio.muted = isMutedRef.current
-    audioRef.current = audio
-
-    const handleLoadStart = () => {
-      setStatus('loading')
-    }
-
-    const handleLoadedMetadata = async () => {
-      const activeTrack =
-        snapshotRef.current.songs.find((song) => song.id === currentTrackIdRef.current) ?? null
-      const nextDuration =
-        Number.isFinite(audio.duration) && audio.duration > 0
-          ? audio.duration
-          : activeTrack?.duration ?? 0
-
-      setDurationFromPlayback(nextDuration)
-      persistResolvedDuration(nextDuration)
-
-      if (pendingStartSecondsRef.current > 0) {
-        audio.currentTime = clamp(
-          pendingStartSecondsRef.current,
-          0,
-          nextDuration || pendingStartSecondsRef.current,
-        )
-        setProgressFromPlayback(audio.currentTime)
-        pendingStartSecondsRef.current = 0
-      }
-
-      const shouldAutoplay = pendingAutoplayRef.current
-      pendingAutoplayRef.current = false
-
-      if (shouldAutoplay) {
-        try {
-          await audio.play()
-        } catch {
-          await recoverFromPlaybackFailure()
-        }
-      } else {
-        setStatus('ready')
-      }
-    }
-
-    const handleTimeUpdate = () => {
-      clearStalledTimer()
-      updateProgressFromAudio()
-    }
-
-    const handleDurationChange = () => {
-      if (Number.isFinite(audio.duration) && audio.duration > 0) {
-        setDurationFromPlayback(audio.duration)
-        persistResolvedDuration(audio.duration)
-      }
-    }
-
-    const handlePlay = () => {
-      setIsPlaying(true)
-      setStatus('playing')
-      startProgressSync()
-    }
-
-    const handlePlaying = () => {
-      clearStalledTimer()
-      failedTrackIdsRef.current.clear()
-      setIsPlaying(true)
-      setStatus('playing')
-      startProgressSync()
-    }
-
-    const handlePause = () => {
-      setIsPlaying(false)
-      stopProgressSync()
-      clearStalledTimer()
-      if (statusRef.current !== 'loading' && statusRef.current !== 'seeking' && statusRef.current !== 'buffering') {
-        setStatus('paused')
-      }
-      void persistPlaybackSettings({ musicProgress: audio.currentTime })
-    }
-
-    const handleCanPlay = () => {
-      clearStalledTimer()
-      if (pendingAutoplayRef.current) {
-        return
-      }
-
-      setStatus(audio.paused ? 'ready' : 'playing')
-    }
-
-    const handleWaiting = () => {
-      if (!audio.paused) {
-        setStatus('buffering')
-        armStalledTimer()
-      }
-    }
-
-    const handleSeeking = () => {
-      clearStalledTimer()
-      if (!isUserSeekingRef.current) {
-        setStatus('seeking')
-      }
-    }
-
-    const handleSeeked = () => {
-      clearStalledTimer()
-      updateProgressFromAudio()
-      if (!audio.paused) {
-        setStatus('playing')
-        startProgressSync()
-        return
-      }
-
-      setStatus('paused')
-    }
-
-    const handlePlaybackFailure = () => {
-      stopProgressSync()
-      setStatus('buffering')
-      void recoverFromPlaybackFailure()
-    }
-
-    const handleEnded = async () => {
-      clearStalledTimer()
-      const playbackSongIds = getPlaybackSongIds()
-      const activeIndex = currentIndex(playbackSongIds, currentTrackIdRef.current, currentQueueIndexRef.current ?? -1)
-      const activeTrack =
-        currentTrackIdRef.current == null
-          ? null
-          : snapshotRef.current.songs.find((song) => song.id === currentTrackIdRef.current) ?? null
-
-      if (activeTrack && window.smplayer) {
-        await window.smplayer.markSongPlayed(activeTrack.id)
-      }
-
-      if (playbackSongIds.length === 0) {
-        setIsPlaying(false)
-        setStatus('idle')
-        return
-      }
-
-      if (modeRef.current === 'repeat-one' && activeTrack) {
-        await loadTrackRef.current(activeTrack.id, { autoplay: true, queueIndex: activeIndex, startAt: 0 })
-        return
-      }
-
-      const nextIndex = activeIndex + 1
-      if (nextIndex < playbackSongIds.length) {
-        await loadTrackRef.current(playbackSongIds[nextIndex], { autoplay: true, queueIndex: nextIndex, startAt: 0 })
-        return
-      }
-
-      if (modeRef.current === 'repeat' || modeRef.current === 'shuffle') {
-        await loadTrackRef.current(playbackSongIds[0], { autoplay: true, queueIndex: 0, startAt: 0 })
-        return
-      }
-
-      setIsPlaying(false)
-      setStatus('paused')
-      setProgressFromPlayback(durationSecondsRef.current)
-      await persistPlaybackSettings({ musicProgress: durationSecondsRef.current })
-    }
-
-    const handleBeforeUnload = () => {
-      void persistPlaybackSettings({ musicProgress: audio.currentTime })
-    }
-
-    audio.addEventListener('loadstart', handleLoadStart)
-    audio.addEventListener('loadedmetadata', handleLoadedMetadata)
-    audio.addEventListener('timeupdate', handleTimeUpdate)
-    audio.addEventListener('durationchange', handleDurationChange)
-    audio.addEventListener('canplay', handleCanPlay)
-    audio.addEventListener('play', handlePlay)
-    audio.addEventListener('playing', handlePlaying)
-    audio.addEventListener('waiting', handleWaiting)
-    audio.addEventListener('stalled', handleWaiting)
-    audio.addEventListener('seeking', handleSeeking)
-    audio.addEventListener('seeked', handleSeeked)
-    audio.addEventListener('error', handlePlaybackFailure)
-    audio.addEventListener('pause', handlePause)
-    audio.addEventListener('ended', handleEnded)
-    window.addEventListener('beforeunload', handleBeforeUnload)
-
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload)
-      clearStalledTimer()
-      stopProgressSync()
-      audio.pause()
-      audio.src = ''
-      audio.removeEventListener('loadstart', handleLoadStart)
-      audio.removeEventListener('loadedmetadata', handleLoadedMetadata)
-      audio.removeEventListener('timeupdate', handleTimeUpdate)
-      audio.removeEventListener('durationchange', handleDurationChange)
-      audio.removeEventListener('canplay', handleCanPlay)
-      audio.removeEventListener('play', handlePlay)
-      audio.removeEventListener('playing', handlePlaying)
-      audio.removeEventListener('waiting', handleWaiting)
-      audio.removeEventListener('stalled', handleWaiting)
-      audio.removeEventListener('seeking', handleSeeking)
-      audio.removeEventListener('seeked', handleSeeked)
-      audio.removeEventListener('error', handlePlaybackFailure)
-      audio.removeEventListener('pause', handlePause)
-      audio.removeEventListener('ended', handleEnded)
-      audioRef.current = null
-    }
-  }, [
-    armStalledTimer,
-    clearStalledTimer,
+  usePlaybackAudioElement({
+    audioRef,
+    snapshotRef,
+    currentTrackIdRef,
+    currentQueueIndexRef,
+    pendingStartSecondsRef,
+    pendingAutoplayRef,
+    volumeRef,
+    isMutedRef,
+    modeRef,
+    statusRef,
+    isUserSeekingRef,
+    pendingSeekSecondsRef,
+    durationSecondsRef,
+    failedTrackIdsRef,
+    loadTrackRef,
     getPlaybackSongIds,
+    setStatus,
+    setIsPlaying,
+    clearStalledTimer,
+    armStalledTimer,
+    stopProgressSync,
+    startProgressSync,
+    updateProgressFromAudio,
+    setProgressFromPlayback,
+    setDurationFromPlayback,
     persistPlaybackSettings,
     persistResolvedDuration,
     recoverFromPlaybackFailure,
-    setDurationFromPlayback,
-    setProgressFromPlayback,
-    setStatus,
-    startProgressSync,
-    stopProgressSync,
-    updateProgressFromAudio,
-  ])
+    markSongPlayed,
+    clamp,
+  })
 
   useEffect(() => {
     const audio = audioRef.current
@@ -735,35 +567,37 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
   const seekToRatio = useCallback(
     (ratio: number) => {
       const audio = audioRef.current
-      const safeDuration = durationSecondsRef.current
+      const safeDuration = getSeekableDuration()
       if (!audio || safeDuration <= 0) {
         return
       }
 
       const nextTime = clamp(ratio, 0, 1) * safeDuration
+      pendingSeekSecondsRef.current = nextTime
       setStatus('seeking')
       audio.currentTime = nextTime
       setProgressFromPlayback(nextTime)
       void persistPlaybackSettings({ musicProgress: nextTime })
     },
-    [persistPlaybackSettings, setProgressFromPlayback, setStatus],
+    [getSeekableDuration, persistPlaybackSettings, setProgressFromPlayback, setStatus],
   )
 
   const seekToSeconds = useCallback(
     (seconds: number) => {
       const audio = audioRef.current
-      const safeDuration = durationSecondsRef.current
+      const safeDuration = getSeekableDuration()
       if (!audio || safeDuration <= 0) {
         return
       }
 
       const nextTime = clamp(seconds, 0, safeDuration)
+      pendingSeekSecondsRef.current = nextTime
       setStatus('seeking')
       audio.currentTime = nextTime
       setProgressFromPlayback(nextTime)
       void persistPlaybackSettings({ musicProgress: nextTime })
     },
-    [persistPlaybackSettings, setProgressFromPlayback, setStatus],
+    [getSeekableDuration, persistPlaybackSettings, setProgressFromPlayback, setStatus],
   )
 
   const beginSeek = useCallback(() => {
@@ -784,11 +618,13 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
     }
 
     isUserSeekingRef.current = false
-    updateProgressFromAudio()
 
     if (audio.seeking) {
       return
     }
+
+    pendingSeekSecondsRef.current = null
+    updateProgressFromAudio()
 
     if (wasPlayingBeforeSeekRef.current && !audio.paused) {
       setStatus('playing')
@@ -802,19 +638,20 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
   const seekBySeconds = useCallback(
     (offsetSeconds: number) => {
       const audio = audioRef.current
-      const safeDuration = durationSecondsRef.current
+      const safeDuration = getSeekableDuration()
 
       if (!audio || safeDuration <= 0) {
         return
       }
 
       const nextTime = clamp(audio.currentTime + offsetSeconds, 0, safeDuration)
+      pendingSeekSecondsRef.current = nextTime
       setStatus('seeking')
       audio.currentTime = nextTime
       setProgressFromPlayback(nextTime)
       void persistPlaybackSettings({ musicProgress: nextTime })
     },
-    [persistPlaybackSettings, setProgressFromPlayback, setStatus],
+    [getSeekableDuration, persistPlaybackSettings, setProgressFromPlayback, setStatus],
   )
 
   const setVolumeLevel = useCallback(
@@ -870,7 +707,7 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
       const shuffledCurrentIndex = currentIndex(queueOverrideRef.current, currentTrackIdRef.current)
       currentQueueIndexRef.current = shuffledCurrentIndex > -1 ? shuffledCurrentIndex : null
       setCurrentQueueIndex(shuffledCurrentIndex > -1 ? shuffledCurrentIndex : null)
-      void window.smplayer?.replaceNowPlaying(queueOverrideRef.current)
+      void useLibraryStore.getState().replaceNowPlaying(queueOverrideRef.current)
     }
     setMode(nextMode)
     void persistPlaybackSettings({ mode: nextMode })
@@ -905,136 +742,37 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
     void persistPlaybackSettings({ mode: nextMode })
   }, [persistPlaybackSettings])
 
-  useEffect(() => {
-    if (!('mediaSession' in navigator)) {
-      return
-    }
+  const getDurationSeconds = useCallback(() => durationSecondsRef.current, [])
 
-    if (!currentTrack) {
-      navigator.mediaSession.metadata = null
-      return
-    }
-
-    navigator.mediaSession.metadata = new MediaMetadata({
-      title: currentTrack.title,
-      artist: getDisplayArtists(currentTrack),
-      album: currentTrack.album || 'Unknown album',
-      artwork: currentTrack.artworkUrl
-        ? [
-            { src: currentTrack.artworkUrl, sizes: '96x96', type: 'image/png' },
-            { src: currentTrack.artworkUrl, sizes: '128x128', type: 'image/png' },
-            { src: currentTrack.artworkUrl, sizes: '192x192', type: 'image/png' },
-            { src: currentTrack.artworkUrl, sizes: '256x256', type: 'image/png' },
-            { src: currentTrack.artworkUrl, sizes: '512x512', type: 'image/png' },
-          ]
-        : [],
-    })
-  }, [currentTrack])
-
-  useEffect(() => {
-    if (!('mediaSession' in navigator)) {
-      return
-    }
-
-    navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused'
-  }, [isPlaying])
-
-  useEffect(() => {
-    if (!('mediaSession' in navigator)) {
-      return
-    }
-
-    navigator.mediaSession.setActionHandler('play', () => {
+  useMediaSession({
+    currentTrack,
+    isPlaying,
+    onTogglePlayPause: () => {
       void togglePlayPause()
-    })
-    navigator.mediaSession.setActionHandler('pause', () => {
-      void togglePlayPause()
-    })
-    navigator.mediaSession.setActionHandler('previoustrack', () => {
-      void playPrevious()
-    })
-    navigator.mediaSession.setActionHandler('nexttrack', () => {
+    },
+    onPlayNext: () => {
       void playNext()
-    })
-    navigator.mediaSession.setActionHandler('seekto', (details) => {
-      if (typeof details.seekTime !== 'number' || durationSecondsRef.current <= 0) {
-        return
-      }
+    },
+    onPlayPrevious: () => {
+      void playPrevious()
+    },
+    onSeekToRatio: seekToRatio,
+    onSeekBySeconds: seekBySeconds,
+    getDurationSeconds,
+  })
 
-      const ratio = details.seekTime / durationSecondsRef.current
-      seekToRatio(ratio)
-    })
-    navigator.mediaSession.setActionHandler('seekbackward', (details) => {
-      seekBySeconds(-(details.seekOffset ?? 10))
-    })
-    navigator.mediaSession.setActionHandler('seekforward', (details) => {
-      seekBySeconds(details.seekOffset ?? 10)
-    })
-
-    return () => {
-      navigator.mediaSession.setActionHandler('play', null)
-      navigator.mediaSession.setActionHandler('pause', null)
-      navigator.mediaSession.setActionHandler('previoustrack', null)
-      navigator.mediaSession.setActionHandler('nexttrack', null)
-      navigator.mediaSession.setActionHandler('seekto', null)
-      navigator.mediaSession.setActionHandler('seekbackward', null)
-      navigator.mediaSession.setActionHandler('seekforward', null)
-    }
-  }, [playNext, playPrevious, seekBySeconds, seekToRatio, togglePlayPause])
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const target = event.target
-      const isEditableTarget =
-        target instanceof HTMLInputElement ||
-        target instanceof HTMLTextAreaElement ||
-        target instanceof HTMLSelectElement ||
-        (target instanceof HTMLElement && target.isContentEditable)
-
-      if (isEditableTarget) {
-        return
-      }
-
-      if (event.code === 'Space') {
-        event.preventDefault()
-        void togglePlayPause()
-        return
-      }
-
-      if (event.altKey || event.metaKey) {
-        return
-      }
-
-      if (event.ctrlKey && event.key === 'ArrowRight') {
-        event.preventDefault()
-        void playNext()
-        return
-      }
-
-      if (event.ctrlKey && event.key === 'ArrowLeft') {
-        event.preventDefault()
-        void playPrevious()
-        return
-      }
-
-      if (event.key === 'ArrowRight') {
-        event.preventDefault()
-        seekBySeconds(event.shiftKey ? 30 : 5)
-        return
-      }
-
-      if (event.key === 'ArrowLeft') {
-        event.preventDefault()
-        seekBySeconds(event.shiftKey ? -30 : -5)
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [playNext, playPrevious, seekBySeconds, togglePlayPause])
+  usePlaybackShortcuts({
+    onTogglePlayPause: () => {
+      void togglePlayPause()
+    },
+    onPlayNext: () => {
+      void playNext()
+    },
+    onPlayPrevious: () => {
+      void playPrevious()
+    },
+    onSeekBySeconds: seekBySeconds,
+  })
 
   useEffect(() => {
     if (!window.smplayer) {

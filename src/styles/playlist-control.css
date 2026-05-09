@@ -112,11 +112,92 @@
   white-space: nowrap;
 }
 
+.playlist-control-item.has-artwork .playlist-control-item-title {
+  grid-template-columns: 34px 56px minmax(0, 1fr);
+  gap: 14px;
+}
+
 .playlist-control-item-title-text {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.playlist-control-item-artwork-wrap {
+  position: relative;
+  display: block;
+  width: 56px;
+  height: 56px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.playlist-control-item-artwork {
+  display: block;
+  width: 56px;
+  height: 56px;
+  border-radius: 6px;
+  object-fit: cover;
+  transition:
+    box-shadow 140ms ease,
+    filter 140ms ease;
+}
+
+.playlist-control-item:hover .playlist-control-item-artwork,
+.playlist-control-item:focus-visible .playlist-control-item-artwork,
+.playlist-control-item.is-current .playlist-control-item-artwork {
+  box-shadow: 0 8px 18px rgba(32, 45, 63, 0.24);
+}
+
+.playlist-control-item-artwork-fallback {
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(116, 132, 153, 0.18);
+  overflow: hidden;
+}
+
+.playlist-control-item-artwork-fallback-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.playlist-control-item-artwork-play {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(30, 34, 40, 0.72);
+  color: #fff;
+  cursor: pointer;
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.94);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease,
+    background-color 120ms ease;
+}
+
+.playlist-control-item-artwork-play svg {
+  width: 18px;
+  height: 18px;
+}
+
+.playlist-control-item:hover .playlist-control-item-artwork-play,
+.playlist-control-item:focus-within .playlist-control-item-artwork-play {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.playlist-control-item-artwork-play:hover {
+  background: rgba(30, 34, 40, 0.88);
 }
 
 .playlist-control-item-current-slot {

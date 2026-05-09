@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-import type { LibraryPlaylist, LibrarySong, PreferenceItemSnapshot } from '../shared/contracts'
+import type { LibraryPlaylist, LibrarySong, PreferenceItemSnapshot, PreferenceSettingsSnapshot } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
 import { useLibraryStore } from '../state/useLibraryStore'
+import { usePreferenceStore } from '../state/usePreferenceStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
 import { MenuFlyout } from './MenuFlyout'
 import { getMusicMenuFlyoutItems } from './MenuFlyoutHelper'
@@ -59,30 +60,35 @@ export function MusicMenuFlyout({
   onSelectSong,
 }: MusicMenuFlyoutProps) {
   const navigate = useNavigate()
-  const refresh = useLibraryStore((state) => state.refresh)
   const createPlaylist = useLibraryStore((state) => state.createPlaylist)
   const hideSong = useLibraryStore((state) => state.hideSong)
+  const resumeHiddenStorageItemByPath = useLibraryStore((state) => state.resumeHiddenStorageItemByPath)
+  const refresh = useLibraryStore((state) => state.refresh)
   const folders = useLibraryStore((state) => state.snapshot.folders)
   const nowPlayingSongIds = useLibraryStore((state) => state.snapshot.nowPlaying.songIds)
   const moveSongToFolder = useLibraryStore((state) => state.moveSongToFolder)
   const replaceNowPlaying = useLibraryStore((state) => state.replaceNowPlaying)
   const removeSongFromPlaylist = useLibraryStore((state) => state.removeSongFromPlaylist)
   const setSongFavorite = useLibraryStore((state) => state.setSongFavorite)
+  const refreshPreferences = usePreferenceStore((state) => state.refresh)
+  const addPreferenceItem = usePreferenceStore((state) => state.addItem)
+  const removePreferenceItem = usePreferenceStore((state) => state.removeItem)
   const showUndoableNotification = useUndoableNotificationStore((state) => state.show)
   const [dialogMode, setDialogMode] = useState<'properties' | 'lyrics' | 'album-art' | null>(null)
   const [preferenceItem, setPreferenceItem] = useState<PreferenceItemSnapshot | null>(null)
   const showUndo = (message: string, action: () => void | Promise<void>) => {
     showUndoableNotification(message, t('common.undo'), action)
   }
-  const refreshPreferenceItem = async () => {
-    const settings = await window.smplayer!.getPreferenceSettings()
+  const refreshPreferenceItem = async (snapshot?: PreferenceSettingsSnapshot | null) => {
+    const settings = snapshot ?? await refreshPreferences()
+    if (!settings) {
+      return
+    }
     setPreferenceItem(settings.songs.find((item) => item.itemId === String(menu.song.id)) ?? null)
   }
 
   useEffect(() => {
-    void window.smplayer!.getPreferenceSettings().then((settings) => {
-      setPreferenceItem(settings.songs.find((item) => item.itemId === String(menu.song.id)) ?? null)
-    })
+    void refreshPreferenceItem()
   }, [menu.song.id])
 
   return (
@@ -143,11 +149,11 @@ export function MusicMenuFlyout({
             preferenceItem,
             onUndoPreference: () => {
               if (preferenceItem) {
-                void window.smplayer?.removePreferenceItem(preferenceItem.id).then(refreshPreferenceItem)
+                void removePreferenceItem(preferenceItem).then(() => refreshPreferenceItem(usePreferenceStore.getState().snapshot))
               }
             },
             onSetPreference: (level) => {
-              void window.smplayer?.addPreferenceItem('song', String(menu.song.id), menu.song.title, level).then(refreshPreferenceItem)
+              void addPreferenceItem('song', String(menu.song.id), menu.song.title, level).then(refreshPreferenceItem)
             },
             onMoveToFolder: (folderPath) => {
               const originalFolderPath = getParentFolderPath(menu.song.path)
@@ -177,10 +183,7 @@ export function MusicMenuFlyout({
             onHide: async () => {
               await hideSong(menu.song.id)
               showUndo(t('notification.hiddenStorageItem', { name: menu.song.title }), async () => {
-                const hiddenItems = await window.smplayer!.getHiddenStorageItems()
-                const hiddenItem = hiddenItems.find((item) => item.path === menu.song.path)
-                await window.smplayer!.resumeHiddenStorageItem(hiddenItem!)
-                await refresh()
+                await resumeHiddenStorageItemByPath(menu.song.path)
               })
             },
             onSeeArtist: (artist) => {

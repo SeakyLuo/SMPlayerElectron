@@ -11,10 +11,11 @@ import { MusicMenuFlyout, type MusicMenuFlyoutState } from '../components/MusicM
 import { MultiSelectCommandBar } from '../components/MultiSelectCommandBar'
 import { PlaylistControlItem } from '../components/PlaylistControlItem'
 import { getSongArtists } from '../shared/artists'
-import type { LibraryPlaylist, LibrarySong, PreferenceItemSnapshot } from '../shared/contracts'
+import type { LibraryPlaylist, LibrarySong, PreferenceItemSnapshot, PreferenceSettingsSnapshot } from '../shared/contracts'
 import { formatDuration } from '../shared/formatters'
 import type { Translator } from '../shared/i18n'
 import { useLibraryStore } from '../state/useLibraryStore'
+import { usePreferenceStore } from '../state/usePreferenceStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
 
 interface ArtistsPageProps {
@@ -25,6 +26,7 @@ interface ArtistsPageProps {
   searchQuery: string
   error: string | null
   playlists: LibraryPlaylist[]
+  favoritePlaylistId: number
   loading: boolean
   scanning: boolean
   targetArtistName?: string
@@ -70,6 +72,7 @@ export function ArtistsPage({
   searchQuery,
   error,
   playlists,
+  favoritePlaylistId,
   loading,
   scanning,
   targetArtistName,
@@ -144,7 +147,6 @@ export function ArtistsPage({
     artistAlbumVirtualWindow.endIndex,
   )
   const customPlaylists = playlists.filter((playlist) => !playlist.isBuiltIn)
-  const favoritePlaylist = playlists.find((playlist) => playlist.isBuiltIn && playlist.name === t('common.myFavorites'))!
   const artistListHeight = visibleArtists.length * ARTIST_ROW_HEIGHT
   const effectiveArtistScrollTop = Math.min(
     artistScrollTop,
@@ -200,6 +202,10 @@ export function ArtistsPage({
   const selectSongs = (songIds: number[]) => {
     setMultiSelect(true)
     setSelectedSongIds(new Set(songIds))
+  }
+
+  const addSongsToFavorites = (songIds: number[]) => {
+    onAddSongsToPlaylist(favoritePlaylistId, songIds)
   }
 
   const clearSelection = () => {
@@ -578,7 +584,7 @@ export function ArtistsPage({
           onAddSongsToPlaylist={onAddSongsToPlaylist}
           onAddSongsToNowPlaying={onAddSongsToNowPlaying}
           onAddSongsToFavorites={(songIds) => {
-            onAddSongsToPlaylist(favoritePlaylist.id, songIds)
+            addSongsToFavorites(songIds)
           }}
           onCreatePlaylistWithSongs={onCreatePlaylistWithSongs}
           onClose={() => {
@@ -638,7 +644,7 @@ export function ArtistsPage({
                 onAddSongsToNowPlaying(addToMenu.songIds)
               },
               onToggleFavorite: () => {
-                onAddSongsToPlaylist(favoritePlaylist.id, addToMenu.songIds)
+                addSongsToFavorites(addToMenu.songIds)
               },
               onCreatePlaylist: (name) => {
                 onCreatePlaylistWithSongs(name, addToMenu.songIds)
@@ -693,8 +699,12 @@ function ArtistGroupContextMenu({
 }) {
   const songIds = useMemo(() => menu.songs.map((song) => song.id), [menu.songs])
   const [preferenceItem, setPreferenceItem] = useState<PreferenceItemSnapshot | null>(null)
-  const refreshPreferenceItem = async () => {
-    const settings = await window.smplayer!.getPreferenceSettings()
+  const refreshPreferences = usePreferenceStore((state) => state.refresh)
+  const refreshPreferenceItem = async (snapshot?: PreferenceSettingsSnapshot | null) => {
+    const settings = snapshot ?? await refreshPreferences()
+    if (!settings) {
+      return
+    }
     const items = menu.type === 'artist' ? settings.artists : settings.albums
     setPreferenceItem(items.find((item) => item.itemId === menu.label) ?? null)
   }

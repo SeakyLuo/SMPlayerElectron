@@ -17,6 +17,7 @@ const api: SmplayerApi = {
   revealItemInFolder: (path) => ipcRenderer.invoke('shell:reveal-item', path),
   startWindowDrag: () => ipcRenderer.invoke('window:start-drag'),
   stopWindowDrag: () => ipcRenderer.invoke('window:stop-drag'),
+  setWindowControlsLight: (light) => ipcRenderer.invoke('window:set-controls-light', light),
   createLocalFolder: (rootPath, relativePath, name) => ipcRenderer.invoke('shell:create-local-folder', rootPath, relativePath, name),
   revealSystemLogs: () => ipcRenderer.invoke('shell:reveal-system-logs'),
   showTrackNotification: (track) => ipcRenderer.invoke('shell:show-track-notification', track),
@@ -34,6 +35,8 @@ const api: SmplayerApi = {
   moveSongsToFolder: (songIds, folderPath) => ipcRenderer.invoke('library:move-songs-to-folder', songIds, folderPath),
   moveLocalFolderToFolder: (sourceFolderPath, targetFolderPath) =>
     ipcRenderer.invoke('library:move-local-folder-to-folder', sourceFolderPath, targetFolderPath),
+  moveLocalItemsToFolder: (songIds, folderPaths, targetFolderPath) =>
+    ipcRenderer.invoke('library:move-local-items-to-folder', songIds, folderPaths, targetFolderPath),
   deleteSongsFromDisk: (songIds) => ipcRenderer.invoke('library:delete-songs-from-disk', songIds),
   deleteLocalItems: (songIds, folderPaths) => ipcRenderer.invoke('library:delete-local-items', songIds, folderPaths),
   updateLocalFolderSort: (folderPath, sortCriterion) =>
@@ -46,6 +49,7 @@ const api: SmplayerApi = {
   pickLibraryRoot: () => ipcRenderer.invoke('library:pick-root'),
   scanLibrary: (rootPath?: string) => ipcRenderer.invoke('library:scan', rootPath),
   scanLocalFolder: (folderPath) => ipcRenderer.invoke('library:scan-folder', folderPath),
+  takePendingOpenFiles: () => ipcRenderer.invoke('app:take-pending-open-files'),
   exportData: () => ipcRenderer.invoke('data:export'),
   importData: () => ipcRenderer.invoke('data:import'),
   sendFeedbackEmail: () => ipcRenderer.invoke('shell:send-feedback-email'),
@@ -53,6 +57,8 @@ const api: SmplayerApi = {
   openVoiceAssistantPrivacySettings: () => ipcRenderer.invoke('shell:open-voice-assistant-privacy-settings'),
   setSongFavorite: (songId, favorite) =>
     ipcRenderer.invoke('library:set-favorite', songId, favorite),
+  setSongsFavorite: (songIds, favorite) =>
+    ipcRenderer.invoke('library:set-favorites', songIds, favorite),
   createPlaylist: (name, songIds) => ipcRenderer.invoke('playlist:create', name, songIds),
   deletePlaylist: (playlistId) => ipcRenderer.invoke('playlist:delete', playlistId),
   renamePlaylist: (playlistId, name) => ipcRenderer.invoke('playlist:rename', playlistId, name),
@@ -97,6 +103,17 @@ const api: SmplayerApi = {
 
     return () => {
       ipcRenderer.removeListener('playback:global-media-command', listener)
+    }
+  },
+  onOpenFiles: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, songIds: number[]) => {
+      callback(songIds)
+    }
+
+    ipcRenderer.on('app:open-files', listener)
+
+    return () => {
+      ipcRenderer.removeListener('app:open-files', listener)
     }
   },
 }

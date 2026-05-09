@@ -75,6 +75,23 @@
         "to": "assets/app-icon.png"
       }
     ],
+    "fileAssociations": [
+      {
+        "name": "music_player",
+        "description": "SMPlayer audio file",
+        "ext": [
+          "mp3",
+          "flac",
+          "wma",
+          "alac",
+          "aac",
+          "wav",
+          "ogg"
+        ],
+        "icon": "public/app-icon.ico",
+        "role": "Viewer"
+      }
+    ],
     "mac": {
       "category": "public.app-category.music",
       "target": [
@@ -85,7 +102,6 @@
     },
     "win": {
       "icon": "public/app-icon.ico",
-      "publisherName": "Seaky",
       "target": [
         {
           "target": "nsis",
@@ -138,8 +154,10 @@
       "icon": "public/app-icon.png",
       "category": "AudioVideo",
       "desktop": {
-        "Name": "简音播放器",
-        "Comment": "Local music player"
+        "entry": {
+          "Name": "简音播放器",
+          "Comment": "Local music player"
+        }
       },
       "target": [
         "AppImage",

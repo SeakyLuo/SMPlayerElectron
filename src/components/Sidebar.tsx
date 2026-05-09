@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { NavLink, useLocation } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { flushSync } from 'react-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 
 import { Icon, type IconName } from './icons'
 import type { LibraryPlaylist, SearchHistoryEntry } from '../shared/contracts'
@@ -19,9 +20,9 @@ const primaryLinks: NavLinkItem[] = [
 ]
 
 const secondaryLinks: NavLinkItem[] = [
-  { to: '/now-playing', labelKey: 'common.nowPlaying', label: 'Now Playing', icon: 'nowPlaying' },
-  { to: '/recent', labelKey: 'common.recent', label: 'Recent', icon: 'recent' },
   { to: '/local', labelKey: 'common.local', label: 'Local', icon: 'local' },
+  { to: '/recent', labelKey: 'common.recent', label: 'Recent', icon: 'recent' },
+  { to: '/now-playing', labelKey: 'common.nowPlaying', label: 'Now Playing', icon: 'nowPlaying' },
   { to: '/favorites', labelKey: 'common.myFavorites', label: 'My Favorites', icon: 'heart' },
 ]
 
@@ -49,6 +50,7 @@ interface SidebarProps {
   onGoBack: () => void
   onNavigate: () => void
   onReorderPlaylists: (playlistIds: number[]) => void
+  onQuickPlayPlaylist: (playlistId: number) => void
   getRestoredNavTarget: (target: string) => string
 }
 
@@ -69,6 +71,7 @@ export function Sidebar({
   onGoBack,
   onNavigate,
   onReorderPlaylists,
+  onQuickPlayPlaylist,
   getRestoredNavTarget,
 }: SidebarProps) {
   const [isSearchFocused, setIsSearchFocused] = useState(false)
@@ -79,9 +82,17 @@ export function Sidebar({
   const focusSearchAfterExpandRef = useRef(false)
   const draggedPlaylistIdRef = useRef<number | null>(null)
   const location = useLocation()
+  const navigate = useNavigate()
 
   const visibleRecentSearches = recentSearches.slice(0, 10)
-  const customPlaylists = playlists.filter((playlist) => !playlist.isBuiltIn)
+  const customPlaylists = useMemo(() => playlists.filter((playlist) => !playlist.isBuiltIn), [playlists])
+  const visibleCustomPlaylists = useMemo(() =>
+    customPlaylists.filter((playlist) =>
+      playlist.name !== t('common.nowPlaying') &&
+      playlist.name !== 'Now Playing',
+    ),
+    [customPlaylists, t],
+  )
   const customPlaylistIds = useMemo(() => customPlaylists.map((playlist) => playlist.id), [customPlaylists])
   const isPlaylistRoute = location.pathname.startsWith('/playlists')
 
@@ -127,6 +138,24 @@ export function Sidebar({
     nextPlaylistIds.splice(targetIndex + (insertAfter ? 1 : 0), 0, draggedPlaylistId)
     clearPlaylistDragState()
     onReorderPlaylists(nextPlaylistIds)
+  }
+
+  const openPlaylist = (playlistId: number) => {
+    flushSync(() => {
+      onNavigate()
+      navigate(`/playlists/${playlistId}`)
+    })
+  }
+
+  const openPlaylistOnKeyDown = (event: KeyboardEvent<HTMLElement>, playlistId: number) => {
+    if (event.target !== event.currentTarget) {
+      return
+    }
+
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      openPlaylist(playlistId)
+    }
   }
 
   return (
@@ -294,11 +323,11 @@ export function Sidebar({
 
       <nav className="nav-section playlist-nav-section" aria-label={t('common.playlists')}>
         {collapsed ? (
-          <NavItem to="/playlists" icon="playlists" label={t('common.playlists')} onNavigate={onNavigate} />
+          <NavItem to="/playlists" icon="playlists" label={t('common.playlists')} onNavigate={onNavigate} exactActive />
         ) : (
           <>
             <div className="playlist-nav-heading">
-              <NavItem to="/playlists" icon="playlists" label={t('common.playlists')} onNavigate={onNavigate} />
+              <NavItem to="/playlists" icon="playlists" label={t('common.playlists')} onNavigate={onNavigate} exactActive />
               <button
                 type="button"
                 className="playlist-nav-toggle"
@@ -312,16 +341,17 @@ export function Sidebar({
               </button>
             </div>
             <div className={`playlist-nav-children${isPlaylistNavExpanded ? ' is-expanded' : ''}`}>
-              {customPlaylists.map((playlist) => (
-                <NavLink
+              {visibleCustomPlaylists.map((playlist) => (
+                <div
                   key={playlist.id}
-                  className={({ isActive }) =>
-                    `playlist-nav-child${isActive ? ' active' : ''}${draggingPlaylistId === playlist.id ? ' is-dragging' : ''}${dropIndicator?.playlistId === playlist.id ? ` is-drop-${dropIndicator.position}` : ''}`
-                  }
-                  to={`/playlists/${playlist.id}`}
+                  className={`playlist-nav-child${location.pathname === `/playlists/${playlist.id}` ? ' active' : ''}${draggingPlaylistId === playlist.id ? ' is-dragging' : ''}${dropIndicator?.playlistId === playlist.id ? ` is-drop-${dropIndicator.position}` : ''}`}
+                  role="button"
+                  tabIndex={0}
+                  data-nav-to={`/playlists/${playlist.id}`}
                   title={playlist.name}
                   draggable
-                  onClick={onNavigate}
+                  onClick={() => openPlaylist(playlist.id)}
+                  onKeyDown={(event) => openPlaylistOnKeyDown(event, playlist.id)}
                   onDragStart={(event) => {
                     draggedPlaylistIdRef.current = playlist.id
                     setDraggingPlaylistId(playlist.id)
@@ -350,8 +380,26 @@ export function Sidebar({
                   <span className="playlist-nav-child-icon" aria-hidden="true">
                     <Icon name="playlists" />
                   </span>
-                  <span>{playlist.name}</span>
-                </NavLink>
+                  <span className="playlist-nav-child-label">{playlist.name}</span>
+                  <button
+                    className="playlist-nav-child-quick-play"
+                    type="button"
+                    title={t('nowPlaying.quickPlay')}
+                    aria-label={`${t('nowPlaying.quickPlay')} ${playlist.name}`}
+                    draggable={false}
+                    disabled={playlist.songIds.length === 0}
+                    onClick={(event) => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      onQuickPlayPlaylist(playlist.id)
+                    }}
+                    onDragStart={(event) => {
+                      event.preventDefault()
+                    }}
+                  >
+                    <Icon name="play" />
+                  </button>
+                </div>
               ))}
             </div>
           </>
@@ -371,23 +419,36 @@ interface NavItemProps {
   label: string
   icon: IconName
   onNavigate?: () => void
+  exactActive?: boolean
 }
 
-function NavItem({ to, targetTo = to, label, icon, onNavigate }: NavItemProps) {
+function NavItem({ to, targetTo = to, label, icon, onNavigate, exactActive = false }: NavItemProps) {
   const location = useLocation()
-  const isActive = location.pathname === to || location.pathname.startsWith(`${to}/`)
+  const navigate = useNavigate()
+  const isActive = exactActive ? location.pathname === to : location.pathname === to || location.pathname.startsWith(`${to}/`)
 
   return (
-    <NavLink
-      className={() => `nav-link${isActive ? ' active' : ''}`}
-      to={targetTo}
+    <button
+      className={`nav-link${isActive ? ' active' : ''}`}
+      type="button"
+      data-nav-to={targetTo}
       data-tooltip={label}
-      onClick={onNavigate}
+      ref={(node) => {
+        if (node) {
+          node.onclick = (event) => {
+            event.preventDefault()
+            flushSync(() => {
+              onNavigate?.()
+              navigate(targetTo)
+            })
+          }
+        }
+      }}
     >
       <span className="nav-tag" aria-hidden="true">
         <Icon name={icon} />
       </span>
       <span>{label}</span>
-    </NavLink>
+    </button>
   )
 }

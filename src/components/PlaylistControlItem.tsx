@@ -5,6 +5,8 @@ import { getSongArtists } from '../shared/artists'
 import type { LibrarySong } from '../shared/contracts'
 import { formatDuration } from '../shared/formatters'
 import type { Translator } from '../shared/i18n'
+import { ArtworkImage } from './ArtworkImage'
+import { DefaultAlbumArtwork } from './DefaultAlbumArtwork'
 import { Icon } from './icons'
 
 interface PlaylistControlItemProps {
@@ -20,6 +22,7 @@ interface PlaylistControlItemProps {
   draggable?: boolean
   showAlbum?: boolean
   showArtist?: boolean
+  showArtwork?: boolean
   showFavorite?: boolean
   showDuration?: boolean
   removable?: boolean
@@ -50,6 +53,7 @@ export function PlaylistControlItem({
   draggable = false,
   showAlbum = false,
   showArtist = false,
+  showArtwork = false,
   showFavorite = false,
   showDuration = true,
   removable = false,
@@ -166,6 +170,7 @@ export function PlaylistControlItem({
         'is-swiping': isSwiping,
         'has-artist': showArtist,
         'has-album': showAlbum,
+        'has-artwork': showArtwork,
         'has-favorite': showFavorite,
       })}
       style={{ '--playlist-swipe-offset': `${swipeOffset}px` } as CSSProperties}
@@ -234,22 +239,55 @@ export function PlaylistControlItem({
             <span className="playlist-control-item-index">{rowNumber}</span>
           )}
         </span>
+        {showArtwork ? (
+          <span className="playlist-control-item-artwork-wrap">
+            <ArtworkImage
+              className="playlist-control-item-artwork"
+              src={song.artworkUrl}
+              title={song.title}
+              renderFallback={() => (
+                <span className="playlist-control-item-artwork playlist-control-item-artwork-fallback" aria-hidden="true">
+                  <DefaultAlbumArtwork className="playlist-control-item-artwork-fallback-image" />
+                </span>
+              )}
+            />
+            {!selectionMode ? (
+              <button
+                type="button"
+                className="playlist-control-item-artwork-play"
+                aria-label={current && isPlaying ? t('context.pause') : t('context.play')}
+                title={current && isPlaying ? t('context.pause') : t('context.play')}
+                onPointerDown={(event) => {
+                  event.stopPropagation()
+                }}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  toggleHoverPlay()
+                }}
+              >
+                <Icon name={current && isPlaying ? 'pause' : 'play'} />
+              </button>
+            ) : null}
+          </span>
+        ) : null}
         <span className="playlist-control-item-title-text">{song.title}</span>
         <span className="playlist-control-item-hover-actions">
-          <button
-            type="button"
-            aria-label={current && isPlaying ? t('context.pause') : t('context.play')}
-            title={current && isPlaying ? t('context.pause') : t('context.play')}
-            onPointerDown={(event) => {
-              event.stopPropagation()
-            }}
-            onClick={(event) => {
-              event.stopPropagation()
-              toggleHoverPlay()
-            }}
-          >
-            <Icon name={current && isPlaying ? 'pause' : 'play'} />
-          </button>
+          {!showArtwork ? (
+            <button
+              type="button"
+              aria-label={current && isPlaying ? t('context.pause') : t('context.play')}
+              title={current && isPlaying ? t('context.pause') : t('context.play')}
+              onPointerDown={(event) => {
+                event.stopPropagation()
+              }}
+              onClick={(event) => {
+                event.stopPropagation()
+                toggleHoverPlay()
+              }}
+            >
+              <Icon name={current && isPlaying ? 'pause' : 'play'} />
+            </button>
+          ) : null}
           {onAddToPlaylistClick ? (
             <button
               type="button"

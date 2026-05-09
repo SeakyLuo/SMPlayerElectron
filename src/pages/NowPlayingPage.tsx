@@ -1,20 +1,18 @@
 import clsx from 'clsx'
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEventHandler, type KeyboardEvent, type Ref } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { Icon } from '../components/icons'
-import { ArtworkImage } from '../components/ArtworkImage'
-import { DefaultAlbumArtwork } from '../components/DefaultAlbumArtwork'
 import { MenuFlyout } from '../components/MenuFlyout'
 import { getAddToPlaylistMenuFlyoutItem, getMusicMenuFlyoutItems, getShuffleMenuItems } from '../components/MenuFlyoutHelper'
 import { MultiSelectCommandBar } from '../components/MultiSelectCommandBar'
 import { MusicDialog } from '../components/MusicDialog'
-import { getSongArtists } from '../shared/artists'
-import type { LibraryPlaylist, LibrarySong, PreferenceItemSnapshot } from '../shared/contracts'
-import { formatDuration } from '../shared/formatters'
+import { NowPlayingQueueItem } from '../components/NowPlayingQueueItem'
+import type { LibraryPlaylist, LibrarySong, PreferenceItemSnapshot, PreferenceSettingsSnapshot } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
 import { quickPlay } from '../shared/mediaHelper'
 import { useLibraryStore } from '../state/useLibraryStore'
+import { usePreferenceStore } from '../state/usePreferenceStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
 
 const QUICK_PLAY_LIMIT = 100
@@ -26,6 +24,7 @@ interface NowPlayingPageProps {
   librarySongs: LibrarySong[]
   recentSongs: LibrarySong[]
   playlists: LibraryPlaylist[]
+  favoritePlaylistId: number
   t: Translator
   selectedTrackId: number | null
   selectedQueueIndex: number | null
@@ -63,6 +62,7 @@ export function NowPlayingPage({
   librarySongs,
   recentSongs,
   playlists,
+  favoritePlaylistId,
   t,
   selectedTrackId,
   selectedQueueIndex,
@@ -95,10 +95,16 @@ export function NowPlayingPage({
   const folders = useLibraryStore((state) => state.snapshot.folders)
   const moveSongToFolder = useLibraryStore((state) => state.moveSongToFolder)
   const removeSongFromPlaylist = useLibraryStore((state) => state.removeSongFromPlaylist)
+  const removeSongsFromPlaylist = useLibraryStore((state) => state.removeSongsFromPlaylist)
   const setSongFavorite = useLibraryStore((state) => state.setSongFavorite)
+  const resumeHiddenStorageItemByPath = useLibraryStore((state) => state.resumeHiddenStorageItemByPath)
   const refresh = useLibraryStore((state) => state.refresh)
+  const refreshPreferences = usePreferenceStore((state) => state.refresh)
+  const addPreferenceItem = usePreferenceStore((state) => state.addItem)
+  const removePreferenceItem = usePreferenceStore((state) => state.removeItem)
   const showUndoableNotification = useUndoableNotificationStore((state) => state.show)
   const draggedQueueIndexRef = useRef<number | null>(null)
+  const [dropIndicator, setDropIndicator] = useState<{ queueIndex: number; position: 'before' | 'after' } | null>(null)
   const [scrollTop, setScrollTop] = useState(0)
   const [viewportHeight, setViewportHeight] = useState(640)
   const navigate = useNavigate()
@@ -109,7 +115,11 @@ export function NowPlayingPage({
     showUndoableNotification(message, t('common.undo'), action)
   }
   const playQuick = useCallback(async () => {
-    const preferences = await window.smplayer!.getPreferenceSettings()
+    const preferences = await refreshPreferences()
+    if (!preferences) {
+      return
+    }
+
     const songIds = quickPlay({
       songs: librarySongs,
       recentSongs,
@@ -119,18 +129,19 @@ export function NowPlayingPage({
     }, QUICK_PLAY_LIMIT)
     onReplaceQueue(songIds)
     onPlayTrack(songIds[0]!, songIds, 0)
-  }, [folders, librarySongs, onPlayTrack, onReplaceQueue, playlists, recentSongs])
+  }, [folders, librarySongs, onPlayTrack, onReplaceQueue, playlists, recentSongs, refreshPreferences])
 
-  const refreshSongPreferenceItem = async (songId: number) => {
-    const settings = await window.smplayer!.getPreferenceSettings()
+  const refreshSongPreferenceItem = async (songId: number, snapshot?: PreferenceSettingsSnapshot | null) => {
+    const settings = snapshot ?? await refreshPreferences()
+    if (!settings) {
+      return
+    }
     setSongPreferenceItem(settings.songs.find((item) => item.itemId === String(songId)) ?? null)
   }
 
   useEffect(() => {
     if (songMenu) {
-      void window.smplayer!.getPreferenceSettings().then((settings) => {
-        setSongPreferenceItem(settings.songs.find((item) => item.itemId === String(songMenu.song.id)) ?? null)
-      })
+      void refreshSongPreferenceItem(songMenu.song.id)
     }
   }, [songMenu?.song.id])
 
@@ -160,10 +171,6 @@ export function NowPlayingPage({
     [selectedVisibleEntries],
   )
   const customPlaylists = useMemo(() => playlists.filter((playlist) => !playlist.isBuiltIn), [playlists])
-  const favoritePlaylist = useMemo(
-    () => playlists.find((playlist) => playlist.isBuiltIn && playlist.name === t('common.myFavorites'))!,
-    [playlists, t],
-  )
   const defaultNewPlaylistName = useMemo(() => getDefaultNewPlaylistName(t, playlists), [playlists, t])
   const currentSong = useMemo(
     () => songs.find((song) => song.id === selectedTrackId) ?? null,
@@ -208,7 +215,7 @@ export function NowPlayingPage({
         currentPlaylistName: t('common.nowPlaying'),
         includeFavorites: true,
         onToggleFavorite: () => {
-          onAddSongsToPlaylist(favoritePlaylist.id, addToMenu.songIds)
+          onAddSongsToPlaylist(favoritePlaylistId, addToMenu.songIds)
           showUndo(
             addToMenu.songIds.length === 1
               ? t('notification.songAddedTo', {
@@ -216,7 +223,7 @@ export function NowPlayingPage({
                   target: t('common.myFavorites'),
                 })
               : t('notification.songsAddedTo', { count: addToMenu.songIds.length, target: t('common.myFavorites') }),
-            () => Promise.all(addToMenu.songIds.map((songId) => removeSongFromPlaylist(favoritePlaylist.id, songId))).then(() => undefined),
+            () => removeSongsFromPlaylist(favoritePlaylistId, addToMenu.songIds),
           )
           if (hideMultiSelectCommandBarAfterOperation) {
             setMultiSelect(false)
@@ -240,7 +247,7 @@ export function NowPlayingPage({
                   target: targetPlaylist.name,
                 })
               : t('notification.songsAddedTo', { count: addToMenu.songIds.length, target: targetPlaylist.name }),
-            () => Promise.all(addToMenu.songIds.map((songId) => removeSongFromPlaylist(playlistId, songId))).then(() => undefined),
+            () => removeSongsFromPlaylist(playlistId, addToMenu.songIds),
           )
           if (hideMultiSelectCommandBarAfterOperation) {
             setMultiSelect(false)
@@ -382,18 +389,22 @@ export function NowPlayingPage({
               }}
             >
               {randomActions.map((action) => (
-                <button
-                  type="button"
-                  role="menuitem"
-                  key={action.key}
-                  disabled={action.disabled}
-                  onClick={() => {
-                    void action.onClick?.()
-                    setRandomMenuOpen(false)
-                  }}
-                >
-                  {action.text}
-                </button>
+                action.separator ? (
+                  <div className="now-playing-random-options-separator" key={action.key} role="separator" />
+                ) : (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    key={action.key}
+                    disabled={action.disabled}
+                    onClick={() => {
+                      void action.onClick?.()
+                      setRandomMenuOpen(false)
+                    }}
+                  >
+                    {action.text}
+                  </button>
+                )
               ))}
             </div>
           ) : null}
@@ -487,7 +498,7 @@ export function NowPlayingPage({
 
               return (
                 <NowPlayingQueueItem
-                  key={`now-playing-${queueIndex}-${song.id}`}
+                  key={song.id}
                   containerRef={current ? currentRowRef : undefined}
                   song={song}
                   t={t}
@@ -495,6 +506,7 @@ export function NowPlayingPage({
                   playing={isPlaying}
                   selected={selectedQueueIndexes.has(queueIndex)}
                   selectionMode={multiSelect}
+                  dropPosition={dropIndicator?.queueIndex === queueIndex ? dropIndicator.position : null}
                   queueSongIds={queueSongIds}
                   onPlayTrack={(trackId, nextQueueSongIds) => {
                     onPlayTrack(trackId, nextQueueSongIds, queueIndex)
@@ -523,32 +535,50 @@ export function NowPlayingPage({
                     setSongMenu({ song: contextSong, queueIndex, x, y })
                   }}
                   onSeeAlbum={(contextSong) => {
-                    navigate(`/albums/${encodeURIComponent(contextSong.album || t('common.albumUnknown'))}`)
+                    navigate(`/albums?album=${encodeURIComponent(contextSong.album || t('common.albumUnknown'))}`)
                   }}
                   onSeeArtist={(artist) => {
-                    navigate(`/artists/${encodeURIComponent(artist)}`)
+                    navigate(`/artists?artist=${encodeURIComponent(artist)}`)
                   }}
                   onDragStart={(event) => {
                     draggedQueueIndexRef.current = queueIndex
+                    setDropIndicator(null)
                     event.dataTransfer.effectAllowed = 'move'
+                    event.dataTransfer.setData('text/plain', String(queueIndex))
                   }}
                   onDragOver={(event) => {
                     event.preventDefault()
                     event.dataTransfer.dropEffect = 'move'
+                    const rect = event.currentTarget.getBoundingClientRect()
+                    setDropIndicator({
+                      queueIndex,
+                      position: event.clientY > rect.top + rect.height / 2 ? 'after' : 'before',
+                    })
+                  }}
+                  onDragLeave={() => {
+                    setDropIndicator((current) => current?.queueIndex === queueIndex ? null : current)
                   }}
                   onDrop={(event) => {
                     event.preventDefault()
                     const draggedQueueIndex = draggedQueueIndexRef.current
                     draggedQueueIndexRef.current = null
+                    const insertAfter = dropIndicator?.queueIndex === queueIndex && dropIndicator.position === 'after'
+                    setDropIndicator(null)
                     if (draggedQueueIndex == null || draggedQueueIndex === queueIndex) {
                       return
                     }
 
                     const nextSongIds = queueSongIds.slice()
                     const [draggedSongId] = nextSongIds.splice(draggedQueueIndex, 1)
-                    const targetIndex = draggedQueueIndex < queueIndex ? queueIndex - 1 : queueIndex
+                    const targetIndex = draggedQueueIndex < queueIndex + (insertAfter ? 1 : 0)
+                      ? queueIndex + (insertAfter ? 1 : 0) - 1
+                      : queueIndex + (insertAfter ? 1 : 0)
                     nextSongIds.splice(targetIndex, 0, draggedSongId!)
                     onReplaceQueue(nextSongIds)
+                  }}
+                  onDragEnd={() => {
+                    draggedQueueIndexRef.current = null
+                    setDropIndicator(null)
                   }}
                 />
               )
@@ -655,10 +685,10 @@ export function NowPlayingPage({
             },
             preferenceItem: songPreferenceItem,
             onUndoPreference: () => {
-              void window.smplayer?.removePreferenceItem(songPreferenceItem!.id).then(() => refreshSongPreferenceItem(songMenu.song.id))
+              void removePreferenceItem(songPreferenceItem!).then(() => refreshSongPreferenceItem(songMenu.song.id, usePreferenceStore.getState().snapshot))
             },
             onSetPreference: (level) => {
-              void window.smplayer?.addPreferenceItem('song', String(songMenu.song.id), songMenu.song.title, level).then(() => refreshSongPreferenceItem(songMenu.song.id))
+              void addPreferenceItem('song', String(songMenu.song.id), songMenu.song.title, level).then((snapshot) => refreshSongPreferenceItem(songMenu.song.id, snapshot))
             },
             onMoveToFolder: (folderPath) => {
               const originalFolderPath = getParentFolderPath(songMenu.song.path)
@@ -690,18 +720,15 @@ export function NowPlayingPage({
               await window.smplayer?.hideSong(songMenu.song.id)
               onRemoveSongs([songMenu.song.id])
               showUndo(t('notification.hiddenStorageItem', { name: songMenu.song.title }), async () => {
-                const hiddenItems = await window.smplayer!.getHiddenStorageItems()
-                const hiddenItem = hiddenItems.find((item) => item.path === songMenu.song.path)
-                await window.smplayer!.resumeHiddenStorageItem(hiddenItem!)
+                await resumeHiddenStorageItemByPath(songMenu.song.path)
                 onReplaceQueue(previousQueueSongIds)
-                await refresh()
               })
             },
             onSeeArtist: (artist) => {
-              navigate(`/artists/${encodeURIComponent(artist)}`)
+              navigate(`/artists?artist=${encodeURIComponent(artist)}`)
             },
             onSeeAlbum: () => {
-              navigate(`/albums/${encodeURIComponent(songMenu.song.album || t('common.albumUnknown'))}`)
+              navigate(`/albums?album=${encodeURIComponent(songMenu.song.album || t('common.albumUnknown'))}`)
             },
             onSeeMusicInfo: () => {
               setSongDialog({ song: songMenu.song, mode: 'properties' })
@@ -744,222 +771,6 @@ export function NowPlayingPage({
         />
       ) : null}
     </section>
-  )
-}
-
-interface NowPlayingQueueItemProps {
-  song: LibrarySong
-  t: Translator
-  current: boolean
-  playing: boolean
-  selected: boolean
-  selectionMode: boolean
-  queueSongIds: number[]
-  containerRef?: Ref<HTMLDivElement>
-  onPlayTrack: (trackId: number, queueSongIds: number[]) => void
-  onTogglePlayPause: () => void
-  onToggleSelection: () => void
-  onToggleFavorite: (songId: number, favorite: boolean) => void
-  onRemoveFromListClick: (song: LibrarySong) => void
-  onAddToPlaylistClick: (song: LibrarySong, x: number, y: number) => void
-  onContextMenu: (song: LibrarySong, x: number, y: number) => void
-  onSeeAlbum: (song: LibrarySong) => void
-  onSeeArtist: (artist: string) => void
-  onDragStart: DragEventHandler<HTMLDivElement>
-  onDragOver: DragEventHandler<HTMLDivElement>
-  onDrop: DragEventHandler<HTMLDivElement>
-}
-
-function NowPlayingQueueItem({
-  song,
-  t,
-  current,
-  playing,
-  selected,
-  selectionMode,
-  queueSongIds,
-  containerRef,
-  onPlayTrack,
-  onTogglePlayPause,
-  onToggleSelection,
-  onToggleFavorite,
-  onRemoveFromListClick,
-  onAddToPlaylistClick,
-  onContextMenu,
-  onSeeAlbum,
-  onSeeArtist,
-  onDragStart,
-  onDragOver,
-  onDrop,
-}: NowPlayingQueueItemProps) {
-  const artists = getSongArtists(song)
-  const artistLabel = artists.join(', ')
-  const open = () => {
-    if (selectionMode) {
-      onToggleSelection()
-    } else {
-      onPlayTrack(song.id, queueSongIds)
-    }
-  }
-  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault()
-      open()
-    }
-  }
-
-  return (
-    <div
-      ref={containerRef}
-      role="button"
-      tabIndex={0}
-      draggable
-      className={clsx('now-playing-queue-item', {
-        'is-current': current,
-        'is-playing': current && playing,
-        'is-selected': selected,
-        'is-selecting': selectionMode,
-      })}
-      onClick={open}
-      onKeyDown={handleKeyDown}
-      onContextMenu={(event) => {
-        event.preventDefault()
-        onContextMenu(song, event.clientX, event.clientY)
-      }}
-      onDragStart={onDragStart}
-      onDragOver={onDragOver}
-      onDrop={onDrop}
-    >
-      <span className="now-playing-queue-status">
-        {current ? (
-          <span className="playlist-control-item-playing-wave" aria-hidden="true">
-            <span />
-            <span />
-            <span />
-            <span />
-          </span>
-        ) : null}
-      </span>
-      <span className="now-playing-queue-artwork-wrap">
-        <ArtworkImage
-          className="now-playing-queue-artwork"
-          src={song.artworkUrl}
-          title={song.title}
-          renderFallback={() => (
-            <span className="now-playing-queue-artwork now-playing-queue-artwork-fallback" aria-hidden="true">
-              <DefaultAlbumArtwork className="now-playing-queue-artwork-fallback-image" />
-            </span>
-          )}
-        />
-        {selectionMode ? (
-          <span className="now-playing-queue-select-mark" aria-hidden="true">
-            {selected ? <Icon name="check" /> : null}
-          </span>
-        ) : null}
-        {!selectionMode ? (
-          <button
-            type="button"
-            className="now-playing-queue-play"
-            aria-label={current && playing ? t('context.pause') : t('context.play')}
-            title={current && playing ? t('context.pause') : t('context.play')}
-            onClick={(event) => {
-              event.stopPropagation()
-              if (current && playing) {
-                onTogglePlayPause()
-              } else {
-                onPlayTrack(song.id, queueSongIds)
-              }
-            }}
-          >
-            <Icon name={current && playing ? 'pause' : 'play'} />
-          </button>
-        ) : null}
-      </span>
-      <span className="now-playing-queue-copy">
-        <strong title={song.title}>{song.title}</strong>
-        <span className="now-playing-queue-artists" title={artistLabel}>
-          {artists.map((artist, index) => (
-            <span key={`${song.id}-${artist}`}>
-              {index > 0 ? ', ' : null}
-              <button
-                type="button"
-                className="now-playing-queue-artist"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  onSeeArtist(artist)
-                }}
-              >
-                {artist}
-              </button>
-            </span>
-          ))}
-        </span>
-      </span>
-      <span className="now-playing-queue-actions">
-        <button
-          type="button"
-          className={clsx('now-playing-queue-action', 'favorite', { 'is-active': song.favorite })}
-          aria-label={t('common.favorite')}
-          title={t('common.favorite')}
-          onClick={(event) => {
-            event.stopPropagation()
-            onToggleFavorite(song.id, !song.favorite)
-          }}
-        >
-          <Icon name={song.favorite ? 'heartFilled' : 'heart'} />
-        </button>
-        <button
-          type="button"
-          className="now-playing-queue-action is-hover-action"
-          aria-label={t('context.addToPlaylist')}
-          title={t('context.addToPlaylist')}
-          onClick={(event) => {
-            event.stopPropagation()
-            const rect = event.currentTarget.getBoundingClientRect()
-            onAddToPlaylistClick(song, rect.left, rect.bottom + 8)
-          }}
-        >
-          <Icon name="plus" />
-        </button>
-        <button
-          type="button"
-          className="now-playing-queue-action is-hover-action"
-          aria-label={t('nowPlaying.remove')}
-          title={t('nowPlaying.remove')}
-          onClick={(event) => {
-            event.stopPropagation()
-            onRemoveFromListClick(song)
-          }}
-        >
-          <Icon name="close" />
-        </button>
-        <button
-          type="button"
-          className="now-playing-queue-action is-hover-action"
-          aria-label={t('player.more')}
-          title={t('player.more')}
-          onClick={(event) => {
-            event.stopPropagation()
-            const rect = event.currentTarget.getBoundingClientRect()
-            onContextMenu(song, rect.left, rect.bottom + 8)
-          }}
-        >
-          <Icon name="moreHorizontal" />
-        </button>
-      </span>
-      <button
-        type="button"
-        className="now-playing-queue-album"
-        title={song.album || t('common.albumUnknown')}
-        onClick={(event) => {
-          event.stopPropagation()
-          onSeeAlbum(song)
-        }}
-      >
-        {song.album || t('common.albumUnknown')}
-      </button>
-      <time>{formatDuration(song.duration)}</time>
-    </div>
   )
 }
 

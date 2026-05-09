@@ -35,10 +35,15 @@
   gap: 10px;
   min-height: 40px;
   padding: 0 10px 0 0;
+  width: 100%;
   border-radius: 16px;
+  border: 0;
+  background: transparent;
   color: var(--text-muted);
+  font: inherit;
+  text-align: left;
   text-decoration: none;
-  border-left: 0;
+  cursor: pointer;
   transition:
     background-color 120ms ease,
     color 120ms ease,
@@ -53,7 +58,7 @@
 }
 
 .nav-link > span:last-child,
-.playlist-nav-child > span:last-child {
+.playlist-nav-child-label {
   display: flex;
   align-items: center;
   min-width: 0;
@@ -282,14 +287,19 @@
 .playlist-nav-child {
   position: relative;
   display: grid;
-  grid-template-columns: 40px minmax(0, 1fr);
+  grid-template-columns: 40px minmax(0, 1fr) 30px;
   align-items: center;
   gap: 10px;
   min-height: 40px;
   margin: 2px 0 0;
   padding: 0 10px 0 0;
+  width: 100%;
   border-radius: 16px;
+  border: 0;
+  background: transparent;
   color: var(--text-muted);
+  font: inherit;
+  text-align: left;
   text-decoration: none;
   font-size: 14px;
   cursor: grab;
@@ -361,15 +371,62 @@
   transform: translateY(-1px);
 }
 
+.playlist-nav-child-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.playlist-nav-child-quick-play {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: currentColor;
+  opacity: 0;
+  pointer-events: none;
+  cursor: pointer;
+  transition:
+    opacity 120ms ease,
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.playlist-nav-child:hover .playlist-nav-child-quick-play,
+.playlist-nav-child:focus-within .playlist-nav-child-quick-play {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.playlist-nav-child-quick-play:hover,
+.playlist-nav-child-quick-play:focus-visible {
+  background: rgba(var(--accent-rgb), 0.16);
+  color: var(--accent-strong);
+}
+
+.playlist-nav-child-quick-play:disabled {
+  cursor: default;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.playlist-nav-child-quick-play svg {
+  width: 14px;
+  height: 14px;
+}
+
 .sidebar.is-collapsed .nav-tag svg {
   transform: none;
 }
 
-.nav-link[href='/favorites'] .nav-tag svg {
+.nav-link[data-nav-to='/favorites'] .nav-tag svg {
   transform: translateY(-2px);
 }
 
-.sidebar.is-collapsed .nav-link[href='/favorites'] .nav-tag svg {
+.sidebar.is-collapsed .nav-link[data-nav-to='/favorites'] .nav-tag svg {
   transform: translateY(-1px);
 }
 

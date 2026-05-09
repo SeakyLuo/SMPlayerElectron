@@ -8,9 +8,10 @@ import { MenuFlyout } from '../components/MenuFlyout'
 import { getMusicMenuFlyoutItems, type MenuFlyoutItem } from '../components/MenuFlyoutHelper'
 import { MultiSelectCommandBar } from '../components/MultiSelectCommandBar'
 import { MusicDialog } from '../components/MusicDialog'
-import type { LibraryPlaylist, LibrarySong, PreferenceItemSnapshot, RecentLibrarySong, SearchHistoryEntry } from '../shared/contracts'
+import type { LibraryPlaylist, LibrarySong, PreferenceItemSnapshot, PreferenceSettingsSnapshot, RecentLibrarySong, SearchHistoryEntry } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
 import { useLibraryStore } from '../state/useLibraryStore'
+import { usePreferenceStore } from '../state/usePreferenceStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
 
 type RecentTab = 'added' | 'played' | 'searches'
@@ -20,6 +21,8 @@ interface RecentPageProps {
   recentSongs: RecentLibrarySong[]
   recentSearches: SearchHistoryEntry[]
   playlists: LibraryPlaylist[]
+  favoritePlaylistId: number
+  favoriteSongIds: number[]
   t: Translator
   selectedTrackId: number | null
   isPlaying: boolean
@@ -76,6 +79,8 @@ export function RecentPage({
   recentSongs,
   recentSearches,
   playlists,
+  favoritePlaylistId,
+  favoriteSongIds,
   t,
   selectedTrackId,
   isPlaying,
@@ -112,8 +117,13 @@ export function RecentPage({
   const moveSongToFolder = useLibraryStore((state) => state.moveSongToFolder)
   const replaceNowPlaying = useLibraryStore((state) => state.replaceNowPlaying)
   const removeSongFromPlaylist = useLibraryStore((state) => state.removeSongFromPlaylist)
+  const removeSongsFromPlaylist = useLibraryStore((state) => state.removeSongsFromPlaylist)
   const setSongFavorite = useLibraryStore((state) => state.setSongFavorite)
+  const resumeHiddenStorageItemByPath = useLibraryStore((state) => state.resumeHiddenStorageItemByPath)
   const refresh = useLibraryStore((state) => state.refresh)
+  const refreshPreferences = usePreferenceStore((state) => state.refresh)
+  const addPreferenceItem = usePreferenceStore((state) => state.addItem)
+  const removePreferenceItem = usePreferenceStore((state) => state.removeItem)
   const showUndoableNotification = useUndoableNotificationStore((state) => state.show)
   const hideMultiSelectCommandBarAfterOperation = useLibraryStore(
     (state) => state.snapshot.settings.hideMultiSelectCommandBarAfterOperation,
@@ -121,8 +131,11 @@ export function RecentPage({
   const showUndo = (message: string, action: () => void | Promise<void>) => {
     showUndoableNotification(message, t('common.undo'), action)
   }
-  const refreshSongPreferenceItem = async (songId: number) => {
-    const settings = await window.smplayer!.getPreferenceSettings()
+  const refreshSongPreferenceItem = async (songId: number, snapshot?: PreferenceSettingsSnapshot | null) => {
+    const settings = snapshot ?? await refreshPreferences()
+    if (!settings) {
+      return
+    }
     setSongPreferenceItem(settings.songs.find((item) => item.itemId === String(songId)) ?? null)
   }
   const customPlaylists = playlists.filter((playlist) => !playlist.isBuiltIn)
@@ -382,10 +395,10 @@ export function RecentPage({
             },
             preferenceItem: songPreferenceItem,
             onUndoPreference: () => {
-              void window.smplayer?.removePreferenceItem(songPreferenceItem!.id).then(() => refreshSongPreferenceItem(songMenu.song.id))
+              void removePreferenceItem(songPreferenceItem!).then(() => refreshSongPreferenceItem(songMenu.song.id, usePreferenceStore.getState().snapshot))
             },
             onSetPreference: (level) => {
-              void window.smplayer?.addPreferenceItem('song', String(songMenu.song.id), songMenu.song.title, level).then(() => refreshSongPreferenceItem(songMenu.song.id))
+              void addPreferenceItem('song', String(songMenu.song.id), songMenu.song.title, level).then((snapshot) => refreshSongPreferenceItem(songMenu.song.id, snapshot))
             },
             onMoveToFolder: (folderPath) => {
               const originalFolderPath = getParentFolderPath(songMenu.song.path)
@@ -416,10 +429,7 @@ export function RecentPage({
               await window.smplayer?.hideSong(songMenu.song.id)
               onRemoveRecentPlayed([songMenu.song.id])
               showUndo(t('notification.hiddenStorageItem', { name: songMenu.song.title }), async () => {
-                const hiddenItems = await window.smplayer!.getHiddenStorageItems()
-                const hiddenItem = hiddenItems.find((item) => item.path === songMenu.song.path)
-                await window.smplayer!.resumeHiddenStorageItem(hiddenItem!)
-                await refresh()
+                await resumeHiddenStorageItemByPath(songMenu.song.path)
               })
             },
             onSeeArtist: (artist) => {
@@ -453,6 +463,8 @@ export function RecentPage({
             songIds: addToMenu.songIds,
             defaultPlaylistName: addToMenu.defaultPlaylistName,
             playlists,
+            favoritePlaylistId,
+            favoriteSongIds,
             t,
             onAddToNowPlaying: () => {
               const previousQueueSongIds = nowPlayingSongIds
@@ -486,7 +498,7 @@ export function RecentPage({
                       target: targetPlaylist.name,
                     })
                   : t('notification.songsAddedTo', { count: addToMenu.songIds.length, target: targetPlaylist.name }),
-                () => Promise.all(addToMenu.songIds.map((songId) => removeSongFromPlaylist(playlistId, songId))).then(() => undefined),
+                () => removeSongsFromPlaylist(playlistId, addToMenu.songIds),
               )
               hideSelectionAfterOperation()
             },
@@ -516,6 +528,8 @@ export function RecentPage({
 function getRecentAddToMenuItems({
   songIds,
   playlists,
+  favoritePlaylistId,
+  favoriteSongIds,
   defaultPlaylistName,
   t,
   onAddToNowPlaying,
@@ -524,6 +538,8 @@ function getRecentAddToMenuItems({
 }: {
   songIds: number[]
   playlists: LibraryPlaylist[]
+  favoritePlaylistId: number
+  favoriteSongIds: number[]
   defaultPlaylistName: string
   t: Translator
   onAddToNowPlaying: () => void
@@ -538,14 +554,13 @@ function getRecentAddToMenuItems({
       onClick: onAddToNowPlaying,
     },
   ]
-  const myFavorites = playlists.find((playlist) => playlist.isBuiltIn)
-  if (songIds.some((songId) => !myFavorites!.songIds.includes(songId))) {
+  if (songIds.some((songId) => !favoriteSongIds.includes(songId))) {
     items.push({
       key: 'recent-add-my-favorites',
       text: t('common.myFavorites'),
       icon: 'heart',
       onClick: () => {
-        onAddToPlaylist(myFavorites!.id)
+        onAddToPlaylist(favoritePlaylistId)
       },
     })
   }

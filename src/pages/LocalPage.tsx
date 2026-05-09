@@ -8,12 +8,29 @@ import { Icon } from '../components/icons'
 import { MenuFlyout } from '../components/MenuFlyout'
 import { getAddToPlaylistMenuFlyoutItem, type MenuFlyoutItem, type MenuFlyoutPosition } from '../components/MenuFlyoutHelper'
 import { MusicMenuFlyout } from '../components/MusicMenuFlyout'
-import type { LibraryFolder, LibraryPlaylist, LibrarySong, LocalFolderSortCriterion, PreferenceItemSnapshot, PreferenceLevel, ScanLibraryResult } from '../shared/contracts'
+import { useFolderPreferenceMenuItem } from '../hooks/useFolderPreferenceMenuItem'
+import { resolveSongArtwork, useSongArtwork } from '../hooks/useSongArtwork'
+import type { LibraryFolder, LibraryPlaylist, LibrarySong, LocalFolderSortCriterion, ScanLibraryResult } from '../shared/contracts'
 import { getDisplayArtists, getSongArtists } from '../shared/artists'
 import { formatDuration } from '../shared/formatters'
 import type { Translator } from '../shared/i18n'
 import { useLibraryStore } from '../state/useLibraryStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
+import {
+  buildFolderChain,
+  buildFolderIndex,
+  createFolderNode,
+  getOriginalFolderThumbnailCandidateGroups,
+  getParentPath,
+  getSongFolderRelativePath,
+  localSortModeFromCriterion,
+  matchesSongSearch,
+  normalizePath,
+  shuffleSongIds,
+  sortFolders,
+  sortSongs,
+  type FolderNode,
+} from './localFolderModel'
 import { buildLocalRoute } from './localPagePaths'
 
 type LocalSortMode = LocalFolderSortCriterion
@@ -23,6 +40,7 @@ interface LocalPageProps {
   songs: LibrarySong[]
   folders: LibraryFolder[]
   playlists: LibraryPlaylist[]
+  favoritePlaylistId: number
   t: Translator
   rootPath: string
   currentRelativePath: string
@@ -57,46 +75,6 @@ interface LocalPageProps {
   onSearchDirectory: (query: string, folderRelativePath: string) => void
 }
 
-interface FolderNode {
-  id: number
-  relativePath: string
-  path: string
-  name: string
-  thumbnailUrls: string[]
-  childPaths: string[]
-  directSongIds: number[]
-  subtreeSongIds: number[]
-  criterion: number
-}
-
-const localTextCollator = new Intl.Collator('zh-Hans-CN-u-co-pinyin', {
-  numeric: true,
-  sensitivity: 'base',
-})
-
-function getLocalTextSortBucket(value: string) {
-  const trimmedValue = value.trim()
-  if (!trimmedValue) {
-    return 0
-  }
-
-  return /^[0-9A-Za-z]/.test(trimmedValue) ? 1 : 2
-}
-
-interface FolderChainItem {
-  name: string
-  path: string
-  isLastItem: boolean
-  isCurrentItem: boolean
-  children: FolderChainChildItem[]
-}
-
-interface FolderChainChildItem {
-  name: string
-  path: string
-  isHighlighted: boolean
-}
-
 interface FolderChainDropPayload {
   songIds: number[]
   folderPaths: string[]
@@ -122,255 +100,6 @@ type LocalSelectionAddMenuState = MenuFlyoutPosition
 
 interface LocalToolbarMenuState extends MenuFlyoutPosition {
   kind: 'sort' | 'view'
-}
-
-function normalizePath(value: string) {
-  return value.replace(/\\/g, '/').replace(/\/+$/, '')
-}
-
-function getSongFolderRelativePath(songPath: string, rootPath: string) {
-  const normalizedSongPath = normalizePath(songPath)
-  const normalizedRootPath = normalizePath(rootPath)
-  const relativePath = normalizedSongPath.startsWith(`${normalizedRootPath}/`)
-    ? normalizedSongPath.slice(normalizedRootPath.length + 1)
-    : normalizedSongPath
-  const segments = relativePath.split('/').filter(Boolean)
-
-  if (segments.length <= 1) {
-    return ''
-  }
-
-  return segments.slice(0, -1).join('/')
-}
-
-function getFolderDisplayName(relativePath: string, rootPath: string) {
-  if (!relativePath) {
-    const normalizedRootPath = normalizePath(rootPath)
-    return normalizedRootPath.split('/').filter(Boolean).at(-1) ?? 'Library root'
-  }
-
-  return relativePath.split('/').at(-1) ?? relativePath
-}
-
-function getFolderAbsolutePath(relativePath: string, rootPath: string) {
-  if (!relativePath) {
-    return rootPath
-  }
-
-  const separator = rootPath.includes('\\') ? '\\' : '/'
-  return `${rootPath.replace(/[\\/]+$/, '')}${separator}${relativePath.split('/').join(separator)}`
-}
-
-function createFolderNode(relativePath: string, rootPath: string): FolderNode {
-  return {
-    relativePath,
-    id: 0,
-    path: getFolderAbsolutePath(relativePath, rootPath),
-    name: getFolderDisplayName(relativePath, rootPath),
-    thumbnailUrls: [],
-    childPaths: [],
-    directSongIds: [],
-    subtreeSongIds: [],
-    criterion: 0,
-  }
-}
-
-function addOriginalFolderThumbnails(thumbnailUrls: string[], songIds: number[], songsById: Map<number, LibrarySong>) {
-  const albumSongs = new Map<string, LibrarySong[]>()
-
-  for (const songId of songIds) {
-    const song = songsById.get(songId)!
-    albumSongs.set(song.album, [...(albumSongs.get(song.album) ?? []), song])
-  }
-
-  for (const groupSongs of albumSongs.values()) {
-    const songWithThumbnail = groupSongs.find((song) => song.artworkUrl)
-    if (songWithThumbnail) {
-      thumbnailUrls.push(songWithThumbnail.artworkUrl)
-    }
-    if (thumbnailUrls.length === 4) {
-      return true
-    }
-  }
-
-  return false
-}
-
-function getOriginalFolderThumbnailUrls(node: FolderNode, nodes: Map<string, FolderNode>, songsById: Map<number, LibrarySong>) {
-  const thumbnailUrls: string[] = []
-
-  if (addOriginalFolderThumbnails(thumbnailUrls, node.directSongIds, songsById)) {
-    return thumbnailUrls
-  }
-
-  for (const childPath of node.childPaths) {
-    const childNode = nodes.get(childPath)!
-    if (addOriginalFolderThumbnails(thumbnailUrls, childNode.subtreeSongIds, songsById)) {
-      return thumbnailUrls
-    }
-  }
-
-  return thumbnailUrls
-}
-
-function compareLocalText(left: string, right: string) {
-  const leftBucket = getLocalTextSortBucket(left)
-  const rightBucket = getLocalTextSortBucket(right)
-
-  if (leftBucket !== rightBucket) {
-    return leftBucket - rightBucket
-  }
-
-  return localTextCollator.compare(left, right)
-}
-
-function getFolderFlattenedSongIds(node: FolderNode, nodes: Map<string, FolderNode>): number[] {
-  return [
-    ...node.childPaths.flatMap((childPath) => getFolderFlattenedSongIds(nodes.get(childPath)!, nodes)),
-    ...node.directSongIds,
-  ]
-}
-
-function compareSongByFolderCriterion(left: LibrarySong, right: LibrarySong, criterion: number): number {
-  switch (criterion) {
-    case 1:
-      return compareLocalText(getDisplayArtists(left), getDisplayArtists(right))
-    case 2:
-      return compareLocalText(left.album, right.album)
-    case 3:
-      return left.duration - right.duration
-    case 4:
-      return left.playCount - right.playCount
-    case 5:
-      return left.dateAdded.localeCompare(right.dateAdded)
-    case 7:
-      return -compareSongByFolderCriterion(left, right, 0)
-    case 0:
-    case 6:
-      return compareLocalText(left.title, right.title)
-    default:
-      return left.id - right.id
-  }
-}
-
-function getFolderRelativePath(folderPath: string, rootPath: string) {
-  const normalizedFolderPath = normalizePath(folderPath)
-  const normalizedRootPath = normalizePath(rootPath)
-
-  if (normalizedFolderPath === normalizedRootPath) {
-    return ''
-  }
-
-  return normalizedFolderPath.slice(normalizedRootPath.length + 1)
-}
-
-function buildFolderIndex(songs: LibrarySong[], folders: LibraryFolder[], rootPath: string) {
-  const nodes = new Map<string, FolderNode>()
-  const songsById = new Map(songs.map((song) => [song.id, song]))
-
-  nodes.set('', createFolderNode('', rootPath))
-
-  for (const folder of folders) {
-    const relativePath = getFolderRelativePath(folder.path, rootPath)
-    if (!nodes.has(relativePath)) {
-      nodes.set(relativePath, createFolderNode(relativePath, rootPath))
-    }
-    nodes.get(relativePath)!.criterion = folder.criterion
-    nodes.get(relativePath)!.id = folder.id
-  }
-
-  for (const relativePath of nodes.keys()) {
-    if (!relativePath) {
-      continue
-    }
-
-    const parentPath = getParentPath(relativePath)
-    const parentNode = nodes.get(parentPath) ?? createFolderNode(parentPath, rootPath)
-    if (!nodes.has(parentPath)) {
-      nodes.set(parentPath, parentNode)
-    }
-    if (!parentNode.childPaths.includes(relativePath)) {
-      parentNode.childPaths.push(relativePath)
-    }
-  }
-
-  for (const song of songs) {
-    const relativeFolderPath = getSongFolderRelativePath(song.path, rootPath)
-    const segments = relativeFolderPath ? relativeFolderPath.split('/') : []
-    const ancestorPaths = ['']
-    let currentPath = ''
-
-    for (const segment of segments) {
-      const nextPath = currentPath ? `${currentPath}/${segment}` : segment
-      const parentNode = nodes.get(currentPath) ?? createFolderNode(currentPath, rootPath)
-      const nextNode = nodes.get(nextPath) ?? createFolderNode(nextPath, rootPath)
-
-      if (!nodes.has(currentPath)) {
-        nodes.set(currentPath, parentNode)
-      }
-      if (!nodes.has(nextPath)) {
-        nodes.set(nextPath, nextNode)
-      }
-      if (!parentNode.childPaths.includes(nextPath)) {
-        parentNode.childPaths.push(nextPath)
-      }
-
-      currentPath = nextPath
-      ancestorPaths.push(currentPath)
-    }
-
-    const folderNode = nodes.get(currentPath) ?? createFolderNode(currentPath, rootPath)
-    if (!nodes.has(currentPath)) {
-      nodes.set(currentPath, folderNode)
-    }
-
-    folderNode.directSongIds.push(song.id)
-
-    for (const ancestorPath of ancestorPaths) {
-      const ancestorNode = nodes.get(ancestorPath) ?? createFolderNode(ancestorPath, rootPath)
-      if (!nodes.has(ancestorPath)) {
-        nodes.set(ancestorPath, ancestorNode)
-      }
-
-      ancestorNode.subtreeSongIds.push(song.id)
-    }
-  }
-
-  for (const node of nodes.values()) {
-    node.childPaths.sort((left, right) => compareLocalText(nodes.get(left)!.name, nodes.get(right)!.name))
-    node.directSongIds.sort((left, right) => {
-      const leftSong = songsById.get(left)!
-      const rightSong = songsById.get(right)!
-      return compareSongByFolderCriterion(leftSong, rightSong, node.criterion)
-    })
-  }
-
-  for (const node of nodes.values()) {
-    node.subtreeSongIds = getFolderFlattenedSongIds(node, nodes)
-  }
-
-  for (const node of nodes.values()) {
-    node.thumbnailUrls = getOriginalFolderThumbnailUrls(node, nodes, songsById)
-  }
-
-  return { nodes, songsById }
-}
-
-function matchesSongSearch(song: LibrarySong, searchQuery: string) {
-  const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase()
-  if (!normalizedSearchQuery) {
-    return true
-  }
-
-  return [song.title, song.artist, ...song.artists, song.album, song.path]
-    .join(' ')
-    .toLocaleLowerCase()
-    .includes(normalizedSearchQuery)
-}
-
-function getParentPath(relativePath: string) {
-  const parts = relativePath.split('/').filter(Boolean)
-  return parts.slice(0, -1).join('/')
 }
 
 function getFolderListItemKey(folderPath: string) {
@@ -420,43 +149,59 @@ function getRefreshResultMessage(result: ScanLibraryResult, t: Translator) {
   return messages.length > 0 ? messages.join(t('common.comma')) : t('local.refreshNoChange')
 }
 
-function buildFolderChain(
-  currentRelativePath: string,
-  nodes: Map<string, FolderNode>,
-): FolderChainItem[] {
-  const rootNode = nodes.get('')!
-  const relativeSegments = currentRelativePath.split('/').filter(Boolean)
-  const currentPaths = [
-    '',
-    ...relativeSegments.map((_, index) => relativeSegments.slice(0, index + 1).join('/')),
-  ]
-
-  return currentPaths.map((path, index) => {
-    const node = path ? nodes.get(path) : rootNode
-    const isCurrentItem = index === currentPaths.length - 1
-
-    return {
-      name: node?.name ?? relativeSegments[index - 1]!,
-      path,
-      isLastItem: !isCurrentItem,
-      isCurrentItem,
-      children: (node?.childPaths ?? []).map((childPath) => {
-        const child = nodes.get(childPath)!
-
-        return {
-          name: child.name,
-          path: child.relativePath,
-          isHighlighted: currentRelativePath === child.relativePath || currentRelativePath.startsWith(`${child.relativePath}/`),
-        }
-      }),
-    }
-  })
-}
-
 function scrollCurrentFolderToTop() {
   document.querySelector<HTMLElement>('.local-scroll-shell, .local-table-shell')?.scrollTo({
     top: 0,
   })
+}
+
+async function resolveOriginalFolderThumbnailUrls(candidateGroups: LibrarySong[][], isDisposed: () => boolean) {
+  const artworkUrls: string[] = []
+
+  for (const groupSongs of candidateGroups) {
+    for (const song of groupSongs) {
+      const artworkUrl = await resolveSongArtwork(song.id, song.artworkUrl)
+      if (isDisposed()) {
+        return artworkUrls
+      }
+      if (artworkUrl) {
+        artworkUrls.push(artworkUrl)
+        break
+      }
+    }
+
+    if (artworkUrls.length === 4) {
+      return artworkUrls
+    }
+  }
+
+  return artworkUrls
+}
+
+function useOriginalFolderThumbnailUrls(
+  folder: FolderNode,
+  nodes: Map<string, FolderNode>,
+  songsById: Map<number, LibrarySong>,
+) {
+  const [artworkUrls, setArtworkUrls] = useState(folder.thumbnailUrls)
+
+  useEffect(() => {
+    let disposed = false
+    const candidateGroups = getOriginalFolderThumbnailCandidateGroups(folder, nodes, songsById)
+
+    setArtworkUrls(folder.thumbnailUrls)
+    void resolveOriginalFolderThumbnailUrls(candidateGroups, () => disposed).then((nextArtworkUrls) => {
+      if (!disposed) {
+        setArtworkUrls(nextArtworkUrls)
+      }
+    })
+
+    return () => {
+      disposed = true
+    }
+  }, [folder, nodes, songsById])
+
+  return artworkUrls
 }
 
 export function FolderChainListView({
@@ -611,6 +356,7 @@ export function LocalTitleGrid({
   songs,
   folders,
   playlists,
+  favoritePlaylistId,
   t,
   rootPath,
   currentRelativePath,
@@ -627,6 +373,7 @@ export function LocalTitleGrid({
   songs: LibrarySong[]
   folders: LibraryFolder[]
   playlists: LibraryPlaylist[]
+  favoritePlaylistId: number
   t: Translator
   rootPath: string
   currentRelativePath: string
@@ -641,15 +388,11 @@ export function LocalTitleGrid({
   onAddSongsToPlaylist: (playlistId: number, songIds: number[]) => void
 }) {
   const [folderChainMenu, setFolderChainMenu] = useState<FolderChainMenuState | null>(null)
-  const [folderPreferenceItems, setFolderPreferenceItems] = useState<Map<string, PreferenceItemSnapshot>>(new Map())
+  const { getFolderPreferenceMenuItem } = useFolderPreferenceMenuItem(t)
   const { nodes } = useMemo(
     () => buildFolderIndex(songs, folders, rootPath),
     [folders, rootPath, songs],
   )
-  const refreshFolderPreferenceItems = async () => {
-    const settings = await window.smplayer!.getPreferenceSettings()
-    setFolderPreferenceItems(new Map(settings.folders.map((item) => [item.itemId, item])))
-  }
   const searchDirectory = (folder: FolderNode) => {
     const query = window.prompt(t('local.searchDirectoryPrompt', { name: folder.name }))
     if (!query?.trim()) {
@@ -660,50 +403,9 @@ export function LocalTitleGrid({
     setFolderChainMenu(null)
   }
   const playablePlaylists = playlists.filter((playlist) => !playlist.isBuiltIn || playlist.name === t('common.myFavorites'))
-  const favoritePlaylist = playlists.find((playlist) => playlist.isBuiltIn)!
-  const getFolderPreferenceMenuItem = (folder: FolderNode, keyPrefix: string): MenuFlyoutItem => {
-    const preferenceItem = folderPreferenceItems.get(String(folder.id))
-
-    return {
-      key: `${keyPrefix}-folder-preference`,
-      text: t('settings.preferenceSettings'),
-      icon: 'star',
-      submenu: [
-        ...(preferenceItem
-          ? [
-              {
-                key: `${keyPrefix}-folder-preference-undo`,
-                text: t('preferences.undoPrefer'),
-                onClick: () => {
-                  void window.smplayer?.removePreferenceItem(preferenceItem.id).then(refreshFolderPreferenceItems)
-                },
-              },
-              { key: `${keyPrefix}-folder-preference-undo-separator`, text: '', separator: true },
-            ] satisfies MenuFlyoutItem[]
-          : []),
-        ...([
-          'very-high',
-          'higher',
-          'high',
-          'normal',
-          'dislike',
-          'do-not-appear',
-        ] as PreferenceLevel[]).map((level) => ({
-          key: `${keyPrefix}-folder-preference-${level}`,
-          text: t(`preferences.level.${level}`),
-          icon: preferenceItem?.level === level ? 'check' as const : undefined,
-          onClick: () => {
-            void window.smplayer?.addPreferenceItem('folder', String(folder.id), folder.name, level).then(refreshFolderPreferenceItems)
-          },
-        })),
-      ],
-    }
+  const addSongsToFavorites = (songIds: number[]) => {
+    onAddSongsToPlaylist(favoritePlaylistId, songIds)
   }
-
-  useEffect(() => {
-    void refreshFolderPreferenceItems()
-  }, [])
-
   return (
     <div className="local-title-grid">
       <div className="current-path-grid">
@@ -754,7 +456,9 @@ export function LocalTitleGrid({
               includeNowPlaying: true,
               includeFavorites: true,
               onAddToNowPlaying: () => onAddSongsToNowPlaying(folderChainMenu.folder.subtreeSongIds),
-              onToggleFavorite: () => onAddSongsToPlaylist(favoritePlaylist.id, folderChainMenu.folder.subtreeSongIds),
+              onToggleFavorite: () => {
+                addSongsToFavorites(folderChainMenu.folder.subtreeSongIds)
+              },
               onCreatePlaylist: (name) => onCreatePlaylistWithSongs(name, folderChainMenu.folder.subtreeSongIds),
               onAddToPlaylist: (playlistId) => onAddSongsToPlaylist(playlistId, folderChainMenu.folder.subtreeSongIds),
             }),
@@ -779,58 +483,11 @@ export function LocalTitleGrid({
   )
 }
 
-function sortFolders(folders: FolderNode[]) {
-  return folders.slice().sort((left, right) => compareLocalText(left.name, right.name))
-}
-
-function sortSongs(songs: LibrarySong[], mode: LocalSortMode, baseMode: LocalSortMode = mode): LibrarySong[] {
-  if (mode === 'reverse') {
-    return sortSongs(songs, baseMode === 'reverse' ? 'title' : baseMode).reverse()
-  }
-
-  return songs.slice().sort((left, right) => {
-    if (mode === 'artist') {
-      return compareLocalText(getDisplayArtists(left), getDisplayArtists(right))
-    }
-
-    if (mode === 'album') {
-      return compareLocalText(left.album || '', right.album || '')
-    }
-
-    return compareLocalText(left.title, right.title)
-  })
-}
-
-function localSortModeFromCriterion(criterion: number): LocalSortMode {
-  switch (criterion) {
-    case 7:
-      return 'reverse'
-    case 1:
-      return 'artist'
-    case 2:
-      return 'album'
-    default:
-      return 'title'
-  }
-}
-
-function shuffleSongIds(songIds: number[]) {
-  const shuffledSongIds = songIds.slice()
-
-  for (let index = shuffledSongIds.length - 1; index > 0; index -= 1) {
-    const randomIndex = Math.floor(Math.random() * (index + 1))
-    const current = shuffledSongIds[index]
-    shuffledSongIds[index] = shuffledSongIds[randomIndex]
-    shuffledSongIds[randomIndex] = current
-  }
-
-  return shuffledSongIds
-}
-
 export function LocalPage({
   songs,
   folders,
   playlists,
+  favoritePlaylistId,
   t,
   rootPath,
   currentRelativePath: routeRelativePath,
@@ -865,7 +522,7 @@ export function LocalPage({
   onSearchDirectory,
 }: LocalPageProps) {
   const navigate = useNavigate()
-  const [currentRelativePath, setCurrentRelativePath] = useState(routeRelativePath)
+  const currentRelativePath = routeRelativePath
   const [sortMode, setSortMode] = useState<LocalSortMode>('title')
   const [viewMode, setViewMode] = useState<LocalViewMode>(() =>
     window.localStorage.getItem('smplayer:local-view-mode') === 'list' ? 'list' : 'grid',
@@ -876,7 +533,7 @@ export function LocalPage({
   const [selectedListItemKey, setSelectedListItemKey] = useState('')
   const [createdFolderPaths, setCreatedFolderPaths] = useState<Set<string>>(new Set())
   const [localNotification, setLocalNotification] = useState('')
-  const refresh = useLibraryStore((state) => state.refresh)
+  const resumeHiddenStorageItemByPath = useLibraryStore((state) => state.resumeHiddenStorageItemByPath)
   const hideMultiSelectCommandBarAfterOperation = useLibraryStore(
     (state) => state.snapshot.settings.hideMultiSelectCommandBarAfterOperation,
   )
@@ -890,7 +547,7 @@ export function LocalPage({
   const [songAddMenu, setSongAddMenu] = useState<LocalSongAddMenuState | null>(null)
   const [selectionAddMenu, setSelectionAddMenu] = useState<LocalSelectionAddMenuState | null>(null)
   const [toolbarMenu, setToolbarMenu] = useState<LocalToolbarMenuState | null>(null)
-  const [folderPreferenceItems, setFolderPreferenceItems] = useState<Map<string, PreferenceItemSnapshot>>(new Map())
+  const { getFolderPreferenceMenuItem } = useFolderPreferenceMenuItem(t)
   const { nodes, songsById } = useMemo(
     () => buildFolderIndex(songs, folders, rootPath),
     [folders, songs, rootPath],
@@ -898,13 +555,8 @@ export function LocalPage({
   const currentNode = nodes.get(currentRelativePath) ?? null
   const currentSortMode = currentNode ? localSortModeFromCriterion(currentNode.criterion) : 'title'
 
-  useEffect(() => {
-    setCurrentRelativePath(routeRelativePath)
-  }, [routeRelativePath])
-
   const openFolder = (targetRelativePath: string) => {
-    setCurrentRelativePath(targetRelativePath)
-    navigate(buildLocalRoute(targetRelativePath), { replace: true })
+    navigate(buildLocalRoute(targetRelativePath))
   }
 
   const currentSongs = useMemo(() => {
@@ -912,12 +564,8 @@ export function LocalPage({
       return []
     }
 
-    const sourceSongIds = searchQuery.trim()
-      ? currentNode.subtreeSongIds
-      : currentNode.directSongIds
-
     return sortSongs(
-      sourceSongIds
+      currentNode.directSongIds
         .map((songId) => songsById.get(songId)!)
         .filter((song) => matchesSongSearch(song, searchQuery)),
       sortMode,
@@ -944,17 +592,10 @@ export function LocalPage({
           return true
         }
 
-        if (child.name.toLocaleLowerCase().includes(normalizedSearchQuery)) {
-          return true
-        }
-
-        return child.subtreeSongIds.some((songId) => {
-          const song = songsById.get(songId)!
-          return matchesSongSearch(song, searchQuery)
-        })
+        return child.name.toLocaleLowerCase().includes(normalizedSearchQuery)
       }),
     )
-  }, [createdFolderPaths, currentNode, currentRelativePath, nodes, rootPath, searchQuery, songsById])
+  }, [createdFolderPaths, currentNode, currentRelativePath, nodes, rootPath, searchQuery])
   const visibleSongIds = useMemo(() => currentSongs.map((song) => song.id), [currentSongs])
   const queueSongIds = visibleSongIds
   const effectiveSelectedFolderPaths = [...selectedFolderPaths].filter((folderPath) =>
@@ -966,12 +607,9 @@ export function LocalPage({
     ...effectiveSelectedFolderPaths.flatMap((folderPath) => nodes.get(folderPath)?.subtreeSongIds ?? []),
   ].filter((songId, index, all) => all.indexOf(songId) === index)
   const playablePlaylists = playlists.filter((playlist) => !playlist.isBuiltIn || playlist.name === t('common.myFavorites'))
-  const favoritePlaylist = playlists.find((playlist) => playlist.isBuiltIn)!
-  const refreshFolderPreferenceItems = async () => {
-    const settings = await window.smplayer!.getPreferenceSettings()
-    setFolderPreferenceItems(new Map(settings.folders.map((item) => [item.itemId, item])))
+  const addSongsToFavorites = (songIds: number[]) => {
+    onAddSongsToPlaylist(favoritePlaylistId, songIds)
   }
-
   const ClearMultiSelectStatus = () => {
     if (!multiSelect) {
       return false
@@ -1056,10 +694,6 @@ export function LocalPage({
     window.localStorage.setItem('smplayer:local-view-mode', viewMode)
   }, [viewMode])
 
-  useEffect(() => {
-    void refreshFolderPreferenceItems()
-  }, [])
-
   const playShuffled = () => {
     if (queueSongIds.length === 0) {
       setLocalNotification(t('local.noMusicUnderCurrentFolder'))
@@ -1110,45 +744,6 @@ export function LocalPage({
       return ''
     }
     return nextName
-  }
-
-  const getFolderPreferenceMenuItem = (folder: FolderNode, keyPrefix: string): MenuFlyoutItem => {
-    const preferenceItem = folderPreferenceItems.get(String(folder.id))
-
-    return {
-      key: `${keyPrefix}-folder-preference`,
-      text: t('settings.preferenceSettings'),
-      icon: 'star',
-      submenu: [
-        ...(preferenceItem
-          ? [
-              {
-                key: `${keyPrefix}-folder-preference-undo`,
-                text: t('preferences.undoPrefer'),
-                onClick: () => {
-                  void window.smplayer?.removePreferenceItem(preferenceItem.id).then(refreshFolderPreferenceItems)
-                },
-              },
-              { key: `${keyPrefix}-folder-preference-undo-separator`, text: '', separator: true },
-            ] satisfies MenuFlyoutItem[]
-          : []),
-        ...([
-          'very-high',
-          'higher',
-          'high',
-          'normal',
-          'dislike',
-          'do-not-appear',
-        ] as PreferenceLevel[]).map((level) => ({
-          key: `${keyPrefix}-folder-preference-${level}`,
-          text: t(`preferences.level.${level}`),
-          icon: preferenceItem?.level === level ? 'check' as const : undefined,
-          onClick: () => {
-            void window.smplayer?.addPreferenceItem('folder', String(folder.id), folder.name, level).then(refreshFolderPreferenceItems)
-          },
-        })),
-      ],
-    }
   }
 
   const createFolder = async () => {
@@ -1209,10 +804,7 @@ export function LocalPage({
   const hideFolder = async (folder: FolderNode) => {
     await onHideFolder(folder.path)
     showUndo(t('notification.hiddenStorageItem', { name: folder.name }), async () => {
-      const hiddenItems = await window.smplayer!.getHiddenStorageItems()
-      const hiddenItem = hiddenItems.find((item) => item.path === folder.path)
-      await window.smplayer!.resumeHiddenStorageItem(hiddenItem!)
-      await refresh()
+      await resumeHiddenStorageItemByPath(folder.path)
     })
     ClearMultiSelectStatus()
     setFolderMenu(null)
@@ -1692,6 +1284,8 @@ export function LocalPage({
                   key={folder.relativePath}
                   selected={selectedFolderPaths.has(folder.relativePath)}
                   multiSelect={multiSelect}
+                  nodes={nodes}
+                  songsById={songsById}
                   t={t}
                   onPlayFolder={shuffleFolder}
                   onAddFolder={(event, folder) => {
@@ -1804,7 +1398,7 @@ export function LocalPage({
                   </td>
                   <td>{t('common.folders')}</td>
                   <td>{t('local.childFolderCount', { count: folder.childPaths.length })}</td>
-                  <td>{t('local.folderSongs', { count: folder.subtreeSongIds.length })}</td>
+                  <td>{t('local.folderSongs', { count: folder.directSongIds.length })}</td>
                   <td className="local-path-cell">{folder.relativePath || t('local.libraryRoot')}</td>
                   <td>
                     <button
@@ -1967,7 +1561,9 @@ export function LocalPage({
               includeNowPlaying: true,
               includeFavorites: true,
               onAddToNowPlaying: () => addFolderSongsToNowPlaying(folderMenu.folder),
-              onToggleFavorite: () => onAddSongsToPlaylist(favoritePlaylist.id, folderMenu.folder.subtreeSongIds),
+              onToggleFavorite: () => {
+                addSongsToFavorites(folderMenu.folder.subtreeSongIds)
+              },
               onCreatePlaylist: (name) => onCreatePlaylistWithSongs(name, folderMenu.folder.subtreeSongIds),
               onAddToPlaylist: (playlistId) => addFolderSongsToPlaylist(folderMenu.folder, playlistId),
             }),
@@ -2060,7 +1656,7 @@ export function LocalPage({
                 HideMultiSelectAfterOperation()
               },
               onToggleFavorite: () => {
-                onAddSongsToPlaylist(favoritePlaylist.id, selectedQueueSongIds)
+                addSongsToFavorites(selectedQueueSongIds)
                 HideMultiSelectAfterOperation()
               },
               onCreatePlaylist: (name) => {
@@ -2109,7 +1705,9 @@ export function LocalPage({
               includeNowPlaying: true,
               includeFavorites: true,
               onAddToNowPlaying: () => addFolderSongsToNowPlaying(folderAddMenu.folder),
-              onToggleFavorite: () => onAddSongsToPlaylist(favoritePlaylist.id, folderAddMenu.folder.subtreeSongIds),
+              onToggleFavorite: () => {
+                addSongsToFavorites(folderAddMenu.folder.subtreeSongIds)
+              },
               onCreatePlaylist: (name) => onCreatePlaylistWithSongs(name, folderAddMenu.folder.subtreeSongIds),
               onAddToPlaylist: (playlistId) => addFolderSongsToPlaylist(folderAddMenu.folder, playlistId),
             }),
@@ -2171,6 +1769,8 @@ function LocalFolderCard({
   folder,
   selected,
   multiSelect,
+  nodes,
+  songsById,
   t,
   onPlayFolder,
   onAddFolder,
@@ -2183,6 +1783,8 @@ function LocalFolderCard({
   folder: FolderNode
   selected: boolean
   multiSelect: boolean
+  nodes: Map<string, FolderNode>
+  songsById: Map<number, LibrarySong>
   t: Translator
   onPlayFolder: (folder: FolderNode) => void
   onAddFolder: (event: MouseEvent, folder: FolderNode) => void
@@ -2192,6 +1794,7 @@ function LocalFolderCard({
   onDrop: (event: DragEvent, folder: FolderNode) => void
   onOpenFolderMenu: (folder: FolderNode, x: number, y: number) => void
 }) {
+  const artworkUrls = useOriginalFolderThumbnailUrls(folder, nodes, songsById)
   const openFolder = () => onOpenFolder(folder.relativePath)
   const openFolderOnKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.target !== event.currentTarget) {
@@ -2221,7 +1824,7 @@ function LocalFolderCard({
           onClick: (event) => onAddFolder(event, folder),
         },
       ]}
-      artworkUrls={folder.thumbnailUrls}
+      artworkUrls={artworkUrls}
       badge={<FolderTypeBadge />}
       fallbackIcon="folder"
       selectedMark={multiSelect ? (
@@ -2230,8 +1833,8 @@ function LocalFolderCard({
         </span>
       ) : null}
       subtitle={folder.childPaths.length > 0
-        ? t('local.folderCardStats', { folders: folder.childPaths.length, songs: folder.subtreeSongIds.length })
-        : t('local.folderSongsShort', { count: folder.subtreeSongIds.length })}
+        ? t('local.folderCardStats', { folders: folder.childPaths.length, songs: folder.directSongIds.length })
+        : t('local.folderSongsShort', { count: folder.directSongIds.length })}
       title={folder.name}
     />
   )
@@ -2322,6 +1925,7 @@ function LocalSongCard({
   onDragStart: (event: DragEvent, song: LibrarySong) => void
   onOpenSongMenu: (song: LibrarySong, x: number, y: number) => void
 }) {
+  const { artworkUrl } = useSongArtwork(song.id, song.artworkUrl)
   const openSong = () => {
     if (multiSelect) {
       onToggleSelection(song.id)
@@ -2356,7 +1960,7 @@ function LocalSongCard({
     >
       <ArtworkImage
         className="local-song-artwork"
-        src={song.artworkUrl}
+        src={artworkUrl}
         title={song.title}
         renderFallback={() => (
           <span className="local-song-artwork local-song-artwork-fallback">

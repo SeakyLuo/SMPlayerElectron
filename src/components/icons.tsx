@@ -42,6 +42,16 @@ const paths = {
     <path key="bottomRightH" d="M20 15v5h-5" />,
     <path key="bottomRightD" d="m20 20-6-6" />,
   ],
+  fullscreenExit: [
+    <path key="topLeftH" d="M9 4v5H4" />,
+    <path key="topLeftD" d="m9 9-6-6" />,
+    <path key="topRightH" d="M15 4v5h5" />,
+    <path key="topRightD" d="m15 9 6-6" />,
+    <path key="bottomLeftH" d="M9 20v-5H4" />,
+    <path key="bottomLeftD" d="m9 15-6 6" />,
+    <path key="bottomRightH" d="M15 20v-5h5" />,
+    <path key="bottomRightD" d="m15 15 6 6" />,
+  ],
   grip: [
     <circle key="a1" cx="8" cy="6" r="1" fill="currentColor" stroke="none" />,
     <circle key="a2" cx="12" cy="6" r="1" fill="currentColor" stroke="none" />,

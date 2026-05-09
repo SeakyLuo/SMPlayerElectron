@@ -7,9 +7,9 @@ import type {
   PreferenceEntityType,
   PreferenceItemSnapshot,
   PreferenceLevel,
-  PreferenceSettingsSnapshot,
 } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
+import { usePreferenceStore } from '../state/usePreferenceStore'
 
 interface PreferenceSettingsPageProps {
   t: Translator
@@ -36,15 +36,14 @@ const preferenceSectionLimits: Record<PreferenceSectionKey, number> = {
 }
 
 export function PreferenceSettingsPage({ t, onClose }: PreferenceSettingsPageProps) {
-  const [snapshot, setSnapshot] = useState<PreferenceSettingsSnapshot | null>(null)
-  const [error, setError] = useState('')
+  const snapshot = usePreferenceStore((state) => state.snapshot)
+  const error = usePreferenceStore((state) => state.error)
+  const refresh = usePreferenceStore((state) => state.refresh)
+  const updatePreferenceSettings = usePreferenceStore((state) => state.updateSettings)
+  const updatePreferenceItem = usePreferenceStore((state) => state.updateItem)
+  const removePreferenceItem = usePreferenceStore((state) => state.removeItem)
+  const clearInvalidPreferenceItems = usePreferenceStore((state) => state.clearInvalidItems)
   const [expandedSections, setExpandedSections] = useState<Set<PreferenceSectionKey>>(new Set())
-
-  const refresh = async () => {
-    const nextSnapshot = await window.smplayer!.getPreferenceSettings()
-    setSnapshot(nextSnapshot)
-    setError('')
-  }
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -54,37 +53,27 @@ export function PreferenceSettingsPage({ t, onClose }: PreferenceSettingsPagePro
     }
 
     window.addEventListener('keydown', handleKeyDown)
-    window.smplayer!.getPreferenceSettings()
-      .then((nextSnapshot) => {
-        setSnapshot(nextSnapshot)
-      })
-      .catch((loadError: unknown) => {
-        setError(loadError instanceof Error ? loadError.message : 'Preference settings failed to load.')
-      })
+    void refresh()
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [onClose])
+  }, [onClose, refresh])
 
   const updateSettings = async (section: PreferenceSectionKey, enabled: boolean) => {
-    await window.smplayer!.updatePreferenceSettings({ [section]: enabled })
-    await refresh()
+    await updatePreferenceSettings({ [section]: enabled })
   }
 
   const updateItem = async (item: PreferenceItemSnapshot, update: { isEnabled?: boolean; level?: PreferenceLevel }) => {
-    await window.smplayer!.updatePreferenceItem(item.id, update)
-    await refresh()
+    await updatePreferenceItem(item, update)
   }
 
   const removeItem = async (item: PreferenceItemSnapshot) => {
-    await window.smplayer!.removePreferenceItem(item.id)
-    await refresh()
+    await removePreferenceItem(item)
   }
 
   const clearInvalid = async (type: PreferenceEntityType) => {
-    await window.smplayer!.clearInvalidPreferenceItems(type)
-    await refresh()
+    await clearInvalidPreferenceItems(type)
   }
 
   const toggleExpanded = (section: PreferenceSectionKey) => {

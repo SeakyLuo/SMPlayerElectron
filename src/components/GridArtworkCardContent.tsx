@@ -33,7 +33,7 @@ export function GridArtworkCardContent({
   selectedMark,
   actions = [],
 }: GridArtworkCardContentProps) {
-  const fallbackArtwork = fallbackIcon === 'folder'
+  const renderFallbackArtwork = () => fallbackIcon === 'folder' || fallbackIcon === 'playlists'
     ? <img className="grid-artwork-card-fallback-image" src={NOT_FOUND_ARTWORK_URL} alt="" />
     : <DefaultAlbumArtwork className="grid-artwork-card-fallback-image" />
 
@@ -42,14 +42,18 @@ export function GridArtworkCardContent({
       <span className={`grid-artwork-card-cover artwork-count-${artworkUrls.length <= 2 ? 1 : artworkUrls.length}`} aria-hidden="true">
         {artworkUrls.length === 0 ? (
           <span className="grid-artwork-card-cover-fallback">
-            {fallbackArtwork}
+            {renderFallbackArtwork()}
           </span>
         ) : artworkUrls.length <= 2 ? (
           <ArtworkImage
             className="grid-artwork-card-image"
             src={artworkUrls[0]}
             title={title}
-            renderFallback={() => <span className="grid-artwork-card-image" />}
+            renderFallback={() => (
+              <span className="grid-artwork-card-cover-fallback">
+                {renderFallbackArtwork()}
+              </span>
+            )}
           />
         ) : (
           <>
@@ -59,12 +63,16 @@ export function GridArtworkCardContent({
                 key={`${artworkUrl}:${index}`}
                 src={artworkUrl}
                 title={title}
-                renderFallback={() => <span className="grid-artwork-card-image" />}
+                renderFallback={() => (
+                  <span className="grid-artwork-card-cover-fallback grid-artwork-card-cover-tile-fallback">
+                    {renderFallbackArtwork()}
+                  </span>
+                )}
               />
             ))}
             {artworkUrls.length === 3 ? (
               <span className="grid-artwork-card-cover-fallback grid-artwork-card-cover-tile-fallback">
-                {fallbackArtwork}
+                {renderFallbackArtwork()}
               </span>
             ) : null}
           </>

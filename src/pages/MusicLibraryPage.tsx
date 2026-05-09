@@ -124,7 +124,6 @@ export function MusicLibraryPage({
     viewportWidth,
   )
   const customPlaylists = snapshot.playlists.filter((playlist) => !playlist.isBuiltIn)
-  const favoritePlaylist = snapshot.playlists.find((playlist) => playlist.isBuiltIn && playlist.name === t('common.myFavorites'))!
   const quickJumpMap = useMemo(
     () => buildQuickJumpMap(visibleSongs, quickJumpColumn),
     [quickJumpColumn, visibleSongs],
@@ -157,6 +156,10 @@ export function MusicLibraryPage({
         direction: current.direction === 'ascending' ? 'descending' : 'ascending',
       }
     })
+  }
+
+  const addSongsToFavorites = (songIds: number[]) => {
+    onAddSongsToPlaylist(snapshot.favorites.playlistId, songIds)
   }
 
   const resizeColumn = (column: LibrarySortColumn, deltaX: number) => {
@@ -496,7 +499,7 @@ export function MusicLibraryPage({
                 onAddSongsToNowPlaying(effectiveSelectedSongIds)
               },
               onToggleFavorite: () => {
-                onAddSongsToPlaylist(favoritePlaylist.id, effectiveSelectedSongIds)
+                addSongsToFavorites(effectiveSelectedSongIds)
               },
               onCreatePlaylist: (name) => {
                 onCreatePlaylistWithSongs(name, effectiveSelectedSongIds)

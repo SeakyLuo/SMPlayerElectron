@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, MouseEvent, PointerEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-import type { LibraryPlaylist, LibrarySong, LyricsSnapshot, PlaybackMode, PreferenceItemSnapshot } from '../shared/contracts'
+import type { LibraryPlaylist, LibrarySong, LyricsSnapshot, PlaybackMode, PreferenceItemSnapshot, PreferenceSettingsSnapshot } from '../shared/contracts'
 import { getSongArtists } from '../shared/artists'
 import { extractArtworkColorRgb, getDefaultArtworkColorRgb } from '../shared/artworkColor'
 import type { Translator } from '../shared/i18n'
@@ -10,11 +10,13 @@ import { getCurrentLyricsLine } from '../shared/lyrics'
 import { useLibraryStore } from '../state/useLibraryStore'
 import { usePlaybackProgress } from '../state/playbackProgressStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
+import { useSongArtwork } from '../hooks/useSongArtwork'
 import { Icon } from './icons'
 import { formatDuration } from '../shared/formatters'
 import { MenuFlyout } from './MenuFlyout'
 import { getAddToPlaylistMenuFlyoutItem, getPreferenceMenuFlyoutItem, type MenuFlyoutItem, type MenuFlyoutPosition } from './MenuFlyoutHelper'
 import { MusicDialog } from './MusicDialog'
+import { usePreferenceStore } from '../state/usePreferenceStore'
 
 interface PlayerBarTrack {
   id: number | null
@@ -64,6 +66,38 @@ interface VoiceAssistantResponse {
 
 type VoiceAssistantState = 'idle' | 'capturing' | 'processing'
 
+interface PlayerControlsProps {
+  trackId: number | null
+  isLoading: boolean
+  favorite?: boolean
+  disabled: boolean
+  isPlaying: boolean
+  volumeValue: number
+  mode: PlaybackMode
+  progressSeconds: number
+  progressValue: number
+  progressMax: number
+  progressFill: number
+  durationSeconds: number
+  t: Translator
+  onTogglePlayPause: () => void
+  onPrevious: () => void
+  onNext: () => void
+  onSeekChange: (seconds: number) => void
+  onSeekPointerDown: (event: PointerEvent<HTMLInputElement>) => void
+  onSeekPointerCommit: (event: PointerEvent<HTMLInputElement>) => void
+  onVolumeChange: (volume: number) => void
+  onToggleMute: () => void
+  onToggleShuffle: () => void
+  onToggleRepeat: () => void
+  onToggleRepeatOne: () => void
+  onToggleFavorite: () => void
+  onVoiceAssistantClick: () => void
+  voiceAssistantActive?: boolean
+  isMuted: boolean
+  onMoreClick: (event: MouseEvent<HTMLButtonElement>) => void
+}
+
 function getShuffleTitle(t: Translator, mode: PlaybackMode) {
   return mode === 'shuffle' ? t('player.shuffleEnabled') : t('player.shuffleDisabled')
 }
@@ -77,6 +111,191 @@ function getRepeatOneTitle(t: Translator, mode: PlaybackMode) {
 }
 
 const DEFAULT_ARTWORK_URL = '/monotone_bg_wide.png'
+
+export function PlayerControls({
+  trackId,
+  isLoading,
+  favorite,
+  disabled,
+  isPlaying,
+  volumeValue,
+  mode,
+  progressSeconds,
+  progressValue,
+  progressMax,
+  progressFill,
+  durationSeconds,
+  t,
+  onTogglePlayPause,
+  onPrevious,
+  onNext,
+  onSeekChange,
+  onSeekPointerDown,
+  onSeekPointerCommit,
+  onVolumeChange,
+  onToggleMute,
+  onToggleShuffle,
+  onToggleRepeat,
+  onToggleRepeatOne,
+  onToggleFavorite,
+  onVoiceAssistantClick,
+  voiceAssistantActive = false,
+  isMuted,
+  onMoreClick,
+}: PlayerControlsProps) {
+  const playTitle = isPlaying ? t('player.pause') : t('player.play')
+  const volumeTitle = isMuted ? t('player.unmute') : t('player.mute')
+
+  return (
+    <>
+      <div className="player-center">
+        <div className="transport-row">
+          <button
+            className="transport-button"
+            type="button"
+            aria-label={t('player.previous')}
+            title={t('player.previous')}
+            disabled={disabled}
+            onClick={onPrevious}
+          >
+            <Icon name="previous" />
+          </button>
+          <button
+            className={`transport-button primary${isLoading ? ' is-loading' : ''}`}
+            type="button"
+            aria-label={playTitle}
+            title={playTitle}
+            disabled={disabled}
+            onClick={onTogglePlayPause}
+          >
+            {isLoading ? <span className="player-loading-spinner" aria-hidden="true" /> : <Icon name={isPlaying ? 'pause' : 'play'} />}
+          </button>
+          <button
+            className="transport-button"
+            type="button"
+            aria-label={t('player.next')}
+            title={t('player.next')}
+            disabled={disabled}
+            onClick={onNext}
+          >
+            <Icon name="next" />
+          </button>
+        </div>
+        <div className="progress-row">
+          <span>{formatDuration(progressSeconds)}</span>
+          {isLoading ? (
+            <div className="media-progress-loading" aria-hidden="true" />
+          ) : (
+            <input
+              className="media-slider"
+              type="range"
+              min="0"
+              max={progressMax}
+              step="0.1"
+              value={progressValue}
+              style={{ '--range-progress': `${progressFill}%` } as CSSProperties}
+              onChange={(event) => {
+                onSeekChange(Number(event.currentTarget.value))
+              }}
+              onPointerDown={onSeekPointerDown}
+              onPointerUp={onSeekPointerCommit}
+              onPointerCancel={onSeekPointerCommit}
+              onLostPointerCapture={onSeekPointerCommit}
+              disabled={disabled || durationSeconds <= 0}
+              aria-label={t('player.trackProgress')}
+              title={formatDuration(progressValue)}
+            />
+          )}
+          <span>{formatDuration(durationSeconds)}</span>
+        </div>
+      </div>
+
+      <div className="player-utility">
+        <div className="player-volume-row">
+          <button
+            type="button"
+            disabled={disabled}
+            className={isMuted ? 'is-active' : ''}
+            onClick={onToggleMute}
+            aria-label={volumeTitle}
+            title={volumeTitle}
+          >
+            <Icon name={isMuted ? 'volumeMuted' : 'volume'} />
+          </button>
+          <input
+            className="media-slider"
+            type="range"
+            min="0"
+            max="100"
+            value={volumeValue}
+            style={{ '--range-progress': `${volumeValue}%` } as CSSProperties}
+            disabled={disabled}
+            onChange={(event) => {
+              onVolumeChange(Number(event.currentTarget.value))
+            }}
+            aria-label={t('player.volume')}
+            title={String(volumeValue)}
+          />
+          <button
+            type="button"
+            disabled={disabled || trackId == null}
+            className={`favorite-toggle${favorite ? ' is-active' : ''}`}
+            onClick={onToggleFavorite}
+            aria-label={t('common.favorite')}
+            title={favorite ? t('player.unlike') : t('player.like')}
+          >
+            <Icon name={favorite ? 'heartFilled' : 'heart'} />
+          </button>
+        </div>
+        <div className="player-mode-row">
+          <button
+            type="button"
+            disabled={disabled}
+            className={mode === 'shuffle' ? 'is-active' : ''}
+            onClick={onToggleShuffle}
+            aria-label={getShuffleTitle(t, mode)}
+            title={getShuffleTitle(t, mode)}
+          >
+            <Icon name="shuffle" />
+          </button>
+          <button
+            type="button"
+            disabled={disabled}
+            className={mode === 'repeat' ? 'is-active' : ''}
+            onClick={onToggleRepeat}
+            aria-label={getRepeatTitle(t, mode)}
+            title={getRepeatTitle(t, mode)}
+          >
+            <Icon name="repeat" />
+          </button>
+          <button
+            type="button"
+            disabled={disabled}
+            className={mode === 'repeat-one' ? 'is-active' : ''}
+            onClick={onToggleRepeatOne}
+            aria-label={getRepeatOneTitle(t, mode)}
+            title={getRepeatOneTitle(t, mode)}
+          >
+            <Icon name="repeatOne" />
+          </button>
+          <button
+            type="button"
+            disabled={disabled}
+            className={voiceAssistantActive ? 'is-active' : ''}
+            aria-label={t('player.voiceAssistant')}
+            title={t('player.voiceAssistant')}
+            onClick={onVoiceAssistantClick}
+          >
+            <Icon name="voice" />
+          </button>
+          <button type="button" disabled={disabled} aria-label={t('player.more')} title={t('player.more')} onClick={onMoreClick}>
+            <Icon name="moreHorizontal" />
+          </button>
+        </div>
+      </div>
+    </>
+  )
+}
 
 export function PlayerBar({
   track,
@@ -111,10 +330,12 @@ export function PlayerBar({
 }: PlayerBarProps) {
   const navigate = useNavigate()
   const createPlaylist = useLibraryStore((state) => state.createPlaylist)
+  const addSongToPlaylist = useLibraryStore((state) => state.addSongToPlaylist)
   const replaceNowPlaying = useLibraryStore((state) => state.replaceNowPlaying)
   const removeSongFromPlaylist = useLibraryStore((state) => state.removeSongFromPlaylist)
   const snapshotQueueSongIds = useLibraryStore((state) => state.snapshot.nowPlaying.songIds)
   const playerLyricsSource = useLibraryStore((state) => state.snapshot.settings.playerLyricsSource)
+  const refreshPreferences = usePreferenceStore((state) => state.refresh)
   const showUndoableNotification = useUndoableNotificationStore((state) => state.show)
   const [isProgressSeeking, setIsProgressSeeking] = useState(false)
   const [draftProgressSeconds, setDraftProgressSeconds] = useState(0)
@@ -127,10 +348,7 @@ export function PlayerBar({
   const progressMax = Math.max(effectiveDurationSeconds, 0)
   const progressFill = progressMax > 0 ? (progressValue / progressMax) * 100 : 0
   const volumeValue = disabled ? 0 : Math.min(Math.max(volume, 0), 100)
-  const volumeTitle = isMuted ? t('player.unmute') : t('player.mute')
-  const playTitle = isPlaying ? t('player.pause') : t('player.play')
   const [coverColorRgb, setCoverColorRgb] = useState(getDefaultArtworkColorRgb)
-  const [songArtwork, setSongArtwork] = useState<{ trackId: number; artworkUrl: string } | null>(null)
   const [failedArtworkUrl, setFailedArtworkUrl] = useState('')
   const [moreMenu, setMoreMenu] = useState<MenuFlyoutPosition | null>(null)
   const [dialogMode, setDialogMode] = useState<'properties' | 'lyrics' | 'album-art' | null>(null)
@@ -144,16 +362,21 @@ export function PlayerBar({
   const speechRecognitionRef = useRef<SpeechRecognition | null>(null)
   const voiceAssistantTimerRef = useRef<number | null>(null)
   const voiceAssistantStateLabel = t(`voiceAssistant.state.${voiceAssistantState}`)
-  const effectiveArtworkUrl =
-    track.artworkUrl ||
-    (songArtwork?.trackId === track.id ? songArtwork.artworkUrl : '')
+  const {
+    artworkUrl: effectiveArtworkUrl,
+    baseArtworkUrl,
+    refreshArtwork,
+  } = useSongArtwork(track.id, track.artworkUrl)
   const usableArtworkUrl = effectiveArtworkUrl && effectiveArtworkUrl !== failedArtworkUrl
     ? effectiveArtworkUrl
     : ''
   const displayArtworkUrl = usableArtworkUrl || DEFAULT_ARTWORK_URL
-  const refreshPreferenceItem = async () => {
+  const refreshPreferenceItem = async (snapshot?: PreferenceSettingsSnapshot | null) => {
     if (currentSong) {
-      const settings = await window.smplayer!.getPreferenceSettings()
+      const settings = snapshot ?? await refreshPreferences()
+      if (!settings) {
+        return
+      }
       setPreferenceItem(settings.songs.find((item) => item.itemId === String(currentSong.id)) ?? null)
     }
   }
@@ -300,33 +523,11 @@ export function PlayerBar({
   }
 
   useEffect(() => {
-    let isDisposed = false
-
-    if (track.id == null || !window.smplayer) {
-      return () => {
-        isDisposed = true
-      }
+    setFailedArtworkUrl('')
+    if (track.id != null && baseArtworkUrl) {
+      onArtworkResolved(track.id, baseArtworkUrl)
     }
-
-    window.smplayer.getSongArtwork(track.id)
-      .then((artworkUrl) => {
-        if (!isDisposed) {
-          setSongArtwork({ trackId: track.id!, artworkUrl })
-          if (artworkUrl) {
-            onArtworkResolved(track.id!, artworkUrl)
-          }
-        }
-      })
-      .catch(() => {
-        if (!isDisposed) {
-          setSongArtwork({ trackId: track.id!, artworkUrl: '' })
-        }
-      })
-
-    return () => {
-      isDisposed = true
-    }
-  }, [track.id])
+  }, [baseArtworkUrl, onArtworkResolved, track.id])
 
   useEffect(() => {
     if (!currentSong) {
@@ -345,23 +546,6 @@ export function PlayerBar({
       isDisposed = true
     }
   }, [currentSong?.id, playerLyricsSource])
-
-  const retryLoadSongArtwork = () => {
-    if (track.id == null || !window.smplayer) {
-      return
-    }
-
-    window.smplayer.getSongArtwork(track.id)
-      .then((artworkUrl) => {
-        setSongArtwork({ trackId: track.id!, artworkUrl })
-        if (artworkUrl) {
-          onArtworkResolved(track.id!, artworkUrl)
-        }
-      })
-      .catch(() => {
-        setSongArtwork({ trackId: track.id!, artworkUrl: '' })
-      })
-  }
 
   useEffect(() => {
     let isDisposed = false
@@ -404,7 +588,7 @@ export function PlayerBar({
             aria-hidden="true"
             onError={() => {
               setFailedArtworkUrl(displayArtworkUrl)
-              retryLoadSongArtwork()
+              refreshArtwork()
             }}
           />
           <span className="player-artwork-overlay" aria-hidden="true">
@@ -425,161 +609,41 @@ export function PlayerBar({
         </span>
       </button>
 
-      <div className="player-center">
-        <div className="transport-row">
-          <button
-            className="transport-button"
-            type="button"
-            aria-label={t('player.previous')}
-            title={t('player.previous')}
-            disabled={disabled}
-            onClick={onPrevious}
-          >
-            <Icon name="previous" />
-          </button>
-          <button
-            className={`transport-button primary${track.isLoading ? ' is-loading' : ''}`}
-            type="button"
-            aria-label={playTitle}
-            title={playTitle}
-            disabled={disabled}
-            onClick={onTogglePlayPause}
-          >
-            {track.isLoading ? <span className="player-loading-spinner" aria-hidden="true" /> : <Icon name={isPlaying ? 'pause' : 'play'} />}
-          </button>
-          <button
-            className="transport-button"
-            type="button"
-            aria-label={t('player.next')}
-            title={t('player.next')}
-            disabled={disabled}
-            onClick={onNext}
-          >
-            <Icon name="next" />
-          </button>
-        </div>
-        <div className="progress-row">
-          <span>{formatDuration(progressSeconds)}</span>
-          {track.isLoading ? (
-            <div className="media-progress-loading" aria-hidden="true" />
-          ) : (
-            <input
-              className="media-slider"
-              type="range"
-              min="0"
-              max={progressMax}
-              step="0.1"
-              value={progressValue}
-              style={{ '--range-progress': `${progressFill}%` } as CSSProperties}
-              onChange={(event) => {
-                const nextValue = Number(event.currentTarget.value)
-                setDraftProgressSeconds(nextValue)
-                if (!isProgressSeekingRef.current) {
-                  onSeek(nextValue)
-                }
-              }}
-              onPointerDown={beginProgressSeek}
-              onPointerUp={(event) => {
-                commitProgressSeek(Number(event.currentTarget.value))
-              }}
-              onPointerCancel={(event) => {
-                commitProgressSeek(Number(event.currentTarget.value))
-              }}
-              onLostPointerCapture={(event) => {
-                commitProgressSeek(Number(event.currentTarget.value))
-              }}
-              disabled={disabled || effectiveDurationSeconds <= 0}
-              aria-label={t('player.trackProgress')}
-              title={formatDuration(progressValue)}
-            />
-          )}
-          <span>{formatDuration(effectiveDurationSeconds)}</span>
-        </div>
-      </div>
-
-      <div className="player-utility">
-        <div className="player-volume-row">
-          <button
-            type="button"
-            disabled={disabled}
-            className={isMuted ? 'is-active' : ''}
-            onClick={onToggleMute}
-            aria-label={volumeTitle}
-            title={volumeTitle}
-          >
-            <Icon name={isMuted ? 'volumeMuted' : 'volume'} />
-          </button>
-          <input
-            className="media-slider"
-            type="range"
-            min="0"
-            max="100"
-            value={volumeValue}
-            style={{ '--range-progress': `${volumeValue}%` } as CSSProperties}
-            disabled={disabled}
-            onChange={(event) => {
-              onVolumeChange(Number(event.currentTarget.value))
-            }}
-            aria-label={t('player.volume')}
-            title={String(volumeValue)}
-          />
-          <button
-            type="button"
-            disabled={disabled || track.id == null}
-            className={`favorite-toggle${track.favorite ? ' is-active' : ''}`}
-            onClick={onToggleFavorite}
-            aria-label={t('common.favorite')}
-            title={track.favorite ? t('player.unlike') : t('player.like')}
-          >
-            <Icon name={track.favorite ? 'heartFilled' : 'heart'} />
-          </button>
-        </div>
-        <div className="player-mode-row">
-          <button
-            type="button"
-            disabled={disabled}
-            className={mode === 'shuffle' ? 'is-active' : ''}
-            onClick={onToggleShuffle}
-            aria-label={getShuffleTitle(t, mode)}
-            title={getShuffleTitle(t, mode)}
-          >
-            <Icon name="shuffle" />
-          </button>
-          <button
-            type="button"
-            disabled={disabled}
-            className={mode === 'repeat' ? 'is-active' : ''}
-            onClick={onToggleRepeat}
-            aria-label={getRepeatTitle(t, mode)}
-            title={getRepeatTitle(t, mode)}
-          >
-            <Icon name="repeat" />
-          </button>
-          <button
-            type="button"
-            disabled={disabled}
-            className={mode === 'repeat-one' ? 'is-active' : ''}
-            onClick={onToggleRepeatOne}
-            aria-label={getRepeatOneTitle(t, mode)}
-            title={getRepeatOneTitle(t, mode)}
-          >
-            <Icon name="repeatOne" />
-          </button>
-          <button
-            type="button"
-            disabled={disabled}
-            className={voiceAssistantOpen ? 'is-active' : ''}
-            aria-label={t('player.voiceAssistant')}
-            title={t('player.voiceAssistant')}
-            onClick={openVoiceAssistant}
-          >
-            <Icon name="voice" />
-          </button>
-          <button type="button" disabled={disabled} aria-label={t('player.more')} title={t('player.more')} onClick={openMoreMenu}>
-            <Icon name="moreHorizontal" />
-          </button>
-        </div>
-      </div>
+      <PlayerControls
+        trackId={track.id}
+        isLoading={track.isLoading}
+        favorite={track.favorite}
+        disabled={disabled}
+        isPlaying={isPlaying}
+        volumeValue={volumeValue}
+        mode={mode}
+        progressSeconds={progressValue}
+        progressValue={progressValue}
+        progressMax={progressMax}
+        progressFill={progressFill}
+        durationSeconds={effectiveDurationSeconds}
+        t={t}
+        onTogglePlayPause={onTogglePlayPause}
+        onPrevious={onPrevious}
+        onNext={onNext}
+        onSeekChange={(nextValue) => {
+          setDraftProgressSeconds(nextValue)
+        }}
+        onSeekPointerDown={beginProgressSeek}
+        onSeekPointerCommit={(event) => {
+          commitProgressSeek(Number(event.currentTarget.value))
+        }}
+        onVolumeChange={onVolumeChange}
+        onToggleMute={onToggleMute}
+        onToggleShuffle={onToggleShuffle}
+        onToggleRepeat={onToggleRepeat}
+        onToggleRepeatOne={onToggleRepeatOne}
+        onToggleFavorite={onToggleFavorite}
+        onVoiceAssistantClick={openVoiceAssistant}
+        voiceAssistantActive={voiceAssistantOpen}
+        isMuted={isMuted}
+        onMoreClick={openMoreMenu}
+      />
       {voiceAssistantOpen ? (
         <div className={`voice-assistant-popover is-${voiceAssistantState}`} role="status">
           <div className="voice-assistant-state">{voiceAssistantStateLabel}</div>
@@ -676,7 +740,7 @@ export function PlayerBar({
             onAddToPlaylist: (playlistId) => {
               if (currentSong) {
                 const playlist = playlists.find((item) => item.id === playlistId)!
-                void window.smplayer?.addSongToPlaylist(playlistId, currentSong.id)
+                void addSongToPlaylist(playlistId, currentSong.id)
                 showUndo(t('notification.songAddedTo', { title: currentSong.title, target: playlist.name }), () =>
                   removeSongFromPlaylist(playlistId, currentSong.id),
                 )
