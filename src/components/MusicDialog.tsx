@@ -5,7 +5,7 @@ import { normalizeArtists } from '../shared/artists'
 import type { LibrarySong, LyricsSnapshot, SongPropertiesSnapshot } from '../shared/contracts'
 import { formatBytes, formatDuration } from '../shared/formatters'
 import type { Translator } from '../shared/i18n'
-import { mergePlainLyricsWithTimedRaw, stripLyricsTimestamps } from '../shared/lyrics'
+import { hasLyricsTimestamps, mergePlainLyricsWithTimedRaw, stripLyricsTimestamps } from '../shared/lyrics'
 import { useLibraryStore } from '../state/useLibraryStore'
 import { useMusicDialogShortcuts } from '../hooks/useMusicDialogShortcuts'
 import { AlbumArtControl } from './AlbumArtControl'
@@ -89,6 +89,7 @@ export function MusicDialog({
   const currentLyricsRawText = showLyricsTimestamps
     ? lyricsText
     : mergePlainLyricsWithTimedRaw(lyricsRawText, lyricsText)
+  const lyricsCanToggleTimestamps = hasLyricsTimestamps(lyricsRawText)
   const lyricsDirty = currentLyricsRawText !== originalLyricsText
   const isCurrentSong = currentTrackId === song.id
   const canPause = isCurrentSong && isPlaying
@@ -176,9 +177,9 @@ export function MusicDialog({
         }
       })
 
-    void window.smplayer?.getSongArtwork(song.id).then((nextArtworkUrl) => {
-      if (!canceled && nextArtworkUrl) {
-        setArtworkUrl(nextArtworkUrl)
+    void window.smplayer?.getSongArtworkSnapshot(song.id).then((snapshot) => {
+      if (!canceled && snapshot.artworkUrl) {
+        setArtworkUrl(snapshot.artworkUrl)
       }
     })
 
@@ -436,6 +437,7 @@ export function MusicDialog({
         setOriginalLyricsText(targetLyrics)
         setLyrics((current) => current ? { ...current, rawText: targetLyrics } : current)
         setPendingLyricsSave(null)
+        onSaved?.()
       }
       setPendingSwitchLyrics((current) => current?.songId === targetSongId ? null : current)
       if (refreshLatestLyrics) {
@@ -688,14 +690,16 @@ export function MusicDialog({
             <button type="button" className="ImportLyricsButton" disabled={saving} onClick={() => void importLyrics()}>{t('common.import')}</button>
             <button type="button" className="song-dialog-primary-button save-lyrics-button SaveLyricsButton" disabled={saving} onClick={() => void saveLyrics()}>{t('settings.save')}</button>
             <button type="button" className="reset-lyrics-button ResetLyricsButton" disabled={saving} onClick={resetActivePage}>{t('common.reset')}</button>
-            <label className="song-dialog-lyrics-timestamp-toggle">
-              <input
-                type="checkbox"
-                checked={showLyricsTimestamps}
-                onChange={(event) => toggleLyricsTimestamps(event.currentTarget.checked)}
-              />
-              {t('song.showLyricsTimestamps')}
-            </label>
+            {lyricsCanToggleTimestamps ? (
+              <label className="song-dialog-lyrics-timestamp-toggle">
+                <input
+                  type="checkbox"
+                  checked={showLyricsTimestamps}
+                  onChange={(event) => toggleLyricsTimestamps(event.currentTarget.checked)}
+                />
+                {t('song.showLyricsTimestamps')}
+              </label>
+            ) : null}
             {showBusy ? <div className="music-info-save-progress SaveProgress" /> : null}
           </div>
         ) : null}

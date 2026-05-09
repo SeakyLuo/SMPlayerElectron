@@ -9,6 +9,13 @@
 .sidebar.is-collapsed .nav-section,
 .sidebar.is-collapsed .nav-links {
   align-items: center;
+  width: 100%;
+}
+
+.sidebar.is-collapsed .nav-section + .nav-section {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(108, 117, 128, 0.24);
 }
 
 .nav-section + .nav-section {
@@ -45,6 +52,10 @@
   text-decoration: none;
   cursor: pointer;
   transition:
+    width 180ms cubic-bezier(0.2, 0, 0, 1),
+    grid-template-columns 180ms cubic-bezier(0.2, 0, 0, 1),
+    gap 180ms cubic-bezier(0.2, 0, 0, 1),
+    padding 180ms cubic-bezier(0.2, 0, 0, 1),
     background-color 120ms ease,
     color 120ms ease,
     box-shadow 120ms ease;
@@ -70,6 +81,16 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  opacity: 1;
+  transition:
+    opacity 120ms ease,
+    transform 180ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.sidebar.is-collapsed .nav-link > span:last-child {
+  opacity: 0;
+  transform: translateX(-6px);
+  pointer-events: none;
 }
 
 .nav-link.active {
@@ -250,6 +271,16 @@
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
+  opacity: 1;
+  transition:
+    opacity 120ms ease,
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.sidebar.is-collapsed .playlist-nav-toggle {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .playlist-nav-toggle:hover {
@@ -263,18 +294,22 @@
 }
 
 .playlist-nav-children {
-  flex: 0 0 auto;
+  flex: 0 0 0;
   min-height: 0;
+  height: 0;
   opacity: 0;
   overflow: hidden;
+  pointer-events: none;
   transition: opacity 120ms ease;
 }
 
 .playlist-nav-children.is-expanded {
   flex: 1 1 auto;
+  height: auto;
   opacity: 1;
   overflow-x: hidden;
   overflow-y: auto;
+  pointer-events: auto;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: rgba(91, 105, 122, 0.42) transparent;
@@ -301,7 +336,6 @@
   font: inherit;
   text-align: left;
   text-decoration: none;
-  font-size: 14px;
   cursor: grab;
   transition:
     background-color 120ms ease,
@@ -366,8 +400,8 @@
 
 .playlist-nav-child-icon svg {
   display: block;
-  width: 16px;
-  height: 16px;
+  width: 19px;
+  height: 19px;
   transform: translateY(-1px);
 }
 
@@ -375,6 +409,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  opacity: 1;
+  transition:
+    opacity 120ms ease,
+    transform 180ms cubic-bezier(0.2, 0, 0, 1);
 }
 
 .playlist-nav-child-quick-play {
@@ -419,7 +457,7 @@
 }
 
 .sidebar.is-collapsed .nav-tag svg {
-  transform: none;
+  transform: translateY(-1px);
 }
 
 .nav-link[data-nav-to='/favorites'] .nav-tag svg {
@@ -427,11 +465,11 @@
 }
 
 .sidebar.is-collapsed .nav-link[data-nav-to='/favorites'] .nav-tag svg {
-  transform: translateY(-1px);
+  transform: translateY(-2px);
 }
 
 .sidebar.is-collapsed .playlist-nav-section {
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
 .sidebar-footer .nav-link {
@@ -444,9 +482,8 @@
 }
 
 .sidebar.is-collapsed .sidebar-footer .nav-link {
-  display: flex;
-  justify-content: center;
-  align-items: center;
+  grid-template-columns: 40px minmax(0, 0fr);
+  gap: 0;
   width: var(--sidebar-collapsed-item-size);
   min-height: var(--sidebar-collapsed-item-size);
   padding: 0;

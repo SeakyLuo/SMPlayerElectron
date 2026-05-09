@@ -1,20 +1,22 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { AlbumArtControl } from '../components/AlbumArtControl'
 import { Icon } from '../components/icons'
+import { LoadingState } from '../components/LoadingState'
 import { MenuFlyout } from '../components/MenuFlyout'
 import { getAddToPlaylistMenuFlyoutItem, getPreferenceMenuFlyoutItem, type MenuFlyoutItem, type MenuFlyoutPosition } from '../components/MenuFlyoutHelper'
 import { MultiSelectCommandBar } from '../components/MultiSelectCommandBar'
 import { getSongArtists } from '../shared/artists'
 import type { AlbumSortCriterion, AppSettingsUpdate, LibraryPlaylist, LibrarySong, PreferenceItemSnapshot, PreferenceSettingsSnapshot } from '../shared/contracts'
-import { formatDuration } from '../shared/formatters'
 import type { Translator } from '../shared/i18n'
+import { getQuickJumpTooltip } from '../shared/quickJumpTooltip'
+import { compareLocalText, getLocalTextQuickJumpBucket, LOCAL_TEXT_QUICK_JUMP_KEYS } from '../shared/textCompare'
 import { useLibraryStore } from '../state/useLibraryStore'
 import { usePreferenceStore } from '../state/usePreferenceStore'
 
-const ALBUM_TILE_WIDTH = 160
-const ALBUM_COLUMN_GAP = 18
+const ALBUM_TILE_TRACK_WIDTH = 180
+const ALBUM_COLUMN_GAP = 30
 const ALBUM_GRID_RIGHT_PADDING = 0
 const ALBUM_ROW_HEIGHT = 250
 const ALBUM_OVERSCAN_ROWS = 2
@@ -56,10 +58,12 @@ export function AlbumsPage({
   onUpdateSettings,
 }: AlbumsPageProps) {
   const navigate = useNavigate()
+  const [searchDraft, setSearchDraft] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
   const albumsSort = useLibraryStore((state) => state.snapshot.settings.albumsSort)
   const [sortCriterion, setSortCriterion] = useState<AlbumSortCriterion>(albumsSort)
+  const [reverseDisplayOrder, setReverseDisplayOrder] = useState(false)
   const [sortMenuOpen, setSortMenuOpen] = useState(false)
   const [processing, setProcessing] = useState(false)
   const [multiSelect, setMultiSelect] = useState(false)
@@ -78,24 +82,17 @@ export function AlbumsPage({
   const refreshPreferences = usePreferenceStore((state) => state.refresh)
 
   const albums = useMemo(() => buildAlbumViews(songs, t), [songs, t])
-  const [manualAlbumOrder, setManualAlbumOrder] = useState<string[] | null>(null)
-  const baseVisibleAlbums = useMemo(() => {
+  const baseVisibleAlbums = useMemo<AlbumView[]>(() => {
     if (searchQuery.trim()) {
       return searchAlbums(albums, searchQuery)
     }
 
-    return sortAlbums(albums, sortCriterion === 'reverse' ? albumsSort : sortCriterion)
-  }, [albums, albumsSort, searchQuery, sortCriterion])
-  const visibleAlbums = useMemo(() => {
-    if (!manualAlbumOrder) {
-      return baseVisibleAlbums
-    }
-
-    const albumMap = new Map(baseVisibleAlbums.map((album) => [album.name, album]))
-    return manualAlbumOrder.map((albumName) => albumMap.get(albumName)).filter((album) => album != null)
-  }, [baseVisibleAlbums, manualAlbumOrder])
-  const albumSearchSuggestions = searchQuery.trim()
-    ? searchAlbums(albums, searchQuery).slice(0, 8)
+    return sortAlbums(albums, sortCriterion)
+  }, [albums, searchQuery, sortCriterion])
+  const visibleAlbums = reverseDisplayOrder ? baseVisibleAlbums.slice().reverse() : baseVisibleAlbums
+  const searchHasText = Boolean(searchDraft || searchQuery)
+  const albumSearchSuggestions = searchDraft.trim()
+    ? searchAlbums(albums, searchDraft).slice(0, 8)
     : []
   const showAlbumSearchSuggestions = searchFocused && albumSearchSuggestions.length > 0
   const selectedAlbums = useMemo(
@@ -104,7 +101,7 @@ export function AlbumsPage({
   )
   const selectedSongIds = selectedAlbums.flatMap((album) => album.songs.map((song) => song.id))
   const customPlaylists = playlists.filter((playlist) => !playlist.isBuiltIn)
-  const albumColumns = Math.max(1, Math.floor((albumGridWidth + ALBUM_COLUMN_GAP) / (ALBUM_TILE_WIDTH + ALBUM_COLUMN_GAP)))
+  const albumColumns = Math.max(1, Math.floor((albumGridWidth + ALBUM_COLUMN_GAP) / (ALBUM_TILE_TRACK_WIDTH + ALBUM_COLUMN_GAP)))
   const albumRowCount = Math.ceil(visibleAlbums.length / albumColumns)
   const albumListHeight = albumRowCount * ALBUM_ROW_HEIGHT
   const effectiveAlbumScrollTop = Math.min(
@@ -121,6 +118,13 @@ export function AlbumsPage({
   )
   const renderedAlbums = visibleAlbums.slice(albumStartRow * albumColumns, albumEndRow * albumColumns)
   const albumWindowTop = albumStartRow * ALBUM_ROW_HEIGHT
+  const albumQuickJumpMap = useMemo(
+    () => buildAlbumQuickJumpMap(visibleAlbums),
+    [visibleAlbums],
+  )
+  const activeAlbumQuickJumpKey = visibleAlbums.length > 0
+    ? getLocalTextQuickJumpBucket(visibleAlbums[Math.min(visibleAlbums.length - 1, albumStartRow * albumColumns)]!.name)
+    : ''
 
   const clearSelection = () => {
     setSelectedAlbumNames(new Set())
@@ -181,51 +185,37 @@ export function AlbumsPage({
     setAlbumPreferenceItems(new Map(settings.albums.map((item) => [item.itemId, item])))
   }
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const albumGrid = albumGridRef.current
     if (!albumGrid) {
       return
     }
 
-    const resizeObserver = new ResizeObserver(() => {
+    const measureAlbumGrid = () => {
       setAlbumViewportHeight(albumGrid.clientHeight)
       setAlbumGridWidth(albumGrid.clientWidth - ALBUM_GRID_RIGHT_PADDING)
-    })
+    }
+
+    measureAlbumGrid()
+    const animationFrame = window.requestAnimationFrame(measureAlbumGrid)
+    const resizeObserver = new ResizeObserver(measureAlbumGrid)
 
     resizeObserver.observe(albumGrid)
 
     return () => {
+      window.cancelAnimationFrame(animationFrame)
       resizeObserver.disconnect()
     }
   }, [])
 
   useEffect(() => {
     setSortCriterion(albumsSort)
+    setReverseDisplayOrder(false)
   }, [albumsSort])
-
-  useEffect(() => {
-    setManualAlbumOrder(null)
-  }, [searchQuery])
 
   useEffect(() => {
     void refreshAlbumPreferenceItems()
   }, [])
-
-  useEffect(() => {
-    if (!sortMenuOpen) {
-      return
-    }
-
-    const closeSortMenu = () => {
-      setSortMenuOpen(false)
-    }
-
-    window.addEventListener('pointerdown', closeSortMenu)
-
-    return () => {
-      window.removeEventListener('pointerdown', closeSortMenu)
-    }
-  }, [sortMenuOpen])
 
   const scrollAlbumsToTop = () => {
     setAlbumScrollTop(0)
@@ -234,15 +224,44 @@ export function AlbumsPage({
     }
   }
 
+  const submitSearch = () => {
+    const nextQuery = searchDraft.trim()
+    showProcessing()
+    setSearchDraft(nextQuery)
+    setSearchQuery(nextQuery)
+    scrollAlbumsToTop()
+  }
+
+  const jumpToAlbumKey = (key: string) => {
+    const targetIndex = albumQuickJumpMap.get(key)
+    if (targetIndex == null) {
+      return
+    }
+
+    albumGridRef.current?.scrollTo({
+      top: Math.floor(targetIndex / albumColumns) * ALBUM_ROW_HEIGHT,
+    })
+  }
+
   return (
     <section className="albums-page page-panel">
       <header className="albums-toolbar">
         <div className="page-search-shell albums-search-shell">
-          <div className={`page-search-form${searchQuery ? ' has-query' : ''}`}>
-            <Icon name="search" />
+          <div className={`page-search-form${searchHasText ? ' has-query' : ''}`}>
+            <button
+              className="page-search-submit-button"
+              type="button"
+              aria-label={t('common.search')}
+              onMouseDown={(event) => {
+                event.preventDefault()
+              }}
+              onClick={submitSearch}
+            >
+              <Icon name="search" />
+            </button>
             <input
               type="search"
-              value={searchQuery}
+              value={searchDraft}
               onFocus={() => {
                 setSearchFocused(true)
               }}
@@ -250,13 +269,17 @@ export function AlbumsPage({
                 setSearchFocused(false)
               }}
               onChange={(event) => {
-                showProcessing()
-                setSearchQuery(event.currentTarget.value)
-                scrollAlbumsToTop()
+                setSearchDraft(event.currentTarget.value)
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  submitSearch()
+                }
               }}
               placeholder={t('albums.searchAlbumPlaceholder')}
             />
-            {searchQuery ? (
+            {searchHasText ? (
               <button
                 className="page-search-clear-button"
                 type="button"
@@ -265,6 +288,7 @@ export function AlbumsPage({
                   event.preventDefault()
                 }}
                 onClick={() => {
+                  setSearchDraft('')
                   setSearchQuery('')
                   scrollAlbumsToTop()
                 }}
@@ -274,25 +298,29 @@ export function AlbumsPage({
             ) : null}
           </div>
           {showAlbumSearchSuggestions ? (
-            <div className="page-search-suggestions">
-              {albumSearchSuggestions.map((album) => (
-                <button
-                  className="page-search-suggestion"
-                  type="button"
-                  key={album.name}
-                  onMouseDown={(event) => {
-                    event.preventDefault()
-                  }}
-                  onClick={() => {
-                    setSearchFocused(false)
-                    navigate(`/albums/${encodeURIComponent(album.name)}`)
-                  }}
-                >
-                  <span>{album.name}</span>
-                  <small>{album.artist || t('common.artistUnknown')}</small>
-                </button>
-              ))}
-            </div>
+            <>
+              <div className="dropdown-dismiss-layer" onPointerDown={() => setSearchFocused(false)} />
+              <div className="page-search-suggestions">
+                {albumSearchSuggestions.map((album) => (
+                  <button
+                    className="page-search-suggestion"
+                    type="button"
+                    key={album.name}
+                    onMouseDown={(event) => {
+                      event.preventDefault()
+                    }}
+                    onClick={() => {
+                      setSearchDraft(album.name)
+                      setSearchQuery(album.name)
+                      setSearchFocused(false)
+                      scrollAlbumsToTop()
+                    }}
+                  >
+                    <span>{album.name}</span>
+                  </button>
+                ))}
+              </div>
+            </>
           ) : null}
         </div>
         <div className="albums-command-row">
@@ -314,14 +342,12 @@ export function AlbumsPage({
             onChange={(criterion) => {
               showProcessing()
               if (criterion === 'reverse') {
-                setSortCriterion('reverse')
-                setManualAlbumOrder(visibleAlbums.map((album) => album.name).reverse())
+                setReverseDisplayOrder((current) => !current)
                 scrollAlbumsToTop()
                 return
               }
-
+              setReverseDisplayOrder(false)
               setSortCriterion(criterion)
-              setManualAlbumOrder(null)
               onUpdateSettings({ albumsSort: criterion })
               scrollAlbumsToTop()
             }}
@@ -332,54 +358,78 @@ export function AlbumsPage({
       {loading || scanning || processing ? <div className="albums-progress" aria-label={t('nowPlaying.loading')} /> : null}
 
       {visibleAlbums.length === 0 ? (
+        loading || scanning || processing ? (
+          <LoadingState t={t} compact />
+        ) : (
         <div className="empty-state compact">
           <h3>{searchQuery ? t('albums.noMatch') : t('collection.noAlbums')}</h3>
           <p>{searchQuery ? t('albums.noMatchCopy') : t('collection.scanFirst')}</p>
         </div>
+        )
       ) : (
-        <div
-          className="albums-grid"
-          ref={albumGridRef}
-          onScroll={(event) => {
-            setAlbumScrollTop(event.currentTarget.scrollTop)
-          }}
-        >
-          <div className="albums-grid-virtual" style={{ height: albumListHeight }}>
-            <div
-              className="albums-grid-window"
-              style={{
-                gridTemplateColumns: `repeat(${albumColumns}, ${ALBUM_TILE_WIDTH}px)`,
-                transform: `translateY(${albumWindowTop}px)`,
-              }}
-            >
-              {renderedAlbums.map((album) => (
-                <AlbumTile
-                  album={album}
-                  key={album.name}
-                  multiSelect={multiSelect}
-                  selected={selectedAlbumNames.has(album.name)}
-                  t={t}
-                  onOpenAlbum={() => {
-                    navigate(`/albums/${encodeURIComponent(album.name)}`)
+        <div className="albums-grid-shell">
+          <nav className="albums-quick-jump" aria-label={t('common.albums')}>
+            {LOCAL_TEXT_QUICK_JUMP_KEYS.map((key) => {
+              const enabled = albumQuickJumpMap.has(key)
+
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  className={activeAlbumQuickJumpKey === key ? 'is-active' : ''}
+                  disabled={!enabled}
+                  title={getQuickJumpTooltip(key, enabled, t('common.albums'), t('common.album'), t)}
+                  onClick={() => {
+                    jumpToAlbumKey(key)
                   }}
-                  onPlayAlbum={() => {
-                    onPlayTrack(album.songs[0].id, album.songs.map((song) => song.id))
-                  }}
-                  onAddAlbum={(position) => {
-                    setAlbumContextMenu(null)
-                    setAddToMenu({ ...position, songIds: album.songs.map((song) => song.id), defaultPlaylistName: album.name })
-                  }}
-                  canAddAlbum={customPlaylists.some((playlist) =>
-                    album.songs.some((song) => !playlist.songIds.includes(song.id)),
-                  )}
-                  onToggleSelection={() => {
-                    toggleAlbumSelection(album.name)
-                  }}
-                  onOpenContextMenu={(position) => {
-                    setAlbumContextMenu({ ...position, album })
-                  }}
-                />
-              ))}
+                >
+                  {key}
+                </button>
+              )
+            })}
+          </nav>
+          <div
+            className="albums-grid"
+            ref={albumGridRef}
+            onScroll={(event) => {
+              setAlbumScrollTop(event.currentTarget.scrollTop)
+            }}
+          >
+            <div className="albums-grid-virtual" style={{ height: albumListHeight }}>
+              <div
+                className="albums-grid-window"
+                style={{
+                  columnGap: `${ALBUM_COLUMN_GAP}px`,
+                  gridTemplateColumns: `repeat(${albumColumns}, ${ALBUM_TILE_TRACK_WIDTH}px)`,
+                  transform: `translateY(${albumWindowTop}px)`,
+                }}
+              >
+                {renderedAlbums.map((album) => (
+                  <AlbumTile
+                    album={album}
+                    key={album.name}
+                    multiSelect={multiSelect}
+                    selected={selectedAlbumNames.has(album.name)}
+                    t={t}
+                    onOpenAlbum={() => {
+                      navigate(`/albums/${encodeURIComponent(album.name)}`)
+                    }}
+                    onPlayAlbum={() => {
+                      onPlayTrack(album.songs[0].id, album.songs.map((song) => song.id))
+                    }}
+                    onAddAlbum={(position) => {
+                      setAlbumContextMenu(null)
+                      setAddToMenu({ ...position, songIds: album.songs.map((song) => song.id), defaultPlaylistName: album.name })
+                    }}
+                    onToggleSelection={() => {
+                      toggleAlbumSelection(album.name)
+                    }}
+                    onOpenContextMenu={(position) => {
+                      setAlbumContextMenu({ ...position, album })
+                    }}
+                  />
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -543,7 +593,7 @@ function getAddToPlaylistsMenuItems({
     { key: 'built-in-separator', text: '', separator: true },
     {
       key: 'new-playlist',
-      text: t('playlists.newName'),
+      text: t('playlists.newPlaylist'),
       icon: 'plus',
       onClick: () => {
         const name = window.prompt(t('playlists.newName'), defaultPlaylistName)
@@ -554,7 +604,16 @@ function getAddToPlaylistsMenuItems({
       },
     },
   ]
-  const addablePlaylists = playlists.filter((playlist) => songIds.some((songId) => !playlist.songIds.includes(songId)))
+  const songIdSet = new Set(songIds)
+  const addablePlaylists = playlists.filter((playlist) => {
+    const playlistSongIds = new Set(playlist.songIds)
+    for (const songId of songIdSet) {
+      if (!playlistSongIds.has(songId)) {
+        return true
+      }
+    }
+    return false
+  })
   if (addablePlaylists.length > 0) {
     items.push({ key: 'separator-playlists', text: '', separator: true })
   }
@@ -584,11 +643,33 @@ function AlbumSortMenu({
   onOpenChange: (open: boolean) => void
   onChange: (criterion: AlbumSortCriterion) => void
 }) {
-  const options: AlbumSortCriterion[] = ['default', 'name', 'artist', 'reverse']
+  const options: AlbumSortCriterion[] = ['reverse', 'default', 'name', 'artist']
+  const menuRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+
+    const closeSortMenu = (event: PointerEvent) => {
+      const target = event.target
+      if (target instanceof Node && menuRef.current?.contains(target)) {
+        return
+      }
+
+      onOpenChange(false)
+    }
+
+    document.addEventListener('pointerdown', closeSortMenu, true)
+    return () => {
+      document.removeEventListener('pointerdown', closeSortMenu, true)
+    }
+  }, [onOpenChange, open])
 
   return (
     <div
       className="albums-sort-menu"
+      ref={menuRef}
       onBlur={(event) => {
         const nextFocus = event.relatedTarget
         if (!(nextFocus instanceof Node) || !event.currentTarget.contains(nextFocus)) {
@@ -613,29 +694,47 @@ function AlbumSortMenu({
         <Icon name={open ? 'chevronUp' : 'chevronDown'} />
       </button>
       {open ? (
-        <div
-          className="albums-sort-options"
-          role="listbox"
-          onPointerDown={(event) => {
-            event.stopPropagation()
-          }}
-        >
-          {options.map((option) => (
-            <button
-              type="button"
-              role="option"
-              aria-selected={option === value}
-              className={option === value ? 'is-selected' : ''}
-              key={option}
-              onClick={() => {
-                onChange(option)
-                onOpenChange(false)
-              }}
-            >
-              {t(`albums.sort.${option}`)}
-            </button>
-          ))}
-        </div>
+        <>
+          <div className="albums-sort-dismiss-layer" onPointerDown={() => onOpenChange(false)} />
+          <div
+            className="albums-sort-options"
+            role="listbox"
+            onPointerDown={(event) => {
+              event.stopPropagation()
+            }}
+          >
+            {options.map((option) => (
+              option === 'reverse' ? (
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={false}
+                  key={option}
+                  onClick={() => {
+                    onChange(option)
+                    onOpenChange(false)
+                  }}
+                >
+                  {t('local.sortReverseList')}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={option === value}
+                  className={option === value ? 'is-selected' : ''}
+                  key={option}
+                  onClick={() => {
+                    onChange(option)
+                    onOpenChange(false)
+                  }}
+                >
+                  {t(`albums.sort.${option}`)}
+                </button>
+              )
+            ))}
+          </div>
+        </>
       ) : null}
     </div>
   )
@@ -649,7 +748,6 @@ function AlbumTile({
   onOpenAlbum,
   onPlayAlbum,
   onAddAlbum,
-  canAddAlbum,
   onToggleSelection,
   onOpenContextMenu,
 }: {
@@ -660,18 +758,15 @@ function AlbumTile({
   onOpenAlbum: () => void
   onPlayAlbum: () => void
   onAddAlbum: (position: MenuFlyoutPosition) => void
-  canAddAlbum: boolean
   onToggleSelection: () => void
   onOpenContextMenu: (position: MenuFlyoutPosition) => void
 }) {
-  const summary = t('albums.albumSummary', { songs: album.songs.length, duration: formatDuration(album.duration) })
   const content = (
     <>
       <AlbumArtControl title={album.name} artworkUrl={album.artworkUrl} songId={album.songs[0]!.id} />
       <div className="album-tile-copy">
         <strong title={album.name}>{album.name}</strong>
         <span title={album.artist}>{album.artist}</span>
-        <small title={summary}>{summary}</small>
       </div>
     </>
   )
@@ -700,24 +795,24 @@ function AlbumTile({
         <button type="button" onClick={onPlayAlbum} aria-label={t('detail.playAlbum')} title={t('detail.playAlbum')}>
           <Icon name="play" />
         </button>
-        {canAddAlbum ? (
-          <button
-            type="button"
-            className="album-add-button"
-            onClick={(event) => {
-              event.stopPropagation()
-              onAddAlbum({ x: event.clientX, y: event.clientY })
-            }}
-            aria-label={t('context.addToPlaylist')}
-            title={t('context.addToPlaylist')}
-          >
-            <span aria-hidden="true" />
-          </button>
-        ) : null}
+        <button
+          type="button"
+          className="album-add-button"
+          onClick={(event) => {
+            event.stopPropagation()
+            onAddAlbum({ x: event.clientX, y: event.clientY })
+          }}
+          aria-label={t('context.addToPlaylist')}
+          title={t('context.addToPlaylist')}
+        >
+          <span aria-hidden="true" />
+        </button>
       </div>
-      <span className="album-select-mark" aria-hidden="true">
-        <Icon name="check" />
-      </span>
+      {multiSelect || selected ? (
+        <span className={selected ? 'album-select-mark is-selected' : 'album-select-mark'} aria-hidden="true">
+          {selected ? <Icon name="check" /> : null}
+        </span>
+      ) : null}
     </article>
   )
 }
@@ -801,14 +896,19 @@ function buildAlbumViews(songs: LibrarySong[], t: Translator): AlbumView[] {
 
   for (const song of songs) {
     const albumName = song.album || t('common.albumUnknown')
-    groups.set(albumName, [...(groups.get(albumName) ?? []), song])
+    const albumSongs = groups.get(albumName)
+    if (albumSongs) {
+      albumSongs.push(song)
+    } else {
+      groups.set(albumName, [song])
+    }
   }
 
   return [...groups.entries()].map(([name, albumSongs]) => ({
     name,
     artists: getAlbumArtists(albumSongs),
     artist: getAlbumArtistLabel(albumSongs, t),
-    songs: albumSongs.slice().sort((left, right) => left.title.localeCompare(right.title)),
+    songs: albumSongs.slice().sort((left, right) => compareLocalText(left.title, right.title)),
     artworkUrl: albumSongs.find((song) => song.artworkUrl)?.artworkUrl ?? '',
     duration: albumSongs.reduce((total, song) => total + song.duration, 0),
   }))
@@ -829,7 +929,7 @@ function getAlbumArtists(songs: LibrarySong[]) {
         return right[1] - left[1]
       }
 
-      return left[0].localeCompare(right[0])
+      return compareLocalText(left[0], right[0])
     })
     .map(([artist]) => artist)
 }
@@ -844,7 +944,7 @@ function getAlbumArtistLabel(songs: LibrarySong[], t: Translator) {
   return artists.join(t('albums.artistSeparator'))
 }
 
-function searchAlbums(albums: AlbumView[], query: string) {
+function searchAlbums(albums: AlbumView[], query: string): AlbumView[] {
   const normalizedQuery = query.trim()
 
   if (!normalizedQuery) {
@@ -859,8 +959,20 @@ function searchAlbums(albums: AlbumView[], query: string) {
 }
 
 function getAlbumSearchScore(album: AlbumView, keyword: string) {
-  const artistScore = Math.max(...album.artists.map((artist) => Math.max(evaluateString(artist, keyword) - 10, 0)), 0)
-  return Math.max(evaluateString(album.name, keyword), artistScore)
+  return evaluateString(album.name, keyword)
+}
+
+function buildAlbumQuickJumpMap(albums: AlbumView[]) {
+  const indexes = new Map<string, number>()
+
+  albums.forEach((album, index) => {
+    const bucket = getLocalTextQuickJumpBucket(album.name)
+    if (!indexes.has(bucket)) {
+      indexes.set(bucket, index)
+    }
+  })
+
+  return indexes
 }
 
 function evaluateString(value: string, keyword: string, offset = 0) {
@@ -927,16 +1039,16 @@ function getEditDistance(target: string, given: string) {
   return dp[rows][columns]
 }
 
-function sortAlbums(albums: AlbumView[], criterion: AlbumSortCriterion) {
+function sortAlbums(albums: AlbumView[], criterion: AlbumSortCriterion): AlbumView[] {
   const sorted = albums.slice()
 
   switch (criterion) {
     case 'artist':
-      return sorted.sort((left, right) => left.artist.localeCompare(right.artist) || left.name.localeCompare(right.name))
+      return sorted.sort((left, right) => compareLocalText(left.artist, right.artist) || compareLocalText(left.name, right.name))
     case 'name':
     case 'default':
-      return sorted.sort((left, right) => left.name.localeCompare(right.name) || left.artist.localeCompare(right.artist))
-    case 'reverse':
-      return sorted.reverse()
+      return sorted.sort((left, right) => compareLocalText(left.name, right.name) || compareLocalText(left.artist, right.artist))
+    default:
+      return sorted
   }
 }

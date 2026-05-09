@@ -4,11 +4,12 @@ import { useNavigate } from 'react-router-dom'
 
 import { GridViewMusicItemControl } from '../components/GridViewMusicItemControl'
 import { Icon } from '../components/icons'
+import { LoadingState } from '../components/LoadingState'
 import { MenuFlyout } from '../components/MenuFlyout'
 import { getMusicMenuFlyoutItems, type MenuFlyoutItem } from '../components/MenuFlyoutHelper'
 import { MultiSelectCommandBar } from '../components/MultiSelectCommandBar'
 import { MusicDialog } from '../components/MusicDialog'
-import type { LibraryPlaylist, LibrarySong, PreferenceItemSnapshot, PreferenceSettingsSnapshot, RecentLibrarySong, SearchHistoryEntry } from '../shared/contracts'
+import type { LibraryPlaylist, LibrarySong, PreferredLanguage, PreferenceItemSnapshot, PreferenceSettingsSnapshot, RecentLibrarySong, SearchHistoryEntry } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
 import { useLibraryStore } from '../state/useLibraryStore'
 import { usePreferenceStore } from '../state/usePreferenceStore'
@@ -24,9 +25,11 @@ interface RecentPageProps {
   favoritePlaylistId: number
   favoriteSongIds: number[]
   t: Translator
+  loading: boolean
   selectedTrackId: number | null
   isPlaying: boolean
   showCount: boolean
+  preferredLanguage: PreferredLanguage
   onPlayTrack: (trackId: number, queueSongIds: number[]) => void
   onMoveToMusicOrPlay: (songId: number) => void
   onTogglePlayPause: () => void
@@ -39,6 +42,7 @@ interface RecentPageProps {
   onRevealSong: (songPath: string) => void
   onDeleteSongFromDisk: (songId: number) => void
   onRemoveRecentPlayed: (songIds: number[]) => void
+  onRestoreRecentPlayed: (songIds: number[]) => void
   onClearRecentPlayed: () => void
   onRemoveRecentSearches: (entryIds: number[]) => void
   onClearRecentSearches: () => void
@@ -82,9 +86,11 @@ export function RecentPage({
   favoritePlaylistId,
   favoriteSongIds,
   t,
+  loading,
   selectedTrackId,
   isPlaying,
   showCount,
+  preferredLanguage,
   onPlayTrack,
   onMoveToMusicOrPlay,
   onTogglePlayPause,
@@ -97,6 +103,7 @@ export function RecentPage({
   onRevealSong,
   onDeleteSongFromDisk,
   onRemoveRecentPlayed,
+  onRestoreRecentPlayed,
   onClearRecentPlayed,
   onRemoveRecentSearches,
   onClearRecentSearches,
@@ -213,6 +220,19 @@ export function RecentPage({
     clearSelection()
   }
 
+  const clearHistory = () => {
+    if (activeTab === 'played') {
+      if (window.confirm(t('recent.clearPlayedConfirm'))) {
+        onClearRecentPlayed()
+      }
+      return
+    }
+
+    if (window.confirm(t('recent.clearSearchesConfirm'))) {
+      onClearRecentSearches()
+    }
+  }
+
   return (
     <section className="recent-page page-panel">
       <div className="recent-tabs search-result-tabs">
@@ -269,7 +289,7 @@ export function RecentPage({
               type="button"
               className="now-playing-command"
               disabled={!canClearHistory}
-              onClick={activeTab === 'played' ? onClearRecentPlayed : onClearRecentSearches}
+              onClick={clearHistory}
             >
               <Icon name="clearSelection" />
               {t('recent.clearHistory')}
@@ -284,6 +304,8 @@ export function RecentPage({
           multiSelect={multiSelect}
           selectedEntryIds={selectedSearchIds}
           t={t}
+          preferredLanguage={preferredLanguage}
+          loading={loading}
           onSearch={onSearch}
           onToggleSelection={toggleSearchSelection}
           onRemove={(entryId) => {
@@ -299,6 +321,7 @@ export function RecentPage({
           selectedTrackId={selectedTrackId}
           isPlaying={isPlaying}
           canRemove={activeTab === 'played'}
+          loading={loading}
           t={t}
           onPlayTrack={onPlayTrack}
           onTogglePlayPause={onTogglePlayPause}
@@ -388,6 +411,9 @@ export function RecentPage({
             },
             onRemove: () => {
               onRemoveRecentPlayed([songMenu.song.id])
+              showUndo(t('notification.removedFrom', { title: songMenu.song.title, target: t('recent.played') }), () =>
+                onRestoreRecentPlayed([songMenu.song.id]),
+              )
             },
             onSelect: () => {
               setMultiSelect(true)
@@ -554,7 +580,9 @@ function getRecentAddToMenuItems({
       onClick: onAddToNowPlaying,
     },
   ]
-  if (songIds.some((songId) => !favoriteSongIds.includes(songId))) {
+  const favoriteSongIdSet = new Set(favoriteSongIds)
+
+  if (songIds.some((songId) => !favoriteSongIdSet.has(songId))) {
     items.push({
       key: 'recent-add-my-favorites',
       text: t('common.myFavorites'),
@@ -568,7 +596,7 @@ function getRecentAddToMenuItems({
   items.push({ key: 'recent-add-separator', text: '', separator: true })
   items.push({
     key: 'recent-add-new-playlist',
-    text: t('playlists.newName'),
+    text: t('playlists.newPlaylist'),
     icon: 'plus',
     onClick: () => {
       const name = window.prompt(t('playlists.newName'), defaultPlaylistName)
@@ -578,14 +606,19 @@ function getRecentAddToMenuItems({
       }
     },
   })
+  const songIdSet = new Set(songIds)
   const customPlaylists = playlists.filter((playlist) => {
     if (playlist.isBuiltIn) {
       return false
     }
-    if (songIds.length === 1) {
-      return !playlist.songIds.includes(songIds[0]!)
+
+    const playlistSongIds = new Set(playlist.songIds)
+    for (const songId of songIdSet) {
+      if (!playlistSongIds.has(songId)) {
+        return true
+      }
     }
-    return true
+    return false
   })
   customPlaylists.forEach((playlist) => {
     items.push({
@@ -630,6 +663,7 @@ function RecentSongGrid({
   selectedTrackId,
   isPlaying,
   canRemove,
+  loading,
   t,
   onPlayTrack,
   onTogglePlayPause,
@@ -645,6 +679,7 @@ function RecentSongGrid({
   selectedTrackId: number | null
   isPlaying: boolean
   canRemove: boolean
+  loading: boolean
   t: Translator
   onPlayTrack: (trackId: number, queueSongIds: number[]) => void
   onTogglePlayPause: () => void
@@ -703,7 +738,7 @@ function RecentSongGrid({
   }, [columnCount, onTimelineLabelChange, songs, startRow, t])
 
   if (songs.length === 0) {
-    return (
+    return loading ? <LoadingState t={t} compact /> : (
       <div className="empty-state compact">
         <h3>{t('recent.empty')}</h3>
       </div>
@@ -758,6 +793,8 @@ function RecentSearchList({
   multiSelect,
   selectedEntryIds,
   t,
+  preferredLanguage,
+  loading,
   onSearch,
   onToggleSelection,
   onRemove,
@@ -766,6 +803,8 @@ function RecentSearchList({
   multiSelect: boolean
   selectedEntryIds: Set<number>
   t: Translator
+  preferredLanguage: PreferredLanguage
+  loading: boolean
   onSearch: (query: string) => void
   onToggleSelection: (entryId: number) => void
   onRemove: (entryId: number) => void
@@ -806,7 +845,7 @@ function RecentSearchList({
   }, [])
 
   if (entries.length === 0) {
-    return (
+    return loading ? <LoadingState t={t} compact /> : (
       <div className="empty-state compact">
         <h3>{t('recent.noSearches')}</h3>
       </div>
@@ -846,7 +885,7 @@ function RecentSearchList({
               </span>
             ) : null}
             <span>{entry.query}</span>
-            <RecentSearchTime value={entry.searchedAt} t={t} />
+            <RecentSearchTime value={entry.searchedAt} preferredLanguage={preferredLanguage} />
           </button>
           {!multiSelect ? (
             <button
@@ -877,8 +916,8 @@ function toggleSetItem<T>(source: Set<T>, item: T) {
   return next
 }
 
-function RecentSearchTime({ value, t }: { value: string; t: Translator }) {
-  const label = formatRecentSearchTime(value, t)
+function RecentSearchTime({ value, preferredLanguage }: { value: string; preferredLanguage: PreferredLanguage }) {
+  const label = formatRecentSearchTime(value, preferredLanguage)
   return label ? <small>{label}</small> : null
 }
 
@@ -929,7 +968,7 @@ function sameCalendarDate(left: Date, right: Date) {
     left.getDate() === right.getDate()
 }
 
-function formatRecentSearchTime(value: string, t: Translator) {
+function formatRecentSearchTime(value: string, preferredLanguage: PreferredLanguage) {
   if (!value) {
     return ''
   }
@@ -939,7 +978,7 @@ function formatRecentSearchTime(value: string, t: Translator) {
     return ''
   }
 
-  return date.toLocaleString(resolveDateLocale(t), {
+  return date.toLocaleString(resolveDateLocale(preferredLanguage), {
     year: 'numeric',
     month: 'numeric',
     day: 'numeric',
@@ -948,6 +987,6 @@ function formatRecentSearchTime(value: string, t: Translator) {
   })
 }
 
-function resolveDateLocale(t: Translator) {
-  return t('common.search') === '搜索' ? 'zh-CN' : 'en-US'
+function resolveDateLocale(preferredLanguage: PreferredLanguage) {
+  return preferredLanguage === 'system' ? undefined : preferredLanguage
 }

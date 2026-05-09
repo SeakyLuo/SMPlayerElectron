@@ -6,7 +6,8 @@ import type { LibrarySong } from '../shared/contracts'
 interface MediaSessionOptions {
   currentTrack: LibrarySong | null
   isPlaying: boolean
-  onTogglePlayPause: () => void
+  onPlay: () => void
+  onPause: () => void
   onPlayNext: () => void
   onPlayPrevious: () => void
   onSeekToRatio: (ratio: number) => void
@@ -38,7 +39,8 @@ export function updateMediaSessionPosition(durationSeconds: number, progressSeco
 export function useMediaSession({
   currentTrack,
   isPlaying,
-  onTogglePlayPause,
+  onPlay,
+  onPause,
   onPlayNext,
   onPlayPrevious,
   onSeekToRatio,
@@ -82,8 +84,8 @@ export function useMediaSession({
       return
     }
 
-    navigator.mediaSession.setActionHandler('play', onTogglePlayPause)
-    navigator.mediaSession.setActionHandler('pause', onTogglePlayPause)
+    navigator.mediaSession.setActionHandler('play', onPlay)
+    navigator.mediaSession.setActionHandler('pause', onPause)
     navigator.mediaSession.setActionHandler('previoustrack', onPlayPrevious)
     navigator.mediaSession.setActionHandler('nexttrack', onPlayNext)
     navigator.mediaSession.setActionHandler('seekto', (details) => {
@@ -110,5 +112,5 @@ export function useMediaSession({
       navigator.mediaSession.setActionHandler('seekbackward', null)
       navigator.mediaSession.setActionHandler('seekforward', null)
     }
-  }, [getDurationSeconds, onPlayNext, onPlayPrevious, onSeekBySeconds, onSeekToRatio, onTogglePlayPause])
+  }, [getDurationSeconds, onPause, onPlay, onPlayNext, onPlayPrevious, onSeekBySeconds, onSeekToRatio])
 }

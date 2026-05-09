@@ -234,6 +234,10 @@ const paths = {
     <path key="user2" d="M22 21v-2a4 4 0 0 0-3-3.9" />,
     <path key="head2" d="M16 3.1a4 4 0 0 1 0 7.8" />,
   ],
+  view: [
+    <path key="eye" d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z" />,
+    <circle key="pupil" cx="12" cy="12" r="3" />,
+  ],
 } as const
 
 export type IconName = keyof typeof paths

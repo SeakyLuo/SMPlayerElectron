@@ -13,7 +13,6 @@ import { getSongArtists } from '../shared/artists'
 import type { AppSettingsUpdate, LibraryFolder, LibraryPlaylist, LibrarySong, PreferenceEntityType, PreferenceItemSnapshot, PreferenceSettingsSnapshot, SearchSortCriterion } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
 import { usePreferenceStore } from '../state/usePreferenceStore'
-import { buildLocalRoute } from './localPagePaths'
 
 interface SearchPageProps {
   t: Translator
@@ -43,6 +42,7 @@ interface SearchPageProps {
   onDeleteSongFromDisk: (songId: number) => void
   onToggleFavorite: (songId: number, favorite: boolean) => void
   onUpdateSettings: (update: AppSettingsUpdate) => void
+  onOpenLocalFolder: (folderRelativePath: string) => void
   onSearchDirectory: (query: string, folderRelativePath: string) => void
 }
 
@@ -59,6 +59,7 @@ export interface SearchResult {
   songIds: number[]
   sourceId?: string
   sourcePath?: string
+  localFolderRelativePath?: string
 }
 
 interface SearchResultContextMenuState {
@@ -103,6 +104,7 @@ export function SearchPage({
   onDeleteSongFromDisk,
   onToggleFavorite,
   onUpdateSettings,
+  onOpenLocalFolder,
   onSearchDirectory,
 }: SearchPageProps) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
@@ -118,9 +120,13 @@ export function SearchPage({
     () => searchFolderPath ? songs.filter((song) => isSongUnderFolder(song.path, searchFolderPath)) : songs,
     [searchFolderPath, songs],
   )
+  const searchableFolders = useMemo(
+    () => searchFolderPath ? folders.filter((folder) => isFolderUnderFolder(folder.path, searchFolderPath)) : folders,
+    [folders, searchFolderPath],
+  )
   const results = useMemo(
-    () => buildSearchResults(searchableSongs, songs, folders, playlists, rootPath, normalizedQuery, t),
-    [folders, normalizedQuery, playlists, rootPath, searchableSongs, songs, t],
+    () => buildSearchResults(searchableSongs, searchableFolders, playlists, rootPath, normalizedQuery, t),
+    [normalizedQuery, playlists, rootPath, searchableFolders, searchableSongs, t],
   )
   const sortedResults = useMemo(
     () => ({
@@ -195,6 +201,11 @@ export function SearchPage({
     void refreshPreferenceItems()
   }, [])
 
+  useEffect(() => {
+    setActiveFilter('all')
+    setExpandedSections(new Set())
+  }, [normalizedQuery, searchFolderPath])
+
   return (
     <section className="page-panel search-page">
       {loading && normalizedRequestedQuery ? (
@@ -238,6 +249,7 @@ export function SearchPage({
               onToggleExpanded={toggleExpanded}
               onSortChange={updateSortCriterion}
               onOpenContextMenu={openCardContextMenu}
+              onOpenLocalFolder={onOpenLocalFolder}
             />
           ) : null}
           {showAlbums ? (
@@ -465,6 +477,7 @@ function SearchResultSection({
   onToggleExpanded,
   onSortChange,
   onOpenContextMenu,
+  onOpenLocalFolder,
 }: {
   cards: SearchResult[]
   sectionKey: SearchResultType
@@ -479,6 +492,7 @@ function SearchResultSection({
   onToggleExpanded: (section: SearchResultType) => void
   onSortChange: (section: SearchResultType, criterion: SearchSortCriterion) => void
   onOpenContextMenu: (sectionKey: SearchResultType, card: SearchResult, x: number, y: number) => void
+  onOpenLocalFolder?: (folderRelativePath: string) => void
 }) {
   if (cards.length === 0) {
     return null
@@ -504,6 +518,11 @@ function SearchResultSection({
             className="search-result-card"
             key={`${card.path}-${card.title}`}
             to={card.path}
+            onClick={() => {
+              if (sectionKey === 'folders') {
+                onOpenLocalFolder?.(card.localFolderRelativePath!)
+              }
+            }}
             onContextMenu={(event) => {
               event.preventDefault()
               onOpenContextMenu(sectionKey, card, event.clientX, event.clientY)
@@ -551,13 +570,18 @@ export function SearchSectionHeader({
       return
     }
 
-    const closeSortMenu = () => {
+    const closeSortMenu = (event: PointerEvent) => {
+      const target = event.target
+      if (target instanceof Node && sortMenuRef.current?.contains(target)) {
+        return
+      }
+
       setIsSortOpen(false)
     }
 
-    window.addEventListener('pointerdown', closeSortMenu)
+    document.addEventListener('pointerdown', closeSortMenu, true)
     return () => {
-      window.removeEventListener('pointerdown', closeSortMenu)
+      document.removeEventListener('pointerdown', closeSortMenu, true)
     }
   }, [isSortOpen])
 
@@ -595,23 +619,26 @@ export function SearchSectionHeader({
             <span>{activeSortLabel}</span>
           </button>
           {isSortOpen ? (
-            <div className="search-sort-menu" role="menu">
-              {sortOptions.map((option) => (
-                <button
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={option.value === sortCriterion}
-                  className={option.value === sortCriterion ? 'is-active' : ''}
-                  key={option.value}
-                  onClick={() => {
-                    onSortChange(sectionKey, option.value)
-                    setIsSortOpen(false)
-                  }}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
+            <>
+              <div className="dropdown-dismiss-layer" onPointerDown={() => setIsSortOpen(false)} />
+              <div className="search-sort-menu" role="menu">
+                {sortOptions.map((option) => (
+                  <button
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={option.value === sortCriterion}
+                    className={option.value === sortCriterion ? 'is-active' : ''}
+                    key={option.value}
+                    onClick={() => {
+                      onSortChange(sectionKey, option.value)
+                      setIsSortOpen(false)
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </>
           ) : null}
         </div>
       </div>
@@ -669,10 +696,11 @@ function getSearchResultMenuItems({
       key: 'shuffle',
       text: t('nowPlaying.randomPlay'),
       icon: 'shuffle',
-      disabled: card.songIds.length === 0,
       onClick: () => {
         const shuffledSongIds = shuffleSongIds(card.songIds)
-        onPlayTrack(shuffledSongIds[0]!, shuffledSongIds)
+        if (shuffledSongIds.length > 0) {
+          onPlayTrack(shuffledSongIds[0]!, shuffledSongIds)
+        }
       },
     },
   ]
@@ -723,7 +751,7 @@ function getSearchResultMenuItems({
         key: 'show-in-explorer',
         text: t('context.reveal'),
         pendingText: t('context.openingLocal'),
-        icon: 'folder',
+        icon: 'local',
         onClick: () => window.smplayer?.revealItemInFolder(card.sourcePath!),
       },
       {
@@ -918,8 +946,7 @@ function getPrimaryArtist(song: LibrarySong) {
 }
 
 function buildSearchResults(
-  scopedSongs: LibrarySong[],
-  allSongs: LibrarySong[],
+  songs: LibrarySong[],
   folders: LibraryFolder[],
   playlists: LibraryPlaylist[],
   rootPath: string,
@@ -927,16 +954,16 @@ function buildSearchResults(
   t: Translator,
 ) {
   const matchedSongs = normalizedQuery
-    ? scopedSongs
+    ? songs
         .map((song) => ({ entity: song, score: matchSong(song, normalizedQuery) }))
         .filter((result) => result.score > 0)
         .sort(sortByScoreThenTitle)
         .map((result) => result.entity)
     : []
-  const artists = buildArtistResults(scopedSongs, matchedSongs, normalizedQuery, t)
-  const albums = buildAlbumResults(scopedSongs, matchedSongs, normalizedQuery, t)
-  const folderResults = buildFolderResults(allSongs, folders, matchedSongs, rootPath, normalizedQuery, t)
-  const scopedSongsById = new Map(scopedSongs.map((song) => [song.id, song]))
+  const artists = buildArtistResults(songs, matchedSongs, normalizedQuery, t)
+  const albums = buildAlbumResults(songs, matchedSongs, normalizedQuery, t)
+  const folderResults = buildFolderResults(songs, folders, matchedSongs, rootPath, normalizedQuery, t)
+  const scopedSongsById = new Map(songs.map((song) => [song.id, song]))
   const playlistResults = playlists
     .map((playlist) => ({
       entity: playlist,
@@ -1114,7 +1141,8 @@ function buildFolderResults(
       title: getPathLabel(folderPath) || t('local.libraryRoot'),
       subtitle: t('cards.songCount', { count: folderSongs.length }),
       artworkUrl: folderSongs.find((song) => song.artworkUrl)?.artworkUrl ?? '',
-      path: buildLocalRoute(getRelativeFolderPath(folderPath, rootPath)),
+      path: '/local',
+      localFolderRelativePath: getRelativeFolderPath(folderPath, rootPath),
       songCount: folderSongs.length,
       playCount: folderSongs.reduce((sum, song) => sum + song.playCount, 0),
       duration: folderSongs.reduce((sum, song) => sum + song.duration, 0),
@@ -1228,4 +1256,11 @@ function isSongUnderFolder(songPath: string, folderPath: string) {
   const normalizedFolderPath = folderPath.replace(/\\/g, '/').replace(/\/+$/, '')
 
   return normalizedSongPath.startsWith(`${normalizedFolderPath}/`)
+}
+
+function isFolderUnderFolder(candidatePath: string, folderPath: string) {
+  const normalizedCandidatePath = candidatePath.replace(/\\/g, '/').replace(/\/+$/, '')
+  const normalizedFolderPath = folderPath.replace(/\\/g, '/').replace(/\/+$/, '')
+
+  return normalizedCandidatePath === normalizedFolderPath || normalizedCandidatePath.startsWith(`${normalizedFolderPath}/`)
 }

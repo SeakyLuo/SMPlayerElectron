@@ -1,12 +1,14 @@
 import clsx from 'clsx'
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent, type PointerEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { AlbumArtControl } from '../components/AlbumArtControl'
 import { Icon } from '../components/icons'
+import { LoadingState } from '../components/LoadingState'
 import { MenuFlyout } from '../components/MenuFlyout'
+import { MusicDialog } from '../components/MusicDialog'
 import { NowPlayingQueueItem } from '../components/NowPlayingQueueItem'
-import { PlayerControls } from '../components/PlayerBar'
+import { MediaControlSurface, type VoiceAssistantResponse } from '../components/MediaControl'
 import {
   getAddToPlaylistMenuFlyoutItem,
   getMusicMenuFlyoutItems,
@@ -18,16 +20,14 @@ import {
 import { MultiSelectCommandBar } from '../components/MultiSelectCommandBar'
 import { getDisplayArtists } from '../shared/artists'
 import { extractArtworkColorRgb, getDefaultArtworkColorRgb } from '../shared/artworkColor'
-import { mergePlainLyricsWithTimedRaw, stripLyricsTimestamps } from '../shared/lyrics'
 import type {
   LibraryPlaylist,
   LibrarySong,
   LyricsSnapshot,
   PlaybackMode,
   PreferenceItemSnapshot,
-  SongPropertiesSnapshot,
 } from '../shared/contracts'
-import { formatBytes, formatDuration } from '../shared/formatters'
+import { formatDuration } from '../shared/formatters'
 import type { Translator } from '../shared/i18n'
 import { quickPlay, randomLibrary } from '../shared/mediaHelper'
 import { useLibraryStore } from '../state/useLibraryStore'
@@ -37,8 +37,10 @@ import { useUndoableNotificationStore } from '../state/useUndoableNotificationSt
 const QUICK_PLAY_LIMIT = 100
 const DEFAULT_ARTWORK_URL = '/monotone_bg_wide.png'
 const LYRICS_RESTORE_DELAY_MS = 5000
+const LYRICS_SCROLL_DURATION_MS = 360
 
 type FullPanel = 'playlist' | 'info' | 'lyrics' | 'album-art'
+type FullDialogMode = 'properties' | 'lyrics' | 'album-art'
 
 interface ImmersiveLyricsLine {
   id: number
@@ -58,6 +60,7 @@ interface NowPlayingFullPageProps {
   selectedTrackId: number | null
   selectedQueueIndex: number | null
   isPlaying: boolean
+  loading: boolean
   volume: number
   isMuted: boolean
   mode: PlaybackMode
@@ -75,6 +78,10 @@ interface NowPlayingFullPageProps {
   onToggleShuffle: () => void
   onToggleRepeat: () => void
   onToggleRepeatOne: () => void
+  onVoiceCommand: (text: string) => Promise<VoiceAssistantResponse>
+  getVoiceHint: () => string
+  getVoiceHelpText: () => string
+  voiceLanguage: string
   onPlayTrack: (trackId: number, queueSongIds: number[], queueIndex?: number) => void
   onReplaceQueue: (songIds: number[]) => void
   onPlayNext: (songId: number, queueIndex?: number) => void
@@ -100,6 +107,7 @@ export function NowPlayingFullPage({
   selectedTrackId,
   selectedQueueIndex,
   isPlaying,
+  loading,
   volume,
   isMuted,
   mode,
@@ -117,6 +125,10 @@ export function NowPlayingFullPage({
   onToggleShuffle,
   onToggleRepeat,
   onToggleRepeatOne,
+  onVoiceCommand,
+  getVoiceHint,
+  getVoiceHelpText,
+  voiceLanguage,
   onPlayTrack,
   onReplaceQueue,
   onPlayNext,
@@ -131,22 +143,21 @@ export function NowPlayingFullPage({
   onRefresh,
 }: NowPlayingFullPageProps) {
   const [showPlaylistPanel, setShowPlaylistPanel] = useState(false)
+  const [dialogMode, setDialogMode] = useState<FullDialogMode | null>(null)
   const [displayLyrics, setDisplayLyrics] = useState<{ trackId: number; lyrics: LyricsSnapshot } | null>(null)
   const [songArtwork, setSongArtwork] = useState<{ trackId: number; artworkUrl: string } | null>(null)
   const [moreMenu, setMoreMenu] = useState<MenuFlyoutPosition | null>(null)
   const [preferenceItem, setPreferenceItem] = useState<PreferenceItemSnapshot | null>(null)
-  const [isProgressSeeking, setIsProgressSeeking] = useState(false)
-  const [draftProgressSeconds, setDraftProgressSeconds] = useState(0)
   const [isLyricPreviewing, setIsLyricPreviewing] = useState(false)
   const [isLyricDragging, setIsLyricDragging] = useState(false)
   const [lyricsLoading, setLyricsLoading] = useState(false)
   const [lyricPreviewIndex, setLyricPreviewIndex] = useState<number | null>(null)
   const [coverColorRgb, setCoverColorRgb] = useState(getDefaultArtworkColorRgb)
-  const isProgressSeekingRef = useRef(false)
   const coverWrapRef = useRef<HTMLDivElement | null>(null)
   const lyricStageRef = useRef<HTMLDivElement | null>(null)
   const lyricLineRefs = useRef<Array<HTMLDivElement | null>>([])
   const lyricRestoreTimerRef = useRef<number | null>(null)
+  const lyricScrollAnimationRef = useRef<number | null>(null)
   const activeLyricsIndexRef = useRef(-1)
   const lyricDragRef = useRef<{ pointerId: number; clientY: number; scrollTop: number; moved: boolean } | null>(null)
   const createPlaylist = useLibraryStore((state) => state.createPlaylist)
@@ -157,11 +168,7 @@ export function NowPlayingFullPage({
   const queueSongIds = useMemo(() => songs.map((song) => song.id), [songs])
   const currentSongId = currentSong?.id
   const effectiveDuration = durationSeconds || currentSong?.duration || 0
-  const displayProgressSeconds = isProgressSeeking ? draftProgressSeconds : progressSeconds
-  const progressValue = Math.min(Math.max(displayProgressSeconds, 0), effectiveDuration)
-  const progressMax = Math.max(effectiveDuration, 0)
-  const progressFill = effectiveDuration > 0 ? (progressValue / effectiveDuration) * 100 : 0
-  const volumeValue = Math.min(Math.max(volume, 0), 100)
+  const progressValue = Math.min(Math.max(progressSeconds, 0), effectiveDuration)
   const artworkUrl =
     currentSong?.artworkUrl ||
     (songArtwork && songArtwork.trackId === currentSong?.id ? songArtwork.artworkUrl : '') ||
@@ -174,8 +181,6 @@ export function NowPlayingFullPage({
   const showUndo = (message: string, action: () => void | Promise<void>) => {
     showUndoableNotification(message, t('common.undo'), action)
   }
-  void onRefresh
-  void NowPlayingFullSongPanel
   const lyricsProgressRatio = effectiveDuration > 0 ? progressValue / effectiveDuration : 0
   const displayLyricsLines = useMemo(
     () => getImmersiveLyricsLines(currentLyrics, progressValue, lyricsProgressRatio, effectiveDuration),
@@ -220,11 +225,11 @@ export function NowPlayingFullPage({
     }
 
     let canceled = false
-    void window.smplayer!.getSongArtwork(currentSongId).then((nextArtworkUrl) => {
+    void window.smplayer!.getSongArtworkSnapshot(currentSongId).then((snapshot) => {
       if (!canceled) {
-        setSongArtwork({ trackId: currentSongId, artworkUrl: nextArtworkUrl })
-        if (nextArtworkUrl) {
-          onArtworkResolved(currentSongId, nextArtworkUrl)
+        setSongArtwork({ trackId: currentSongId, artworkUrl: snapshot.artworkUrl })
+        if (snapshot.artworkUrl) {
+          onArtworkResolved(currentSongId, snapshot.artworkUrl)
         }
       }
     })
@@ -234,12 +239,35 @@ export function NowPlayingFullPage({
     }
   }, [currentSongId, onArtworkResolved])
 
-  useEffect(() => {
+  const refreshDisplayLyrics = useCallback(() => {
     if (currentSongId === undefined) {
       return
     }
 
+    setLyricsLoading(true)
+    void window.smplayer!.getLyrics(currentSongId, 'auto').then((snapshot) => {
+      setDisplayLyrics({ trackId: currentSongId, lyrics: snapshot })
+    setLyricsLoading(false)
+    })
+  }, [currentSongId])
+
+  const cancelLyricScrollAnimation = useCallback(() => {
+    if (lyricScrollAnimationRef.current != null) {
+      window.cancelAnimationFrame(lyricScrollAnimationRef.current)
+      lyricScrollAnimationRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    if (currentSongId === undefined) {
+      cancelLyricScrollAnimation()
+      setDisplayLyrics(null)
+      setLyricsLoading(false)
+      return
+    }
+
     let canceled = false
+    cancelLyricScrollAnimation()
     setLyricsLoading(true)
     void window.smplayer!.getLyrics(currentSongId, 'auto').then((snapshot) => {
       if (!canceled) {
@@ -250,8 +278,9 @@ export function NowPlayingFullPage({
 
     return () => {
       canceled = true
+      cancelLyricScrollAnimation()
     }
-  }, [currentSongId])
+  }, [cancelLyricScrollAnimation, currentSongId])
 
   useEffect(() => {
     activeLyricsIndexRef.current = activeLyricsIndex
@@ -264,7 +293,7 @@ export function NowPlayingFullPage({
     }
   }, [])
 
-  const scrollLyricsToIndex = useCallback((index: number, behavior: ScrollBehavior) => {
+  const scrollLyricsToIndex = useCallback((index: number, animated: boolean) => {
     const container = lyricStageRef.current
     const cover = coverWrapRef.current
     const line = lyricLineRefs.current[index]
@@ -275,12 +304,30 @@ export function NowPlayingFullPage({
     const containerRect = container.getBoundingClientRect()
     const coverRect = cover.getBoundingClientRect()
     const anchorOffset = coverRect.top + coverRect.height / 2 - containerRect.top
+    const targetTop = line.offsetTop - anchorOffset + line.offsetHeight / 2
 
-    container.scrollTo({
-      top: line.offsetTop - anchorOffset + line.offsetHeight / 2,
-      behavior,
-    })
-  }, [])
+    cancelLyricScrollAnimation()
+    if (!animated) {
+      container.scrollTop = targetTop
+      return
+    }
+
+    const startTop = container.scrollTop
+    const distance = targetTop - startTop
+    const startedAt = performance.now()
+    const step = (now: number) => {
+      const elapsed = Math.min((now - startedAt) / LYRICS_SCROLL_DURATION_MS, 1)
+      const eased = 1 - Math.pow(1 - elapsed, 3)
+      container.scrollTop = startTop + distance * eased
+      if (elapsed < 1) {
+        lyricScrollAnimationRef.current = window.requestAnimationFrame(step)
+      } else {
+        lyricScrollAnimationRef.current = null
+      }
+    }
+
+    lyricScrollAnimationRef.current = window.requestAnimationFrame(step)
+  }, [cancelLyricScrollAnimation])
 
   const restoreLyricsToPlayback = useCallback(() => {
     setIsLyricPreviewing(false)
@@ -288,7 +335,7 @@ export function NowPlayingFullPage({
     setLyricPreviewIndex(null)
     const activeIndex = activeLyricsIndexRef.current
     if (activeIndex >= 0) {
-      scrollLyricsToIndex(activeIndex, 'smooth')
+      scrollLyricsToIndex(activeIndex, true)
     }
   }, [scrollLyricsToIndex])
 
@@ -328,13 +375,14 @@ export function NowPlayingFullPage({
 
   useEffect(() => {
     if (!isLyricPreviewing && activeLyricsIndex >= 0) {
-      window.requestAnimationFrame(() => scrollLyricsToIndex(activeLyricsIndex, 'smooth'))
+      window.requestAnimationFrame(() => scrollLyricsToIndex(activeLyricsIndex, true))
     }
   }, [activeLyricsIndex, displayLyricsLines.length, isLyricPreviewing, scrollLyricsToIndex])
 
   useEffect(() => () => {
     clearLyricRestoreTimer()
-  }, [clearLyricRestoreTimer])
+    cancelLyricScrollAnimation()
+  }, [cancelLyricScrollAnimation, clearLyricRestoreTimer])
 
   const openMoreMenu = (event: MouseEvent<HTMLButtonElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
@@ -342,30 +390,12 @@ export function NowPlayingFullPage({
     void refreshPreferenceItem()
   }
 
-  const beginProgressSeek = (event: PointerEvent<HTMLInputElement>) => {
-    event.currentTarget.setPointerCapture(event.pointerId)
-    isProgressSeekingRef.current = true
-    setIsProgressSeeking(true)
-    setDraftProgressSeconds(Number(event.currentTarget.value))
-    onBeginSeek()
-  }
-
-  const commitProgressSeek = (seconds: number) => {
-    if (!isProgressSeekingRef.current) {
-      return
-    }
-
-    isProgressSeekingRef.current = false
-    onSeek(seconds)
-    onEndSeek()
-    setIsProgressSeeking(false)
-  }
-
   const beginLyricsDrag = (event: PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0 || displayLyricsLines.length === 0) {
       return
     }
 
+    cancelLyricScrollAnimation()
     event.currentTarget.setPointerCapture(event.pointerId)
     lyricDragRef.current = {
       pointerId: event.pointerId,
@@ -489,55 +519,71 @@ export function NowPlayingFullPage({
     onClose()
   }
 
-  const moreItems = getNowPlayingFullMoreItems({
-    currentSong,
-    songs,
-    librarySongs,
-    recentSongs,
-    playlists,
-    folders,
-    queueSongIds,
-    preferenceItem,
-    t,
-    onQuickPlay: playQuick,
-    onPlaySongs: playSongIds,
-    onSavePlaylist: saveQueueAsPlaylist,
-    onClearQueue: () => {
-      goBack()
-      onClearQueue()
-    },
-    onPlayAlbum: playCurrentAlbum,
-    onPlayArtist: playCurrentArtist,
-    onAddToNowPlaying: () => {
-      if (currentSong) {
-        const previousQueueSongIds = queueSongIds
-        onReplaceQueue([...queueSongIds, currentSong.id])
-        showUndo(t('notification.songAddedTo', { title: currentSong.title, target: t('common.nowPlaying') }), () =>
-          onReplaceQueue(previousQueueSongIds),
-        )
-      }
-    },
-    onCreatePlaylist: (name) => {
-      if (currentSong) {
-        void createPlaylist(name, [currentSong.id])
-      }
-    },
-    onAddToPlaylist: (playlistId) => {
-      if (currentSong) {
-        const playlist = playlists.find((item) => item.id === playlistId)!
-        onAddSongToPlaylist(playlistId, currentSong.id)
-        showUndo(t('notification.songAddedTo', { title: currentSong.title, target: playlist.name }), () =>
-          removeSongFromPlaylist(playlistId, currentSong.id),
-        )
-      }
-    },
-    onToggleFavorite: () => {
-      if (currentSong) {
-        onToggleFavorite(currentSong.id, !currentSong.favorite)
-      }
-    },
-    onPreferenceChanged: refreshPreferenceItem,
-  })
+  const moreItems = moreMenu
+    ? getNowPlayingFullMoreItems({
+      currentSong,
+      songs,
+      librarySongs,
+      recentSongs,
+      playlists,
+      folders,
+      preferenceItem,
+      t,
+      onQuickPlay: playQuick,
+      onPlaySongs: playSongIds,
+      onSavePlaylist: saveQueueAsPlaylist,
+      onClearQueue: () => {
+        goBack()
+        onClearQueue()
+      },
+      onPlayAlbum: playCurrentAlbum,
+      onPlayArtist: playCurrentArtist,
+      onAddToNowPlaying: () => {
+        if (currentSong) {
+          const previousQueueSongIds = queueSongIds
+          onReplaceQueue([...queueSongIds, currentSong.id])
+          showUndo(t('notification.songAddedTo', { title: currentSong.title, target: t('common.nowPlaying') }), () =>
+            onReplaceQueue(previousQueueSongIds),
+          )
+        }
+      },
+      onCreatePlaylist: (name) => {
+        if (currentSong) {
+          void createPlaylist(name, [currentSong.id])
+        }
+      },
+      onAddToPlaylist: (playlistId) => {
+        if (currentSong) {
+          const playlist = playlists.find((item) => item.id === playlistId)!
+          onAddSongToPlaylist(playlistId, currentSong.id)
+          showUndo(t('notification.songAddedTo', { title: currentSong.title, target: playlist.name }), () =>
+            removeSongFromPlaylist(playlistId, currentSong.id),
+          )
+        }
+      },
+      onToggleFavorite: () => {
+        if (currentSong) {
+          onToggleFavorite(currentSong.id, !currentSong.favorite)
+        }
+      },
+      onPreferenceChanged: refreshPreferenceItem,
+      onSeeMusicInfo: () => {
+        setMoreMenu(null)
+        setShowPlaylistPanel(false)
+        setDialogMode('properties')
+      },
+      onSeeLyrics: () => {
+        setMoreMenu(null)
+        setShowPlaylistPanel(false)
+        setDialogMode('lyrics')
+      },
+      onSeeAlbumArt: () => {
+        setMoreMenu(null)
+        setShowPlaylistPanel(false)
+        setDialogMode('album-art')
+      },
+    })
+    : []
 
   return (
     <section
@@ -548,17 +594,9 @@ export function NowPlayingFullPage({
       <div className="now-playing-full-titlebar" aria-hidden="true" />
       <button
         type="button"
-        className="now-playing-full-back-button"
-        aria-label={t('sidebar.back')}
-        title={t('sidebar.back')}
-        onClick={goBack}
-      >
-        <Icon name="arrowLeft" />
-      </button>
-      <button
-        type="button"
         className={clsx('now-playing-full-queue-button', { 'is-active': showPlaylistPanel })}
         onClick={() => {
+          setDialogMode(null)
           setShowPlaylistPanel((current) => !current)
         }}
       >
@@ -593,7 +631,7 @@ export function NowPlayingFullPage({
                 </div>
               ) : displayLyricsLines.length > 0 ? displayLyricsLines.map((line, index) => (
                 <div
-                  key={line.id}
+                  key={`${currentSongId}-${line.id}`}
                   ref={(element) => {
                     lyricLineRefs.current[index] = element
                   }}
@@ -649,30 +687,22 @@ export function NowPlayingFullPage({
               </span>
             </span>
           </button>
-          <PlayerControls
+          <MediaControlSurface
             trackId={currentSong?.id ?? null}
             isLoading={false}
             favorite={currentSong?.favorite}
             disabled={disabled}
             isPlaying={isPlaying}
-            volumeValue={volumeValue}
+            volume={volume}
+            currentSong={currentSong}
             mode={mode}
-            progressSeconds={progressValue}
-            progressValue={progressValue}
-            progressMax={progressMax}
-            progressFill={progressFill}
-            durationSeconds={effectiveDuration}
             t={t}
             onTogglePlayPause={onTogglePlayPause}
             onPrevious={onPrevious}
             onNext={onNext}
-            onSeekChange={(nextValue) => {
-              setDraftProgressSeconds(nextValue)
-            }}
-            onSeekPointerDown={beginProgressSeek}
-            onSeekPointerCommit={(event) => {
-              commitProgressSeek(Number(event.currentTarget.value))
-            }}
+            onSeek={onSeek}
+            onBeginSeek={onBeginSeek}
+            onEndSeek={onEndSeek}
             onVolumeChange={onVolumeChange}
             onToggleMute={onToggleMute}
             onToggleShuffle={onToggleShuffle}
@@ -683,7 +713,10 @@ export function NowPlayingFullPage({
                 onToggleFavorite(currentSong.id, !currentSong.favorite)
               }
             }}
-            onVoiceAssistantClick={() => {}}
+            onVoiceCommand={onVoiceCommand}
+            getVoiceHint={getVoiceHint}
+            getVoiceHelpText={getVoiceHelpText}
+            voiceLanguage={voiceLanguage}
             isMuted={isMuted}
             onMoreClick={openMoreMenu}
           />
@@ -701,6 +734,7 @@ export function NowPlayingFullPage({
         selectedTrackId={selectedTrackId}
         selectedQueueIndex={selectedQueueIndex}
         isPlaying={isPlaying}
+        loading={loading}
         onTogglePlayPause={onTogglePlayPause}
         onPlayTrack={onPlayTrack}
         onReplaceQueue={onReplaceQueue}
@@ -711,11 +745,38 @@ export function NowPlayingFullPage({
         onToggleFavorite={onToggleFavorite}
         onRemoveSongs={onRemoveSongs}
         onDeleteSongFromDisk={onDeleteSongFromDisk}
-        onClose={goBack}
-        onPanelRequest={() => {
+        onClose={() => {
           setShowPlaylistPanel(false)
         }}
+        onPanelRequest={(panel) => {
+          setShowPlaylistPanel(false)
+          if (panel !== 'playlist') {
+            setDialogMode(panel === 'info' ? 'properties' : panel)
+          }
+        }}
       />
+      {currentSong && dialogMode ? (
+        <MusicDialog
+          song={currentSong}
+          mode={dialogMode}
+          t={t}
+          currentTrackId={selectedTrackId}
+          isPlaying={isPlaying}
+          queueSongIds={queueSongIds}
+          onClose={() => {
+            setDialogMode(null)
+            setMoreMenu(null)
+          }}
+          onPlayTrack={(trackId, nextQueueSongIds) => {
+            onPlayTrack(trackId, nextQueueSongIds)
+          }}
+          onTogglePlayPause={onTogglePlayPause}
+          onSaved={() => {
+            refreshDisplayLyrics()
+            void onRefresh()
+          }}
+        />
+      ) : null}
       {moreMenu ? (
         <MenuFlyout
           position={moreMenu}
@@ -793,6 +854,7 @@ function NowPlayingFullPlaylist({
   selectedTrackId,
   selectedQueueIndex,
   isPlaying,
+  loading,
   onTogglePlayPause,
   onPlayTrack,
   onReplaceQueue,
@@ -814,6 +876,7 @@ function NowPlayingFullPlaylist({
   selectedTrackId: number | null
   selectedQueueIndex: number | null
   isPlaying: boolean
+  loading: boolean
   onTogglePlayPause: () => void
   onPlayTrack: (trackId: number, queueSongIds: number[], queueIndex?: number) => void
   onReplaceQueue: (songIds: number[]) => void
@@ -849,6 +912,14 @@ function NowPlayingFullPlaylist({
   )
   const showUndoableNotification = useUndoableNotificationStore((state) => state.show)
   const queueSongIds = useMemo(() => songs.map((song) => song.id), [songs])
+  const queueEntryKeys = useMemo(() => {
+    const occurrenceCounts = new Map<number, number>()
+    return songs.map((song) => {
+      const occurrence = occurrenceCounts.get(song.id) ?? 0
+      occurrenceCounts.set(song.id, occurrence + 1)
+      return `now-playing-full-${song.id}-${occurrence}`
+    })
+  }, [songs])
   const selectedEntries = useMemo(
     () => songs
       .map((song, queueIndex) => ({ song, queueIndex }))
@@ -873,12 +944,24 @@ function NowPlayingFullPlaylist({
   }, [songMenuSongId])
 
   useEffect(() => {
-    if (songs.length === 0) {
+    if (!open || songs.length === 0) {
       return
     }
 
     window.requestAnimationFrame(() => {
       currentRowRef.current?.scrollIntoView({ block: 'center' })
+    })
+  }, [open, selectedQueueIndex, selectedTrackId, songs.length])
+
+  useEffect(() => {
+    setSelectedQueueIndexes((current) => {
+      const next = new Set<number>()
+      for (const queueIndex of current) {
+        if (queueIndex < songs.length) {
+          next.add(queueIndex)
+        }
+      }
+      return next
     })
   }, [songs.length])
 
@@ -955,6 +1038,11 @@ function NowPlayingFullPlaylist({
     onPlayTrack(firstSongId!, selectedSongIds)
   }
 
+  const getDropPosition = (event: DragEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    return event.clientY > rect.top + rect.height / 2 ? 'after' : 'before'
+  }
+
   const reverseSelection = () => {
     setSelectedQueueIndexes((current) => {
       const next = new Set<number>()
@@ -975,8 +1063,14 @@ function NowPlayingFullPlaylist({
         })}
         aria-hidden={!open}
       >
-        <h3>{t('nowPlaying.queueEmpty')}</h3>
-        <p>{t('nowPlaying.queueEmptyHelp')}</p>
+        {loading ? (
+          <LoadingState t={t} compact />
+        ) : (
+          <>
+            <h3>{t('nowPlaying.queueEmpty')}</h3>
+            <p>{t('nowPlaying.queueEmptyHelp')}</p>
+          </>
+        )}
       </section>
     )
   }
@@ -997,9 +1091,7 @@ function NowPlayingFullPlaylist({
           type="button"
           aria-label={t('common.close')}
           title={t('common.close')}
-          onClick={() => {
-            onPanelRequest('playlist')
-          }}
+          onClick={onClose}
         >
           <Icon name="close" />
         </button>
@@ -1012,7 +1104,7 @@ function NowPlayingFullPlaylist({
               : song.id === selectedTrackId
             return (
               <NowPlayingQueueItem
-                key={`now-playing-full-${queueIndex}-${song.id}`}
+                key={queueEntryKeys[queueIndex]}
                 containerRef={current ? currentRowRef : undefined}
                 song={song}
                 t={t}
@@ -1064,10 +1156,9 @@ function NowPlayingFullPlaylist({
                 onDragOver={(event) => {
                   event.preventDefault()
                   event.dataTransfer.dropEffect = 'move'
-                  const rect = event.currentTarget.getBoundingClientRect()
                   setDropIndicator({
                     queueIndex,
-                    position: event.clientY > rect.top + rect.height / 2 ? 'after' : 'before',
+                    position: getDropPosition(event),
                   })
                 }}
                 onDragLeave={() => {
@@ -1077,7 +1168,7 @@ function NowPlayingFullPlaylist({
                   event.preventDefault()
                   const draggedQueueIndex = draggedQueueIndexRef.current
                   draggedQueueIndexRef.current = null
-                  const insertAfter = dropIndicator?.queueIndex === queueIndex && dropIndicator.position === 'after'
+                  const insertAfter = getDropPosition(event) === 'after'
                   setDropIndicator(null)
                   if (draggedQueueIndex == null || draggedQueueIndex === queueIndex) {
                     return
@@ -1274,460 +1365,6 @@ function NowPlayingFullPlaylist({
   )
 }
 
-function NowPlayingFullSongPanel({
-  panel,
-  song,
-  t,
-  currentTrackId,
-  isPlaying,
-  queueSongIds,
-  onPlayTrack,
-  onTogglePlayPause,
-  onArtworkResolved,
-  onSaved,
-}: {
-  panel: Exclude<FullPanel, 'playlist'>
-  song: LibrarySong | null
-  t: Translator
-  currentTrackId: number | null
-  isPlaying: boolean
-  queueSongIds: number[]
-  onPlayTrack: (trackId: number, queueSongIds: number[], queueIndex?: number) => void
-  onTogglePlayPause: () => void
-  onArtworkResolved: (trackId: number, artworkUrl: string) => void
-  onSaved: () => void | Promise<void>
-}) {
-  const [properties, setProperties] = useState<SongPropertiesSnapshot | null>(null)
-  const [originalProperties, setOriginalProperties] = useState<SongPropertiesSnapshot | null>(null)
-  const [lyrics, setLyrics] = useState<LyricsSnapshot | null>(null)
-  const [lyricsText, setLyricsText] = useState('')
-  const [originalLyricsText, setOriginalLyricsText] = useState('')
-  const [lyricsRawText, setLyricsRawText] = useState('')
-  const [showLyricsTimestamps, setShowLyricsTimestamps] = useState(true)
-  const [artworkUrl, setArtworkUrl] = useState('')
-  const [artworkSourcePath, setArtworkSourcePath] = useState('')
-  const [showArtworkDeleteConfirm, setShowArtworkDeleteConfirm] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [statusMessage, setStatusMessage] = useState('')
-  const songId = song?.id
-  const baseArtworkUrl = song?.artworkUrl || ''
-  const isCurrentSong = song?.id === currentTrackId
-  const currentLyricsRawText = showLyricsTimestamps
-    ? lyricsText
-    : mergePlainLyricsWithTimedRaw(lyricsRawText, lyricsText)
-  const canPause = isCurrentSong && isPlaying
-  const playQueue = useMemo(() => {
-    if (!song) {
-      return queueSongIds
-    }
-
-    return queueSongIds.includes(song.id) ? queueSongIds : [...queueSongIds, song.id]
-  }, [queueSongIds, song])
-
-  useEffect(() => {
-    if (songId === undefined) {
-      return
-    }
-
-    let canceled = false
-    setStatusMessage('')
-
-    if (panel === 'info') {
-      setLoading(true)
-      void window.smplayer!.getSongProperties(songId).then((snapshot) => {
-        if (!canceled) {
-          setProperties(snapshot)
-          setOriginalProperties(snapshot)
-          setLoading(false)
-        }
-      })
-    }
-
-    if (panel === 'lyrics') {
-      setLoading(true)
-      void window.smplayer!.getLyrics(songId, 'auto').then((snapshot) => {
-        if (!canceled) {
-          setLyrics(snapshot)
-          setLyricsRawText(snapshot.rawText)
-          setLyricsText(snapshot.rawText)
-          setOriginalLyricsText(snapshot.rawText)
-          setLoading(false)
-        }
-      })
-    }
-
-    if (panel === 'album-art') {
-      setLoading(true)
-      setArtworkUrl(baseArtworkUrl)
-      setArtworkSourcePath('')
-      setShowArtworkDeleteConfirm(false)
-      void window.smplayer!.getSongArtwork(songId).then((nextArtworkUrl) => {
-        if (!canceled) {
-          setArtworkUrl(nextArtworkUrl || baseArtworkUrl)
-          setLoading(false)
-        }
-      })
-    }
-
-    return () => {
-      canceled = true
-    }
-  }, [baseArtworkUrl, panel, songId])
-
-  const updateProperty = (key: keyof SongPropertiesSnapshot, value: string) => {
-    setProperties((current) => current ? { ...current, [key]: value } : current)
-  }
-
-  const updateNumericProperty = (key: keyof SongPropertiesSnapshot, value: string) => {
-    setProperties((current) => current ? { ...current, [key]: Number(value) || 0 } : current)
-  }
-
-  const play = () => {
-    if (!song) {
-      return
-    }
-
-    if (canPause || isCurrentSong && !isPlaying) {
-      onTogglePlayPause()
-      return
-    }
-
-    onPlayTrack(song.id, playQueue)
-  }
-
-  const saveProperties = async () => {
-    if (!song || !properties) {
-      return
-    }
-
-    setSaving(true)
-    try {
-      await window.smplayer!.updateSongProperties(song.id, {
-        title: properties.title,
-        subtitle: properties.subtitle,
-        artist: properties.artist,
-        album: properties.album,
-        albumArtist: properties.albumArtist,
-        publisher: properties.publisher,
-        trackNumber: properties.trackNumber,
-        year: properties.year,
-        genre: properties.genre,
-        composers: properties.composers,
-        playCount: properties.playCount,
-      })
-      setOriginalProperties(properties)
-      setStatusMessage(t('common.saved'))
-      await onSaved()
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const saveLyrics = async () => {
-    if (!song) {
-      return
-    }
-
-    setSaving(true)
-    try {
-      await window.smplayer!.saveSongLyrics(song.id, currentLyricsRawText)
-      setLyricsRawText(currentLyricsRawText)
-      setOriginalLyricsText(currentLyricsRawText)
-      setLyrics((current) => current ? { ...current, rawText: currentLyricsRawText } : current)
-      setStatusMessage(t('common.saved'))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const searchLyrics = async () => {
-    if (!song) {
-      return
-    }
-
-    setSaving(true)
-    try {
-      const snapshot = await window.smplayer!.getLyrics(song.id, 'internet')
-      if (snapshot.rawText.trim()) {
-        setLyrics(snapshot)
-        setLyricsRawText(snapshot.rawText)
-        setLyricsText(showLyricsTimestamps ? snapshot.rawText : stripLyricsTimestamps(snapshot.rawText))
-        setStatusMessage('')
-        return
-      }
-
-      await window.smplayer!.openLyricsSearchInBrowser(song.id)
-      setStatusMessage(t('song.lyricsSearchOpened'))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const importLyrics = async () => {
-    const result = await window.smplayer!.importLyrics()
-    if (!result.canceled) {
-      setLyricsRawText(result.rawText)
-      setLyricsText(showLyricsTimestamps ? result.rawText : stripLyricsTimestamps(result.rawText))
-      setStatusMessage('')
-    }
-  }
-
-  const toggleLyricsTimestamps = (checked: boolean) => {
-    const rawText = currentLyricsRawText
-    setShowLyricsTimestamps(checked)
-    setLyricsRawText(rawText)
-    setLyricsText(checked ? rawText : stripLyricsTimestamps(rawText))
-  }
-
-  const changeArtwork = async () => {
-    const result = await window.smplayer!.pickSongArtworkSource()
-    if (!result.canceled) {
-      setArtworkUrl(result.artworkUrl)
-      setArtworkSourcePath(result.sourcePath)
-      setShowArtworkDeleteConfirm(false)
-      setStatusMessage('')
-    }
-  }
-
-  const saveArtwork = async () => {
-    if (!song || !artworkSourcePath) {
-      return
-    }
-
-    setSaving(true)
-    try {
-      await window.smplayer!.saveSongArtwork(song.id, artworkSourcePath)
-      setArtworkSourcePath('')
-      setStatusMessage(t('common.saved'))
-      if (artworkUrl) {
-        onArtworkResolved(song.id, artworkUrl)
-      }
-      await onSaved()
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const deleteArtwork = async () => {
-    if (!song) {
-      return
-    }
-
-    setSaving(true)
-    try {
-      await window.smplayer!.deleteSongArtwork(song.id)
-      setArtworkUrl('')
-      setArtworkSourcePath('')
-      setShowArtworkDeleteConfirm(false)
-      setStatusMessage(t('common.saved'))
-      await onSaved()
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const resetActivePage = () => {
-    if (panel === 'info' && originalProperties) {
-      setProperties(originalProperties)
-    }
-    if (panel === 'lyrics') {
-      setLyricsRawText(originalLyricsText)
-      setLyricsText(showLyricsTimestamps ? originalLyricsText : stripLyricsTimestamps(originalLyricsText))
-    }
-  }
-
-  if (!song) {
-    return (
-      <section className="now-playing-full-panel now-playing-full-empty-panel">
-        <h3>{t('nowPlaying.noActiveTrack')}</h3>
-        <p>{t('nowPlaying.noActiveTrackCopy')}</p>
-      </section>
-    )
-  }
-
-  if (panel === 'info') {
-    return (
-      <section className="now-playing-full-panel now-playing-full-details">
-        <PanelHeader title={t('context.seeMusicInfo')} statusMessage={statusMessage}>
-          <button type="button" onClick={play}>
-            <Icon name={canPause ? 'pause' : 'play'} />
-            {canPause ? t('context.pause') : t('context.play')}
-          </button>
-          <button type="button" className="now-playing-full-primary" disabled={saving || loading} onClick={() => void saveProperties()}>
-            {t('settings.save')}
-          </button>
-          <button type="button" disabled={loading} onClick={resetActivePage}>
-            {t('common.reset')}
-          </button>
-        </PanelHeader>
-        {loading || !properties ? (
-          <p className="now-playing-full-loading">{t('nowPlaying.loading')}</p>
-        ) : (
-          <>
-            <div className="now-playing-full-form-grid">
-              <label>
-                <span>{t('table.title')}</span>
-                <input value={properties.title} onChange={(event) => updateProperty('title', event.currentTarget.value)} />
-              </label>
-              <label>
-                <span>{t('song.subtitle')}</span>
-                <input value={properties.subtitle} onChange={(event) => updateProperty('subtitle', event.currentTarget.value)} />
-              </label>
-              <label>
-                <span>{t('common.artist')}</span>
-                <input value={properties.artist} onChange={(event) => updateProperty('artist', event.currentTarget.value)} />
-              </label>
-              <label>
-                <span>{t('common.album')}</span>
-                <input value={properties.album} onChange={(event) => updateProperty('album', event.currentTarget.value)} />
-              </label>
-              <label>
-                <span>{t('song.albumArtist')}</span>
-                <input value={properties.albumArtist} onChange={(event) => updateProperty('albumArtist', event.currentTarget.value)} />
-              </label>
-              <label>
-                <span>{t('common.playCount')}</span>
-                <span className="now-playing-full-inline-field">
-                  <input type="number" value={properties.playCount} onChange={(event) => updateNumericProperty('playCount', event.currentTarget.value)} />
-                  <button type="button" onClick={() => updateNumericProperty('playCount', '0')}>{t('common.clear')}</button>
-                </span>
-              </label>
-              <label>
-                <span>{t('song.publisher')}</span>
-                <input value={properties.publisher} onChange={(event) => updateProperty('publisher', event.currentTarget.value)} />
-              </label>
-              <label>
-                <span>{t('song.trackNumber')}</span>
-                <input type="number" value={properties.trackNumber || ''} onChange={(event) => updateNumericProperty('trackNumber', event.currentTarget.value)} />
-              </label>
-              <label>
-                <span>{t('song.year')}</span>
-                <input type="number" value={properties.year || ''} onChange={(event) => updateNumericProperty('year', event.currentTarget.value)} />
-              </label>
-              <label>
-                <span>{t('song.bitrate')}</span>
-                <input value={properties.bitrate ? `${Math.round(properties.bitrate / 1000)} kbps` : ''} readOnly />
-              </label>
-              <label>
-                <span>{t('song.composers')}</span>
-                <input value={properties.composers} readOnly />
-              </label>
-              <label>
-                <span>{t('song.dateCreated')}</span>
-                <input value={new Date(properties.dateCreated).toLocaleString()} readOnly />
-              </label>
-              <label>
-                <span>{t('song.dateModified')}</span>
-                <input value={new Date(properties.dateModified).toLocaleString()} readOnly />
-              </label>
-              <label>
-                <span>{t('common.duration')}</span>
-                <input value={formatDuration(properties.duration)} readOnly />
-              </label>
-              <label>
-                <span>{t('song.fileSize')}</span>
-                <input value={formatBytes(properties.fileSize)} readOnly />
-              </label>
-              <label>
-                <span>{t('song.fileType')}</span>
-                <input value={properties.fileType} readOnly />
-              </label>
-              <label>
-                <span>{t('song.genre')}</span>
-                <input value={properties.genre} onChange={(event) => updateProperty('genre', event.currentTarget.value)} />
-              </label>
-            </div>
-            <label className="now-playing-full-path">
-              <span>{t('local.path')}</span>
-              <span className="now-playing-full-inline-field">
-                <input value={properties.path} readOnly />
-                <button type="button" onClick={() => window.smplayer!.revealItemInFolder(properties.path)}>
-                  {t('local.openFolder')}
-                </button>
-              </span>
-            </label>
-          </>
-        )}
-      </section>
-    )
-  }
-
-  if (panel === 'lyrics') {
-    return (
-      <section className="now-playing-full-panel now-playing-full-lyrics">
-        <PanelHeader title={t('nowPlaying.lyrics')} statusMessage={statusMessage}>
-          <button type="button" disabled={saving} onClick={() => void searchLyrics()}>
-            <Icon name="search" />
-            {t('common.search')}
-          </button>
-          <button type="button" onClick={() => void importLyrics()}>{t('common.import')}</button>
-          <button type="button" className="now-playing-full-primary" disabled={saving} onClick={() => void saveLyrics()}>{t('settings.save')}</button>
-          <button type="button" onClick={resetActivePage}>{t('common.reset')}</button>
-          <label className="now-playing-full-lyrics-toggle">
-            <input
-              type="checkbox"
-              checked={showLyricsTimestamps}
-              onChange={(event) => toggleLyricsTimestamps(event.currentTarget.checked)}
-            />
-            {t('song.showLyricsTimestamps')}
-          </label>
-        </PanelHeader>
-        {loading ? <p className="now-playing-full-loading">{t('nowPlaying.loadingLyrics')}</p> : null}
-        <textarea
-          value={lyricsText}
-          placeholder={lyrics?.source === 'none' ? t('nowPlaying.noLyrics') : ''}
-          onChange={(event) => {
-            const nextText = event.currentTarget.value
-            setLyricsText(nextText)
-            if (showLyricsTimestamps) {
-              setLyricsRawText(nextText)
-            }
-            setStatusMessage('')
-          }}
-        />
-      </section>
-    )
-  }
-
-  return (
-    <section className="now-playing-full-panel now-playing-full-artwork">
-      <PanelHeader title={t('context.seeAlbumArt')} statusMessage={statusMessage}>
-        <button type="button" onClick={() => void changeArtwork()}>{t('song.changeArtwork')}</button>
-        <button type="button" className="now-playing-full-primary" disabled={saving || !artworkSourcePath} onClick={() => void saveArtwork()}>{t('settings.save')}</button>
-        <button type="button" disabled={saving} onClick={() => setShowArtworkDeleteConfirm(true)}>{t('playlists.delete')}</button>
-      </PanelHeader>
-      {loading ? <p className="now-playing-full-loading">{t('nowPlaying.loading')}</p> : null}
-      <AlbumArtControl title={song.title} artworkUrl={artworkUrl} />
-      {showArtworkDeleteConfirm ? (
-        <div className="now-playing-full-warning">
-          <p>{t('song.deleteArtworkConfirm')}</p>
-          <button type="button" onClick={() => void deleteArtwork()}>{t('common.yes')}</button>
-          <button type="button" onClick={() => setShowArtworkDeleteConfirm(false)}>{t('common.cancel')}</button>
-        </div>
-      ) : null}
-    </section>
-  )
-}
-
-function PanelHeader({
-  title,
-  statusMessage,
-  children,
-}: {
-  title: string
-  statusMessage: string
-  children: ReactNode
-}) {
-  return (
-    <header className="now-playing-full-panel-header">
-      <h3>{title}</h3>
-      <div className="now-playing-full-panel-actions">{children}</div>
-      {statusMessage ? <span>{statusMessage}</span> : null}
-    </header>
-  )
-}
-
 function getNowPlayingFullMoreItems({
   currentSong,
   songs,
@@ -1735,7 +1372,6 @@ function getNowPlayingFullMoreItems({
   recentSongs,
   playlists,
   folders,
-  queueSongIds,
   preferenceItem,
   t,
   onQuickPlay,
@@ -1749,6 +1385,9 @@ function getNowPlayingFullMoreItems({
   onAddToPlaylist,
   onToggleFavorite,
   onPreferenceChanged,
+  onSeeMusicInfo,
+  onSeeLyrics,
+  onSeeAlbumArt,
 }: {
   currentSong: LibrarySong | null
   songs: LibrarySong[]
@@ -1756,7 +1395,6 @@ function getNowPlayingFullMoreItems({
   recentSongs: LibrarySong[]
   playlists: LibraryPlaylist[]
   folders: ReturnType<typeof useLibraryStore.getState>['snapshot']['folders']
-  queueSongIds: number[]
   preferenceItem: PreferenceItemSnapshot | null
   t: Translator
   onQuickPlay: () => void | Promise<void>
@@ -1770,9 +1408,12 @@ function getNowPlayingFullMoreItems({
   onAddToPlaylist: (playlistId: number) => void
   onToggleFavorite: () => void
   onPreferenceChanged: () => void | Promise<void>
+  onSeeMusicInfo: () => void
+  onSeeLyrics: () => void
+  onSeeAlbumArt: () => void
 }) {
   const items: MenuFlyoutItem[] = [
-    { key: 'quick-play', text: t('nowPlaying.quickPlay'), icon: 'shuffle', onClick: onQuickPlay },
+    { key: 'quick-play', text: t('nowPlaying.quickPlay'), icon: 'play', onClick: onQuickPlay },
     {
       key: 'shuffle-sources',
       text: t('nowPlaying.randomPlay'),
@@ -1789,8 +1430,8 @@ function getNowPlayingFullMoreItems({
         onQuickPlay,
       }),
     },
-    { key: 'save-playlist', text: t('nowPlaying.savePlaylist'), icon: 'plus', disabled: queueSongIds.length === 0, onClick: onSavePlaylist },
-    { key: 'clear-now-playing', text: t('nowPlaying.clearNowPlaying'), icon: 'close', disabled: queueSongIds.length === 0, onClick: onClearQueue },
+    { key: 'save-playlist', text: t('nowPlaying.savePlaylist'), icon: 'plus', onClick: onSavePlaylist },
+    { key: 'clear-now-playing', text: t('nowPlaying.clearNowPlaying'), icon: 'close', onClick: onClearQueue },
   ]
 
   if (!currentSong) {
@@ -1825,6 +1466,9 @@ function getNowPlayingFullMoreItems({
     }),
     { key: 'play-artist', text: t('detail.playArtist'), icon: 'users', onClick: onPlayArtist },
     { key: 'play-album', text: t('detail.playAlbum'), icon: 'albums', onClick: onPlayAlbum },
+    { key: 'see-music-info', text: t('context.seeMusicInfo'), icon: 'info', keepOpen: true, onClick: onSeeMusicInfo },
+    { key: 'see-lyrics', text: t('context.seeLyrics'), icon: 'songs', keepOpen: true, onClick: onSeeLyrics },
+    { key: 'see-album-art', text: t('context.seeAlbumArt'), icon: 'albums', keepOpen: true, onClick: onSeeAlbumArt },
   )
 
   return items

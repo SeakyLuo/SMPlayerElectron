@@ -86,13 +86,6 @@ export function Sidebar({
 
   const visibleRecentSearches = recentSearches.slice(0, 10)
   const customPlaylists = useMemo(() => playlists.filter((playlist) => !playlist.isBuiltIn), [playlists])
-  const visibleCustomPlaylists = useMemo(() =>
-    customPlaylists.filter((playlist) =>
-      playlist.name !== t('common.nowPlaying') &&
-      playlist.name !== 'Now Playing',
-    ),
-    [customPlaylists, t],
-  )
   const customPlaylistIds = useMemo(() => customPlaylists.map((playlist) => playlist.id), [customPlaylists])
   const isPlaylistRoute = location.pathname.startsWith('/playlists')
 
@@ -172,7 +165,7 @@ export function Sidebar({
             <Icon name="arrowLeft" />
           </button>
         ) : null}
-        {!collapsed ? <span className="sidebar-app-name">{appName}</span> : null}
+        <span className="sidebar-app-name">{appName}</span>
       </div>
       <button
         className="sidebar-collapse-button"
@@ -249,56 +242,59 @@ export function Sidebar({
           </form>
 
           {showRecentSearches ? (
-            <div className="search-history-panel">
-              <div className="search-history-header">
-                <span>{t('sidebar.recentSearches')}</span>
-                <button
-                  type="button"
-                  onMouseDown={(event) => {
-                    event.preventDefault()
-                  }}
-                  onClick={() => {
-                    onRecentSearchesClear()
-                  }}
-                >
-                  {t('common.clear')}
-                </button>
+            <>
+              <div className="dropdown-dismiss-layer" onPointerDown={() => setIsSearchFocused(false)} />
+              <div className="search-history-panel">
+                <div className="search-history-header">
+                  <span>{t('sidebar.recentSearches')}</span>
+                  <button
+                    type="button"
+                    onMouseDown={(event) => {
+                      event.preventDefault()
+                    }}
+                    onClick={() => {
+                      onRecentSearchesClear()
+                    }}
+                  >
+                    {t('common.clear')}
+                  </button>
+                </div>
+                <div className="search-history-list">
+                  {visibleRecentSearches.map((entry) => (
+                    <div className="search-history-item" key={entry.id}>
+                      <button
+                        type="button"
+                        className="search-history-select"
+                        onMouseDown={(event) => {
+                          event.preventDefault()
+                        }}
+                        onClick={() => {
+                          onSearchChange(entry.query)
+                          onSearchCommit(entry.query)
+                        }}
+                      >
+                        <span>{entry.query}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="search-history-remove"
+                        aria-label={t('sidebar.removeRecentSearch', {
+                          query: entry.query,
+                        })}
+                        onMouseDown={(event) => {
+                          event.preventDefault()
+                        }}
+                        onClick={() => {
+                          onRecentSearchRemove(entry.id)
+                        }}
+                      >
+                        <Icon name="close" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="search-history-list">
-                {visibleRecentSearches.map((entry) => (
-                  <div className="search-history-item" key={entry.id}>
-                    <button
-                      type="button"
-                      className="search-history-select"
-                      onMouseDown={(event) => {
-                        event.preventDefault()
-                      }}
-                      onClick={() => {
-                        onSearchChange(entry.query)
-                        onSearchCommit(entry.query)
-                      }}
-                    >
-                      <span>{entry.query}</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="search-history-remove"
-                      aria-label={t('sidebar.removeRecentSearch', {
-                        query: entry.query,
-                      })}
-                      onMouseDown={(event) => {
-                        event.preventDefault()
-                      }}
-                      onClick={() => {
-                        onRecentSearchRemove(entry.id)
-                      }}
-                    >
-                      <Icon name="close" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
+            </>
           ) : null}
         </div>
       </div>
@@ -341,7 +337,7 @@ export function Sidebar({
               </button>
             </div>
             <div className={`playlist-nav-children${isPlaylistNavExpanded ? ' is-expanded' : ''}`}>
-              {visibleCustomPlaylists.map((playlist) => (
+              {customPlaylists.map((playlist) => (
                 <div
                   key={playlist.id}
                   className={`playlist-nav-child${location.pathname === `/playlists/${playlist.id}` ? ' active' : ''}${draggingPlaylistId === playlist.id ? ' is-dragging' : ''}${dropIndicator?.playlistId === playlist.id ? ` is-drop-${dropIndicator.position}` : ''}`}

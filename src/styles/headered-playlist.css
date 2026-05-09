@@ -28,6 +28,24 @@
   height: 0;
 }
 
+.workspace-content:has(.immersive-detail-page) {
+  scrollbar-gutter: auto;
+  scrollbar-width: none;
+  scrollbar-color: transparent transparent;
+}
+
+.workspace-content:has(.immersive-detail-page)::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+  background: transparent;
+}
+
+.workspace-content:has(.immersive-detail-page)::-webkit-scrollbar-track,
+.workspace-content:has(.immersive-detail-page)::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+
 .headered-playlist-drag-region {
   position: fixed;
   top: 0;
@@ -75,6 +93,7 @@
   z-index: 8;
   width: 10px;
   opacity: var(--header-scrollbar-opacity);
+  background: transparent;
   pointer-events: none;
   transition: opacity 140ms ease;
 }

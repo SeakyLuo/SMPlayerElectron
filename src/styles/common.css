@@ -171,6 +171,31 @@
   color: var(--text-muted);
 }
 
+.loading-state {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.loading-state h3 {
+  margin: 0;
+}
+
+.loading-state-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(var(--accent-rgb), 0.18);
+  border-top-color: var(--accent);
+  border-radius: 999px;
+  animation: loading-state-spin 720ms linear infinite;
+}
+
+@keyframes loading-state-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

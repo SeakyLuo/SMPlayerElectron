@@ -1,8 +1,9 @@
 import clsx from 'clsx'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { Icon } from '../components/icons'
+import { LoadingState } from '../components/LoadingState'
 import { MenuFlyout } from '../components/MenuFlyout'
 import { getAddToPlaylistMenuFlyoutItem, getMusicMenuFlyoutItems, getShuffleMenuItems } from '../components/MenuFlyoutHelper'
 import { MultiSelectCommandBar } from '../components/MultiSelectCommandBar'
@@ -29,6 +30,7 @@ interface NowPlayingPageProps {
   selectedTrackId: number | null
   selectedQueueIndex: number | null
   isPlaying: boolean
+  loading: boolean
   searchQuery: string
   error: string | null
   onTogglePlayPause: () => void
@@ -67,6 +69,7 @@ export function NowPlayingPage({
   selectedTrackId,
   selectedQueueIndex,
   isPlaying,
+  loading,
   searchQuery,
   error,
   onTogglePlayPause,
@@ -90,6 +93,7 @@ export function NowPlayingPage({
   const [songDialog, setSongDialog] = useState<{ song: LibrarySong; mode: 'properties' | 'lyrics' | 'album-art' } | null>(null)
   const [songPreferenceItem, setSongPreferenceItem] = useState<PreferenceItemSnapshot | null>(null)
   const listShellRef = useRef<HTMLElement | null>(null)
+  const randomMenuRef = useRef<HTMLDivElement | null>(null)
   const currentRowRef = useRef<HTMLDivElement | null>(null)
   const createPlaylist = useLibraryStore((state) => state.createPlaylist)
   const folders = useLibraryStore((state) => state.snapshot.folders)
@@ -158,6 +162,14 @@ export function NowPlayingPage({
     [visibleEntries],
   )
   const queueSongIds = useMemo(() => songs.map((song) => song.id), [songs])
+  const queueEntryKeys = useMemo(() => {
+    const occurrenceCounts = new Map<number, number>()
+    return songs.map((song) => {
+      const occurrence = occurrenceCounts.get(song.id) ?? 0
+      occurrenceCounts.set(song.id, occurrence + 1)
+      return `now-playing-${song.id}-${occurrence}`
+    })
+  }, [songs])
   const selectedVisibleEntries = useMemo(
     () => visibleEntries.filter((entry) => selectedQueueIndexes.has(entry.queueIndex)),
     [selectedQueueIndexes, visibleEntries],
@@ -189,8 +201,12 @@ export function NowPlayingPage({
   const topSpacerHeight = startIndex * NOW_PLAYING_ROW_HEIGHT
   const bottomSpacerHeight = (visibleEntries.length - endIndex) * NOW_PLAYING_ROW_HEIGHT
   const randomActions = useMemo(
-    () =>
-      getShuffleMenuItems({
+    () => {
+      if (!randomMenuOpen) {
+        return []
+      }
+
+      return getShuffleMenuItems({
         songs,
         librarySongs,
         recentSongs,
@@ -203,8 +219,9 @@ export function NowPlayingPage({
           onReplaceQueue(songIds)
           onPlayTrack(songIds[0]!, songIds, 0)
         },
-      }),
-    [folders, librarySongs, onPlayTrack, onReplaceQueue, playQuick, playlists, recentSongs, songs, t],
+      })
+    },
+    [folders, librarySongs, onPlayTrack, onReplaceQueue, playQuick, playlists, randomMenuOpen, recentSongs, songs, t],
   )
   const addToMenuItem = addToMenu
     ? getAddToPlaylistMenuFlyoutItem({
@@ -279,6 +296,11 @@ export function NowPlayingPage({
     onPlayTrack(firstSongId!, selectedVisibleSongIds, 0)
   }
 
+  const getDropPosition = (event: DragEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    return event.clientY > rect.top + rect.height / 2 ? 'after' : 'before'
+  }
+
   const reverseSelection = () => {
     setSelectedQueueIndexes((current) => {
       const next = new Set<number>()
@@ -313,14 +335,19 @@ export function NowPlayingPage({
       return
     }
 
-    const closeRandomMenu = () => {
+    const closeRandomMenu = (event: PointerEvent) => {
+      const target = event.target
+      if (target instanceof Node && randomMenuRef.current?.contains(target)) {
+        return
+      }
+
       setRandomMenuOpen(false)
     }
 
-    window.addEventListener('pointerdown', closeRandomMenu)
+    document.addEventListener('pointerdown', closeRandomMenu, true)
 
     return () => {
-      window.removeEventListener('pointerdown', closeRandomMenu)
+      document.removeEventListener('pointerdown', closeRandomMenu, true)
     }
   }, [randomMenuOpen])
 
@@ -342,12 +369,10 @@ export function NowPlayingPage({
   }, [])
 
   useEffect(() => {
-    if (songs.length === 0) {
-      return
+    if (songs.length > 0) {
+      window.requestAnimationFrame(locateCurrent)
     }
-
-    window.requestAnimationFrame(locateCurrent)
-  }, [])
+  }, [selectedQueueIndex, selectedTrackId, searchQuery, songs.length])
 
   return (
     <section className="now-playing-page page-panel">
@@ -363,7 +388,7 @@ export function NowPlayingPage({
           <Icon name="play" />
           {t('nowPlaying.quickPlay')}
         </button>
-        <div className="now-playing-random-menu">
+        <div className="now-playing-random-menu" ref={randomMenuRef}>
           <button
             type="button"
             className="now-playing-command"
@@ -381,32 +406,35 @@ export function NowPlayingPage({
             {t('nowPlaying.randomPlay')}
           </button>
           {randomMenuOpen ? (
-            <div
-              className="now-playing-random-options"
-              role="menu"
-              onPointerDown={(event) => {
-                event.stopPropagation()
-              }}
-            >
-              {randomActions.map((action) => (
-                action.separator ? (
-                  <div className="now-playing-random-options-separator" key={action.key} role="separator" />
-                ) : (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    key={action.key}
-                    disabled={action.disabled}
-                    onClick={() => {
-                      void action.onClick?.()
-                      setRandomMenuOpen(false)
-                    }}
-                  >
-                    {action.text}
-                  </button>
-                )
-              ))}
-            </div>
+            <>
+              <div className="dropdown-dismiss-layer" onPointerDown={() => setRandomMenuOpen(false)} />
+              <div
+                className="now-playing-random-options"
+                role="menu"
+                onPointerDown={(event) => {
+                  event.stopPropagation()
+                }}
+              >
+                {randomActions.map((action) => (
+                  action.separator ? (
+                    <div className="now-playing-random-options-separator" key={action.key} role="separator" />
+                  ) : (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      key={action.key}
+                      disabled={action.disabled}
+                      onClick={() => {
+                        void action.onClick?.()
+                        setRandomMenuOpen(false)
+                      }}
+                    >
+                      {action.text}
+                    </button>
+                  )
+                ))}
+              </div>
+            </>
           ) : null}
         </div>
         {canUseQueueCommands ? (
@@ -482,6 +510,9 @@ export function NowPlayingPage({
         }}
       >
         {visibleSongs.length === 0 ? (
+          loading ? (
+            <LoadingState t={t} compact />
+          ) : (
           <div className="empty-state compact">
             <h3>
               {songs.length > 0
@@ -490,6 +521,7 @@ export function NowPlayingPage({
             </h3>
             <p>{songs.length > 0 ? t('nowPlaying.queueSearchHelp') : t('nowPlaying.queueEmptyHelp')}</p>
           </div>
+          )
         ) : (
           <div className="now-playing-playlist-control" style={{ minHeight: listHeight }}>
             {topSpacerHeight > 0 ? <div className="now-playing-virtual-spacer" style={{ height: topSpacerHeight }} /> : null}
@@ -498,7 +530,7 @@ export function NowPlayingPage({
 
               return (
                 <NowPlayingQueueItem
-                  key={song.id}
+                  key={queueEntryKeys[queueIndex]}
                   containerRef={current ? currentRowRef : undefined}
                   song={song}
                   t={t}
@@ -547,24 +579,23 @@ export function NowPlayingPage({
                     event.dataTransfer.setData('text/plain', String(queueIndex))
                   }}
                   onDragOver={(event) => {
-                    event.preventDefault()
-                    event.dataTransfer.dropEffect = 'move'
-                    const rect = event.currentTarget.getBoundingClientRect()
-                    setDropIndicator({
-                      queueIndex,
-                      position: event.clientY > rect.top + rect.height / 2 ? 'after' : 'before',
-                    })
-                  }}
+                  event.preventDefault()
+                  event.dataTransfer.dropEffect = 'move'
+                  setDropIndicator({
+                    queueIndex,
+                    position: getDropPosition(event),
+                  })
+                }}
                   onDragLeave={() => {
                     setDropIndicator((current) => current?.queueIndex === queueIndex ? null : current)
                   }}
                   onDrop={(event) => {
-                    event.preventDefault()
-                    const draggedQueueIndex = draggedQueueIndexRef.current
-                    draggedQueueIndexRef.current = null
-                    const insertAfter = dropIndicator?.queueIndex === queueIndex && dropIndicator.position === 'after'
-                    setDropIndicator(null)
-                    if (draggedQueueIndex == null || draggedQueueIndex === queueIndex) {
+                  event.preventDefault()
+                  const draggedQueueIndex = draggedQueueIndexRef.current
+                  draggedQueueIndexRef.current = null
+                  const insertAfter = getDropPosition(event) === 'after'
+                  setDropIndicator(null)
+                  if (draggedQueueIndex == null || draggedQueueIndex === queueIndex) {
                       return
                     }
 

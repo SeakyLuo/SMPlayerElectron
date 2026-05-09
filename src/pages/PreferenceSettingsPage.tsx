@@ -376,10 +376,32 @@ function PreferenceLevelSelect({
   onChange: (level: PreferenceLevel) => void
 }) {
   const [open, setOpen] = useState(false)
+  const [menuElement, setMenuElement] = useState<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+
+    const closeMenu = (event: PointerEvent) => {
+      const target = event.target
+      if (target instanceof Node && menuElement?.contains(target)) {
+        return
+      }
+
+      setOpen(false)
+    }
+
+    document.addEventListener('pointerdown', closeMenu, true)
+    return () => {
+      document.removeEventListener('pointerdown', closeMenu, true)
+    }
+  }, [menuElement, open])
 
   return (
     <div
       className="preference-level-select"
+      ref={setMenuElement}
       onBlur={(event) => {
         const nextFocus = event.relatedTarget
         if (!(nextFocus instanceof Node) || !event.currentTarget.contains(nextFocus)) {
@@ -400,23 +422,26 @@ function PreferenceLevelSelect({
         <Icon name={open ? 'chevronUp' : 'chevronDown'} />
       </button>
       {open ? (
-        <div className="preference-level-menu" role="listbox">
-          {preferenceLevels.map((level) => (
-            <button
-              type="button"
-              role="option"
-              aria-selected={level === value}
-              className={level === value ? 'is-selected' : ''}
-              key={level}
-              onClick={() => {
-                onChange(level)
-                setOpen(false)
-              }}
-            >
-              {t(`preferences.level.${level}`)}
-            </button>
-          ))}
-        </div>
+        <>
+          <div className="dropdown-dismiss-layer" onPointerDown={() => setOpen(false)} />
+          <div className="preference-level-menu" role="listbox">
+            {preferenceLevels.map((level) => (
+              <button
+                type="button"
+                role="option"
+                aria-selected={level === value}
+                className={level === value ? 'is-selected' : ''}
+                key={level}
+                onClick={() => {
+                  onChange(level)
+                  setOpen(false)
+                }}
+              >
+                {t(`preferences.level.${level}`)}
+              </button>
+            ))}
+          </div>
+        </>
       ) : null}
     </div>
   )

@@ -5,6 +5,7 @@ import { DefaultAlbumArtwork } from './DefaultAlbumArtwork'
 import { Icon, type IconName } from './icons'
 
 const NOT_FOUND_ARTWORK_URL = '/colorful_bg_wide.png'
+const DEFAULT_PLAYLIST_ARTWORK_URL = '/monotone_bg_wide.png'
 
 export interface GridArtworkAction {
   key: string
@@ -34,7 +35,7 @@ export function GridArtworkCardContent({
   actions = [],
 }: GridArtworkCardContentProps) {
   const renderFallbackArtwork = () => fallbackIcon === 'folder' || fallbackIcon === 'playlists'
-    ? <img className="grid-artwork-card-fallback-image" src={NOT_FOUND_ARTWORK_URL} alt="" />
+    ? <img className="grid-artwork-card-fallback-image" src={fallbackIcon === 'playlists' ? DEFAULT_PLAYLIST_ARTWORK_URL : NOT_FOUND_ARTWORK_URL} alt="" />
     : <DefaultAlbumArtwork className="grid-artwork-card-fallback-image" />
 
   return (

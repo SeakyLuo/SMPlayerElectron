@@ -116,22 +116,6 @@ function getAlbumSongGroups(songIds: number[], songsById: Map<number, LibrarySon
   return [...albumSongs.values()]
 }
 
-function addOriginalFolderThumbnails(thumbnailUrls: string[], songIds: number[], songsById: Map<number, LibrarySong>) {
-  const albumSongGroups = getAlbumSongGroups(songIds, songsById)
-
-  for (const groupSongs of albumSongGroups) {
-    const songWithThumbnail = groupSongs.find((song) => song.artworkUrl)
-    if (songWithThumbnail) {
-      thumbnailUrls.push(songWithThumbnail.artworkUrl)
-    }
-    if (thumbnailUrls.length === 4) {
-      return true
-    }
-  }
-
-  return false
-}
-
 export function getOriginalFolderThumbnailCandidateGroups(
   node: FolderNode,
   nodes: Map<string, FolderNode>,
@@ -145,23 +129,6 @@ export function getOriginalFolderThumbnailCandidateGroups(
   }
 
   return candidateGroups
-}
-
-function getOriginalFolderThumbnailUrls(node: FolderNode, nodes: Map<string, FolderNode>, songsById: Map<number, LibrarySong>) {
-  const thumbnailUrls: string[] = []
-
-  if (addOriginalFolderThumbnails(thumbnailUrls, node.thumbnailDirectSongIds, songsById)) {
-    return thumbnailUrls
-  }
-
-  for (const childPath of node.thumbnailChildPaths) {
-    const childNode = nodes.get(childPath)!
-    if (addOriginalFolderThumbnails(thumbnailUrls, childNode.thumbnailSubtreeSongIds, songsById)) {
-      return thumbnailUrls
-    }
-  }
-
-  return thumbnailUrls
 }
 
 function compareLocalText(left: string, right: string) {
@@ -302,9 +269,6 @@ export function buildFolderIndex(songs: LibrarySong[], folders: LibraryFolder[],
   for (const node of nodes.values()) {
     node.thumbnailChildPaths = node.childPaths.slice().sort((left, right) => nodes.get(left)!.id - nodes.get(right)!.id)
     node.thumbnailDirectSongIds = node.directSongIds.slice().sort((left, right) => left - right)
-  }
-
-  for (const node of nodes.values()) {
     node.childPaths.sort((left, right) => compareLocalText(nodes.get(left)!.name, nodes.get(right)!.name))
     node.directSongIds.sort((left, right) => {
       const leftSong = songsById.get(left)!
@@ -319,10 +283,6 @@ export function buildFolderIndex(songs: LibrarySong[], folders: LibraryFolder[],
 
   for (const node of nodes.values()) {
     node.thumbnailSubtreeSongIds = getFolderFlattenedThumbnailSongIds(node, nodes)
-  }
-
-  for (const node of nodes.values()) {
-    node.thumbnailUrls = getOriginalFolderThumbnailUrls(node, nodes, songsById)
   }
 
   return { nodes, songsById }

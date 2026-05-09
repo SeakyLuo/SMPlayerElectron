@@ -13,6 +13,10 @@ const text = {
     en: 'Changed to a more modern UI.',
     zh: '改成了更加现代的 UI。',
   },
+  nightMode: {
+    en: 'Added night mode settings, including automatic switching by time.',
+    zh: '新增夜间模式设置，支持按时间自动切换。',
+  },
   removedNotificationLyrics: {
     en: 'Removed lyrics in system notifications because the Electron version cannot update Windows notifications continuously like the original UWP toast.',
     zh: '移除了系统通知中的歌词显示，因为 Electron 版本无法像原 UWP Toast 那样持续更新 Windows 通知。',
@@ -316,7 +320,7 @@ const text = {
 } satisfies Record<string, ReleaseNoteText>
 
 const releaseNoteDefinitions: Array<{ version: string; items: Array<keyof typeof text> }> = [
-  { version: '3.0.0', items: ['modernUi', 'removedNotificationLyrics', 'tilesUnsupported'] },
+  { version: '3.0.0', items: ['modernUi', 'nightMode', 'removedNotificationLyrics', 'tilesUnsupported'] },
   { version: '2.10.3', items: ['bugFixes'] },
   { version: '2.10.1', items: ['switchLanguageSupported', 'improvedVoiceAssistant'] },
   { version: '2.9.15', items: ['addSeeAlbumArtToFullPage', 'crashFixes'] },

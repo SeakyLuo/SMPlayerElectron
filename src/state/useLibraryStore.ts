@@ -54,6 +54,7 @@ interface LibraryStoreState {
   removeRecentSearches: (entryIds: number[]) => Promise<void>
   clearRecentSearches: () => Promise<void>
   removeRecentPlayed: (songIds: number[]) => Promise<void>
+  restoreRecentPlayed: (songIds: number[]) => Promise<void>
   clearRecentPlayed: () => Promise<void>
   updateSettings: (update: AppSettingsUpdate) => Promise<void>
   saveViewState: (update: ViewStateUpdate) => Promise<void>
@@ -65,6 +66,9 @@ const emptySnapshot: LibrarySnapshot = {
     useFilenameNotMusicName: false,
     showCount: true,
     themeColor: '#0078D7',
+    nightMode: 'never',
+    nightModeStartTime: '20:00',
+    nightModeEndTime: '06:00',
     notificationSend: 'music-changed',
     notificationDisplay: 'normal',
     showNotifications: true,
@@ -913,6 +917,20 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
           recentSongs: state.snapshot.recentSongs.filter((song) => !songIdSet.has(song.id)),
         },
       }))
+    } catch (error) {
+      set({ error: getErrorMessage(error) })
+    }
+  },
+  restoreRecentPlayed: async (songIds) => {
+    if (!window.smplayer || songIds.length === 0) {
+      return
+    }
+
+    set({ error: null })
+
+    try {
+      await window.smplayer.restoreRecentPlayed(songIds)
+      await get().refresh()
     } catch (error) {
       set({ error: getErrorMessage(error) })
     }

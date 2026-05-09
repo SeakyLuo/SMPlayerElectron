@@ -9,6 +9,7 @@ export type PlaybackMode = 'once' | 'repeat' | 'repeat-one' | 'shuffle'
 export type GlobalMediaCommand = 'play-pause' | 'next' | 'previous' | 'stop'
 export type NotificationSendMode = 'music-changed' | 'never'
 export type NotificationDisplayMode = 'reminder' | 'normal' | 'quick'
+export type NightMode = 'auto' | 'on' | 'never'
 export type MusicLibrarySortCriterion =
   | 'title'
   | 'artist'
@@ -43,6 +44,14 @@ export interface LibrarySong {
   playCount: number
   dateAdded: string
   favorite: boolean
+}
+
+export type SongArtworkSource = 'cached' | 'embedded' | 'shell' | 'none'
+
+export interface SongArtworkSnapshot {
+  songId: number
+  artworkUrl: string
+  source: SongArtworkSource
 }
 
 export interface RecentLibrarySong extends LibrarySong {
@@ -197,6 +206,9 @@ export interface SettingsSnapshot {
   useFilenameNotMusicName: boolean
   showCount: boolean
   themeColor: string
+  nightMode: NightMode
+  nightModeStartTime: string
+  nightModeEndTime: string
   notificationSend: NotificationSendMode
   notificationDisplay: NotificationDisplayMode
   showNotifications: boolean
@@ -311,6 +323,9 @@ export interface AppSettingsUpdate {
   useFilenameNotMusicName?: boolean
   showCount?: boolean
   themeColor?: string
+  nightMode?: NightMode
+  nightModeStartTime?: string
+  nightModeEndTime?: string
   notificationSend?: NotificationSendMode
   notificationDisplay?: NotificationDisplayMode
   showNotifications?: boolean
@@ -358,7 +373,8 @@ export interface SmplayerApi {
   createLocalFolder: (rootPath: string, relativePath: string, name: string) => Promise<void>
   revealSystemLogs: () => Promise<void>
   showTrackNotification: (track: TrackNotificationPayload) => Promise<void>
-  getSongArtwork: (songId: number) => Promise<string>
+  getSongArtworkSnapshot: (songId: number) => Promise<SongArtworkSnapshot>
+  getSongArtworkSnapshots: (songIds: number[]) => Promise<SongArtworkSnapshot[]>
   pickAlbumArtwork: (albumName: string) => Promise<void>
   pickAlbumArtworkSource: () => Promise<SongArtworkPickResult>
   saveAlbumArtwork: (albumName: string, sourcePath: string) => Promise<void>
@@ -409,6 +425,7 @@ export interface SmplayerApi {
   removeRecentSearches: (entryIds: number[]) => Promise<void>
   clearRecentSearches: () => Promise<void>
   removeRecentPlayed: (songIds: number[]) => Promise<void>
+  restoreRecentPlayed: (songIds: number[]) => Promise<void>
   clearRecentPlayed: () => Promise<void>
   updateSettings: (update: AppSettingsUpdate) => Promise<void>
   updatePreferenceSettings: (update: PreferenceSettingsUpdate) => Promise<void>

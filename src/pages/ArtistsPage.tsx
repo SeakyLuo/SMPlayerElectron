@@ -5,6 +5,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { ArtworkImage } from '../components/ArtworkImage'
 import { DefaultAlbumArtwork } from '../components/DefaultAlbumArtwork'
 import { Icon } from '../components/icons'
+import { LoadingState } from '../components/LoadingState'
 import { MenuFlyout } from '../components/MenuFlyout'
 import { getAddToPlaylistMenuFlyoutItem, getPreferenceMenuFlyoutItem, type MenuFlyoutItem, type MenuFlyoutPosition } from '../components/MenuFlyoutHelper'
 import { MusicMenuFlyout, type MusicMenuFlyoutState } from '../components/MusicMenuFlyout'
@@ -14,9 +15,11 @@ import { getSongArtists } from '../shared/artists'
 import type { LibraryPlaylist, LibrarySong, PreferenceItemSnapshot, PreferenceSettingsSnapshot } from '../shared/contracts'
 import { formatDuration } from '../shared/formatters'
 import type { Translator } from '../shared/i18n'
+import { getQuickJumpTooltip } from '../shared/quickJumpTooltip'
 import { useLibraryStore } from '../state/useLibraryStore'
 import { usePreferenceStore } from '../state/usePreferenceStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
+import { useSongArtwork } from '../hooks/useSongArtwork'
 
 interface ArtistsPageProps {
   t: Translator
@@ -48,6 +51,7 @@ interface ArtistGroup {
   songs: LibrarySong[]
   albumCount: number
   artworkUrl: string
+  artworkSongId: number | null
 }
 
 interface AlbumGroup {
@@ -63,6 +67,36 @@ const ARTIST_ALBUM_CARD_HEADER_HEIGHT = 112
 const ARTIST_ALBUM_SONG_ROW_HEIGHT = 48
 const ARTIST_ALBUM_CARD_GAP = 22
 const ARTIST_ALBUM_OVERSCAN_ROWS = 2
+const ARTIST_QUICK_JUMP_KEYS = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
+const artistTextCollator = new Intl.Collator('zh-Hans-CN-u-co-pinyin', {
+  numeric: true,
+  sensitivity: 'base',
+})
+const ARTIST_PINYIN_BOUNDARIES = [
+  ['A', '阿'],
+  ['B', '芭'],
+  ['C', '擦'],
+  ['D', '搭'],
+  ['E', '蛾'],
+  ['F', '发'],
+  ['G', '噶'],
+  ['H', '哈'],
+  ['J', '击'],
+  ['K', '喀'],
+  ['L', '垃'],
+  ['M', '妈'],
+  ['N', '拿'],
+  ['O', '哦'],
+  ['P', '啪'],
+  ['Q', '期'],
+  ['R', '然'],
+  ['S', '撒'],
+  ['T', '塌'],
+  ['W', '挖'],
+  ['X', '昔'],
+  ['Y', '压'],
+  ['Z', '匝'],
+] as const
 
 export function ArtistsPage({
   t,
@@ -163,6 +197,13 @@ export function ArtistsPage({
   const renderedArtists = visibleArtists.slice(artistStartIndex, artistEndIndex)
   const artistTopSpacerHeight = artistStartIndex * ARTIST_ROW_HEIGHT
   const artistBottomSpacerHeight = (visibleArtists.length - artistEndIndex) * ARTIST_ROW_HEIGHT
+  const artistQuickJumpMap = useMemo(
+    () => buildArtistQuickJumpMap(visibleArtists),
+    [visibleArtists],
+  )
+  const activeArtistQuickJumpKey = visibleArtists.length > 0
+    ? getArtistQuickJumpBucket(visibleArtists[Math.min(visibleArtists.length - 1, Math.max(0, Math.floor(effectiveArtistScrollTop / ARTIST_ROW_HEIGHT)))]!.name)
+    : ''
 
   const openGroupMenu = (
     event: MouseEvent<HTMLElement>,
@@ -208,6 +249,11 @@ export function ArtistsPage({
     onAddSongsToPlaylist(favoritePlaylistId, songIds)
   }
 
+  const playShuffledSongs = (groupSongs: LibrarySong[]) => {
+    const shuffledSongIds = shuffleSongIds(groupSongs.map((song) => song.id))
+    onPlayTrack(shuffledSongIds[0]!, shuffledSongIds)
+  }
+
   const clearSelection = () => {
     setSelectedSongIds(new Set())
   }
@@ -217,6 +263,17 @@ export function ArtistsPage({
     if (artistIndex > -1 && artistListRef.current) {
       artistListRef.current.scrollTo({ top: artistIndex * ARTIST_ROW_HEIGHT, behavior: 'smooth' })
     }
+  }
+
+  const jumpToArtistKey = (key: string) => {
+    const targetIndex = artistQuickJumpMap.get(key)
+    if (targetIndex == null) {
+      return
+    }
+
+    artistListRef.current?.scrollTo({
+      top: targetIndex * ARTIST_ROW_HEIGHT,
+    })
   }
 
   const reloadArtist = (artistName: string) => {
@@ -290,6 +347,10 @@ export function ArtistsPage({
   }, [selectedArtistName])
 
   useEffect(() => {
+    if (loading || scanning) {
+      return
+    }
+
     if (targetArtistName) {
       if (!artistGroups.some((artist) => artist.name === targetArtistName)) {
         showNotification(t('collection.artistNotFound'), t('common.close'), () => {}, 3200)
@@ -297,9 +358,13 @@ export function ArtistsPage({
       }
       chooseArtist(targetArtistName)
     }
-  }, [targetArtistName, artistGroups])
+  }, [artistGroups, loading, scanning, targetArtistName])
 
   useEffect(() => {
+    if ((loading || scanning) && visibleArtists.length === 0) {
+      return
+    }
+
     if (targetArtistName && artistGroups.some((artist) => artist.name === targetArtistName)) {
       return
     }
@@ -316,7 +381,7 @@ export function ArtistsPage({
       setMultiSelect(false)
       clearSelection()
     }
-  }, [targetArtistName, artistGroups, visibleArtists, selectedArtistName])
+  }, [artistGroups, loading, scanning, selectedArtistName, targetArtistName, visibleArtists])
 
   return (
     <section className="page-panel artists-page">
@@ -362,69 +427,92 @@ export function ArtistsPage({
             ) : null}
           </div>
           {showArtistSearchSuggestions ? (
-            <div className="page-search-suggestions">
-              {visibleArtistSearchSuggestions.map((artist) => (
-                <button
-                  className="page-search-suggestion"
-                  type="button"
-                  key={artist.name}
-                  onMouseDown={(event) => {
-                    event.preventDefault()
-                  }}
-                  onClick={() => {
-                    setArtistSearchFocused(false)
-                    chooseArtist(artist.name)
-                  }}
-                >
-                  <span>{artist.name}</span>
-                </button>
-              ))}
-            </div>
+            <>
+              <div className="dropdown-dismiss-layer" onPointerDown={() => setArtistSearchFocused(false)} />
+              <div className="page-search-suggestions">
+                {visibleArtistSearchSuggestions.map((artist) => (
+                  <button
+                    className="page-search-suggestion"
+                    type="button"
+                    key={artist.name}
+                    onMouseDown={(event) => {
+                      event.preventDefault()
+                    }}
+                    onClick={() => {
+                      setArtistSearchFocused(false)
+                      chooseArtist(artist.name)
+                    }}
+                  >
+                    <span>{artist.name}</span>
+                  </button>
+                ))}
+              </div>
+            </>
           ) : null}
         </div>
         {loading || scanning ? <div className="artists-progress" aria-label={t('nowPlaying.loading')} /> : null}
 
-        <div
-          className="artists-list"
-          ref={artistListRef}
-          aria-label={t('common.artists')}
-          onScroll={(event) => {
-            setArtistScrollTop(event.currentTarget.scrollTop)
-          }}
-        >
-          {artistTopSpacerHeight > 0 ? (
-            <div className="artists-virtual-spacer" style={{ height: artistTopSpacerHeight }} />
-          ) : null}
-          {renderedArtists.map((artist) => (
-            <div className="artist-virtual-row" key={artist.name}>
-              <button
-                className={clsx('artist-list-item', {
-                  'is-active': artist.name === selectedArtist?.name,
-                })}
-                type="button"
-                title={artist.name}
-                onClick={() => {
-                  setSelectedArtistName(artist.name)
-                  setMultiSelect(false)
-                  clearSelection()
-                }}
-                onContextMenu={(event) => {
-                  setSelectedArtistName(artist.name)
-                  openGroupMenu(event, 'artist', artist.name, artist.songs)
-                }}
-              >
-                <span className="artist-list-avatar">
-                  <Icon name="users" />
-                </span>
-                <span className="artist-list-copy">
-                  <strong>{artist.name}</strong>
-                </span>
-              </button>
-            </div>
-          ))}
-          {artistBottomSpacerHeight > 0 ? (
-            <div className="artists-virtual-spacer" style={{ height: artistBottomSpacerHeight }} />
-          ) : null}
+        <div className="artists-list-shell">
+          <nav className="artists-quick-jump" aria-label={t('artists.quickJump')}>
+            {ARTIST_QUICK_JUMP_KEYS.map((key) => {
+              const enabled = artistQuickJumpMap.has(key)
+
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  className={clsx({ 'is-active': activeArtistQuickJumpKey === key })}
+                  disabled={!enabled}
+                  title={getQuickJumpTooltip(key, enabled, t('common.artists'), t('common.artist'), t)}
+                  onClick={() => {
+                    jumpToArtistKey(key)
+                  }}
+                >
+                  {key}
+                </button>
+              )
+            })}
+          </nav>
+          <div
+            className="artists-list"
+            ref={artistListRef}
+            aria-label={t('common.artists')}
+            onScroll={(event) => {
+              setArtistScrollTop(event.currentTarget.scrollTop)
+            }}
+          >
+            {artistTopSpacerHeight > 0 ? (
+              <div className="artists-virtual-spacer" style={{ height: artistTopSpacerHeight }} />
+            ) : null}
+            {renderedArtists.map((artist) => (
+              <div className="artist-virtual-row" key={artist.name}>
+                <button
+                  className={clsx('artist-list-item', {
+                    'is-active': artist.name === selectedArtist?.name,
+                  })}
+                  type="button"
+                  title={artist.name}
+                  onClick={() => {
+                    setSelectedArtistName(artist.name)
+                    setMultiSelect(false)
+                    clearSelection()
+                  }}
+                  onContextMenu={(event) => {
+                    setSelectedArtistName(artist.name)
+                    openGroupMenu(event, 'artist', artist.name, artist.songs)
+                  }}
+                >
+                  <ArtistListArtwork artist={artist} />
+                  <span className="artist-list-copy">
+                    <strong>{artist.name}</strong>
+                  </span>
+                </button>
+              </div>
+            ))}
+            {artistBottomSpacerHeight > 0 ? (
+              <div className="artists-virtual-spacer" style={{ height: artistBottomSpacerHeight }} />
+            ) : null}
+          </div>
         </div>
       </aside>
 
@@ -447,20 +535,33 @@ export function ArtistsPage({
                   })}
                 </p>
               </div>
-              <button
-                className="artist-more-button"
-                type="button"
-                title={t('detail.playArtist')}
-                disabled={selectedArtistSongs.length === 0}
-                onClick={(event) => {
-                  openGroupMenu(event, 'artist', selectedArtist.name, selectedArtistSongs)
-                }}
-                onContextMenu={(event) => {
-                  openGroupMenu(event, 'artist', selectedArtist.name, selectedArtistSongs)
-                }}
-              >
-                <Icon name="moreHorizontal" />
-              </button>
+              <div className="artist-detail-actions">
+                <button
+                  className="artist-shuffle-button"
+                  type="button"
+                  title={t('nowPlaying.randomPlay')}
+                  disabled={selectedArtistSongs.length === 0}
+                  onClick={() => {
+                    playShuffledSongs(selectedArtistSongs)
+                  }}
+                >
+                  <Icon name="shuffle" />
+                </button>
+                <button
+                  className="artist-more-button"
+                  type="button"
+                  title={t('player.more')}
+                  disabled={selectedArtistSongs.length === 0}
+                  onClick={(event) => {
+                    openGroupMenu(event, 'artist', selectedArtist.name, selectedArtistSongs)
+                  }}
+                  onContextMenu={(event) => {
+                    openGroupMenu(event, 'artist', selectedArtist.name, selectedArtistSongs)
+                  }}
+                >
+                  <Icon name="moreHorizontal" />
+                </button>
+              </div>
               {loadingArtistName === selectedArtist.name ? <div className="artist-detail-progress" aria-label={t('nowPlaying.loading')} /> : null}
             </header>
 
@@ -482,19 +583,31 @@ export function ArtistsPage({
                           })}
                         </p>
                       </div>
-                      <button
-                        className="artist-album-more"
-                        type="button"
-                        title={album.name}
-                        onClick={(event) => {
-                          openGroupMenu(event, 'album', album.name, album.songs)
-                        }}
-                        onContextMenu={(event) => {
-                          openGroupMenu(event, 'album', album.name, album.songs)
-                        }}
-                      >
-                        <Icon name="moreHorizontal" />
-                      </button>
+                      <div className="artist-album-actions">
+                        <button
+                          className="artist-album-shuffle"
+                          type="button"
+                          title={t('nowPlaying.randomPlay')}
+                          onClick={() => {
+                            playShuffledSongs(album.songs)
+                          }}
+                        >
+                          <Icon name="shuffle" />
+                        </button>
+                        <button
+                          className="artist-album-more"
+                          type="button"
+                          title={t('player.more')}
+                          onClick={(event) => {
+                            openGroupMenu(event, 'album', album.name, album.songs)
+                          }}
+                          onContextMenu={(event) => {
+                            openGroupMenu(event, 'album', album.name, album.songs)
+                          }}
+                        >
+                          <Icon name="moreHorizontal" />
+                        </button>
+                      </div>
                     </header>
 
                     <div className="artist-song-list">
@@ -541,10 +654,14 @@ export function ArtistsPage({
             </div>
           </>
         ) : (
-          <div className="empty-state">
-            <h3>{visibleArtists.length > 0 ? t('artists.selectArtist') : t('collection.noArtists')}</h3>
-            {visibleArtists.length > 0 ? null : <p>{t('artists.emptyCopy')}</p>}
-          </div>
+          loading || scanning ? (
+            <LoadingState t={t} />
+          ) : (
+            <div className="empty-state">
+              <h3>{visibleArtists.length > 0 ? t('artists.selectArtist') : t('collection.noArtists')}</h3>
+              {visibleArtists.length > 0 ? null : <p>{t('artists.emptyCopy')}</p>}
+            </div>
+          )
         )}
       </main>
       <MultiSelectCommandBar
@@ -590,7 +707,10 @@ export function ArtistsPage({
           onClose={() => {
             setGroupMenu(null)
           }}
-          onPlayTrack={onPlayTrack}
+          onPlaySongs={(songIds) => {
+            const shuffledSongIds = shuffleSongIds(songIds)
+            onPlayTrack(shuffledSongIds[0]!, shuffledSongIds)
+          }}
           onSelectSongs={selectSongs}
           onLocateArtist={(artistName) => {
             scrollToArtist(artistName)
@@ -677,7 +797,7 @@ function ArtistGroupContextMenu({
   onAddSongsToFavorites,
   onCreatePlaylistWithSongs,
   onClose,
-  onPlayTrack,
+  onPlaySongs,
   onSelectSongs,
   onLocateArtist,
   onReloadArtist,
@@ -691,7 +811,7 @@ function ArtistGroupContextMenu({
   onAddSongsToFavorites: (songIds: number[]) => void
   onCreatePlaylistWithSongs: (name: string, songIds: number[]) => void
   onClose: () => void
-  onPlayTrack: (trackId: number, queueSongIds: number[]) => void
+  onPlaySongs: (songIds: number[]) => void
   onSelectSongs: (songIds: number[]) => void
   onLocateArtist: (artistName: string) => void
   onReloadArtist: (artistName: string) => void
@@ -743,8 +863,7 @@ function ArtistGroupContextMenu({
           text: t('nowPlaying.randomPlay'),
           icon: 'shuffle',
           onClick: () => {
-            const shuffledSongIds = shuffleSongIds(songIds)
-            onPlayTrack(shuffledSongIds[0]!, shuffledSongIds)
+            onPlaySongs(songIds)
           },
         },
         ...(addToItem ? [addToItem] : []),
@@ -775,12 +894,12 @@ function ArtistGroupContextMenu({
                 },
               },
               {
-              key: 'locate-artist',
-              text: t('artists.locateArtist'),
-              icon: 'nowPlaying',
-              onClick: () => {
-                onLocateArtist(menu.label)
-              },
+                key: 'locate-artist',
+                text: t('artists.locateArtist'),
+                icon: 'nowPlaying',
+                onClick: () => {
+                  onLocateArtist(menu.label)
+                },
               },
             ] satisfies MenuFlyoutItem[]
           : [{
@@ -820,6 +939,55 @@ function searchArtists(artists: ArtistGroup[], query: string) {
     .filter((result) => result.score > 0)
     .sort((left, right) => right.score - left.score)
     .map((result) => result.artist)
+}
+
+function buildArtistQuickJumpMap(artists: ArtistGroup[]) {
+  const indexes = new Map<string, number>()
+
+  artists.forEach((artist, index) => {
+    const bucket = getArtistQuickJumpBucket(artist.name)
+    if (!indexes.has(bucket)) {
+      indexes.set(bucket, index)
+    }
+  })
+
+  return indexes
+}
+
+function getArtistQuickJumpBucket(artistName: string) {
+  const firstChar = artistName.trim().charAt(0)
+  const normalizedFirstChar = firstChar
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleUpperCase()
+
+  if (/^[A-Z]$/.test(normalizedFirstChar)) {
+    return normalizedFirstChar
+  }
+
+  if (!/[\u3400-\u9fff]/.test(firstChar)) {
+    return '#'
+  }
+
+  for (let index = ARTIST_PINYIN_BOUNDARIES.length - 1; index >= 0; index -= 1) {
+    const [key, boundary] = ARTIST_PINYIN_BOUNDARIES[index]!
+    if (artistTextCollator.compare(firstChar, boundary) >= 0) {
+      return key
+    }
+  }
+
+  return '#'
+}
+
+function compareArtistText(left: string, right: string) {
+  const leftBucketIndex = ARTIST_QUICK_JUMP_KEYS.indexOf(getArtistQuickJumpBucket(left))
+  const rightBucketIndex = ARTIST_QUICK_JUMP_KEYS.indexOf(getArtistQuickJumpBucket(right))
+
+  if (leftBucketIndex !== rightBucketIndex) {
+    return leftBucketIndex - rightBucketIndex
+  }
+
+  return artistTextCollator.compare(left, right)
 }
 
 function evaluateString(value: string, keyword: string, offset = 0) {
@@ -897,25 +1065,34 @@ function buildArtistGroups(songs: LibrarySong[], t: Translator) {
           songs: [],
           albumCount: 0,
           artworkUrl: '',
+          artworkSongId: null,
         }
 
       group.songs.push(song)
-      if (!group.artworkUrl && song.artworkUrl) {
-        group.artworkUrl = song.artworkUrl
-      }
       groups.set(artistName, group)
     }
   }
 
   return [...groups.values()]
-    .map((artist) => ({
-      ...artist,
-      albumCount: new Set(artist.songs.map((song) => song.album || t('common.albumUnknown'))).size,
-      songs: artist.songs.slice().sort((left, right) =>
-        (left.album || '').localeCompare(right.album || '') || left.title.localeCompare(right.title),
-      ),
-    }))
-    .sort((left, right) => left.name.localeCompare(right.name))
+    .map((artist) => {
+      const artworkSong = artist.songs
+        .filter((song) => song.artworkUrl)
+        .sort((left, right) => Date.parse(right.dateAdded) - Date.parse(left.dateAdded))[0]
+      const latestSong = artist.songs
+        .slice()
+        .sort((left, right) => Date.parse(right.dateAdded) - Date.parse(left.dateAdded))[0]!
+
+      return {
+        ...artist,
+        albumCount: new Set(artist.songs.map((song) => song.album || t('common.albumUnknown'))).size,
+        artworkUrl: artworkSong?.artworkUrl ?? '',
+        artworkSongId: artworkSong?.id ?? latestSong.id,
+        songs: artist.songs.slice().sort((left, right) =>
+          compareArtistText(left.album || '', right.album || '') || compareArtistText(left.title, right.title),
+        ),
+      }
+    })
+    .sort((left, right) => compareArtistText(left.name, right.name))
 }
 
 function buildAlbumGroups(songs: LibrarySong[], t: Translator): AlbumGroup[] {
@@ -939,7 +1116,7 @@ function buildAlbumGroups(songs: LibrarySong[], t: Translator): AlbumGroup[] {
     groups.set(albumName, group)
   }
 
-  return [...groups.values()].sort((left, right) => left.name.localeCompare(right.name))
+  return [...groups.values()].sort((left, right) => compareArtistText(left.name, right.name))
 }
 
 function getEstimatedArtistAlbumHeight(album: AlbumGroup) {
@@ -986,26 +1163,31 @@ function getArtistAlbumVirtualWindow(heights: number[], scrollTop: number, viewp
   }
 }
 
+function ArtistListArtwork({ artist }: { artist: ArtistGroup }) {
+  const { artworkUrl, refreshArtwork } = useSongArtwork(artist.artworkSongId, artist.artworkUrl)
+  return (
+    <ArtworkImage
+      className="artist-list-artwork"
+      src={artworkUrl}
+      title={artist.name}
+      onError={refreshArtwork}
+      renderFallback={() => (
+        <span className="artist-list-avatar" aria-hidden="true">
+          <Icon name="users" />
+        </span>
+      )}
+    />
+  )
+}
+
 function AlbumArtwork({ title, artworkUrl, songId }: { title: string; artworkUrl: string; songId: number }) {
-  const [resolvedArtworkUrl, setResolvedArtworkUrl] = useState('')
-  const effectiveArtworkUrl = artworkUrl || resolvedArtworkUrl
-
-  useEffect(() => {
-    setResolvedArtworkUrl('')
-    if (artworkUrl) {
-      return
-    }
-
-    void window.smplayer?.getSongArtwork(songId).then((nextArtworkUrl) => {
-      setResolvedArtworkUrl(nextArtworkUrl)
-    })
-  }, [artworkUrl, songId])
-
+  const resolvedArtwork = useSongArtwork(songId, artworkUrl)
   return (
     <ArtworkImage
       className="artist-album-artwork"
-      src={effectiveArtworkUrl}
+      src={resolvedArtwork.artworkUrl}
       title={title}
+      onError={resolvedArtwork.refreshArtwork}
       renderFallback={() => (
         <div className="artist-album-artwork artist-album-artwork-fallback" aria-hidden="true">
           <DefaultAlbumArtwork className="artist-album-artwork-fallback-image" />

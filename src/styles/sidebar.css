@@ -14,6 +14,9 @@
   box-shadow: none;
   backdrop-filter: none;
   overflow: hidden;
+  transition:
+    padding 180ms cubic-bezier(0.2, 0, 0, 1),
+    gap 180ms cubic-bezier(0.2, 0, 0, 1);
   -webkit-app-region: no-drag;
   app-region: no-drag;
 }
@@ -26,8 +29,8 @@
 .sidebar.is-collapsed {
   align-items: center;
   gap: 8px;
-  padding-left: 0;
-  padding-right: 0;
+  padding-left: 12px;
+  padding-right: 12px;
   overflow: visible;
   scrollbar-gutter: auto;
 }
@@ -37,9 +40,8 @@
 }
 
 .sidebar.is-collapsed .nav-link {
-  display: flex;
-  justify-content: center;
-  align-items: center;
+  grid-template-columns: 40px minmax(0, 0fr);
+  gap: 0;
   width: var(--sidebar-collapsed-item-size);
   min-height: var(--sidebar-collapsed-item-size);
   padding: 0;
@@ -62,9 +64,12 @@
 }
 
 .sidebar-titlebar {
+  position: relative;
   display: flex;
   align-items: center;
-  min-height: 42px;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--sidebar-collapsed-item-size);
   gap: 8px;
   -webkit-app-region: drag;
 }
@@ -74,6 +79,7 @@
 }
 
 .sidebar-app-name {
+  margin-left: 48px;
   min-width: 0;
   color: var(--text-strong);
   font-size: 14px;
@@ -81,16 +87,24 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  opacity: 1;
+  transition:
+    opacity 120ms ease,
+    transform 180ms cubic-bezier(0.2, 0, 0, 1);
 }
 
 .sidebar.is-collapsed .sidebar-titlebar {
-  justify-content: center;
-  width: var(--sidebar-collapsed-item-size);
-  min-height: 42px;
+  justify-content: flex-start;
+  width: 100%;
+  min-height: var(--sidebar-collapsed-item-size);
 }
 
 .sidebar.is-collapsed .sidebar-app-name {
-  display: none;
+  width: 0;
+  max-width: 0;
+  opacity: 0;
+  transform: translateX(-6px);
+  pointer-events: none;
 }
 
 .sidebar-collapse-button {
@@ -116,7 +130,6 @@
   outline: none;
 }
 
-.sidebar.is-collapsed .sidebar-back-button,
 .sidebar.is-collapsed .sidebar-collapse-button {
   display: grid;
   place-items: center;
@@ -137,7 +150,9 @@
 }
 
 .sidebar-back-button {
-  position: relative;
+  position: absolute;
+  left: 0;
+  top: 0;
   display: grid;
   place-items: center;
   width: 40px;
@@ -152,8 +167,9 @@
 
 .sidebar-back-button svg,
 .sidebar-collapse-button svg {
-  width: 20px;
-  height: 20px;
+  width: 19px;
+  height: 19px;
+  transform: translateY(-1px);
 }
 
 .sidebar-back-button:hover {
@@ -187,8 +203,7 @@
 }
 
 .sidebar.is-collapsed .brand,
-.sidebar.is-collapsed .nav-section-label,
-.sidebar.is-collapsed .nav-link span:last-child {
+.sidebar.is-collapsed .nav-section-label {
   display: none;
 }
 
@@ -200,7 +215,8 @@
 .sidebar.is-collapsed .search-form {
   position: relative;
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: 40px minmax(0, 0fr);
+  gap: 0;
   place-items: center;
   width: var(--sidebar-collapsed-item-size);
   height: var(--sidebar-collapsed-item-size);
@@ -213,11 +229,13 @@
 }
 
 .sidebar.is-collapsed .search-shell input {
-  display: none;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .sidebar.is-collapsed .search-clear-button {
-  display: none;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .sidebar.is-collapsed .search-commit-button {

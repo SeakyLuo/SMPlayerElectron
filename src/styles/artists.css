@@ -57,7 +57,7 @@
 
 .page-search-form {
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr);
+  grid-template-columns: 24px minmax(0, 1fr);
   align-items: center;
   gap: 10px;
   height: 42px;
@@ -72,12 +72,6 @@
 
 .page-search-form.has-query {
   grid-template-columns: 18px minmax(0, 1fr) 24px;
-}
-
-.page-search-form svg {
-  align-self: center;
-  width: 17px;
-  height: 17px;
 }
 
 .page-search-form input {
@@ -120,6 +114,7 @@
   appearance: none;
 }
 
+.page-search-submit-button,
 .page-search-clear-button {
   display: grid;
   place-items: center;
@@ -128,16 +123,23 @@
   height: 24px;
   border: 0;
   border-radius: 6px;
-  background: rgba(var(--accent-rgb), 0.08);
-  color: var(--accent-strong);
+  background: transparent;
+  color: var(--text-muted);
   padding: 0;
   cursor: pointer;
 }
 
-.page-search-clear-button:hover {
-  background: rgba(var(--accent-rgb), 0.12);
+.page-search-submit-button:hover {
+  background: rgba(var(--accent-rgb), 0.08);
+  color: var(--accent-strong);
 }
 
+.page-search-clear-button:hover {
+  background: rgba(var(--accent-rgb), 0.12);
+  color: var(--accent-strong);
+}
+
+.page-search-submit-button svg,
 .page-search-clear-button svg {
   width: 14px;
   height: 14px;
@@ -148,7 +150,7 @@
   top: calc(100% + 8px);
   left: 0;
   right: 0;
-  z-index: 35;
+  z-index: 121;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -199,12 +201,62 @@
   font-size: 12px;
 }
 
+.artists-list-shell {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: 4px;
+  margin-top: 14px;
+}
+
+.artists-quick-jump {
+  display: grid;
+  align-self: stretch;
+  grid-template-rows: repeat(27, minmax(0, 1fr));
+  width: 22px;
+  min-height: 0;
+  padding: 2px 0;
+  box-sizing: border-box;
+}
+
+.artists-quick-jump button {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  min-height: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.artists-quick-jump button:hover,
+.artists-quick-jump button.is-active {
+  background: rgba(var(--accent-rgb), 0.12);
+  color: var(--accent-strong);
+}
+
+.artists-quick-jump button:disabled {
+  color: rgba(91, 105, 122, 0.24);
+  cursor: default;
+  opacity: 0.62;
+}
+
+.artists-quick-jump button:disabled:hover {
+  background: transparent;
+  color: rgba(91, 105, 122, 0.24);
+}
+
 .artists-list {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
   gap: 0;
   min-height: 0;
-  margin-top: 14px;
   overflow: auto;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
@@ -264,6 +316,15 @@
 .artist-list-avatar svg {
   width: 17px;
   height: 17px;
+}
+
+.artist-list-artwork {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: rgba(129, 139, 152, 0.14);
 }
 
 .artist-list-copy {
@@ -338,26 +399,49 @@
   font-size: 16px;
 }
 
-.artist-more-button {
+.artist-detail-actions,
+.artist-album-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.artist-shuffle-button,
+.artist-more-button,
+.artist-album-shuffle,
+.artist-album-more {
   flex: 0 0 auto;
   display: grid;
   place-items: center;
-  width: 42px;
-  height: 42px;
+  width: 38px;
+  height: 38px;
   border: 0;
   border-radius: 999px;
-  background: var(--accent);
-  color: #fff;
+  background: transparent;
+  color: var(--text-strong);
   cursor: pointer;
-  box-shadow: 0 14px 28px var(--accent-shadow);
 }
 
+.artist-shuffle-button:hover:not(:disabled),
+.artist-more-button:hover:not(:disabled),
+.artist-more-button:focus-visible:not(:disabled),
+.artist-album-shuffle:hover:not(:disabled),
+.artist-album-shuffle:focus-visible:not(:disabled),
+.artist-album-more:hover:not(:disabled),
+.artist-album-more:focus-visible:not(:disabled) {
+  background: rgba(12, 22, 35, 0.06);
+}
+
+.artist-shuffle-button:disabled,
 .artist-more-button:disabled {
   cursor: not-allowed;
-  opacity: 0.55;
+  opacity: 0.45;
 }
 
+.artist-shuffle-button svg,
 .artist-more-button svg,
+.artist-album-shuffle svg,
 .artist-album-more svg {
   width: 20px;
   height: 20px;
@@ -386,7 +470,7 @@
 .artist-album-header {
   box-sizing: border-box;
   display: grid;
-  grid-template-columns: 80px minmax(0, 1fr) 40px;
+  grid-template-columns: 80px minmax(0, 1fr) 84px;
   align-items: center;
   gap: 16px;
   min-height: 112px;
@@ -437,23 +521,6 @@
   margin: 8px 0 0;
   color: var(--text-muted);
   font-size: 14px;
-}
-
-.artist-album-more {
-  justify-self: end;
-  display: grid;
-  place-items: center;
-  width: 38px;
-  height: 38px;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--text-strong);
-  cursor: pointer;
-}
-
-.artist-album-more:hover {
-  background: rgba(12, 22, 35, 0.06);
 }
 
 .artist-song-list {

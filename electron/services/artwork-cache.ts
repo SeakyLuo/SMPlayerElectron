@@ -9,7 +9,7 @@ const SHELL_THUMBNAIL_CACHE_VERSION = `shell-thumbnail-${SHELL_THUMBNAIL_SIZE}`
 
 export async function writeArtworkCache(
   thumbnailCachePath: string,
-  filePath: string,
+  _filePath: string,
   picture?: { data: Uint8Array; format?: string },
 ) {
   if (!picture?.data || picture.data.length === 0) {
@@ -17,7 +17,7 @@ export async function writeArtworkCache(
   }
 
   const extension = getArtworkExtension(picture.format)
-  const artworkHash = createHash('sha1').update(filePath).digest('hex')
+  const artworkHash = createHash('sha1').update(picture.data).digest('hex')
   const thumbnailPath = join(thumbnailCachePath, `${artworkHash}.${extension}`)
 
   await mkdir(thumbnailCachePath, { recursive: true })

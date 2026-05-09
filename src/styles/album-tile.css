@@ -1,21 +1,22 @@
 .album-tile {
   position: relative;
-  display: grid;
-  grid-template-rows: 160px auto;
-  align-content: start;
-  width: 160px;
-  height: 232px;
-  min-width: 160px;
+  display: flex;
+  flex-direction: column;
+  width: 180px;
+  min-width: 180px;
+  min-height: 232px;
   box-sizing: border-box;
   border: 0;
-  border-radius: 0;
+  border-radius: 12px;
   background: transparent;
-  color: #111;
-  padding: 0;
+  color: var(--text-strong);
+  padding: 10px;
   text-align: left;
   font: inherit;
   box-shadow: none;
-  transition: opacity 140ms ease;
+  transition:
+    background-color 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .album-art-preview-backdrop {
@@ -82,23 +83,17 @@
 }
 
 .album-tile::before {
-  content: '';
-  position: absolute;
-  inset: -8px;
-  z-index: 0;
-  border-radius: 10px;
-  background: rgba(var(--accent-rgb), 0.1);
-  box-shadow: inset 0 0 0 2px rgba(var(--accent-rgb), 0.8), 0 8px 18px rgba(38, 94, 176, 0.2);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 140ms ease;
+  content: none;
 }
 
 .album-tile:hover,
-.album-tile:focus-visible {
-  transform: none;
-  background: transparent;
-  box-shadow: none;
+.album-tile:focus-visible,
+.album-tile:focus-within,
+.album-tile.is-selected {
+  background: rgba(var(--accent-rgb), 0.08);
+  box-shadow:
+    0 12px 26px rgba(30, 42, 58, 0.12),
+    inset 0 0 0 1px rgba(var(--accent-rgb), 0.16);
 }
 
 .album-tile-surface {
@@ -107,9 +102,9 @@
   z-index: 1;
   display: grid;
   grid-template-rows: 160px auto;
+  row-gap: 12px;
   align-content: start;
   width: 100%;
-  height: 100%;
   box-sizing: border-box;
   border: 0;
   background: transparent;
@@ -130,24 +125,19 @@
 }
 
 .album-tile.is-selected::before {
-  opacity: 1;
+  content: none;
 }
 
 .album-art-control {
   display: block;
   width: 100%;
   height: 160px;
-  border-radius: 6px;
+  border-radius: 8px;
   object-fit: cover;
-  background: linear-gradient(135deg, #c7806e, #efc49b);
-  box-shadow: none;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 8px 18px rgba(32, 45, 63, 0.13);
   position: relative;
   z-index: 1;
-  transition: box-shadow 160ms ease;
-}
-
-.album-tile:hover .album-art-control {
-  box-shadow: 4px 6px 12px rgba(22, 31, 44, 0.22);
 }
 
 .album-art-control-fallback {
@@ -167,53 +157,51 @@
   position: relative;
   z-index: 1;
   display: flex;
+  width: 160px;
   flex-direction: column;
-  gap: 4px;
+  align-self: center;
+  gap: 0;
   min-width: 0;
-  padding: 8px 0 0;
+  padding: 0;
+  margin-top: 0;
 }
 
 .album-tile-copy strong,
-.album-tile-copy span,
-.album-tile-copy small {
+.album-tile-copy span {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .album-tile-copy strong {
-  display: -webkit-box;
-  white-space: normal;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 1.25;
+  color: var(--text-strong);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+  white-space: nowrap;
 }
 
 .album-tile-copy span {
-  color: #777;
-  font-size: 13px;
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 12px;
   font-weight: 400;
-}
-
-.album-tile-copy small {
-  display: none;
+  line-height: 1.35;
 }
 
 .album-hover-actions {
   position: absolute;
-  left: 50%;
-  top: 80px;
+  left: 90px;
+  top: 90px;
   z-index: 4;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0;
+  display: grid;
+  grid-template-columns: repeat(2, 48px);
+  gap: 10px;
   opacity: 0;
   pointer-events: none;
   transform: translate(-50%, -50%);
-  transition: opacity 140ms ease;
+  transition: opacity 120ms ease;
 }
 
 .album-tile:hover .album-hover-actions,
@@ -234,11 +222,26 @@
   place-items: center;
   width: 48px;
   height: 48px;
-  margin: 5px;
   border: 0;
   border-radius: 50%;
+  background: rgba(30, 34, 40, 0.72);
+  color: #fff;
+  box-shadow: 0 12px 28px rgba(14, 22, 32, 0.28);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
   line-height: 1;
   cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.album-hover-actions button:hover {
+  background: rgba(20, 24, 30, 0.82);
+  color: #fff;
+  box-shadow: 0 14px 32px rgba(14, 22, 32, 0.28);
+  transform: scale(1.1);
 }
 
 .album-hover-actions svg {
@@ -264,28 +267,32 @@
 
 .album-select-mark {
   position: absolute;
-  right: 8px;
-  bottom: 8px;
+  right: 12px;
+  top: 12px;
+  bottom: auto;
   z-index: 3;
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  background: var(--accent);
+  width: 18px;
+  height: 18px;
+  border: 1px solid rgba(88, 100, 116, 0.42);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.82);
   color: #fff;
-  box-shadow: 0 8px 18px rgba(38, 94, 176, 0.26);
-  opacity: 0;
-  transform: scale(0.88);
-  transition: opacity 140ms ease, transform 140ms ease;
+  box-shadow: none;
+  opacity: 1;
+  transform: none;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
 }
 
 .album-select-mark svg {
-  width: 18px;
-  height: 18px;
+  width: 13px;
+  height: 13px;
 }
 
-.album-tile.is-selected .album-select-mark {
-  opacity: 1;
-  transform: scale(1);
+.album-select-mark.is-selected {
+  border-color: var(--accent);
+  background: var(--accent);
 }

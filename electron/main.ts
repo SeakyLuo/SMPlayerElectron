@@ -14,8 +14,7 @@ import {
   shell,
 } from 'electron'
 import { copyFile, mkdir, readdir, stat } from 'node:fs/promises'
-import { createReadStream, existsSync } from 'node:fs'
-import { Readable } from 'node:stream'
+import { existsSync } from 'node:fs'
 import { basename, dirname, extname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -265,8 +264,8 @@ async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1460,
     height: 940,
-    minWidth: 1180,
-    minHeight: 760,
+    minWidth: 320,
+    minHeight: 520,
     show: false,
     autoHideMenuBar: true,
     backgroundColor: appWindowBackgroundColor,
@@ -466,100 +465,10 @@ function getProtocolSongId(url: string) {
   return songId
 }
 
-function getAudioContentType(filePath: string) {
-  switch (extname(filePath).toLocaleLowerCase()) {
-    case '.mp3':
-      return 'audio/mpeg'
-    case '.flac':
-      return 'audio/flac'
-    case '.m4a':
-    case '.alac':
-    case '.aac':
-      return 'audio/mp4'
-    case '.wav':
-      return 'audio/wav'
-    case '.ogg':
-      return 'audio/ogg'
-    case '.wma':
-      return 'audio/x-ms-wma'
-    default:
-      return 'application/octet-stream'
-  }
-}
-
-function getMediaRange(rangeHeader: string, fileSize: number) {
-  const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader)
-  if (!match) {
-    return null
-  }
-
-  const [, startText, endText] = match
-  if (!startText && !endText) {
-    return null
-  }
-
-  if (!startText) {
-    const suffixLength = Number(endText)
-    return {
-      start: Math.max(fileSize - suffixLength, 0),
-      end: fileSize - 1,
-    }
-  }
-
-  const start = Number(startText)
-  const end = endText ? Number(endText) : fileSize - 1
-  if (start >= fileSize || end < start) {
-    return null
-  }
-
-  return {
-    start,
-    end: Math.min(end, fileSize - 1),
-  }
-}
-
-async function createMediaFileResponse(filePath: string, request: Request) {
-  const fileStats = await stat(filePath)
-  const fileSize = fileStats.size
-  const contentType = getAudioContentType(filePath)
-  const rangeHeader = request.headers.get('range')
-
-  if (rangeHeader) {
-    const range = getMediaRange(rangeHeader, fileSize)
-    if (!range) {
-      return new Response(null, {
-        status: 416,
-        headers: {
-          'accept-ranges': 'bytes',
-          'content-range': `bytes */${fileSize}`,
-        },
-      })
-    }
-
-    return new Response(Readable.toWeb(createReadStream(filePath, range)) as ReadableStream<Uint8Array>, {
-      status: 206,
-      headers: {
-        'accept-ranges': 'bytes',
-        'content-length': String(range.end - range.start + 1),
-        'content-range': `bytes ${range.start}-${range.end}/${fileSize}`,
-        'content-type': contentType,
-      },
-    })
-  }
-
-  return new Response(Readable.toWeb(createReadStream(filePath)) as ReadableStream<Uint8Array>, {
-    headers: {
-      'accept-ranges': 'bytes',
-      'content-length': String(fileSize),
-      'content-type': contentType,
-    },
-  })
-}
-
 function registerMediaProtocols() {
-  protocol.handle('smplayer-media', async (request) => {
+  protocol.registerFileProtocol('smplayer-media', (request, callback) => {
     const songId = getProtocolSongId(request.url)
-    return createMediaFileResponse(dataStore!.getSongPath(songId), request)
+    callback({ path: dataStore!.getSongPath(songId) })
   })
 
   protocol.handle('smplayer-artwork', async (request) => {
@@ -573,7 +482,7 @@ function registerMediaProtocols() {
       headers: request.headers,
     })
     const headers = new Headers(response.headers)
-    headers.set('cache-control', 'no-store')
+    headers.set('cache-control', 'public, max-age=31536000, immutable')
 
     return new Response(response.body, {
       headers,
@@ -666,7 +575,12 @@ app.whenReady().then(async () => {
     return takePendingOpenSongIds()
   })
   ipcMain.handle('library:get-snapshot', () => dataStore!.getLibrarySnapshot())
-  ipcMain.handle('library:get-artwork', (_event, songId: number) => dataStore!.getSongArtwork(songId))
+  ipcMain.handle('library:get-artwork-snapshot', (_event, songId: number) =>
+    dataStore!.getSongArtworkSnapshot(songId),
+  )
+  ipcMain.handle('library:get-artwork-snapshots', (_event, songIds: number[]) =>
+    dataStore!.getSongArtworkSnapshots(songIds),
+  )
   ipcMain.handle('library:get-song-properties', (_event, songId: number) =>
     dataStore!.getSongProperties(songId),
   )
@@ -1058,6 +972,9 @@ app.whenReady().then(async () => {
   ipcMain.handle('search:clear-recent', () => dataStore!.clearRecentSearches())
   ipcMain.handle('recent-played:remove', (_event, songIds: number[]) =>
     dataStore!.removeRecentPlayed(songIds),
+  )
+  ipcMain.handle('recent-played:restore', (_event, songIds: number[]) =>
+    dataStore!.restoreRecentPlayed(songIds),
   )
   ipcMain.handle('recent-played:clear', () => dataStore!.clearRecentPlayed())
   ipcMain.handle('settings:update', (_event, update) => dataStore!.updateSettings(update))

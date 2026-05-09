@@ -18,7 +18,7 @@ import { getAddToPlaylistMenuFlyoutItem, getPreferenceMenuFlyoutItem, type MenuF
 import { MusicDialog } from './MusicDialog'
 import { usePreferenceStore } from '../state/usePreferenceStore'
 
-interface PlayerBarTrack {
+interface MediaControlTrack {
   id: number | null
   title: string
   artist: string
@@ -27,8 +27,8 @@ interface PlayerBarTrack {
   favorite?: boolean
 }
 
-interface PlayerBarProps {
-  track: PlayerBarTrack
+interface MediaControlProps {
+  track: MediaControlTrack
   currentSong: LibrarySong | null
   playlists: LibraryPlaylist[]
   queueSongIds: number[]
@@ -51,22 +51,24 @@ interface PlayerBarProps {
   onToggleRepeatOne: () => void
   onToggleFavorite: () => void
   onQuickPlay: () => void | Promise<void>
+  onPlayTrack: (trackId: number, queueSongIds: number[]) => void
   onVoiceCommand: (text: string) => Promise<VoiceAssistantResponse>
   getVoiceHint: () => string
   getVoiceHelpText: () => string
   voiceLanguage: string
   onOpenNowPlaying: () => void
   onArtworkResolved: (trackId: number, artworkUrl: string) => void
+  onSaved: () => void | Promise<void>
 }
 
-interface VoiceAssistantResponse {
+export interface VoiceAssistantResponse {
   message: string
   shouldContinue: boolean
 }
 
 type VoiceAssistantState = 'idle' | 'capturing' | 'processing'
 
-interface PlayerControlsProps {
+interface MediaControlButtonsProps {
   trackId: number | null
   isLoading: boolean
   favorite?: boolean
@@ -98,6 +100,36 @@ interface PlayerControlsProps {
   onMoreClick: (event: MouseEvent<HTMLButtonElement>) => void
 }
 
+interface MediaControlSurfaceProps {
+  trackId: number | null
+  isLoading: boolean
+  favorite?: boolean
+  disabled: boolean
+  isPlaying: boolean
+  volume: number
+  isMuted: boolean
+  mode: PlaybackMode
+  currentSong: LibrarySong | null
+  t: Translator
+  onTogglePlayPause: () => void
+  onPrevious: () => void
+  onNext: () => void
+  onSeek: (seconds: number) => void
+  onBeginSeek: () => void
+  onEndSeek: () => void
+  onVolumeChange: (volume: number) => void
+  onToggleMute: () => void
+  onToggleShuffle: () => void
+  onToggleRepeat: () => void
+  onToggleRepeatOne: () => void
+  onToggleFavorite: () => void
+  onVoiceCommand: (text: string) => Promise<VoiceAssistantResponse>
+  getVoiceHint: () => string
+  getVoiceHelpText: () => string
+  voiceLanguage: string
+  onMoreClick: (event: MouseEvent<HTMLButtonElement>) => void
+}
+
 function getShuffleTitle(t: Translator, mode: PlaybackMode) {
   return mode === 'shuffle' ? t('player.shuffleEnabled') : t('player.shuffleDisabled')
 }
@@ -112,7 +144,7 @@ function getRepeatOneTitle(t: Translator, mode: PlaybackMode) {
 
 const DEFAULT_ARTWORK_URL = '/monotone_bg_wide.png'
 
-export function PlayerControls({
+export function MediaControlButtons({
   trackId,
   isLoading,
   favorite,
@@ -142,9 +174,41 @@ export function PlayerControls({
   voiceAssistantActive = false,
   isMuted,
   onMoreClick,
-}: PlayerControlsProps) {
+}: MediaControlButtonsProps) {
   const playTitle = isPlaying ? t('player.pause') : t('player.play')
   const volumeTitle = isMuted ? t('player.unmute') : t('player.mute')
+  const [volumeTooltipActive, setVolumeTooltipActive] = useState(false)
+  const volumeTooltipTimerRef = useRef<number | null>(null)
+  const volumeDisplayValue = Math.round(volumeValue)
+
+  const clearVolumeTooltipTimer = () => {
+    if (volumeTooltipTimerRef.current != null) {
+      window.clearTimeout(volumeTooltipTimerRef.current)
+      volumeTooltipTimerRef.current = null
+    }
+  }
+
+  const showVolumeTooltip = (duration = 900) => {
+    if (disabled) {
+      return
+    }
+
+    clearVolumeTooltipTimer()
+    setVolumeTooltipActive(true)
+    volumeTooltipTimerRef.current = window.setTimeout(() => {
+      setVolumeTooltipActive(false)
+      volumeTooltipTimerRef.current = null
+    }, duration)
+  }
+
+  const hideVolumeTooltip = () => {
+    clearVolumeTooltipTimer()
+    setVolumeTooltipActive(false)
+  }
+
+  useEffect(() => () => {
+    clearVolumeTooltipTimer()
+  }, [])
 
   return (
     <>
@@ -222,20 +286,46 @@ export function PlayerControls({
           >
             <Icon name={isMuted ? 'volumeMuted' : 'volume'} />
           </button>
-          <input
-            className="media-slider"
-            type="range"
-            min="0"
-            max="100"
-            value={volumeValue}
-            style={{ '--range-progress': `${volumeValue}%` } as CSSProperties}
-            disabled={disabled}
-            onChange={(event) => {
-              onVolumeChange(Number(event.currentTarget.value))
-            }}
-            aria-label={t('player.volume')}
-            title={String(volumeValue)}
-          />
+          <div
+            className={`volume-slider-wrap${volumeTooltipActive ? ' is-active' : ''}${disabled ? ' is-disabled' : ''}`}
+            style={{ '--volume-tooltip-left': `${volumeValue}%` } as CSSProperties}
+          >
+            <input
+              className="media-slider"
+              type="range"
+              min="0"
+              max="100"
+              value={volumeValue}
+              style={{ '--range-progress': `${volumeValue}%` } as CSSProperties}
+              disabled={disabled}
+              onChange={(event) => {
+                onVolumeChange(Number(event.currentTarget.value))
+                showVolumeTooltip()
+              }}
+              onPointerDown={() => {
+                clearVolumeTooltipTimer()
+                setVolumeTooltipActive(true)
+              }}
+              onPointerUp={() => {
+                showVolumeTooltip(650)
+              }}
+              onPointerCancel={() => {
+                hideVolumeTooltip()
+              }}
+              onLostPointerCapture={() => {
+                showVolumeTooltip(650)
+              }}
+              onFocus={() => {
+                showVolumeTooltip(900)
+              }}
+              onBlur={() => {
+                hideVolumeTooltip()
+              }}
+              aria-label={t('player.volume')}
+              aria-valuetext={String(volumeDisplayValue)}
+            />
+            <span className="volume-slider-tooltip" aria-hidden="true">{volumeDisplayValue}</span>
+          </div>
           <button
             type="button"
             disabled={disabled || trackId == null}
@@ -297,16 +387,26 @@ export function PlayerControls({
   )
 }
 
-export function PlayerBar({
-  track,
-  currentSong,
-  playlists,
-  queueSongIds,
-  disabled = false,
+function MediaControlLyrics({ line }: { line: string }) {
+  return (
+    <span className="player-track-lyrics" title={line}>
+      <span key={line} className="player-track-lyrics-line">
+        {line}
+      </span>
+    </span>
+  )
+}
+
+export function MediaControlSurface({
+  trackId,
+  isLoading,
+  favorite,
+  disabled,
   isPlaying,
   volume,
   isMuted,
   mode,
+  currentSong,
   t,
   onTogglePlayPause,
   onPrevious,
@@ -320,80 +420,40 @@ export function PlayerBar({
   onToggleRepeat,
   onToggleRepeatOne,
   onToggleFavorite,
-  onQuickPlay,
   onVoiceCommand,
   getVoiceHint,
   getVoiceHelpText,
   voiceLanguage,
-  onOpenNowPlaying,
-  onArtworkResolved,
-}: PlayerBarProps) {
-  const navigate = useNavigate()
-  const createPlaylist = useLibraryStore((state) => state.createPlaylist)
-  const addSongToPlaylist = useLibraryStore((state) => state.addSongToPlaylist)
-  const replaceNowPlaying = useLibraryStore((state) => state.replaceNowPlaying)
-  const removeSongFromPlaylist = useLibraryStore((state) => state.removeSongFromPlaylist)
-  const snapshotQueueSongIds = useLibraryStore((state) => state.snapshot.nowPlaying.songIds)
-  const playerLyricsSource = useLibraryStore((state) => state.snapshot.settings.playerLyricsSource)
-  const refreshPreferences = usePreferenceStore((state) => state.refresh)
-  const showUndoableNotification = useUndoableNotificationStore((state) => state.show)
+  onMoreClick,
+}: MediaControlSurfaceProps) {
   const [isProgressSeeking, setIsProgressSeeking] = useState(false)
   const [draftProgressSeconds, setDraftProgressSeconds] = useState(0)
-  const isProgressSeekingRef = useRef(false)
-  const { progressSeconds, durationSeconds } = usePlaybackProgress()
-  const effectiveDurationSeconds = durationSeconds || currentSong?.duration || 0
-  const progressRatio = effectiveDurationSeconds > 0 ? progressSeconds / effectiveDurationSeconds : 0
-  const displayProgressSeconds = isProgressSeeking ? draftProgressSeconds : progressSeconds
-  const progressValue = disabled || effectiveDurationSeconds <= 0 ? 0 : Math.min(Math.max(displayProgressSeconds, 0), effectiveDurationSeconds)
-  const progressMax = Math.max(effectiveDurationSeconds, 0)
-  const progressFill = progressMax > 0 ? (progressValue / progressMax) * 100 : 0
-  const volumeValue = disabled ? 0 : Math.min(Math.max(volume, 0), 100)
-  const [coverColorRgb, setCoverColorRgb] = useState(getDefaultArtworkColorRgb)
-  const [failedArtworkUrl, setFailedArtworkUrl] = useState('')
-  const [moreMenu, setMoreMenu] = useState<MenuFlyoutPosition | null>(null)
-  const [dialogMode, setDialogMode] = useState<'properties' | 'lyrics' | 'album-art' | null>(null)
-  const [preferenceItem, setPreferenceItem] = useState<PreferenceItemSnapshot | null>(null)
-  const [lyrics, setLyrics] = useState<LyricsSnapshot | null>(null)
   const [voiceAssistantOpen, setVoiceAssistantOpen] = useState(false)
   const [voiceAssistantText, setVoiceAssistantText] = useState('')
   const [voiceAssistantState, setVoiceAssistantState] = useState<VoiceAssistantState>('idle')
   const [voiceAssistantNeedsPrivacySettings, setVoiceAssistantNeedsPrivacySettings] = useState(false)
   const [voiceAssistantHelpOpen, setVoiceAssistantHelpOpen] = useState(false)
+  const isProgressSeekingRef = useRef(false)
   const speechRecognitionRef = useRef<SpeechRecognition | null>(null)
   const voiceAssistantTimerRef = useRef<number | null>(null)
+  const { progressSeconds, durationSeconds } = usePlaybackProgress()
+  const effectiveDurationSeconds = durationSeconds || currentSong?.duration || 0
+  const displayProgressSeconds = isProgressSeeking ? draftProgressSeconds : progressSeconds
+  const progressValue = disabled || effectiveDurationSeconds <= 0 ? 0 : Math.min(Math.max(displayProgressSeconds, 0), effectiveDurationSeconds)
+  const progressMax = Math.max(effectiveDurationSeconds, 0)
+  const progressFill = progressMax > 0 ? (progressValue / progressMax) * 100 : 0
+  const volumeValue = disabled ? 0 : Math.min(Math.max(volume, 0), 100)
   const voiceAssistantStateLabel = t(`voiceAssistant.state.${voiceAssistantState}`)
-  const {
-    artworkUrl: effectiveArtworkUrl,
-    baseArtworkUrl,
-    refreshArtwork,
-  } = useSongArtwork(track.id, track.artworkUrl)
-  const usableArtworkUrl = effectiveArtworkUrl && effectiveArtworkUrl !== failedArtworkUrl
-    ? effectiveArtworkUrl
-    : ''
-  const displayArtworkUrl = usableArtworkUrl || DEFAULT_ARTWORK_URL
-  const refreshPreferenceItem = async (snapshot?: PreferenceSettingsSnapshot | null) => {
-    if (currentSong) {
-      const settings = snapshot ?? await refreshPreferences()
-      if (!settings) {
-        return
-      }
-      setPreferenceItem(settings.songs.find((item) => item.itemId === String(currentSong.id)) ?? null)
-    }
-  }
 
-  const showUndo = (message: string, action: () => void | Promise<void>) => {
-    showUndoableNotification(message, t('common.undo'), action)
-  }
-  const currentLyricsLine = useMemo(
-    () => getCurrentLyricsLine(lyrics, progressSeconds, progressRatio),
-    [lyrics, progressRatio, progressSeconds],
-  )
-
-  const closeVoiceAssistant = () => {
+  const clearVoiceAssistantTimer = () => {
     if (voiceAssistantTimerRef.current != null) {
       window.clearTimeout(voiceAssistantTimerRef.current)
       voiceAssistantTimerRef.current = null
     }
+  }
+
+  const closeVoiceAssistant = () => {
+    clearVoiceAssistantTimer()
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel()
     }
@@ -497,12 +557,6 @@ export function PlayerBar({
     void window.smplayer?.openVoiceAssistantPrivacySettings()
   }
 
-  const openMoreMenu = (event: MouseEvent<HTMLButtonElement>) => {
-    const rect = event.currentTarget.getBoundingClientRect()
-    setMoreMenu({ x: rect.left, y: rect.top })
-    void refreshPreferenceItem()
-  }
-
   const beginProgressSeek = (event: PointerEvent<HTMLInputElement>) => {
     event.currentTarget.setPointerCapture(event.pointerId)
     isProgressSeekingRef.current = true
@@ -522,97 +576,20 @@ export function PlayerBar({
     setIsProgressSeeking(false)
   }
 
-  useEffect(() => {
-    setFailedArtworkUrl('')
-    if (track.id != null && baseArtworkUrl) {
-      onArtworkResolved(track.id, baseArtworkUrl)
+  useEffect(() => () => {
+    clearVoiceAssistantTimer()
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel()
     }
-  }, [baseArtworkUrl, onArtworkResolved, track.id])
-
-  useEffect(() => {
-    if (!currentSong) {
-      setLyrics(null)
-      return
-    }
-
-    let isDisposed = false
-    void window.smplayer!.getLyrics(currentSong.id, playerLyricsSource).then((snapshot) => {
-      if (!isDisposed) {
-        setLyrics(snapshot)
-      }
-    })
-
-    return () => {
-      isDisposed = true
-    }
-  }, [currentSong?.id, playerLyricsSource])
-
-  useEffect(() => {
-    let isDisposed = false
-
-    extractArtworkColorRgb(usableArtworkUrl)
-      .then((nextColor) => {
-        if (!isDisposed) {
-          setCoverColorRgb(nextColor)
-        }
-      })
-      .catch(() => {
-        if (!isDisposed) {
-          setCoverColorRgb(getDefaultArtworkColorRgb())
-        }
-      })
-
-    return () => {
-      isDisposed = true
-    }
-  }, [usableArtworkUrl])
+    speechRecognitionRef.current?.stop()
+  }, [])
 
   return (
-    <footer
-      className={`player-bar${disabled ? ' disabled' : ''}`}
-      style={{ '--player-cover-rgb': coverColorRgb } as CSSProperties}
-    >
-      <button
-        className="player-track"
-        type="button"
-        disabled={track.id == null}
-        aria-label={track.title}
-        title={track.id == null ? undefined : track.title}
-        onClick={onOpenNowPlaying}
-      >
-        <span className="player-artwork-shell">
-          <img
-            className="album-swatch artwork-image"
-            src={displayArtworkUrl}
-            alt=""
-            aria-hidden="true"
-            onError={() => {
-              setFailedArtworkUrl(displayArtworkUrl)
-              refreshArtwork()
-            }}
-          />
-          <span className="player-artwork-overlay" aria-hidden="true">
-            <Icon name="fullscreen" />
-          </span>
-        </span>
-        <span className="player-track-copy">
-          <strong>{track.title}</strong>
-          <span>{track.artist}</span>
-          {currentLyricsLine ? (
-            <span
-              className="player-track-lyrics"
-              title={currentLyricsLine}
-            >
-              {currentLyricsLine}
-            </span>
-          ) : null}
-        </span>
-      </button>
-
-      <PlayerControls
-        trackId={track.id}
-        isLoading={track.isLoading}
-        favorite={track.favorite}
+    <>
+      <MediaControlButtons
+        trackId={trackId}
+        isLoading={isLoading}
+        favorite={favorite}
         disabled={disabled}
         isPlaying={isPlaying}
         volumeValue={volumeValue}
@@ -642,7 +619,7 @@ export function PlayerBar({
         onVoiceAssistantClick={openVoiceAssistant}
         voiceAssistantActive={voiceAssistantOpen}
         isMuted={isMuted}
-        onMoreClick={openMoreMenu}
+        onMoreClick={onMoreClick}
       />
       {voiceAssistantOpen ? (
         <div className={`voice-assistant-popover is-${voiceAssistantState}`} role="status">
@@ -711,6 +688,212 @@ export function PlayerBar({
           </div>
         </div>
       ) : null}
+    </>
+  )
+}
+
+export function MediaControl({
+  track,
+  currentSong,
+  playlists,
+  queueSongIds,
+  disabled = false,
+  isPlaying,
+  volume,
+  isMuted,
+  mode,
+  t,
+  onTogglePlayPause,
+  onPrevious,
+  onNext,
+  onSeek,
+  onBeginSeek,
+  onEndSeek,
+  onVolumeChange,
+  onToggleMute,
+  onToggleShuffle,
+  onToggleRepeat,
+  onToggleRepeatOne,
+  onToggleFavorite,
+  onQuickPlay,
+  onPlayTrack,
+  onVoiceCommand,
+  getVoiceHint,
+  getVoiceHelpText,
+  voiceLanguage,
+  onOpenNowPlaying,
+  onArtworkResolved,
+  onSaved,
+}: MediaControlProps) {
+  const navigate = useNavigate()
+  const createPlaylist = useLibraryStore((state) => state.createPlaylist)
+  const addSongToPlaylist = useLibraryStore((state) => state.addSongToPlaylist)
+  const replaceNowPlaying = useLibraryStore((state) => state.replaceNowPlaying)
+  const removeSongFromPlaylist = useLibraryStore((state) => state.removeSongFromPlaylist)
+  const snapshotQueueSongIds = useLibraryStore((state) => state.snapshot.nowPlaying.songIds)
+  const playerLyricsSource = useLibraryStore((state) => state.snapshot.settings.playerLyricsSource)
+  const refreshPreferences = usePreferenceStore((state) => state.refresh)
+  const showUndoableNotification = useUndoableNotificationStore((state) => state.show)
+  const { progressSeconds, durationSeconds } = usePlaybackProgress()
+  const effectiveDurationSeconds = durationSeconds || currentSong?.duration || 0
+  const progressRatio = effectiveDurationSeconds > 0 ? progressSeconds / effectiveDurationSeconds : 0
+  const [coverColorRgb, setCoverColorRgb] = useState(getDefaultArtworkColorRgb)
+  const [failedArtworkUrl, setFailedArtworkUrl] = useState('')
+  const [moreMenu, setMoreMenu] = useState<MenuFlyoutPosition | null>(null)
+  const [dialogMode, setDialogMode] = useState<'properties' | 'lyrics' | 'album-art' | null>(null)
+  const [preferenceItem, setPreferenceItem] = useState<PreferenceItemSnapshot | null>(null)
+  const [lyrics, setLyrics] = useState<LyricsSnapshot | null>(null)
+  const {
+    artworkUrl: effectiveArtworkUrl,
+    baseArtworkUrl,
+    refreshArtwork,
+  } = useSongArtwork(track.id, track.artworkUrl)
+  const usableArtworkUrl = effectiveArtworkUrl && effectiveArtworkUrl !== failedArtworkUrl
+    ? effectiveArtworkUrl
+    : ''
+  const displayArtworkUrl = usableArtworkUrl || DEFAULT_ARTWORK_URL
+  const refreshPreferenceItem = async (snapshot?: PreferenceSettingsSnapshot | null) => {
+    if (currentSong) {
+      const settings = snapshot ?? await refreshPreferences()
+      if (!settings) {
+        return
+      }
+      setPreferenceItem(settings.songs.find((item) => item.itemId === String(currentSong.id)) ?? null)
+    }
+  }
+
+  const showUndo = (message: string, action: () => void | Promise<void>) => {
+    showUndoableNotification(message, t('common.undo'), action)
+  }
+  const currentLyricsLine = useMemo(
+    () => getCurrentLyricsLine(lyrics, progressSeconds, progressRatio),
+    [lyrics, progressRatio, progressSeconds],
+  )
+
+  const openMoreMenu = (event: MouseEvent<HTMLButtonElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    setMoreMenu({ x: rect.left, y: rect.top })
+    void refreshPreferenceItem()
+  }
+
+  useEffect(() => {
+    setFailedArtworkUrl('')
+    if (track.id != null && baseArtworkUrl) {
+      onArtworkResolved(track.id, baseArtworkUrl)
+    }
+  }, [baseArtworkUrl, onArtworkResolved, track.id])
+
+  useEffect(() => {
+    if (!currentSong) {
+      setLyrics(null)
+      return
+    }
+
+    let isDisposed = false
+    void window.smplayer!.getLyrics(currentSong.id, playerLyricsSource).then((snapshot) => {
+      if (!isDisposed) {
+        setLyrics(snapshot)
+      }
+    })
+
+    return () => {
+      isDisposed = true
+    }
+  }, [currentSong?.id, playerLyricsSource])
+
+  const refreshCurrentSong = async () => {
+    if (currentSong) {
+      const snapshot = await window.smplayer!.getLyrics(currentSong.id, playerLyricsSource)
+      setLyrics(snapshot)
+      refreshArtwork()
+    }
+    await onSaved()
+  }
+
+  useEffect(() => {
+    let isDisposed = false
+
+    extractArtworkColorRgb(usableArtworkUrl)
+      .then((nextColor) => {
+        if (!isDisposed) {
+          setCoverColorRgb(nextColor)
+        }
+      })
+      .catch(() => {
+        if (!isDisposed) {
+          setCoverColorRgb(getDefaultArtworkColorRgb())
+        }
+      })
+
+    return () => {
+      isDisposed = true
+    }
+  }, [usableArtworkUrl])
+
+  return (
+    <footer
+      className={`player-bar${disabled ? ' disabled' : ''}`}
+      style={{ '--player-cover-rgb': coverColorRgb } as CSSProperties}
+    >
+      <button
+        className="player-track"
+        type="button"
+        disabled={track.id == null}
+        aria-label={track.title}
+        title={track.id == null ? undefined : track.title}
+        onClick={onOpenNowPlaying}
+      >
+        <span className="player-artwork-shell">
+          <img
+            className="album-swatch artwork-image"
+            src={displayArtworkUrl}
+            alt=""
+            aria-hidden="true"
+            onError={() => {
+              setFailedArtworkUrl(displayArtworkUrl)
+              refreshArtwork()
+            }}
+          />
+          <span className="player-artwork-overlay" aria-hidden="true">
+            <Icon name="fullscreen" />
+          </span>
+        </span>
+        <span className="player-track-copy">
+          <strong>{track.title}</strong>
+          <span>{track.artist}</span>
+          {currentLyricsLine ? <MediaControlLyrics line={currentLyricsLine} /> : null}
+        </span>
+      </button>
+
+      <MediaControlSurface
+        trackId={track.id}
+        isLoading={track.isLoading}
+        favorite={track.favorite}
+        disabled={disabled}
+        isPlaying={isPlaying}
+        volume={volume}
+        mode={mode}
+        currentSong={currentSong}
+        t={t}
+        onTogglePlayPause={onTogglePlayPause}
+        onPrevious={onPrevious}
+        onNext={onNext}
+        onSeek={onSeek}
+        onBeginSeek={onBeginSeek}
+        onEndSeek={onEndSeek}
+        onVolumeChange={onVolumeChange}
+        onToggleMute={onToggleMute}
+        onToggleShuffle={onToggleShuffle}
+        onToggleRepeat={onToggleRepeat}
+        onToggleRepeatOne={onToggleRepeatOne}
+        onToggleFavorite={onToggleFavorite}
+        onVoiceCommand={onVoiceCommand}
+        getVoiceHint={getVoiceHint}
+        getVoiceHelpText={getVoiceHelpText}
+        voiceLanguage={voiceLanguage}
+        isMuted={isMuted}
+        onMoreClick={openMoreMenu}
+      />
       {moreMenu ? (
         <MenuFlyout
           position={moreMenu}
@@ -785,6 +968,11 @@ export function PlayerBar({
             setDialogMode(null)
             setMoreMenu(null)
           }}
+          onPlayTrack={onPlayTrack}
+          onTogglePlayPause={onTogglePlayPause}
+          onSaved={() => {
+            void refreshCurrentSong()
+          }}
         />
       ) : null}
     </footer>
@@ -825,7 +1013,7 @@ function getPlayerMoreMenuItems({
   onSeeAlbumArt: () => void
 }) {
   const items: MenuFlyoutItem[] = [
-    { key: 'quick-play', text: t('nowPlaying.quickPlay'), icon: 'shuffle', onClick: onQuickPlay },
+    { key: 'quick-play', text: t('nowPlaying.quickPlay'), icon: 'play', onClick: onQuickPlay },
   ]
 
   if (!song) {
