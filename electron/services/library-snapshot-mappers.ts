@@ -1,0 +1,76 @@
+import type {
+  LibraryFolder,
+  LibraryPlaylist,
+  SearchHistoryEntry,
+} from '../../src/shared/contracts.ts'
+
+export interface PlaylistRow {
+  id: number
+  name: string
+  songCount: number
+  priority: number
+  criterion: number
+}
+
+export interface PlaylistItemRow {
+  playlistId: number
+  songId: number
+}
+
+export interface SongArtistRow {
+  songId: number
+  name: string
+}
+
+export interface SearchHistoryRow {
+  id: number
+  query: string
+  searchedAt: string
+}
+
+export function toSearchHistoryEntry(row: SearchHistoryRow): SearchHistoryEntry {
+  return {
+    id: Number(row.id),
+    query: row.query,
+    searchedAt: row.searchedAt,
+  }
+}
+
+export function toLibraryFolder(row: LibraryFolder): LibraryFolder {
+  return {
+    id: Number(row.id),
+    path: row.path,
+    parentId: Number(row.parentId),
+    criterion: Number(row.criterion),
+  }
+}
+
+export function toPlaylistItemRow(row: PlaylistItemRow): PlaylistItemRow {
+  return {
+    playlistId: Number(row.playlistId),
+    songId: Number(row.songId),
+  }
+}
+
+export function toSongArtistRow(row: SongArtistRow): SongArtistRow {
+  return {
+    songId: Number(row.songId),
+    name: row.name,
+  }
+}
+
+export function toLibraryPlaylist(
+  row: PlaylistRow,
+  playlistSongIds: Map<number, number[]>,
+  favoritesPlaylistId: number,
+  mapPlaylistSort: (criterion: number) => LibraryPlaylist['sortCriterion'],
+): LibraryPlaylist {
+  return {
+    id: Number(row.id),
+    name: row.name,
+    songCount: Number(row.songCount),
+    songIds: playlistSongIds.get(row.id) ?? [],
+    sortCriterion: mapPlaylistSort(row.criterion),
+    isBuiltIn: row.id === favoritesPlaylistId,
+  }
+}

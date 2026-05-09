@@ -56,11 +56,11 @@ export function MultiSelectCommandBar({
 
   useLayoutEffect(() => {
     const anchor = anchorRef.current as HTMLSpanElement
-    const workspaceContent = anchor.closest('.workspace-content') as HTMLElement
+    const layoutHost = anchor.closest('.workspace-content, .now-playing-full-page') as HTMLElement
     const playerBar = document.querySelector('.player-bar') as HTMLElement
 
     const updateLayout = () => {
-      const contentRect = workspaceContent.getBoundingClientRect()
+      const contentRect = layoutHost.getBoundingClientRect()
       const playerRect = playerBar?.getBoundingClientRect()
       setLayout({
         left: contentRect.left,
@@ -71,7 +71,7 @@ export function MultiSelectCommandBar({
 
     updateLayout()
     const resizeObserver = new ResizeObserver(updateLayout)
-    resizeObserver.observe(workspaceContent)
+    resizeObserver.observe(layoutHost)
     window.addEventListener('resize', updateLayout)
 
     return () => {

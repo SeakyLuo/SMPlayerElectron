@@ -5,10 +5,11 @@ interface ArtworkImageProps {
   src: string
   className: string
   title: string
+  onError?: () => void
   renderFallback: () => ReactNode
 }
 
-export function ArtworkImage({ src, className, title, renderFallback }: ArtworkImageProps) {
+export function ArtworkImage({ src, className, title, onError, renderFallback }: ArtworkImageProps) {
   const [failedSrc, setFailedSrc] = useState('')
 
   if (!src || src === failedSrc) {
@@ -22,6 +23,7 @@ export function ArtworkImage({ src, className, title, renderFallback }: ArtworkI
       alt={`${title} artwork`}
       onError={() => {
         setFailedSrc(src)
+        onError?.()
       }}
     />
   )

@@ -6,6 +6,8 @@ import type { LibrarySong, LyricsSnapshot, SongPropertiesSnapshot } from '../sha
 import { formatBytes, formatDuration } from '../shared/formatters'
 import type { Translator } from '../shared/i18n'
 import { mergePlainLyricsWithTimedRaw, stripLyricsTimestamps } from '../shared/lyrics'
+import { useLibraryStore } from '../state/useLibraryStore'
+import { useMusicDialogShortcuts } from '../hooks/useMusicDialogShortcuts'
 import { AlbumArtControl } from './AlbumArtControl'
 import { Icon } from './icons'
 
@@ -95,6 +97,13 @@ export function MusicDialog({
   const playQueue = useMemo(() => {
     return queueSongIds.includes(song.id) ? queueSongIds : [...queueSongIds, song.id]
   }, [queueSongIds, song.id])
+  const getCurrentTrackTitle = () => {
+    if (currentTrackId == null) {
+      return ''
+    }
+
+    return useLibraryStore.getState().snapshot.songs.find((item) => item.id === currentTrackId)?.title ?? song.title
+  }
 
   useEffect(() => {
     setActiveMode(mode)
@@ -207,11 +216,7 @@ export function MusicDialog({
 
     const timeoutId = window.setTimeout(() => {
       void window.smplayer?.saveSongLyrics(pendingLyricsSave.songId, pendingLyricsSave.lyrics).then(async () => {
-        const snapshot = await window.smplayer?.getLibrarySnapshot()
-        const currentTitle =
-          currentTrackId == null
-            ? ''
-            : snapshot?.songs.find((item) => item.id === currentTrackId)?.title ?? song.title
+        const currentTitle = getCurrentTrackTitle()
         if (pendingLyricsSave.songId === song.id) {
           setLyricsRawText(pendingLyricsSave.lyrics)
           setOriginalLyricsText(pendingLyricsSave.lyrics)
@@ -230,34 +235,6 @@ export function MusicDialog({
       window.clearTimeout(timeoutId)
     }
   }, [currentTrackId, pendingLyricsSave, song.id, song.title, t])
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (!event.ctrlKey) {
-        return
-      }
-
-      if (event.key.toLocaleLowerCase() === 's') {
-        event.preventDefault()
-        void saveActivePage()
-      }
-
-      if (event.key.toLocaleLowerCase() === 'r') {
-        event.preventDefault()
-        resetActivePage()
-      }
-
-      if (event.key.toLocaleLowerCase() === 'f' && activeMode === 'lyrics') {
-        event.preventDefault()
-        void searchLyrics()
-      }
-    }
-
-    window.addEventListener('keydown', onKeyDown)
-    return () => {
-      window.removeEventListener('keydown', onKeyDown)
-    }
-  })
 
   const updateProperty = (key: keyof SongPropertiesSnapshot, value: string) => {
     setProperties((current) => current ? { ...current, [key]: value } : current)
@@ -435,8 +412,7 @@ export function MusicDialog({
       return
     }
 
-    const snapshot = await window.smplayer?.getLibrarySnapshot()
-    if (isCurrentSong && !snapshot?.settings.saveLyricsImmediately) {
+    if (isCurrentSong && !useLibraryStore.getState().snapshot.settings.saveLyricsImmediately) {
       setPendingLyricsSave({ songId: song.id, title: song.title, lyrics: currentLyricsRawText })
       setStatusMessage(t('song.saveLyricsLater', { title: song.title }))
       return
@@ -463,11 +439,7 @@ export function MusicDialog({
       }
       setPendingSwitchLyrics((current) => current?.songId === targetSongId ? null : current)
       if (refreshLatestLyrics) {
-        const snapshot = await window.smplayer?.getLibrarySnapshot()
-        const currentTitle =
-          currentTrackId == null
-            ? song.title
-            : snapshot?.songs.find((item) => item.id === currentTrackId)?.title ?? song.title
+        const currentTitle = getCurrentTrackTitle() || song.title
         setStatusMessage(t('song.lyricsUpdatedAndRefreshed', { savedTitle: targetTitle, currentTitle }))
       } else {
         setStatusMessage(t('song.lyricsUpdated', { title: targetTitle }))
@@ -655,6 +627,13 @@ export function MusicDialog({
       setStatusMessage(t('song.lyricsReset'))
     }
   }
+
+  useMusicDialogShortcuts({
+    activeMode,
+    onSave: saveActivePage,
+    onReset: resetActivePage,
+    onSearchLyrics: searchLyrics,
+  })
 
   return createPortal(
     <div className="song-dialog-overlay music-dialog-overlay MusicDialogOverlay">

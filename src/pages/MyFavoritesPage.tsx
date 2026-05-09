@@ -7,6 +7,7 @@ import type { Translator } from '../shared/i18n'
 interface MyFavoritesPageProps {
   songs: LibrarySong[]
   playlists: LibraryPlaylist[]
+  favoritePlaylistId: number
   sortCriterion: LibraryPlaylist['sortCriterion']
   t: Translator
   selectedTrackId: number | null
@@ -26,6 +27,7 @@ interface MyFavoritesPageProps {
 export function MyFavoritesPage({
   songs,
   playlists,
+  favoritePlaylistId,
   sortCriterion,
   t,
   selectedTrackId,
@@ -54,6 +56,7 @@ export function MyFavoritesPage({
         selectedTrackId={selectedTrackId}
         isPlaying={isPlaying}
         playlists={playlists}
+        favoritePlaylistId={favoritePlaylistId}
         artworkUrl={artworkUrl}
         removable
         showAlbum

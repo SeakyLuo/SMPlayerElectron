@@ -1,7 +1,8 @@
-import type { DragEvent, KeyboardEvent } from 'react'
+import { type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react'
 
 import { GridArtworkCardContent } from './GridArtworkCardContent'
 import { Icon } from './icons'
+import { getPlaylistArtworkDisplayUrls, usePlaylistArtwork } from './playlistArtwork'
 import type { LibraryPlaylist, LibrarySong } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
 
@@ -13,10 +14,10 @@ interface GridViewHolderProps {
   t: Translator
   onOpen: () => void
   onPlay: () => void
-  onDragStart: (event: DragEvent<HTMLDivElement>) => void
-  onDragEnd: () => void
-  onDragOver: (event: DragEvent<HTMLDivElement>) => void
-  onDrop: (event: DragEvent<HTMLDivElement>) => void
+  onPointerDragStart?: (event: PointerEvent<HTMLDivElement>) => void
+  cardRef?: (element: HTMLDivElement | null) => void
+  dragOverlay?: boolean
+  style?: CSSProperties
   onContextMenu?: (x: number, y: number) => void
 }
 
@@ -28,40 +29,41 @@ export function GridViewHolder({
   t,
   onOpen,
   onPlay,
-  onDragStart,
-  onDragEnd,
-  onDragOver,
-  onDrop,
+  onPointerDragStart,
+  cardRef,
+  dragOverlay = false,
+  style,
   onContextMenu,
 }: GridViewHolderProps) {
-  const artworks = getDisplayArtworks(songs)
+  const artworkUrls = usePlaylistArtwork(songs)
   const openOnKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
       onOpen()
     }
   }
-  const startDragging = (event: DragEvent<HTMLDivElement>) => {
-    if (!(event.target instanceof Element) || !event.target.closest('.grid-view-holder-drag-handle')) {
-      event.preventDefault()
+  const startPointerDrag = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.target instanceof Element && event.target.closest('.grid-artwork-card-actions button')) {
       return
     }
 
-    onDragStart(event)
+    if (event.button !== 0) {
+      return
+    }
+
+    onPointerDragStart?.(event)
   }
 
   return (
     <div
       role="button"
+      ref={cardRef}
       tabIndex={0}
-      draggable
-      className={`grid-view-holder${selected ? ' is-selected' : ''}${dragging ? ' is-dragging' : ''}`}
+      className={`grid-view-holder${selected ? ' is-selected' : ''}${dragging ? ' is-dragging' : ''}${dragOverlay ? ' is-drag-overlay' : ''}`}
+      style={style}
       title={playlist.name}
       onClick={onOpen}
-      onDragStart={startDragging}
-      onDragEnd={onDragEnd}
-      onDragOver={onDragOver}
-      onDrop={onDrop}
+      onPointerDown={startPointerDrag}
       onContextMenu={(event) => {
         event.preventDefault()
         onContextMenu?.(event.clientX, event.clientY)
@@ -78,7 +80,7 @@ export function GridViewHolder({
             onClick: () => onPlay(),
           },
         ]}
-        artworkUrls={artworks}
+        artworkUrls={getPlaylistArtworkDisplayUrls(artworkUrls)}
         fallbackIcon="playlists"
         subtitle={t('playlists.songCount', { count: playlist.songCount })}
         title={playlist.name}
@@ -96,9 +98,4 @@ export function GridViewHolder({
       </button>
     </div>
   )
-}
-
-function getDisplayArtworks(songs: LibrarySong[]) {
-  const songWithArtwork = songs.find((song) => song.artworkUrl)
-  return songWithArtwork ? [songWithArtwork.artworkUrl] : []
 }

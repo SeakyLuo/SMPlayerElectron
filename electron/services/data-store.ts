@@ -1,10 +1,9 @@
+import { readFileSync, writeFileSync } from 'node:fs'
 import { mkdir, readFile, readdir, rename, rmdir, stat, unlink, writeFile } from 'node:fs/promises'
-import { createHash } from 'node:crypto'
 import { basename, dirname, extname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { pathToFileURL } from 'node:url'
 
-import { nativeImage } from 'electron'
 import { parseFile } from 'music-metadata'
 
 import type {
@@ -43,12 +42,31 @@ import type {
 import { normalizeArtists } from '../../src/shared/artists.ts'
 import { stripLyricsTimestamps } from '../../src/shared/lyrics.ts'
 import { ACTIVE_STATE, AUDIO_EXTENSIONS, PLAYLIST_NAMES, SMPLAYER_DB_NAME } from './constants.ts'
+import {
+  getArtworkFormat,
+  pruneThumbnailCache,
+  shouldRebuildShellThumbnail,
+  writeArtworkCache,
+  writeShellThumbnailCache,
+} from './artwork-cache.ts'
 import { initializeSchema } from './schema.ts'
+import { ensurePreferenceCompatibility } from './preference-compatibility.ts'
+import {
+  toLibraryFolder,
+  toLibraryPlaylist,
+  toPlaylistItemRow,
+  toSearchHistoryEntry,
+  toSongArtistRow,
+  type PlaylistItemRow,
+  type PlaylistRow,
+  type SongArtistRow,
+  type SearchHistoryRow,
+} from './library-snapshot-mappers.ts'
 
 const LYRICS_REQUEST_TIMEOUT_MS = 10_000
 const RECENT_PLAYED_LIMIT = 1000
-const SHELL_THUMBNAIL_SIZE = 1024
-const SHELL_THUMBNAIL_CACHE_VERSION = `shell-thumbnail-${SHELL_THUMBNAIL_SIZE}`
+const METADATA_SCAN_CONCURRENCY = 6
+const NOW_PLAYING_JSON_FILENAME = 'NowPlaying.json'
 
 interface SettingsRow {
   Id: number
@@ -101,30 +119,12 @@ interface ScannedSong {
 type MoveConflictAction = 'replace' | 'keep-both' | 'skip'
 type MoveConflictResolver = (sourcePath: string, targetPath: string) => Promise<MoveConflictAction>
 
-interface PlaylistRow {
-  id: number
-  name: string
-  songCount: number
-  priority: number
-  criterion: number
-}
-
-interface PlaylistItemRow {
-  playlistId: number
-  songId: number
-}
-
 interface StoredLibrarySong extends Omit<LibrarySong, 'mediaUrl' | 'artworkUrl' | 'artists'> {
   thumbnailPath: string
 }
 
 interface StoredRecentLibrarySong extends Omit<RecentLibrarySong, 'mediaUrl' | 'artworkUrl' | 'artists'> {
   thumbnailPath: string
-}
-
-interface SongArtistRow {
-  songId: number
-  name: string
 }
 
 interface SearchStateRow {
@@ -146,6 +146,10 @@ interface PreferenceSettingRow {
   Albums: number
   Playlists: number
   Folders: number
+  RecentAddedId: number
+  MyFavoritesId: number
+  MostPlayedId: number
+  LeastPlayedId: number
 }
 
 interface PreferenceItemRow {
@@ -166,6 +170,7 @@ interface PreferenceItemRow {
 
 export class SmplayerDataStore {
   private readonly db: DatabaseSync
+  private readonly nowPlayingJsonPath: string
   private readonly thumbnailCachePath: string
 
   private readonly getSettingsStatement
@@ -178,7 +183,6 @@ export class SmplayerDataStore {
   private readonly insertSearchHistoryStatement
   private readonly clearSearchHistoryStatement
   private readonly insertSettingsStatement
-  private readonly updateSettingsPlaylistsStatement
   private readonly updateRootPathStatement
   private readonly updateAppSettingsStatement
   private readonly updateViewStateStatement
@@ -186,7 +190,6 @@ export class SmplayerDataStore {
   private readonly updateSongDurationStatement
   private readonly insertPlaylistStatement
   private readonly updatePlaylistNameStatement
-  private readonly updatePlaylistPriorityStatement
   private readonly updatePlaylistStateStatement
   private readonly updatePlaylistItemStateStatement
   private readonly insertPlaylistItemStatement
@@ -221,12 +224,12 @@ export class SmplayerDataStore {
   private readonly getRecentSongsStatement
   private readonly getCountsStatement
   private readonly getActivePlaylistStatement
-  private readonly getActivePlaylistSongCountStatement
   private readonly updatePlaybackRestoreStateStatement
   private readonly updateLastPlaylistStatement
 
   constructor(userDataPath: string) {
     this.db = new DatabaseSync(join(userDataPath, SMPLAYER_DB_NAME))
+    this.nowPlayingJsonPath = join(userDataPath, NOW_PLAYING_JSON_FILENAME)
     this.thumbnailCachePath = join(userDataPath, 'cover-cache')
 
     initializeSchema(this.db)
@@ -312,11 +315,6 @@ export class SmplayerDataStore {
       INSERT INTO Settings (RootPath, MyFavorites, NowPlaying)
       VALUES (?, ?, ?)
     `)
-    this.updateSettingsPlaylistsStatement = this.db.prepare(`
-      UPDATE Settings
-      SET MyFavorites = ?, NowPlaying = ?
-      WHERE Id = ?
-    `)
     this.updateRootPathStatement = this.db.prepare(`
       UPDATE Settings
       SET RootPath = ?
@@ -385,11 +383,6 @@ export class SmplayerDataStore {
     this.updatePlaylistNameStatement = this.db.prepare(`
       UPDATE Playlist
       SET Name = ?
-      WHERE Id = ?
-    `)
-    this.updatePlaylistPriorityStatement = this.db.prepare(`
-      UPDATE Playlist
-      SET Priority = ?
       WHERE Id = ?
     `)
     this.updatePlaylistStateStatement = this.db.prepare(`
@@ -692,15 +685,6 @@ export class SmplayerDataStore {
         AND State = ?
       LIMIT 1
     `)
-    this.getActivePlaylistSongCountStatement = this.db.prepare(`
-      SELECT COUNT(*) AS count
-      FROM PlaylistItem
-      INNER JOIN Music
-        ON Music.Id = PlaylistItem.ItemId
-       AND Music.State = ?
-      WHERE PlaylistItem.PlaylistId = ?
-        AND PlaylistItem.State = ?
-    `)
     this.updatePlaybackRestoreStateStatement = this.db.prepare(`
       UPDATE Settings
       SET LastMusicIndex = ?,
@@ -767,7 +751,8 @@ export class SmplayerDataStore {
   getLibrarySnapshot(): LibrarySnapshot {
     const settings = this.getSettings()
     const searchState = this.getSearchState()
-    const recentSearches = this.getSearchHistoryStatement.all() as unknown as SearchHistoryEntry[]
+    const recentSearches = (this.getSearchHistoryStatement.all() as unknown as SearchHistoryRow[])
+      .map(toSearchHistoryEntry)
     const playlists = this.getPlaylistsStatement.all(
       ACTIVE_STATE.active,
       ACTIVE_STATE.active,
@@ -780,16 +765,19 @@ export class SmplayerDataStore {
       ACTIVE_STATE.active,
       ACTIVE_STATE.active,
     ) as unknown as PlaylistItemRow[]
+    const normalizedPlaylistItems = playlistItems.map(toPlaylistItemRow)
     const songArtistRows = this.getSongArtistsStatement.all(
       ACTIVE_STATE.active,
       ACTIVE_STATE.active,
     ) as unknown as SongArtistRow[]
+    const normalizedSongArtistRows = songArtistRows.map(toSongArtistRow)
     const songs = this.getSongsStatement.all(
       settings.MyFavorites,
       ACTIVE_STATE.active,
       ACTIVE_STATE.active,
     ) as unknown as StoredLibrarySong[]
-    const folders = this.getFoldersStatement.all(ACTIVE_STATE.active) as unknown as LibraryFolder[]
+    const folders = (this.getFoldersStatement.all(ACTIVE_STATE.active) as unknown as LibraryFolder[])
+      .map(toLibraryFolder)
     const recentSongs = this.getRecentSongsStatement.all(
       settings.MyFavorites,
       ACTIVE_STATE.active,
@@ -804,15 +792,17 @@ export class SmplayerDataStore {
       ACTIVE_STATE.active,
       ACTIVE_STATE.active,
     ) as unknown as LibraryCounts | undefined
-    const artistsBySongId = this.groupSongArtists(songArtistRows)
+    const artistsBySongId = this.groupSongArtists(normalizedSongArtistRows)
     const librarySongs = songs.map((song) => this.toLibrarySong(song, artistsBySongId))
     const recentLibrarySongs = recentSongs.map((song) => ({
       ...this.toLibrarySong(song, artistsBySongId),
       playedAt: this.normalizeStoredDate(song.playedAt),
     }))
     const playlistSongIds = new Map<number, number[]>()
+    const playlistsById = new Map(playlists.map((playlist) => [Number(playlist.id), playlist]))
+    const nowPlayingSongIds = this.readNowPlayingSongIds(songs, settings.NowPlaying)
 
-    for (const item of playlistItems) {
+    for (const item of normalizedPlaylistItems) {
       const songIds = playlistSongIds.get(item.playlistId) ?? []
       songIds.push(Number(item.songId))
       playlistSongIds.set(item.playlistId, songIds)
@@ -862,24 +852,27 @@ export class SmplayerDataStore {
       songs: librarySongs,
       folders,
       recentSongs: recentLibrarySongs,
+      favorites: {
+        playlistId: settings.MyFavorites,
+        songIds: playlistSongIds.get(settings.MyFavorites) ?? [],
+        sortCriterion: this.mapPlaylistSort(playlistsById.get(settings.MyFavorites)!.criterion),
+      },
       nowPlaying: {
         playlistId: settings.NowPlaying,
-        songIds: playlistSongIds.get(settings.NowPlaying) ?? [],
+        songIds: nowPlayingSongIds,
       },
       search: {
         lastQuery: searchState.LastQuery,
         recentSearches,
       },
       playlists: playlists
-        .filter((playlist) => playlist.id !== settings.NowPlaying)
-        .map((playlist): LibraryPlaylist => ({
-          id: playlist.id,
-          name: playlist.name,
-          songCount: playlist.songCount,
-          songIds: playlistSongIds.get(playlist.id) ?? [],
-          sortCriterion: this.mapPlaylistSort(playlist.criterion),
-          isBuiltIn: playlist.id === settings.MyFavorites,
-        })),
+        .filter((playlist) => playlist.id !== settings.NowPlaying && playlist.name !== PLAYLIST_NAMES.nowPlaying)
+        .map((playlist) => toLibraryPlaylist(
+          playlist,
+          playlistSongIds,
+          settings.MyFavorites,
+          (criterion) => this.mapPlaylistSort(criterion),
+        )),
     }
   }
 
@@ -905,7 +898,7 @@ export class SmplayerDataStore {
         AND State = ?
     `).all(albumName, ACTIVE_STATE.active) as Array<{ path: string }>
     const artwork = await readFile(sourcePath)
-    const format = this.getArtworkFormat(sourcePath)
+    const format = getArtworkFormat(sourcePath)
 
     for (const song of songs) {
       await this.writeSongArtwork(song.path, {
@@ -914,7 +907,7 @@ export class SmplayerDataStore {
       })
     }
 
-    const thumbnailPath = await this.writeArtworkCache(albumName, {
+    const thumbnailPath = await writeArtworkCache(this.thumbnailCachePath, albumName, {
       data: artwork,
       format,
     })
@@ -953,7 +946,7 @@ export class SmplayerDataStore {
         duration: false,
         skipCovers: false,
       })
-      const thumbnailPath = await this.writeArtworkCache(`${sourcePath}:selected-artwork`, metadata.common.picture?.[0])
+      const thumbnailPath = await writeArtworkCache(this.thumbnailCachePath, `${sourcePath}:selected-artwork`, metadata.common.picture?.[0])
       if (!thumbnailPath) {
         throw new Error('No album art found in the selected music file.')
       }
@@ -981,14 +974,14 @@ export class SmplayerDataStore {
     }
 
     const artwork = await readFile(sourcePath)
-    const format = this.getArtworkFormat(sourcePath)
+    const format = getArtworkFormat(sourcePath)
 
     await this.writeSongArtwork(song.path, {
       data: artwork,
       format,
     })
 
-    const thumbnailPath = await this.writeArtworkCache(song.path, {
+    const thumbnailPath = await writeArtworkCache(this.thumbnailCachePath, song.path, {
       data: artwork,
       format,
     })
@@ -1346,6 +1339,14 @@ export class SmplayerDataStore {
     await rename(sourcePath, nextPath)
     this.replacePathReferences(sourcePath, nextPath)
     this.updateMovedFolderParent(nextPath, targetPath)
+  }
+
+  async moveLocalItemsToFolder(songIds: number[], folderPaths: string[], targetFolderPath: string, resolveConflict?: MoveConflictResolver) {
+    await this.moveSongsToFolder(songIds, targetFolderPath, resolveConflict)
+
+    for (const folderPath of folderPaths) {
+      await this.moveLocalFolderToFolder(folderPath, targetFolderPath, resolveConflict)
+    }
   }
 
   deleteSongs(songIds: number[]) {
@@ -1867,7 +1868,7 @@ export class SmplayerDataStore {
     if (song.thumbnailPath) {
       try {
         await stat(song.thumbnailPath)
-        if (!this.shouldRebuildShellThumbnail(song.path, song.thumbnailPath)) {
+        if (!shouldRebuildShellThumbnail(this.thumbnailCachePath, song.path, song.thumbnailPath)) {
           return pathToFileURL(song.thumbnailPath).href
         }
       } catch {
@@ -1876,7 +1877,28 @@ export class SmplayerDataStore {
     }
 
     try {
-      const thumbnailPath = await this.writeShellThumbnailCache(song.path)
+      const metadata = await parseFile(song.path, {
+        duration: false,
+        skipCovers: false,
+      })
+      const thumbnailPath = await writeArtworkCache(this.thumbnailCachePath, song.path, metadata.common.picture?.[0])
+
+      if (thumbnailPath) {
+        this.db.prepare(`
+          UPDATE Music
+          SET ThumbnailPath = ?
+          WHERE Id = ?
+            AND State = ?
+        `).run(thumbnailPath, songId, ACTIVE_STATE.active)
+
+        return pathToFileURL(thumbnailPath).href
+      }
+    } catch {
+      // Fall back to a shell thumbnail below.
+    }
+
+    try {
+      const thumbnailPath = await writeShellThumbnailCache(this.thumbnailCachePath, song.path)
 
       if (!thumbnailPath) {
         return ''
@@ -2242,7 +2264,7 @@ export class SmplayerDataStore {
     )
   }
 
-  createPlaylist(name: string, songIds: number[] = []) {
+  createPlaylist(name: string, songIds: number[] = []): LibraryPlaylist {
     const nextName = this.validatePlaylistName(name)
     const settings = this.getSettings()
     const maxPriorityRow = this.getMaxCustomPlaylistPriorityStatement.get(
@@ -2256,10 +2278,17 @@ export class SmplayerDataStore {
     try {
       const result = this.insertPlaylistStatement.run(nextName, nextPriority, ACTIVE_STATE.active)
       const playlistId = Number(result.lastInsertRowid)
-      for (const songId of new Set(songIds.map(Number))) {
-        this.setPlaylistSongState(playlistId, songId, true)
-      }
+      this.setPlaylistSongsState(playlistId, songIds, true)
       this.db.exec('COMMIT')
+      const playlistSongIds = [...new Set(songIds.map(Number))]
+      return {
+        id: playlistId,
+        name: nextName,
+        songCount: playlistSongIds.length,
+        songIds: playlistSongIds,
+        sortCriterion: 'title',
+        isBuiltIn: false,
+      }
     } catch (error) {
       this.db.exec('ROLLBACK')
       throw error
@@ -2287,6 +2316,20 @@ export class SmplayerDataStore {
   setSongFavorite(songId: number, favorite: boolean) {
     const settings = this.getSettings()
     this.setPlaylistSongState(settings.MyFavorites, songId, favorite)
+  }
+
+  setSongsFavorite(songIds: number[], favorite: boolean) {
+    const settings = this.getSettings()
+
+    this.db.exec('BEGIN')
+    try {
+      this.setPlaylistSongsState(settings.MyFavorites, songIds, favorite)
+
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
   }
 
   renamePlaylist(playlistId: number, name: string) {
@@ -2321,17 +2364,28 @@ export class SmplayerDataStore {
       throw new Error('Playlist reorder request is out of sync with the current playlist list.')
     }
 
-    this.db.exec('BEGIN')
-    try {
-      for (const [index, playlistId] of playlistIds.entries()) {
-        this.updatePlaylistPriorityStatement.run(index, playlistId)
-      }
-
-      this.db.exec('COMMIT')
-    } catch (error) {
-      this.db.exec('ROLLBACK')
-      throw error
+    const firstChangedIndex = playlistIds.findIndex((playlistId, index) => playlistId !== currentPlaylistIds[index])
+    if (firstChangedIndex < 0) {
+      return
     }
+
+    const lastChangedIndex =
+      playlistIds.length - 1 - [...playlistIds].reverse().findIndex((playlistId, index) =>
+        playlistId !== currentPlaylistIds[currentPlaylistIds.length - 1 - index],
+      )
+    const changedPlaylistIds = playlistIds.slice(firstChangedIndex, lastChangedIndex + 1)
+    const priorityCases = changedPlaylistIds.map(() => 'WHEN ? THEN ?').join(' ')
+    const playlistIdPlaceholders = changedPlaylistIds.map(() => '?').join(', ')
+    const priorityCaseValues = changedPlaylistIds.flatMap((playlistId, index) => [
+      playlistId,
+      firstChangedIndex + index,
+    ])
+
+    this.db.prepare(`
+      UPDATE Playlist
+      SET Priority = CASE Id ${priorityCases} END
+      WHERE Id IN (${playlistIdPlaceholders})
+    `).run(...priorityCaseValues, ...changedPlaylistIds)
   }
 
   addSongToPlaylist(playlistId: number, songId: number) {
@@ -2339,13 +2393,9 @@ export class SmplayerDataStore {
   }
 
   addSongsToPlaylist(playlistId: number, songIds: number[]) {
-    const uniqueSongIds = [...new Set(songIds.map(Number))]
-
     this.db.exec('BEGIN')
     try {
-      for (const songId of uniqueSongIds) {
-        this.setPlaylistSongState(playlistId, songId, true)
-      }
+      this.setPlaylistSongsState(playlistId, songIds, true)
 
       this.db.exec('COMMIT')
     } catch (error) {
@@ -2359,13 +2409,9 @@ export class SmplayerDataStore {
   }
 
   removeSongsFromPlaylist(playlistId: number, songIds: number[]) {
-    const uniqueSongIds = [...new Set(songIds.map(Number))]
-
     this.db.exec('BEGIN')
     try {
-      for (const songId of uniqueSongIds) {
-        this.setPlaylistSongState(playlistId, songId, false)
-      }
+      this.setPlaylistSongsState(playlistId, songIds, false)
 
       this.db.exec('COMMIT')
     } catch (error) {
@@ -2418,50 +2464,105 @@ export class SmplayerDataStore {
   }
 
   replaceNowPlaying(songIds: number[]) {
+    this.writeNowPlayingSongIds(songIds)
+  }
+
+  async addExternalAudioFilesNextAndPlay(filePaths: string[]) {
     const settings = this.getSettings()
+    const useFilenameNotMusicName = Boolean(settings.UseFilenameNotMusicName)
+    const audioFiles = filePaths.filter((filePath) => AUDIO_EXTENSIONS.has(extname(filePath).toLocaleLowerCase()))
+    const scannedSongs = await this.readSongs(audioFiles, useFilenameNotMusicName)
+    const openedSongIds: number[] = []
 
     this.db.exec('BEGIN')
     try {
-      this.markPlaylistItemsInactiveStatement.run(ACTIVE_STATE.inactive, settings.NowPlaying)
+      for (const song of scannedSongs) {
+        const musicRow = this.upsertMusicStatement.get(
+          song.path,
+          song.title,
+          song.artist,
+          song.album,
+          song.thumbnailPath,
+          song.duration,
+          song.path,
+          song.path,
+          song.dateAdded,
+          ACTIVE_STATE.active,
+        ) as { Id: number }
 
-      for (const songId of songIds) {
-        this.insertPlaylistItemStatement.run(settings.NowPlaying, songId, ACTIVE_STATE.active)
+        this.markSongArtistsInactiveStatement.run(ACTIVE_STATE.inactive, musicRow.Id)
+        song.artists.forEach((artist, index) => {
+          this.upsertSongArtistStatement.run(
+            musicRow.Id,
+            artist,
+            index,
+            ACTIVE_STATE.active,
+          )
+        })
+        openedSongIds.push(musicRow.Id)
       }
+
+      const currentQueue = this.readNowPlayingSongIdsByPath()
+      const openedSongIdSet = new Set(openedSongIds)
+      const queueWithoutOpenedSongs = currentQueue.filter((songId) => !openedSongIdSet.has(songId))
+      const currentIndex = Math.min(
+        Math.max(settings.LastMusicIndex, -1),
+        queueWithoutOpenedSongs.length - 1,
+      )
+      const insertIndex = currentIndex + 1
+      const nextQueue = [
+        ...queueWithoutOpenedSongs.slice(0, insertIndex),
+        ...openedSongIds,
+        ...queueWithoutOpenedSongs.slice(insertIndex),
+      ]
+
+      this.writeNowPlayingSongIds(nextQueue)
+      this.savePlaybackSettings({
+        lastMusicIndex: insertIndex,
+        musicProgress: 0,
+      })
 
       this.db.exec('COMMIT')
     } catch (error) {
       this.db.exec('ROLLBACK')
       throw error
     }
+
+    return openedSongIds
   }
 
   removeSongFromNowPlaying(songId: number) {
-    const settings = this.getSettings()
-    this.setPlaylistSongState(settings.NowPlaying, songId, false)
+    this.writeNowPlayingSongIds(this.readNowPlayingSongIdsByPath().filter((queuedSongId) => queuedSongId !== songId))
   }
 
   clearNowPlaying() {
-    const settings = this.getSettings()
-    this.markPlaylistItemsInactiveStatement.run(ACTIVE_STATE.inactive, settings.NowPlaying)
+    this.writeNowPlayingSongIds([])
   }
 
   saveSearchQuery(query: string) {
     this.updateSearchStateStatement.run(query.trim())
   }
 
-  addRecentSearch(query: string) {
+  addRecentSearch(query: string): SearchHistoryEntry | null {
     const nextQuery = query.trim()
     this.saveSearchQuery(nextQuery)
 
     if (!nextQuery) {
-      return
+      return null
     }
+
+    const searchedAt = new Date().toISOString()
 
     this.db.exec('BEGIN')
     try {
       this.deleteSearchHistoryByQueryStatement.run(nextQuery)
-      this.insertSearchHistoryStatement.run(nextQuery, new Date().toISOString())
+      const result = this.insertSearchHistoryStatement.run(nextQuery, searchedAt)
       this.db.exec('COMMIT')
+      return {
+        id: Number(result.lastInsertRowid),
+        query: nextQuery,
+        searchedAt,
+      }
     } catch (error) {
       this.db.exec('ROLLBACK')
       throw error
@@ -2692,12 +2793,8 @@ export class SmplayerDataStore {
     await mkdir(this.thumbnailCachePath, { recursive: true })
     await this.walkLibrary(rootPath, folders, audioFiles, hiddenFolderPaths, hiddenFilePaths)
 
-    const scannedSongs: ScannedSong[] = []
     const useFilenameNotMusicName = Boolean(settings.UseFilenameNotMusicName)
-
-    for (const filePath of audioFiles) {
-      scannedSongs.push(await this.readSong(filePath, useFilenameNotMusicName))
-    }
+    const scannedSongs = await this.readSongs(audioFiles, useFilenameNotMusicName)
 
     this.db.exec('BEGIN')
     try {
@@ -2761,7 +2858,7 @@ export class SmplayerDataStore {
       throw error
     }
 
-    await this.pruneThumbnailCache(scannedSongs.map((song) => song.thumbnailPath))
+    await pruneThumbnailCache(this.thumbnailCachePath, scannedSongs.map((song) => song.thumbnailPath))
 
     return {
       rootPath,
@@ -2799,12 +2896,8 @@ export class SmplayerDataStore {
     await mkdir(this.thumbnailCachePath, { recursive: true })
     await this.walkLibrary(folderPath, folders, audioFiles, hiddenFolderPaths, hiddenFilePaths)
 
-    const scannedSongs: ScannedSong[] = []
     const useFilenameNotMusicName = Boolean(settings.UseFilenameNotMusicName)
-
-    for (const filePath of audioFiles) {
-      scannedSongs.push(await this.readSong(filePath, useFilenameNotMusicName))
-    }
+    const scannedSongs = await this.readSongs(audioFiles, useFilenameNotMusicName)
 
     const previousSongPaths = (this.db.prepare(`
       SELECT Path
@@ -2891,7 +2984,7 @@ export class SmplayerDataStore {
       throw error
     }
 
-    await this.pruneThumbnailCache(scannedSongs.map((song) => song.thumbnailPath))
+    await pruneThumbnailCache(this.thumbnailCachePath, scannedSongs.map((song) => song.thumbnailPath))
 
     return {
       rootPath,
@@ -2933,15 +3026,87 @@ export class SmplayerDataStore {
 
     if (!settings) {
       const myFavoritesId = this.createBuiltInPlaylist(PLAYLIST_NAMES.myFavorites, 0)
-      const nowPlayingId = this.createBuiltInPlaylist(PLAYLIST_NAMES.nowPlaying, 1)
-      this.insertSettingsStatement.run('', myFavoritesId, nowPlayingId)
+      this.insertSettingsStatement.run('', myFavoritesId, 0)
+      return
+    }
+  }
+
+  private readNowPlayingSongIds(songs: StoredLibrarySong[], fallbackPlaylistId: number) {
+    const pathRows = this.readNowPlayingPaths()
+
+    if (pathRows.length > 0) {
+      const songIdsByPath = new Map(songs.map((song) => [song.path, song.id]))
+      return pathRows.flatMap((songPath) => {
+        const songId = songIdsByPath.get(songPath)
+        return songId == null ? [] : [songId]
+      })
+    }
+
+    if (fallbackPlaylistId <= 0) {
+      return []
+    }
+
+    return (
+      this.getPlaylistSongIdsStatement.all(
+        fallbackPlaylistId,
+        ACTIVE_STATE.active,
+        ACTIVE_STATE.active,
+      ) as unknown as Array<{ songId: number }>
+    ).map((item) => Number(item.songId))
+  }
+
+  private readNowPlayingSongIdsByPath() {
+    const pathRows = this.readNowPlayingPaths()
+
+    if (pathRows.length === 0) {
+      return []
+    }
+
+    const placeholders = pathRows.map(() => '?').join(', ')
+    const rows = this.db.prepare(`
+      SELECT Id AS id, Path AS path
+      FROM Music
+      WHERE Path IN (${placeholders})
+        AND State = ?
+    `).all(...pathRows, ACTIVE_STATE.active) as Array<{ id: number; path: string }>
+    const songIdsByPath = new Map(rows.map((song) => [song.path, Number(song.id)]))
+
+    return pathRows.flatMap((songPath) => {
+      const songId = songIdsByPath.get(songPath)
+      return songId == null ? [] : [songId]
+    })
+  }
+
+  private readNowPlayingPaths() {
+    try {
+      const data = JSON.parse(readFileSync(this.nowPlayingJsonPath, 'utf8')) as string[]
+      return data.filter((item) => typeof item === 'string' && item.length > 0)
+    } catch {
+      return []
+    }
+  }
+
+  private writeNowPlayingSongIds(songIds: number[]) {
+    const uniqueSongIds = songIds.map(Number)
+    if (uniqueSongIds.length === 0) {
+      writeFileSync(this.nowPlayingJsonPath, '[]', 'utf8')
       return
     }
 
-    if (settings.NowPlaying <= 0) {
-      const nowPlayingId = this.createBuiltInPlaylist(PLAYLIST_NAMES.nowPlaying, 1)
-      this.updateSettingsPlaylistsStatement.run(settings.MyFavorites, nowPlayingId, settings.Id)
-    }
+    const placeholders = uniqueSongIds.map(() => '?').join(', ')
+    const rows = this.db.prepare(`
+      SELECT Id AS id, Path AS path
+      FROM Music
+      WHERE Id IN (${placeholders})
+        AND State = ?
+    `).all(...uniqueSongIds, ACTIVE_STATE.active) as Array<{ id: number; path: string }>
+    const pathsById = new Map(rows.map((song) => [Number(song.id), song.path]))
+    const songPaths = uniqueSongIds.flatMap((songId) => {
+      const songPath = pathsById.get(songId)
+      return songPath == null ? [] : [songPath]
+    })
+
+    writeFileSync(this.nowPlayingJsonPath, JSON.stringify(songPaths), 'utf8')
   }
 
   private createBuiltInPlaylist(name: string, priority: number): number {
@@ -3129,6 +3294,37 @@ export class SmplayerDataStore {
 
     if (isActive && result.changes === 0) {
       this.insertPlaylistItemStatement.run(playlistId, songId, ACTIVE_STATE.active)
+    }
+  }
+
+  private setPlaylistSongsState(playlistId: number, songIds: number[], isActive: boolean) {
+    const uniqueSongIds = [...new Set(songIds.map(Number))]
+    if (uniqueSongIds.length === 0) {
+      return
+    }
+
+    const placeholders = uniqueSongIds.map(() => '?').join(', ')
+    const nextState = isActive ? ACTIVE_STATE.active : ACTIVE_STATE.inactive
+    this.db.prepare(`
+      UPDATE PlaylistItem
+      SET State = ?
+      WHERE PlaylistId = ?
+        AND ItemId IN (${placeholders})
+    `).run(nextState, playlistId, ...uniqueSongIds)
+
+    if (isActive) {
+      this.db.prepare(`
+        INSERT INTO PlaylistItem (PlaylistId, ItemId, State)
+        SELECT ?, Music.Id, ?
+        FROM Music
+        WHERE Music.Id IN (${placeholders})
+          AND NOT EXISTS (
+            SELECT 1
+            FROM PlaylistItem
+            WHERE PlaylistItem.PlaylistId = ?
+              AND PlaylistItem.ItemId = Music.Id
+          )
+      `).run(playlistId, ACTIVE_STATE.active, ...uniqueSongIds, playlistId)
     }
   }
 
@@ -3399,13 +3595,14 @@ export class SmplayerDataStore {
     const fileStats = await stat(filePath)
     const filename = basename(filePath, extname(filePath))
     const dateAdded = fileStats.birthtime.toISOString()
-    const thumbnailPath = await this.writeShellThumbnailCache(filePath)
 
     try {
       const metadata = await parseFile(filePath, {
         duration: true,
-        skipCovers: true,
+        skipCovers: false,
       })
+      const embeddedThumbnailPath = await writeArtworkCache(this.thumbnailCachePath, filePath, metadata.common.picture?.[0])
+      const thumbnailPath = embeddedThumbnailPath || await writeShellThumbnailCache(this.thumbnailCachePath, filePath)
       const artists = normalizeArtists([
         ...(metadata.common.artists ?? []),
         metadata.common.artist,
@@ -3422,6 +3619,7 @@ export class SmplayerDataStore {
         dateAdded,
       }
     } catch {
+      const thumbnailPath = await writeShellThumbnailCache(this.thumbnailCachePath, filePath)
       return {
         path: filePath,
         thumbnailPath,
@@ -3433,6 +3631,26 @@ export class SmplayerDataStore {
         dateAdded,
       }
     }
+  }
+
+  private async readSongs(audioFiles: string[], useFilenameNotMusicName: boolean) {
+    const scannedSongs = new Array<ScannedSong>(audioFiles.length)
+    let nextIndex = 0
+    const workerCount = Math.min(METADATA_SCAN_CONCURRENCY, audioFiles.length)
+
+    await Promise.all(Array.from({ length: workerCount }, async () => {
+      for (;;) {
+        const index = nextIndex
+        nextIndex += 1
+        if (index >= audioFiles.length) {
+          return
+        }
+
+        scannedSongs[index] = await this.readSong(audioFiles[index]!, useFilenameNotMusicName)
+      }
+    }))
+
+    return scannedSongs
   }
 
   private resolveDurationSeconds(
@@ -3448,61 +3666,6 @@ export class SmplayerDataStore {
     }
 
     return 0
-  }
-
-  private async writeArtworkCache(
-    filePath: string,
-    picture?: { data: Uint8Array; format?: string },
-  ) {
-    if (!picture?.data || picture.data.length === 0) {
-      return ''
-    }
-
-    const extension = this.getArtworkExtension(picture.format)
-    const artworkHash = createHash('sha1').update(filePath).digest('hex')
-    const thumbnailPath = join(this.thumbnailCachePath, `${artworkHash}.${extension}`)
-
-    await mkdir(this.thumbnailCachePath, { recursive: true })
-    await writeFile(thumbnailPath, picture.data)
-
-    return thumbnailPath
-  }
-
-  private async writeShellThumbnailCache(filePath: string) {
-    try {
-      const thumbnail = await nativeImage.createThumbnailFromPath(filePath, {
-        width: SHELL_THUMBNAIL_SIZE,
-        height: SHELL_THUMBNAIL_SIZE,
-      })
-
-      if (thumbnail.isEmpty()) {
-        return ''
-      }
-
-      const thumbnailPath = this.getShellThumbnailCachePath(filePath)
-
-      await mkdir(this.thumbnailCachePath, { recursive: true })
-      await writeFile(thumbnailPath, thumbnail.toPNG())
-
-      return thumbnailPath
-    } catch {
-      return ''
-    }
-  }
-
-  private shouldRebuildShellThumbnail(filePath: string, thumbnailPath: string) {
-    const cachedFilename = basename(thumbnailPath)
-    return cachedFilename === basename(this.getLegacyShellThumbnailCachePath(filePath))
-  }
-
-  private getShellThumbnailCachePath(filePath: string) {
-    const thumbnailHash = createHash('sha1').update(`${filePath}:${SHELL_THUMBNAIL_CACHE_VERSION}`).digest('hex')
-    return join(this.thumbnailCachePath, `${thumbnailHash}.png`)
-  }
-
-  private getLegacyShellThumbnailCachePath(filePath: string) {
-    const thumbnailHash = createHash('sha1').update(`${filePath}:shell-thumbnail`).digest('hex')
-    return join(this.thumbnailCachePath, `${thumbnailHash}.png`)
   }
 
   private async maybePersistFetchedLyrics(
@@ -3772,12 +3935,7 @@ export class SmplayerDataStore {
       }
     }
 
-    const queueRow = this.getActivePlaylistSongCountStatement.get(
-      ACTIVE_STATE.active,
-      settings.NowPlaying,
-      ACTIVE_STATE.active,
-    ) as { count: number } | undefined
-    const queueCount = Number(queueRow?.count ?? 0)
+    const queueCount = this.readNowPlayingSongIdsByPath().length
     const nextLastMusicIndex =
       queueCount === 0
         ? -1
@@ -3796,66 +3954,6 @@ export class SmplayerDataStore {
         nextMusicProgress,
         settings.Id,
       )
-    }
-  }
-
-  private async pruneThumbnailCache(activeThumbnailPaths: string[]) {
-    const activeThumbnailPathSet = new Set(activeThumbnailPaths.filter(Boolean))
-
-    try {
-      const cacheEntries = await readdir(this.thumbnailCachePath, { withFileTypes: true })
-
-      await Promise.all(
-        cacheEntries.map(async (entry) => {
-          if (!entry.isFile()) {
-            return
-          }
-
-          const cachedThumbnailPath = join(this.thumbnailCachePath, entry.name)
-          if (activeThumbnailPathSet.has(cachedThumbnailPath)) {
-            return
-          }
-
-          try {
-            await unlink(cachedThumbnailPath)
-          } catch {
-            // Ignore cache cleanup failures so the library scan itself stays successful.
-          }
-        }),
-      )
-    } catch {
-      // Ignore cache cleanup failures so the library scan itself stays successful.
-    }
-  }
-
-  private getArtworkExtension(format?: string) {
-    const normalizedFormat = (format ?? 'image/jpeg').toLowerCase()
-
-    if (normalizedFormat.includes('png')) {
-      return 'png'
-    }
-
-    if (normalizedFormat.includes('webp')) {
-      return 'webp'
-    }
-
-    if (normalizedFormat.includes('gif')) {
-      return 'gif'
-    }
-
-    return 'jpg'
-  }
-
-  private getArtworkFormat(filePath: string) {
-    switch (extname(filePath).toLocaleLowerCase()) {
-      case '.png':
-        return 'image/png'
-      case '.webp':
-        return 'image/webp'
-      case '.bmp':
-        return 'image/bmp'
-      default:
-        return 'image/jpeg'
     }
   }
 
@@ -4155,7 +4253,7 @@ export class SmplayerDataStore {
 
   private getPreferenceSetting() {
     let setting = this.db.prepare(`
-      SELECT Id, Songs, Artists, Albums, Playlists, Folders
+      SELECT Id, Songs, Artists, Albums, Playlists, Folders, RecentAddedId, MyFavoritesId, MostPlayedId, LeastPlayedId
       FROM PreferenceSetting
       ORDER BY Id DESC
       LIMIT 1
@@ -4167,34 +4265,15 @@ export class SmplayerDataStore {
         VALUES (0, 0, 0, 0, 0)
       `).run()
       setting = this.db.prepare(`
-        SELECT Id, Songs, Artists, Albums, Playlists, Folders
+        SELECT Id, Songs, Artists, Albums, Playlists, Folders, RecentAddedId, MyFavoritesId, MostPlayedId, LeastPlayedId
         FROM PreferenceSetting
         ORDER BY Id DESC
         LIMIT 1
       `).get() as unknown as PreferenceSettingRow
     }
 
-    this.ensureBuiltinPreferenceItems()
+    ensurePreferenceCompatibility(this.db, setting.Id, ACTIVE_STATE.active)
     return setting
-  }
-
-  private ensureBuiltinPreferenceItems() {
-    this.db.prepare(`
-      INSERT INTO PreferenceItem (Type, ItemId, ItemName, IsEnabled, Level, State)
-      SELECT Builtins.Type, Builtins.ItemId, Builtins.ItemName, 0, 1, ?
-      FROM (
-        SELECT 5 AS Type, '5' AS ItemId, 'Recent Added' AS ItemName
-        UNION ALL SELECT 6, '6', 'My Favorites'
-        UNION ALL SELECT 7, '7', 'Most Played'
-        UNION ALL SELECT 8, '8', 'Least Played'
-      ) AS Builtins
-      WHERE NOT EXISTS (
-        SELECT 1
-        FROM PreferenceItem
-        WHERE PreferenceItem.Type = Builtins.Type
-          AND PreferenceItem.State = ?
-      )
-    `).run(ACTIVE_STATE.active, ACTIVE_STATE.active)
   }
 
   private toPreferenceItemSnapshot(item: PreferenceItemRow): PreferenceItemSnapshot {

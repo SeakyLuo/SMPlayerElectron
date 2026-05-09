@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Navigate, Route, Routes, useLocation, useNavigate, useNavigationType, useParams, type Location } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Route, Routes, useLocation, useNavigate, useNavigationType, useParams } from 'react-router-dom'
 
 import { AlbumDetailPage } from './pages/AlbumDetailPage'
 import { AlbumsPage } from './pages/AlbumsPage'
@@ -7,7 +7,12 @@ import { ArtistsPage } from './pages/ArtistsPage'
 import { PlayerBar } from './components/PlayerBar'
 import { Sidebar } from './components/Sidebar'
 import { UndoableNotificationHost } from './components/UndoableNotificationHost'
+import { useOpenFilesPlayback } from './hooks/useOpenFilesPlayback'
 import { usePlaybackController } from './hooks/usePlaybackController'
+import { useRevealItem } from './hooks/useRevealItem'
+import { useScrollbarHoverClass } from './hooks/useScrollbarHoverClass'
+import { useSearchController } from './hooks/useSearchController'
+import { useTrackNotification } from './hooks/useTrackNotification'
 import { CollectionPage } from './pages/CollectionPage'
 import { HiddenFoldersPage } from './pages/HiddenFoldersPage'
 import { MusicLibraryPage } from './pages/MusicLibraryPage'
@@ -27,6 +32,7 @@ import { sortLibrarySongs } from './shared/sorting'
 import { addNextAndPlay as setQueueAddNextAndPlay, moveToMusicOrPlay as setQueueMoveToMusicOrPlay, playNext as setQueuePlayNext, quickPlay, setMusicAndPlayFromPlaylist } from './shared/mediaHelper'
 import { ByArtistRequest, MatchType, VoiceAssistantHelper, type VolumeRequest } from './shared/VoiceAssistantHelper'
 import { useLibraryStore } from './state/useLibraryStore'
+import { usePreferenceStore } from './state/usePreferenceStore'
 import './App.css'
 
 const RESTORABLE_ROUTES = new Set([
@@ -88,6 +94,18 @@ function resolveRestoredPage(lastPage: string) {
   return '/songs'
 }
 
+function StartupRedirect({ ready, lastPage }: { ready: boolean; lastPage: string }) {
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (ready) {
+      navigate(resolveRestoredPage(lastPage), { replace: true })
+    }
+  }, [lastPage, navigate, ready])
+
+  return null
+}
+
 function getRouteSection(pathname: string) {
   if (pathname.startsWith('/artists/')) {
     return '/artists'
@@ -130,54 +148,6 @@ function getScrollElementKey(root: HTMLElement, element: HTMLElement) {
   const index = elements.indexOf(element)
 
   return `${selector}:${index}`
-}
-
-function KeepAlivePane({
-  active,
-  children,
-}: {
-  active: boolean
-  children: ReactNode
-}) {
-  return (
-    <div className="keep-alive-pane" hidden={!active}>
-      {children}
-    </div>
-  )
-}
-
-function KeepAliveRoutes({
-  location,
-  routeKey,
-  children,
-}: {
-  location: Location
-  routeKey: string
-  children: ReactNode
-}) {
-  const [cachedLocations, setCachedLocations] = useState<Array<{ key: string; location: Location }>>([
-    { key: routeKey, location },
-  ])
-
-  useEffect(() => {
-    setCachedLocations((current) => {
-      if (current.some((item) => item.key === routeKey)) {
-        return current
-      }
-
-      return [...current, { key: routeKey, location }]
-    })
-  }, [location, routeKey])
-
-  return (
-    <>
-      {cachedLocations.map((item) => (
-        <KeepAlivePane active={item.key === routeKey} key={item.key}>
-          <Routes location={item.location}>{children}</Routes>
-        </KeepAlivePane>
-      ))}
-    </>
-  )
 }
 
 function hexToRgb(color: string) {
@@ -309,10 +279,6 @@ function findSongsInFolder(songs: LibrarySong[], folderPath: string) {
 
 function App() {
   const [initialLoadComplete, setInitialLoadComplete] = useState(false)
-  const [searchInput, setSearchInput] = useState('')
-  const [submittedSearchQuery, setSubmittedSearchQuery] = useState('')
-  const [searchResultQuery, setSearchResultQuery] = useState('')
-  const [searchResultsLoading, setSearchResultsLoading] = useState(false)
   const [resolvedArtwork, setResolvedArtwork] = useState<{ trackId: number; artworkUrl: string } | null>(null)
   const [isNavigationCollapsed, setIsNavigationCollapsed] = useState(() => {
     try {
@@ -321,9 +287,7 @@ function App() {
       return false
     }
   })
-  const lastNotifiedTrackIdRef = useRef<number | null>(null)
   const hasSeenNavigationRef = useRef(false)
-  const searchResultTimerRef = useRef<number | null>(null)
   const workspaceContentRef = useRef<HTMLElement | null>(null)
   const currentRouteScrollKeyRef = useRef('')
   const routeScrollPositionsRef = useRef(new Map<string, Map<string, { top: number; left: number }>>())
@@ -333,6 +297,11 @@ function App() {
   const navigationType = useNavigationType()
   const [navigationDepth, setNavigationDepth] = useState(0)
   const [showNowPlayingFullPage, setShowNowPlayingFullPage] = useState(false)
+  const revealItem = useRevealItem()
+
+  useEffect(() => {
+    void window.smplayer?.setWindowControlsLight(showNowPlayingFullPage)
+  }, [showNowPlayingFullPage])
 
   const snapshot = useLibraryStore((state) => state.snapshot)
   const loading = useLibraryStore((state) => state.loading)
@@ -353,9 +322,16 @@ function App() {
   const reorderPlaylists = useLibraryStore((state) => state.reorderPlaylists)
   const replaceNowPlaying = useLibraryStore((state) => state.replaceNowPlaying)
   const deleteSongFromDisk = useLibraryStore((state) => state.deleteSongFromDisk)
+  const createLocalFolder = useLibraryStore((state) => state.createLocalFolder)
+  const moveSongsToFolder = useLibraryStore((state) => state.moveSongsToFolder)
+  const moveLocalFolderToFolder = useLibraryStore((state) => state.moveLocalFolderToFolder)
+  const moveLocalItemsToFolder = useLibraryStore((state) => state.moveLocalItemsToFolder)
+  const deleteLocalItems = useLibraryStore((state) => state.deleteLocalItems)
+  const updateLocalFolderSort = useLibraryStore((state) => state.updateLocalFolderSort)
   const hideLocalFolder = useLibraryStore((state) => state.hideLocalFolder)
   const renameLocalFolder = useLibraryStore((state) => state.renameLocalFolder)
   const deleteLocalFolder = useLibraryStore((state) => state.deleteLocalFolder)
+  const resumeHiddenStorageItem = useLibraryStore((state) => state.resumeHiddenStorageItem)
   const clearNowPlaying = useLibraryStore((state) => state.clearNowPlaying)
   const saveSearchQuery = useLibraryStore((state) => state.saveSearchQuery)
   const addRecentSearch = useLibraryStore((state) => state.addRecentSearch)
@@ -368,9 +344,25 @@ function App() {
   const saveViewState = useLibraryStore((state) => state.saveViewState)
 
   const playback = usePlaybackController(snapshot)
+  const {
+    searchInput,
+    submittedSearchQuery,
+    searchResultQuery,
+    searchResultsLoading,
+    setSearchInput,
+    commitSearchQuery,
+    commitDirectorySearchQuery,
+  } = useSearchController({
+    navigate,
+    saveSearchQuery,
+    addRecentSearch,
+  })
   const routeScrollKey = `${location.pathname}${location.search}`
+  const routeSearchParams = useMemo(() => new URLSearchParams(location.search), [location.search])
+  const targetArtistQuery = routeSearchParams.get('artist')
+  const targetAlbumQuery = routeSearchParams.get('album')
   const currentRouteSection = getRouteSection(location.pathname)
-  const isInAlbumDetail = isAlbumDetailRoute(location.pathname)
+  const isInAlbumDetail = isAlbumDetailRoute(location.pathname) || (location.pathname === '/albums' && targetAlbumQuery != null)
 
   if (currentRouteSection && currentRouteSection !== '/albums') {
     routeMemoryRef.current.set(currentRouteSection, location.pathname)
@@ -467,18 +459,12 @@ function App() {
         .filter((song): song is LibrarySong => song != null),
     [snapshot.nowPlaying.songIds, songsById],
   )
-  const myFavoritesPlaylist = useMemo(
-    () => snapshot.playlists.find((playlist) => playlist.isBuiltIn),
-    [snapshot.playlists],
-  )
   const favoriteSongs = useMemo(
     () =>
-      myFavoritesPlaylist
-        ? myFavoritesPlaylist.songIds
-            .map((songId) => songsById.get(songId) ?? null)
-            .filter((song): song is LibrarySong => song != null)
-        : snapshot.songs.filter((song) => song.favorite),
-    [myFavoritesPlaylist, snapshot.songs, songsById],
+      snapshot.favorites.songIds
+        .map((songId) => songsById.get(songId) ?? null)
+        .filter((song): song is LibrarySong => song != null),
+    [snapshot.favorites.songIds, songsById],
   )
   const showCount = snapshot.settings.showCount
   const playerTrack = playback.currentTrack
@@ -519,13 +505,11 @@ function App() {
     }
   }, [refresh])
 
-  useEffect(() => {
-    return () => {
-      if (searchResultTimerRef.current != null) {
-        window.clearTimeout(searchResultTimerRef.current)
-      }
-    }
-  }, [])
+  useOpenFilesPlayback({
+    songs: snapshot.songs,
+    refresh,
+    playTrack: playback.playTrack,
+  })
 
   useEffect(() => {
     if (location.pathname === '/') {
@@ -571,57 +555,7 @@ function App() {
     applyThemeColor(snapshot.settings.themeColor)
   }, [snapshot.settings.themeColor])
 
-  useEffect(() => {
-    let activeScrollbarHost: Element | null = null
-
-    const setActiveScrollbarHost = (nextHost: Element | null) => {
-      if (activeScrollbarHost === nextHost) {
-        return
-      }
-
-      activeScrollbarHost?.classList.remove(SCROLLBAR_HOVER_CLASS)
-      activeScrollbarHost = nextHost
-      activeScrollbarHost?.classList.add(SCROLLBAR_HOVER_CLASS)
-    }
-
-    const updateScrollbarHover = (event: PointerEvent) => {
-      if (!(event.target instanceof Element)) {
-        setActiveScrollbarHost(null)
-        return
-      }
-
-      const scrollbarHost = event.target.closest(SCROLLBAR_HOST_SELECTOR)
-      if (!(scrollbarHost instanceof HTMLElement)) {
-        setActiveScrollbarHost(null)
-        return
-      }
-
-      const rect = scrollbarHost.getBoundingClientRect()
-      const isVerticalScrollbarHovered =
-        scrollbarHost.scrollHeight > scrollbarHost.clientHeight &&
-        event.clientX >= rect.right - 12 &&
-        event.clientX <= rect.right
-      const isHorizontalScrollbarHovered =
-        scrollbarHost.scrollWidth > scrollbarHost.clientWidth &&
-        event.clientY >= rect.bottom - 12 &&
-        event.clientY <= rect.bottom
-
-      setActiveScrollbarHost(isVerticalScrollbarHovered || isHorizontalScrollbarHovered ? scrollbarHost : null)
-    }
-
-    const clearScrollbarHover = () => {
-      setActiveScrollbarHost(null)
-    }
-
-    document.addEventListener('pointermove', updateScrollbarHover)
-    document.addEventListener('pointerleave', clearScrollbarHover)
-
-    return () => {
-      document.removeEventListener('pointermove', updateScrollbarHover)
-      document.removeEventListener('pointerleave', clearScrollbarHover)
-      clearScrollbarHover()
-    }
-  }, [])
+  useScrollbarHoverClass(SCROLLBAR_HOST_SELECTOR, SCROLLBAR_HOVER_CLASS)
 
   useEffect(() => {
     try {
@@ -631,28 +565,7 @@ function App() {
     }
   }, [isNavigationCollapsed])
 
-  useEffect(() => {
-    if (!playback.currentTrack || !window.smplayer) {
-      return
-    }
-
-    if (lastNotifiedTrackIdRef.current == null) {
-      lastNotifiedTrackIdRef.current = playback.currentTrack.id
-      return
-    }
-
-    if (lastNotifiedTrackIdRef.current === playback.currentTrack.id) {
-      return
-    }
-
-    lastNotifiedTrackIdRef.current = playback.currentTrack.id
-    void window.smplayer.showTrackNotification({
-      songId: playback.currentTrack.id,
-      title: playback.currentTrack.title,
-      artist: getDisplayArtists(playback.currentTrack),
-      album: playback.currentTrack.album || 'Unknown album',
-    })
-  }, [playback.currentTrack])
+  useTrackNotification(playback.currentTrack)
 
   async function playTrackInQueue(trackId: number, queueSongIds: number[], queueIndex = -1) {
     const nextQueue = setMusicAndPlayFromPlaylist(
@@ -696,7 +609,11 @@ function App() {
   }
 
   async function playQuick() {
-    const preferences = await window.smplayer!.getPreferenceSettings()
+    const preferences = await usePreferenceStore.getState().refresh()
+    if (!preferences) {
+      return
+    }
+
     const songIds = quickPlay({
       songs: snapshot.songs,
       recentSongs: snapshot.recentSongs,
@@ -704,6 +621,15 @@ function App() {
       folders: snapshot.folders,
       preferences,
     })
+    await replaceNowPlaying(songIds)
+    if (songIds[0] != null) {
+      await playback.playTrack(songIds[0], songIds, 0)
+    }
+  }
+
+  async function quickPlayPlaylist(playlistId: number) {
+    const playlist = snapshot.playlists.find((item) => item.id === playlistId)!
+    const songIds = playlist.songIds
     await replaceNowPlaying(songIds)
     if (songIds[0] != null) {
       await playback.playTrack(songIds[0], songIds, 0)
@@ -1056,53 +982,6 @@ function App() {
     }
   }
 
-  async function commitSearchQuery(value: string) {
-    const nextQuery = value.trim()
-
-    if (searchResultTimerRef.current != null) {
-      window.clearTimeout(searchResultTimerRef.current)
-      searchResultTimerRef.current = null
-    }
-
-    setSearchInput(nextQuery)
-    setSubmittedSearchQuery(nextQuery)
-
-    if (!nextQuery) {
-      setSearchResultsLoading(false)
-      setSearchResultQuery('')
-      await saveSearchQuery('')
-      return
-    }
-
-    navigate('/search')
-    setSearchResultsLoading(true)
-    searchResultTimerRef.current = window.setTimeout(() => {
-      setSearchResultQuery(nextQuery)
-      setSearchResultsLoading(false)
-      searchResultTimerRef.current = null
-    }, 40)
-    void addRecentSearch(nextQuery)
-  }
-
-  function commitDirectorySearchQuery(value: string, folderRelativePath: string) {
-    const nextQuery = value.trim()
-    if (!nextQuery) {
-      return
-    }
-
-    if (searchResultTimerRef.current != null) {
-      window.clearTimeout(searchResultTimerRef.current)
-      searchResultTimerRef.current = null
-    }
-
-    setSearchInput(nextQuery)
-    setSubmittedSearchQuery(nextQuery)
-    setSearchResultQuery(nextQuery)
-    setSearchResultsLoading(false)
-    navigate(`/search?folder=${encodeURIComponent(folderRelativePath)}`)
-    void addRecentSearch(nextQuery)
-  }
-
   const isLocalRoute = location.pathname === '/local' || location.pathname.startsWith('/local/')
   const currentLocalRelativePath = isLocalRoute
     ? decodeLocalRoute(location.pathname.replace(/^\/local\/?/, ''))
@@ -1129,6 +1008,9 @@ function App() {
         onReorderPlaylists={(playlistIds) => {
           void reorderPlaylists(playlistIds)
         }}
+        onQuickPlayPlaylist={(playlistId) => {
+          void quickPlayPlaylist(playlistId)
+        }}
         onSearchChange={setSearchInput}
         onSearchCommit={(value) => {
           void commitSearchQuery(value)
@@ -1150,7 +1032,7 @@ function App() {
       <div className={
         location.pathname === '/recent'
           ? 'workspace is-headerless-route'
-          : location.pathname.startsWith('/albums/') ||
+          : isInAlbumDetail ||
             location.pathname.startsWith('/playlists/') ||
             location.pathname.startsWith('/favorites')
           ? 'workspace is-immersive-route'
@@ -1164,6 +1046,7 @@ function App() {
               songs={snapshot.songs}
               folders={snapshot.folders}
               playlists={snapshot.playlists}
+              favoritePlaylistId={snapshot.favorites.playlistId}
               t={t}
               rootPath={snapshot.settings.rootPath}
               currentRelativePath={currentLocalRelativePath}
@@ -1173,7 +1056,7 @@ function App() {
               onOpenFolder={(targetRelativePath) => {
                 navigate(buildLocalRoute(targetRelativePath), { replace: true })
               }}
-              onRevealFolder={(folderPath) => window.smplayer?.revealItemInFolder(folderPath)}
+              onRevealFolder={revealItem}
               onSearchDirectory={(query, folderRelativePath) => {
                 commitDirectorySearchQuery(query, folderRelativePath)
               }}
@@ -1193,11 +1076,7 @@ function App() {
                 const targetFolderPath = targetRelativePath
                   ? getSearchFolderPath(snapshot.settings.rootPath, targetRelativePath)
                   : snapshot.settings.rootPath
-                await window.smplayer!.moveSongsToFolder(payload.songIds, targetFolderPath)
-                for (const folderPath of payload.folderPaths) {
-                  await window.smplayer!.moveLocalFolderToFolder(folderPath, targetFolderPath)
-                }
-                await refresh()
+                await moveLocalItemsToFolder(payload.songIds, payload.folderPaths, targetFolderPath)
               }}
             />
           ) : (
@@ -1229,9 +1108,11 @@ function App() {
             saveScrollElement(event.target as HTMLElement)
           }}
         >
-          {initialLoadComplete ? (
-            <KeepAliveRoutes location={location} routeKey={routeScrollKey}>
-              <Route path="/" element={<Navigate to={resolveRestoredPage(snapshot.settings.lastPage)} replace />} />
+          <Routes>
+            <Route
+              path="/"
+              element={<StartupRedirect ready={initialLoadComplete} lastPage={snapshot.settings.lastPage} />}
+            />
             <Route
               path="/songs"
               element={
@@ -1281,7 +1162,7 @@ function App() {
                   onCreatePlaylistWithSongs={(name, songIds) => {
                     void createPlaylist(name, songIds)
                   }}
-                  onRevealSong={(songPath) => window.smplayer?.revealItemInFolder(songPath)}
+                  onRevealSong={revealItem}
                   onDeleteSongFromDisk={(songId) => {
                     void deleteSongFromDisk(songId)
                   }}
@@ -1302,8 +1183,10 @@ function App() {
                   searchQuery=""
                   error={error}
                   playlists={snapshot.playlists}
+                  favoritePlaylistId={snapshot.favorites.playlistId}
                   loading={loading}
                   scanning={scanning}
+                  targetArtistName={targetArtistQuery ?? undefined}
                   onPlayTrack={(trackId, queueSongIds) => {
                     void playTrackInQueue(trackId, queueSongIds)
                   }}
@@ -1331,7 +1214,7 @@ function App() {
                   onAddSongsToPlaylist={(playlistId, songIds) => {
                     void addSongsToPlaylist(playlistId, songIds)
                   }}
-                  onRevealSong={(songPath) => window.smplayer?.revealItemInFolder(songPath)}
+                  onRevealSong={revealItem}
                   onDeleteSongFromDisk={(songId) => {
                     void deleteSongFromDisk(songId)
                   }}
@@ -1341,28 +1224,68 @@ function App() {
             <Route
               path="/albums"
               element={
-                <AlbumsPage
-                  songs={snapshot.songs}
-                  playlists={snapshot.playlists}
-                  t={t}
-                  loading={loading}
-                  scanning={scanning}
-                  onPlayTrack={(trackId, queueSongIds) => {
-                    void playTrackInQueue(trackId, queueSongIds)
-                  }}
-                  onAddSongsToPlaylist={(playlistId, songIds) => {
-                    void addSongsToPlaylist(playlistId, songIds)
-                  }}
-                  onAddSongsToNowPlaying={(songIds) => {
-                    void replaceNowPlaying([...snapshot.nowPlaying.songIds, ...songIds])
-                  }}
-                  onCreatePlaylistWithSongs={(name, songIds) => {
-                    void createPlaylist(name, songIds)
-                  }}
-                  onUpdateSettings={(update) => {
-                    void updateSettings(update)
-                  }}
-                />
+                targetAlbumQuery ? (
+                  <AlbumDetailRoute
+                    albumName={targetAlbumQuery}
+                    songs={snapshot.songs}
+                    t={t}
+                    selectedTrackId={playback.currentTrackId}
+                    isPlaying={playback.isPlaying}
+                    onPlayTrack={(trackId, queueSongIds) => {
+                      void playTrackInQueue(trackId, queueSongIds)
+                    }}
+                    onMoveToMusicOrPlay={(songId) => {
+                      void moveToMusicOrPlayInQueue(songId)
+                    }}
+                    onPlayNext={(songId) => {
+                      void playNextInQueue(songId)
+                    }}
+                    onTogglePlayPause={() => {
+                      void playback.togglePlayPause()
+                    }}
+                    onToggleFavorite={(songId, favorite) => {
+                      void setSongFavorite(songId, favorite)
+                    }}
+                    playlists={snapshot.playlists}
+                    favoritePlaylistId={snapshot.favorites.playlistId}
+                    onAddSongToPlaylist={(playlistId, songId) => {
+                      void addSongToPlaylist(playlistId, songId)
+                    }}
+                    onAddSongsToPlaylist={(playlistId, songIds) => {
+                      void addSongsToPlaylist(playlistId, songIds)
+                    }}
+                    onSetAlbumPreferred={(albumName, level) => {
+                      void usePreferenceStore.getState().addItem('album', albumName, albumName, level)
+                    }}
+                    onAlbumArtworkSaved={() => {
+                      void refresh()
+                    }}
+                  />
+                ) : (
+                  <AlbumsPage
+                    songs={snapshot.songs}
+                    playlists={snapshot.playlists}
+                    favoritePlaylistId={snapshot.favorites.playlistId}
+                    t={t}
+                    loading={loading}
+                    scanning={scanning}
+                    onPlayTrack={(trackId, queueSongIds) => {
+                      void playTrackInQueue(trackId, queueSongIds)
+                    }}
+                    onAddSongsToPlaylist={(playlistId, songIds) => {
+                      void addSongsToPlaylist(playlistId, songIds)
+                    }}
+                    onAddSongsToNowPlaying={(songIds) => {
+                      void replaceNowPlaying([...snapshot.nowPlaying.songIds, ...songIds])
+                    }}
+                    onCreatePlaylistWithSongs={(name, songIds) => {
+                      void createPlaylist(name, songIds)
+                    }}
+                    onUpdateSettings={(update) => {
+                      void updateSettings(update)
+                    }}
+                  />
+                )
               }
             />
             <Route
@@ -1376,9 +1299,10 @@ function App() {
                   searchQuery=""
                   error={error}
                   playlists={snapshot.playlists}
+                  favoritePlaylistId={snapshot.favorites.playlistId}
                   loading={loading}
                   scanning={scanning}
-                  targetArtistName={decodeURIComponent(location.pathname.slice('/artists/'.length))}
+                  targetArtistName={targetArtistQuery ?? decodeURIComponent(location.pathname.slice('/artists/'.length))}
                   onPlayTrack={(trackId, queueSongIds) => {
                     void playTrackInQueue(trackId, queueSongIds)
                   }}
@@ -1406,7 +1330,7 @@ function App() {
                   onAddSongsToPlaylist={(playlistId, songIds) => {
                     void addSongsToPlaylist(playlistId, songIds)
                   }}
-                  onRevealSong={(songPath) => window.smplayer?.revealItemInFolder(songPath)}
+                  onRevealSong={revealItem}
                   onDeleteSongFromDisk={(songId) => {
                     void deleteSongFromDisk(songId)
                   }}
@@ -1417,6 +1341,7 @@ function App() {
               path="/albums/*"
               element={
                 <AlbumDetailRoute
+                  albumName={targetAlbumQuery ?? undefined}
                   songs={snapshot.songs}
                   t={t}
                   selectedTrackId={playback.currentTrackId}
@@ -1437,6 +1362,7 @@ function App() {
                     void setSongFavorite(songId, favorite)
                   }}
                   playlists={snapshot.playlists}
+                  favoritePlaylistId={snapshot.favorites.playlistId}
                   onAddSongToPlaylist={(playlistId, songId) => {
                     void addSongToPlaylist(playlistId, songId)
                   }}
@@ -1444,7 +1370,7 @@ function App() {
                     void addSongsToPlaylist(playlistId, songIds)
                   }}
                   onSetAlbumPreferred={(albumName, level) => {
-                    void window.smplayer?.addPreferenceItem('album', albumName, albumName, level)
+                    void usePreferenceStore.getState().addItem('album', albumName, albumName, level)
                   }}
                   onAlbumArtworkSaved={() => {
                     void refresh()
@@ -1460,6 +1386,7 @@ function App() {
                   librarySongs={snapshot.songs}
                   recentSongs={snapshot.recentSongs}
                   playlists={snapshot.playlists}
+                  favoritePlaylistId={snapshot.favorites.playlistId}
                   t={t}
                   selectedTrackId={playback.currentTrackId}
                   selectedQueueIndex={playback.currentQueueIndex}
@@ -1484,7 +1411,7 @@ function App() {
                   onAddSongsToPlaylist={(playlistId, songIds) => {
                     void addSongsToPlaylist(playlistId, songIds)
                   }}
-                  onRevealSong={(songPath) => window.smplayer?.revealItemInFolder(songPath)}
+                  onRevealSong={revealItem}
                   onToggleFavorite={(songId, favorite) => {
                     void setSongFavorite(songId, favorite)
                   }}
@@ -1511,6 +1438,8 @@ function App() {
                   recentSongs={snapshot.recentSongs}
                   recentSearches={snapshot.search.recentSearches}
                   playlists={snapshot.playlists}
+                  favoritePlaylistId={snapshot.favorites.playlistId}
+                  favoriteSongIds={snapshot.favorites.songIds}
                   t={t}
                   selectedTrackId={playback.currentTrackId}
                   isPlaying={playback.isPlaying}
@@ -1542,9 +1471,7 @@ function App() {
                   onToggleFavorite={(songId, favorite) => {
                     void setSongFavorite(songId, favorite)
                   }}
-                  onRevealSong={(songPath) => {
-                    void window.smplayer?.revealItemInFolder(songPath)
-                  }}
+                  onRevealSong={revealItem}
                   onDeleteSongFromDisk={(songId) => {
                     void deleteSongFromDisk(songId)
                   }}
@@ -1573,6 +1500,7 @@ function App() {
                   songs={snapshot.songs}
                   folders={snapshot.folders}
                   playlists={snapshot.playlists}
+                  favoritePlaylistId={snapshot.favorites.playlistId}
                   t={t}
                   rootPath={snapshot.settings.rootPath}
                   selectedTrackId={playback.currentTrackId}
@@ -1597,11 +1525,10 @@ function App() {
                   onPlayNext={(songId) => {
                     void playNextInQueue(songId)
                   }}
-                  onRevealSong={(songPath) => window.smplayer?.revealItemInFolder(songPath)}
-                  onRevealFolder={(folderPath) => window.smplayer?.revealItemInFolder(folderPath)}
+                  onRevealSong={revealItem}
+                  onRevealFolder={revealItem}
                   onCreateFolder={async (relativePath, name) => {
-                    await window.smplayer!.createLocalFolder(snapshot.settings.rootPath, relativePath, name)
-                    await scanLocalFolder(relativePath ? getSearchFolderPath(snapshot.settings.rootPath, relativePath) : snapshot.settings.rootPath)
+                    await createLocalFolder(snapshot.settings.rootPath, relativePath, name)
                   }}
                   onRenameFolder={async (folderPath, name) => {
                     await renameLocalFolder(folderPath, name)
@@ -1631,20 +1558,16 @@ function App() {
                     void deleteSongFromDisk(songId)
                   }}
                   onMoveSongsToFolder={async (songIds, folderPath) => {
-                    await window.smplayer!.moveSongsToFolder(songIds, folderPath)
-                    await refresh()
+                    await moveSongsToFolder(songIds, folderPath)
                   }}
                   onMoveFolderToFolder={async (sourceFolderPath, targetFolderPath) => {
-                    await window.smplayer!.moveLocalFolderToFolder(sourceFolderPath, targetFolderPath)
-                    await refresh()
+                    await moveLocalFolderToFolder(sourceFolderPath, targetFolderPath)
                   }}
                   onDeleteLocalItems={async (songIds, folderPaths) => {
-                    await window.smplayer!.deleteLocalItems(songIds, folderPaths)
-                    await refresh()
+                    await deleteLocalItems(songIds, folderPaths)
                   }}
                   onUpdateFolderSort={async (folderPath, sortCriterion) => {
-                    await window.smplayer!.updateLocalFolderSort(folderPath, sortCriterion)
-                    await refresh()
+                    await updateLocalFolderSort(folderPath, sortCriterion)
                   }}
                   onSearchDirectory={(query, folderRelativePath) => {
                     commitDirectorySearchQuery(query, folderRelativePath)
@@ -1659,8 +1582,7 @@ function App() {
                   active={location.pathname === '/hidden-folders'}
                   t={t}
                   onResumeHiddenStorageItem={async (item) => {
-                    await window.smplayer!.resumeHiddenStorageItem(item)
-                    await scanLibrary()
+                    await resumeHiddenStorageItem(item)
                   }}
                 />
               }
@@ -1706,7 +1628,7 @@ function App() {
                     void reorderPlaylists(playlistIds)
                   }}
                   onSetPlaylistPreferred={(playlistId, name, level) => {
-                    void window.smplayer?.addPreferenceItem('playlist', String(playlistId), name, level)
+                    void usePreferenceStore.getState().addItem('playlist', String(playlistId), name, level)
                   }}
                   onAddSongToPlaylist={(playlistId, songId) => {
                     void addSongToPlaylist(playlistId, songId)
@@ -1729,7 +1651,8 @@ function App() {
                 <MyFavoritesPage
                   songs={favoriteSongs}
                   playlists={snapshot.playlists}
-                  sortCriterion={myFavoritesPlaylist!.sortCriterion}
+                  favoritePlaylistId={snapshot.favorites.playlistId}
+                  sortCriterion={snapshot.favorites.sortCriterion}
                   t={t}
                   selectedTrackId={playback.currentTrackId}
                   isPlaying={playback.isPlaying}
@@ -1752,16 +1675,16 @@ function App() {
                     void addSongsToPlaylist(playlistId, songIds)
                   }}
                   onRemoveSongsFromFavorites={(songIds) => {
-                    void removeSongsFromPlaylist(myFavoritesPlaylist!.id, songIds)
+                    void removeSongsFromPlaylist(snapshot.favorites.playlistId, songIds)
                   }}
                   onSortFavorites={(songIds, sortCriterion) => {
-                    void reorderPlaylistSongs(myFavoritesPlaylist!.id, songIds, sortCriterion)
+                    void reorderPlaylistSongs(snapshot.favorites.playlistId, songIds, sortCriterion)
                   }}
                   onToggleFavorite={(songId, favorite) => {
                     void setSongFavorite(songId, favorite)
                   }}
                   onSetPreferred={(level) => {
-                    void window.smplayer?.addPreferenceItem('my-favorites', '6', t('common.myFavorites'), level)
+                    void usePreferenceStore.getState().addItem('my-favorites', '6', t('common.myFavorites'), level)
                   }}
                 />
               }
@@ -1777,6 +1700,7 @@ function App() {
                   songs={snapshot.songs}
                   folders={snapshot.folders}
                   playlists={snapshot.playlists}
+                  favoritePlaylistId={snapshot.favorites.playlistId}
                   rootPath={snapshot.settings.rootPath}
                   searchFolderPath={searchFolderPath}
                   searchFolderName={searchFolderName}
@@ -1814,9 +1738,7 @@ function App() {
                   onAddSongsToPlaylist={(playlistId, songIds) => {
                     void addSongsToPlaylist(playlistId, songIds)
                   }}
-                  onRevealSong={(songPath) => {
-                    void window.smplayer?.revealItemInFolder(songPath)
-                  }}
+                  onRevealSong={revealItem}
                   onDeleteSongFromDisk={(songId) => {
                     void deleteSongFromDisk(songId)
                   }}
@@ -1853,8 +1775,7 @@ function App() {
                 />
               }
             />
-            </KeepAliveRoutes>
-          ) : null}
+          </Routes>
         </main>
       </div>
 
@@ -1864,6 +1785,7 @@ function App() {
           librarySongs={snapshot.songs}
           recentSongs={snapshot.recentSongs}
           playlists={snapshot.playlists}
+          favoritePlaylistId={snapshot.favorites.playlistId}
           currentSong={playback.currentTrack}
           t={t}
           selectedTrackId={playback.currentTrackId}
@@ -1913,7 +1835,7 @@ function App() {
           onAddSongsToPlaylist={(playlistId, songIds) => {
             void addSongsToPlaylist(playlistId, songIds)
           }}
-          onRevealSong={(songPath) => window.smplayer?.revealItemInFolder(songPath)}
+          onRevealSong={revealItem}
           onToggleFavorite={(songId, favorite) => {
             void setSongFavorite(songId, favorite)
           }}
@@ -1990,6 +1912,7 @@ function App() {
 }
 
 function AlbumDetailRoute({
+  albumName,
   songs,
   t,
   selectedTrackId,
@@ -2000,11 +1923,13 @@ function AlbumDetailRoute({
   onTogglePlayPause,
   onToggleFavorite,
   playlists,
+  favoritePlaylistId,
   onAddSongToPlaylist,
   onAddSongsToPlaylist,
   onSetAlbumPreferred,
   onAlbumArtworkSaved,
 }: {
+  albumName?: string
   songs: LibrarySong[]
   t: Translator
   selectedTrackId: number | null
@@ -2015,6 +1940,7 @@ function AlbumDetailRoute({
   onTogglePlayPause: () => void
   onToggleFavorite: (songId: number, favorite: boolean) => void
   playlists: LibraryPlaylist[]
+  favoritePlaylistId: number
   onAddSongToPlaylist: (playlistId: number, songId: number) => void
   onAddSongsToPlaylist: (playlistId: number, songIds: number[]) => void
   onSetAlbumPreferred: (albumName: string, level: PreferenceLevel) => void
@@ -2022,12 +1948,12 @@ function AlbumDetailRoute({
 }) {
   const location = useLocation()
   const navigate = useNavigate()
-  const albumName = decodeURIComponent(location.pathname.slice('/albums/'.length))
+  const routeAlbumName = albumName ?? decodeURIComponent(location.pathname.slice('/albums/'.length))
   const albumSongs = songs
-    .filter((song) => (song.album || t('common.albumUnknown')) === albumName)
+    .filter((song) => (song.album || t('common.albumUnknown')) === routeAlbumName)
     .sort((left, right) => left.title.localeCompare(right.title))
 
-  if (!albumName || albumSongs.length === 0) {
+  if (!routeAlbumName || albumSongs.length === 0) {
     return (
       <CollectionPage
         title={t('collection.albumNotFound')}
@@ -2046,7 +1972,7 @@ function AlbumDetailRoute({
 
   return (
     <AlbumDetailPage
-      albumName={albumName}
+      albumName={routeAlbumName}
       t={t}
       songs={albumSongs}
       selectedTrackId={selectedTrackId}
@@ -2057,15 +1983,16 @@ function AlbumDetailRoute({
       onTogglePlayPause={onTogglePlayPause}
       onToggleFavorite={onToggleFavorite}
       playlists={playlists}
+      favoritePlaylistId={favoritePlaylistId}
       onAddSongToPlaylist={onAddSongToPlaylist}
       onAddSongsToPlaylist={onAddSongsToPlaylist}
       onSetAlbumPreferred={onSetAlbumPreferred}
       onAlbumArtworkSaved={onAlbumArtworkSaved}
       onArtistClick={(artist) => {
-        navigate(`/artists/${encodeURIComponent(artist)}`)
+        navigate(`/artists?artist=${encodeURIComponent(artist)}`)
       }}
       onAlbumClick={(album) => {
-        navigate(`/albums/${encodeURIComponent(album)}`)
+        navigate(`/albums?album=${encodeURIComponent(album)}`)
       }}
     />
   )
@@ -2075,6 +2002,7 @@ function LocalPageRoute({
   songs,
   folders,
   playlists,
+  favoritePlaylistId,
   t,
   rootPath,
   selectedTrackId,
@@ -2110,6 +2038,7 @@ function LocalPageRoute({
   songs: LibrarySong[]
   folders: LibraryFolder[]
   playlists: LibraryPlaylist[]
+  favoritePlaylistId: number
   t: Translator
   rootPath: string
   selectedTrackId: number | null
@@ -2150,6 +2079,7 @@ function LocalPageRoute({
       songs={songs}
       folders={folders}
       playlists={playlists}
+      favoritePlaylistId={favoritePlaylistId}
       t={t}
       rootPath={rootPath}
       currentRelativePath={currentRelativePath}

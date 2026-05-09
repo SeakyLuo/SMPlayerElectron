@@ -7,10 +7,11 @@ import { MenuFlyout } from '../components/MenuFlyout'
 import { getAddToPlaylistMenuFlyoutItem, getPreferenceMenuFlyoutItem, type MenuFlyoutItem, type MenuFlyoutPosition } from '../components/MenuFlyoutHelper'
 import { MultiSelectCommandBar } from '../components/MultiSelectCommandBar'
 import { getSongArtists } from '../shared/artists'
-import type { AlbumSortCriterion, AppSettingsUpdate, LibraryPlaylist, LibrarySong, PreferenceItemSnapshot } from '../shared/contracts'
+import type { AlbumSortCriterion, AppSettingsUpdate, LibraryPlaylist, LibrarySong, PreferenceItemSnapshot, PreferenceSettingsSnapshot } from '../shared/contracts'
 import { formatDuration } from '../shared/formatters'
 import type { Translator } from '../shared/i18n'
 import { useLibraryStore } from '../state/useLibraryStore'
+import { usePreferenceStore } from '../state/usePreferenceStore'
 
 const ALBUM_TILE_WIDTH = 160
 const ALBUM_COLUMN_GAP = 18
@@ -30,6 +31,7 @@ interface AlbumView {
 interface AlbumsPageProps {
   songs: LibrarySong[]
   playlists: LibraryPlaylist[]
+  favoritePlaylistId: number
   t: Translator
   loading: boolean
   scanning: boolean
@@ -43,6 +45,7 @@ interface AlbumsPageProps {
 export function AlbumsPage({
   songs,
   playlists,
+  favoritePlaylistId,
   t,
   loading,
   scanning,
@@ -72,6 +75,7 @@ export function AlbumsPage({
   const hideMultiSelectCommandBarAfterOperation = useLibraryStore(
     (state) => state.snapshot.settings.hideMultiSelectCommandBarAfterOperation,
   )
+  const refreshPreferences = usePreferenceStore((state) => state.refresh)
 
   const albums = useMemo(() => buildAlbumViews(songs, t), [songs, t])
   const [manualAlbumOrder, setManualAlbumOrder] = useState<string[] | null>(null)
@@ -100,7 +104,6 @@ export function AlbumsPage({
   )
   const selectedSongIds = selectedAlbums.flatMap((album) => album.songs.map((song) => song.id))
   const customPlaylists = playlists.filter((playlist) => !playlist.isBuiltIn)
-  const favoritePlaylist = playlists.find((playlist) => playlist.isBuiltIn && playlist.name === t('common.myFavorites'))!
   const albumColumns = Math.max(1, Math.floor((albumGridWidth + ALBUM_COLUMN_GAP) / (ALBUM_TILE_WIDTH + ALBUM_COLUMN_GAP)))
   const albumRowCount = Math.ceil(visibleAlbums.length / albumColumns)
   const albumListHeight = albumRowCount * ALBUM_ROW_HEIGHT
@@ -154,6 +157,10 @@ export function AlbumsPage({
     onPlayTrack(firstSongId, selectedSongIds)
   }
 
+  const addSongsToFavorites = (songIds: number[]) => {
+    onAddSongsToPlaylist(favoritePlaylistId, songIds)
+  }
+
   const reverseSelection = () => {
     setSelectedAlbumNames((current) => {
       const next = new Set<string>()
@@ -166,8 +173,11 @@ export function AlbumsPage({
     })
   }
 
-  const refreshAlbumPreferenceItems = async () => {
-    const settings = await window.smplayer!.getPreferenceSettings()
+  const refreshAlbumPreferenceItems = async (snapshot?: PreferenceSettingsSnapshot | null) => {
+    const settings = snapshot ?? await refreshPreferences()
+    if (!settings) {
+      return
+    }
     setAlbumPreferenceItems(new Map(settings.albums.map((item) => [item.itemId, item])))
   }
 
@@ -414,7 +424,7 @@ export function AlbumsPage({
               onAddSongsToNowPlaying(albumContextMenu.album.songs.map((song) => song.id))
             },
             onAddToFavorites: () => {
-              onAddSongsToPlaylist(favoritePlaylist.id, albumContextMenu.album.songs.map((song) => song.id))
+              addSongsToFavorites(albumContextMenu.album.songs.map((song) => song.id))
             },
             onCreatePlaylist: (name) => {
               onCreatePlaylistWithSongs(name, albumContextMenu.album.songs.map((song) => song.id))
@@ -447,7 +457,7 @@ export function AlbumsPage({
               hideSelectionAfterOperation()
             },
             onAddToFavorites: () => {
-              onAddSongsToPlaylist(favoritePlaylist.id, addToMenu.songIds)
+              addSongsToFavorites(addToMenu.songIds)
               hideSelectionAfterOperation()
             },
             onCreatePlaylist: (name) => {
@@ -747,7 +757,7 @@ function getAlbumContextMenuItems({
     t,
     defaultPlaylistName: album.name,
     includeNowPlaying: true,
-    includeFavorites: true,
+    includeFavorites: onAddToFavorites != null,
     onAddToNowPlaying,
     onToggleFavorite: onAddToFavorites,
     onCreatePlaylist,

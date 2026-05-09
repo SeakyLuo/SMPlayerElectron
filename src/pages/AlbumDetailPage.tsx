@@ -12,6 +12,7 @@ interface AlbumDetailPageProps {
   selectedTrackId: number | null
   isPlaying: boolean
   playlists: LibraryPlaylist[]
+  favoritePlaylistId: number
   onPlayTrack: (trackId: number, queueSongIds: number[]) => void
   onMoveToMusicOrPlay: (songId: number) => void
   onPlayNext: (songId: number) => void
@@ -32,6 +33,7 @@ export function AlbumDetailPage({
   selectedTrackId,
   isPlaying,
   playlists,
+  favoritePlaylistId,
   onPlayTrack,
   onMoveToMusicOrPlay,
   onPlayNext,
@@ -57,6 +59,7 @@ export function AlbumDetailPage({
         selectedTrackId={selectedTrackId}
         isPlaying={isPlaying}
         playlists={playlists}
+        favoritePlaylistId={favoritePlaylistId}
         artworkUrl={artworkUrl}
         showAlbum={false}
         showArtist

@@ -10,8 +10,9 @@ import { getAddToPlaylistMenuFlyoutItem, getPreferenceMenuFlyoutItem, type MenuF
 import { MusicMenuFlyout, type MusicMenuFlyoutState } from '../components/MusicMenuFlyout'
 import { PlaylistControlItem } from '../components/PlaylistControlItem'
 import { getSongArtists } from '../shared/artists'
-import type { AppSettingsUpdate, LibraryFolder, LibraryPlaylist, LibrarySong, PreferenceEntityType, PreferenceItemSnapshot, SearchSortCriterion } from '../shared/contracts'
+import type { AppSettingsUpdate, LibraryFolder, LibraryPlaylist, LibrarySong, PreferenceEntityType, PreferenceItemSnapshot, PreferenceSettingsSnapshot, SearchSortCriterion } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
+import { usePreferenceStore } from '../state/usePreferenceStore'
 import { buildLocalRoute } from './localPagePaths'
 
 interface SearchPageProps {
@@ -22,6 +23,7 @@ interface SearchPageProps {
   songs: LibrarySong[]
   folders: LibraryFolder[]
   playlists: LibraryPlaylist[]
+  favoritePlaylistId: number
   rootPath: string
   searchFolderPath: string
   searchFolderName: string
@@ -81,6 +83,7 @@ export function SearchPage({
   songs,
   folders,
   playlists,
+  favoritePlaylistId,
   rootPath,
   searchFolderPath,
   searchFolderName,
@@ -108,6 +111,7 @@ export function SearchPage({
   const [cardContextMenu, setCardContextMenu] = useState<SearchResultContextMenuState | null>(null)
   const [albumArtPreview, setAlbumArtPreview] = useState<SearchResult | null>(null)
   const [preferenceItems, setPreferenceItems] = useState<Map<string, PreferenceItemSnapshot>>(new Map())
+  const refreshPreferences = usePreferenceStore((state) => state.refresh)
   const normalizedQuery = query.trim().toLocaleLowerCase()
   const normalizedRequestedQuery = requestedQuery.trim().toLocaleLowerCase()
   const searchableSongs = useMemo(
@@ -174,8 +178,11 @@ export function SearchPage({
     setSongContextMenu(null)
     setCardContextMenu({ sectionKey, card, x, y })
   }
-  const refreshPreferenceItems = async () => {
-    const settings = await window.smplayer!.getPreferenceSettings()
+  const refreshPreferenceItems = async (snapshot?: PreferenceSettingsSnapshot | null) => {
+    const settings = snapshot ?? await refreshPreferences()
+    if (!settings) {
+      return
+    }
     setPreferenceItems(new Map([
       ...settings.artists,
       ...settings.albums,
@@ -350,6 +357,7 @@ export function SearchPage({
               items={getSearchResultMenuItems({
                 menu: cardContextMenu,
                 playlists,
+                favoritePlaylistId,
                 t,
                 onPlayTrack,
                 onAddSongsToNowPlaying,
@@ -629,6 +637,7 @@ export function SearchArtwork({ title, artworkUrl }: { title: string; artworkUrl
 function getSearchResultMenuItems({
   menu,
   playlists,
+  favoritePlaylistId,
   t,
   onPlayTrack,
   onAddSongsToNowPlaying,
@@ -642,6 +651,7 @@ function getSearchResultMenuItems({
 }: {
   menu: SearchResultContextMenuState
   playlists: LibraryPlaylist[]
+  favoritePlaylistId: number
   t: Translator
   onPlayTrack: (trackId: number, queueSongIds: number[]) => void
   onAddSongsToNowPlaying: (songIds: number[]) => void
@@ -650,7 +660,7 @@ function getSearchResultMenuItems({
   onSearchDirectory: (query: string, folderRelativePath: string) => void
   rootPath: string
   preferenceItem: PreferenceItemSnapshot | null
-  onPreferenceChanged: () => void | Promise<void>
+  onPreferenceChanged: (snapshot?: PreferenceSettingsSnapshot | null) => void | Promise<void>
   onSeeAlbumArt: (card: SearchResult) => void
 }) {
   const { card, sectionKey } = menu
@@ -677,8 +687,7 @@ function getSearchResultMenuItems({
       onAddSongsToNowPlaying(card.songIds)
     },
     onToggleFavorite: () => {
-      const favoritePlaylist = playlists.find((playlist) => playlist.isBuiltIn)!
-      onAddSongsToPlaylist(favoritePlaylist.id, card.songIds)
+      onAddSongsToPlaylist(favoritePlaylistId, card.songIds)
     },
     onCreatePlaylist: (name) => {
       onCreatePlaylistWithSongs(name, card.songIds)
@@ -739,7 +748,7 @@ function getSearchResultPreferenceItem(
   card: SearchResult,
   t: Translator,
   preferenceItem: PreferenceItemSnapshot | null,
-  onPreferenceChanged: () => void | Promise<void>,
+  onPreferenceChanged: (snapshot?: PreferenceSettingsSnapshot | null) => void | Promise<void>,
 ): MenuFlyoutItem | null {
   const preferenceTypeBySection = {
     artists: 'artist',
@@ -803,7 +812,7 @@ function shuffleSongIds(songIds: number[]) {
   return shuffledSongIds
 }
 
-export function getSortOptions(
+function getSortOptions(
   section: SearchResultType,
   t: Translator,
 ): Array<{ value: SearchSortCriterion; label: string }> {
@@ -849,7 +858,7 @@ export function getSortOptions(
   }
 }
 
-export function getSearchCriterionSetting(section: SearchResultType): keyof AppSettingsUpdate {
+function getSearchCriterionSetting(section: SearchResultType): keyof AppSettingsUpdate {
   switch (section) {
     case 'artists':
       return 'searchArtistsCriterion'
@@ -864,7 +873,7 @@ export function getSearchCriterionSetting(section: SearchResultType): keyof AppS
   }
 }
 
-export function sortSearchResults(cards: SearchResult[], criterion: SearchSortCriterion) {
+function sortSearchResults(cards: SearchResult[], criterion: SearchSortCriterion) {
   const sorted = cards.slice()
 
   switch (criterion) {
@@ -882,7 +891,7 @@ export function sortSearchResults(cards: SearchResult[], criterion: SearchSortCr
   }
 }
 
-export function sortSearchSongs(songs: LibrarySong[], criterion: SearchSortCriterion) {
+function sortSearchSongs(songs: LibrarySong[], criterion: SearchSortCriterion) {
   const sorted = songs.slice()
 
   switch (criterion) {
@@ -908,7 +917,7 @@ function getPrimaryArtist(song: LibrarySong) {
   return getSongArtists(song)[0]
 }
 
-export function buildSearchResults(
+function buildSearchResults(
   scopedSongs: LibrarySong[],
   allSongs: LibrarySong[],
   folders: LibraryFolder[],

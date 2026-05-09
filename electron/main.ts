@@ -14,7 +14,8 @@ import {
   shell,
 } from 'electron'
 import { copyFile, mkdir, readdir, stat } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
+import { createReadStream, existsSync } from 'node:fs'
+import { Readable } from 'node:stream'
 import { basename, dirname, extname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -31,6 +32,7 @@ import type {
 } from '../src/shared/contracts'
 import { SmplayerDataStore } from './services/data-store'
 import { AUDIO_EXTENSIONS, SMPLAYER_DB_NAME } from './services/constants'
+import { OpenFileCoordinator } from './services/open-file-coordinator'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -39,6 +41,7 @@ let dataStore: SmplayerDataStore | null = null
 let appTray: Tray | null = null
 let isQuitting = false
 let windowDragInterval: NodeJS.Timeout | null = null
+const openFileCoordinator = new OpenFileCoordinator()
 
 function stopWindowDrag() {
   if (windowDragInterval) {
@@ -102,12 +105,31 @@ const feedbackEmailAddress = 'luokiss9@qq.com'
 const feedbackEmailSubject = 'Feedbacks about SMPlayer'
 const audioDialogExtensions = [...AUDIO_EXTENSIONS].map((extension) => extension.slice(1))
 const legacyUwpPackageIdentityName = '23778SeakyTheLoner.SMPlayer'
+const appWindowBackgroundColor = '#f6f8fb'
+const titleBarOverlayColor = '#00000000'
+const defaultTitleBarSymbolColor = '#111111'
+const immersiveTitleBarSymbolColor = '#ffffff'
+const gotSingleInstanceLock = app.requestSingleInstanceLock()
+const restorableRoutes = new Set([
+  '/songs',
+  '/artists',
+  '/albums',
+  '/now-playing',
+  '/recent',
+  '/local',
+  '/playlists',
+  '/favorites',
+])
+
+if (!gotSingleInstanceLock) {
+  app.quit()
+}
 
 function isWindowsStorePackage() {
   return Boolean((process as NodeJS.Process & { windowsStore?: boolean }).windowsStore)
 }
 
-async function findLegacyUwpLocalStatePath() {
+async function findUwpPackageLocalStatePath() {
   if (process.platform !== 'win32') {
     return null
   }
@@ -125,27 +147,65 @@ async function findLegacyUwpLocalStatePath() {
     return null
   }
 
-  for (const entry of packageEntries) {
-    if (!entry.isDirectory() || !entry.name.startsWith(`${legacyUwpPackageIdentityName}_`)) {
-      continue
-    }
+  const localStatePaths = packageEntries
+    .filter((entry) => entry.isDirectory() && entry.name.startsWith(`${legacyUwpPackageIdentityName}_`))
+    .map((entry) => join(packagesPath, entry.name, 'LocalState'))
 
-    const localStatePath = join(packagesPath, entry.name, 'LocalState')
-    if (existsSync(join(localStatePath, SMPLAYER_DB_NAME))) {
-      return localStatePath
+  const existingDatabasePaths: Array<{ localStatePath: string; updatedAt: number }> = []
+  for (const localStatePath of localStatePaths) {
+    const databasePath = join(localStatePath, SMPLAYER_DB_NAME)
+    if (existsSync(databasePath)) {
+      const databaseStats = await stat(databasePath)
+      existingDatabasePaths.push({ localStatePath, updatedAt: databaseStats.mtimeMs })
     }
+  }
+
+  if (existingDatabasePaths.length > 0) {
+    return existingDatabasePaths
+      .reduce((latest, candidate) => candidate.updatedAt > latest.updatedAt ? candidate : latest)
+      .localStatePath
+  }
+
+  for (const localStatePath of localStatePaths) {
+    return localStatePath
   }
 
   return null
 }
 
+function enqueuePendingOpenFilePaths(filePaths: string[]) {
+  openFileCoordinator.enqueueFilePaths(filePaths)
+}
+
+function enqueuePendingOpenSongIds(songIds: number[]) {
+  openFileCoordinator.enqueueSongIds(songIds)
+}
+
+function takePendingOpenSongIds() {
+  return openFileCoordinator.takeSongIds()
+}
+
+function takePendingOpenFilePaths() {
+  return openFileCoordinator.takeFilePaths()
+}
+
+async function openPendingFilePaths() {
+  await openAudioFilesFromShell([...takePendingOpenFilePaths(), ...process.argv])
+}
+
 async function resolveUserDataPath() {
   const defaultUserDataPath = app.getPath('userData')
-  const legacyLocalStatePath = await findLegacyUwpLocalStatePath()
+  const uwpLocalStatePath = await findUwpPackageLocalStatePath()
 
-  if (legacyLocalStatePath && (isWindowsStorePackage() || !existsSync(join(defaultUserDataPath, SMPLAYER_DB_NAME)))) {
-    await mkdir(legacyLocalStatePath, { recursive: true })
-    return legacyLocalStatePath
+  // Keep the legacy UWP LocalState as the canonical Windows data directory so
+  // Store users can move to this Electron build without a one-time copy step.
+  if (uwpLocalStatePath) {
+    await mkdir(uwpLocalStatePath, { recursive: true })
+    return uwpLocalStatePath
+  }
+
+  if (isWindowsStorePackage()) {
+    throw new Error(`Windows Store package data path was not found for ${legacyUwpPackageIdentityName}`)
   }
 
   await mkdir(defaultUserDataPath, { recursive: true })
@@ -184,6 +244,11 @@ function getAppInfo(): AppInfo {
   }
 }
 
+function resolveStartupRoute(lastPage: string) {
+  const route = lastPage.trim()
+  return restorableRoutes.has(route) ? route : '/songs'
+}
+
 async function openVoiceAssistantPrivacySettings() {
   if (process.platform === 'win32') {
     await shell.openExternal('ms-settings:privacy-speech')
@@ -202,14 +267,15 @@ async function createWindow() {
     height: 940,
     minWidth: 1180,
     minHeight: 760,
+    show: false,
     autoHideMenuBar: true,
-    backgroundColor: '#f6f8fb',
+    backgroundColor: appWindowBackgroundColor,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
     titleBarOverlay:
       process.platform === 'win32'
         ? {
-            color: '#00000000',
-            symbolColor: '#111111',
+            color: titleBarOverlayColor,
+            symbolColor: defaultTitleBarSymbolColor,
             height: 44,
           }
         : undefined,
@@ -256,6 +322,9 @@ async function createWindow() {
   mainWindow.on('hide', () => {
     updateTrayMenu()
   })
+  mainWindow.once('ready-to-show', () => {
+    showMainWindow()
+  })
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url)
@@ -266,10 +335,13 @@ async function createWindow() {
     callback(permission === 'media' && mediaTypes?.includes('audio') === true)
   })
 
+  const startupRoute = resolveStartupRoute(dataStore!.getSettingsSnapshot().lastPage)
   if (process.env.VITE_DEV_SERVER_URL) {
-    await mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL)
+    const devServerUrl = new URL(process.env.VITE_DEV_SERVER_URL)
+    devServerUrl.hash = startupRoute
+    await mainWindow.loadURL(devServerUrl.toString())
   } else {
-    await mainWindow.loadFile(join(__dirname, '../dist/index.html'))
+    await mainWindow.loadFile(join(__dirname, '../dist/index.html'), { hash: startupRoute })
   }
 }
 
@@ -394,12 +466,100 @@ function getProtocolSongId(url: string) {
   return songId
 }
 
-function registerMediaProtocols() {
-  protocol.handle('smplayer-media', (request) => {
-    const songId = getProtocolSongId(request.url)
-    return net.fetch(dataStore!.getSongFileUrl(songId), {
-      headers: request.headers,
+function getAudioContentType(filePath: string) {
+  switch (extname(filePath).toLocaleLowerCase()) {
+    case '.mp3':
+      return 'audio/mpeg'
+    case '.flac':
+      return 'audio/flac'
+    case '.m4a':
+    case '.alac':
+    case '.aac':
+      return 'audio/mp4'
+    case '.wav':
+      return 'audio/wav'
+    case '.ogg':
+      return 'audio/ogg'
+    case '.wma':
+      return 'audio/x-ms-wma'
+    default:
+      return 'application/octet-stream'
+  }
+}
+
+function getMediaRange(rangeHeader: string, fileSize: number) {
+  const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader)
+  if (!match) {
+    return null
+  }
+
+  const [, startText, endText] = match
+  if (!startText && !endText) {
+    return null
+  }
+
+  if (!startText) {
+    const suffixLength = Number(endText)
+    return {
+      start: Math.max(fileSize - suffixLength, 0),
+      end: fileSize - 1,
+    }
+  }
+
+  const start = Number(startText)
+  const end = endText ? Number(endText) : fileSize - 1
+  if (start >= fileSize || end < start) {
+    return null
+  }
+
+  return {
+    start,
+    end: Math.min(end, fileSize - 1),
+  }
+}
+
+async function createMediaFileResponse(filePath: string, request: Request) {
+  const fileStats = await stat(filePath)
+  const fileSize = fileStats.size
+  const contentType = getAudioContentType(filePath)
+  const rangeHeader = request.headers.get('range')
+
+  if (rangeHeader) {
+    const range = getMediaRange(rangeHeader, fileSize)
+    if (!range) {
+      return new Response(null, {
+        status: 416,
+        headers: {
+          'accept-ranges': 'bytes',
+          'content-range': `bytes */${fileSize}`,
+        },
+      })
+    }
+
+    return new Response(Readable.toWeb(createReadStream(filePath, range)) as ReadableStream<Uint8Array>, {
+      status: 206,
+      headers: {
+        'accept-ranges': 'bytes',
+        'content-length': String(range.end - range.start + 1),
+        'content-range': `bytes ${range.start}-${range.end}/${fileSize}`,
+        'content-type': contentType,
+      },
     })
+  }
+
+  return new Response(Readable.toWeb(createReadStream(filePath)) as ReadableStream<Uint8Array>, {
+    headers: {
+      'accept-ranges': 'bytes',
+      'content-length': String(fileSize),
+      'content-type': contentType,
+    },
+  })
+}
+
+function registerMediaProtocols() {
+  protocol.handle('smplayer-media', async (request) => {
+    const songId = getProtocolSongId(request.url)
+    return createMediaFileResponse(dataStore!.getSongPath(songId), request)
   })
 
   protocol.handle('smplayer-artwork', async (request) => {
@@ -439,6 +599,30 @@ async function revealSystemLogs() {
   shell.openPath(logsPath)
 }
 
+function getAudioFilePathsFromArgs(args: string[]) {
+  return args.filter((arg) =>
+    AUDIO_EXTENSIONS.has(extname(arg).toLocaleLowerCase()) && existsSync(arg),
+  )
+}
+
+async function openAudioFilesFromShell(filePaths: string[]) {
+  const audioFilePaths = getAudioFilePathsFromArgs(filePaths)
+
+  if (audioFilePaths.length === 0) {
+    return
+  }
+
+  if (!dataStore) {
+    enqueuePendingOpenFilePaths(audioFilePaths)
+    return
+  }
+
+  const songIds = await dataStore.addExternalAudioFilesNextAndPlay(audioFilePaths)
+  enqueuePendingOpenSongIds(songIds)
+  mainWindow?.webContents.send('app:open-files', songIds)
+  showMainWindow()
+}
+
 async function resolveMoveConflict(sourcePath: string, targetPath: string) {
   const result = mainWindow
     ? await dialog.showMessageBox(mainWindow, {
@@ -461,6 +645,16 @@ async function resolveMoveConflict(sourcePath: string, targetPath: string) {
   return result.response === 0 ? 'replace' : result.response === 1 ? 'keep-both' : 'skip'
 }
 
+app.on('second-instance', (_event, argv) => {
+  showMainWindow()
+  void openAudioFilesFromShell(argv)
+})
+
+app.on('open-file', (event, filePath) => {
+  event.preventDefault()
+  void openAudioFilesFromShell([filePath])
+})
+
 app.whenReady().then(async () => {
   app.setAppUserModelId('com.seaky.smplayer')
   app.setPath('userData', await resolveUserDataPath())
@@ -468,6 +662,9 @@ app.whenReady().then(async () => {
   registerMediaProtocols()
 
   ipcMain.handle('app:get-info', () => getAppInfo())
+  ipcMain.handle('app:take-pending-open-files', () => {
+    return takePendingOpenSongIds()
+  })
   ipcMain.handle('library:get-snapshot', () => dataStore!.getLibrarySnapshot())
   ipcMain.handle('library:get-artwork', (_event, songId: number) => dataStore!.getSongArtwork(songId))
   ipcMain.handle('library:get-song-properties', (_event, songId: number) =>
@@ -602,6 +799,9 @@ app.whenReady().then(async () => {
   ipcMain.handle('library:move-local-folder-to-folder', (_event, sourceFolderPath: string, targetFolderPath: string) =>
     dataStore!.moveLocalFolderToFolder(sourceFolderPath, targetFolderPath, resolveMoveConflict),
   )
+  ipcMain.handle('library:move-local-items-to-folder', (_event, songIds: number[], folderPaths: string[], targetFolderPath: string) =>
+    dataStore!.moveLocalItemsToFolder(songIds, folderPaths, targetFolderPath, resolveMoveConflict),
+  )
   ipcMain.handle('library:delete-songs-from-disk', async (_event, songIds: number[]) => {
     const songPaths = songIds.map((songId) => dataStore!.getSongPath(songId))
     for (const songPath of songPaths) {
@@ -687,6 +887,15 @@ app.whenReady().then(async () => {
   })
   ipcMain.handle('window:stop-drag', () => {
     stopWindowDrag()
+  })
+  ipcMain.handle('window:set-controls-light', (_event, light: boolean) => {
+    if (process.platform === 'win32') {
+      mainWindow!.setTitleBarOverlay({
+        color: titleBarOverlayColor,
+        symbolColor: light ? immersiveTitleBarSymbolColor : defaultTitleBarSymbolColor,
+        height: 44,
+      })
+    }
   })
   ipcMain.handle('shell:create-local-folder', async (_event, rootPath: string, relativePath: string, name: string) => {
     await mkdir(join(rootPath, relativePath, name), { recursive: true })
@@ -802,6 +1011,9 @@ app.whenReady().then(async () => {
   ipcMain.handle('library:set-favorite', (_event, songId: number, favorite: boolean) =>
     dataStore!.setSongFavorite(songId, favorite),
   )
+  ipcMain.handle('library:set-favorites', (_event, songIds: number[], favorite: boolean) =>
+    dataStore!.setSongsFavorite(songIds, favorite),
+  )
   ipcMain.handle('library:update-song-duration', (_event, songId: number, duration: number) =>
     dataStore!.updateSongDuration(songId, duration),
   )
@@ -873,6 +1085,7 @@ app.whenReady().then(async () => {
   )
 
   await createWindow()
+  await openPendingFilePaths()
   createTray()
   registerGlobalMediaShortcuts()
 

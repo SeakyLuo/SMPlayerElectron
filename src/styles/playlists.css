@@ -116,10 +116,14 @@
   text-align: left;
   cursor: pointer;
   outline: none;
+  touch-action: none;
   user-select: none;
   -webkit-app-region: no-drag;
   app-region: no-drag;
-  transition: background-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+  transition:
+    background-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 180ms cubic-bezier(0.2, 0, 0, 1);
 }
 
 .grid-view-holder:hover,
@@ -137,6 +141,49 @@
     0 24px 60px rgba(32, 45, 63, 0.22),
     inset 0 0 0 1px rgba(255, 255, 255, 0.82);
   transform: translateY(-4px);
+}
+
+.grid-view-holder.is-drag-overlay {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 500;
+  margin: 0;
+  pointer-events: none;
+  cursor: grabbing;
+  transform: translate3d(var(--playlist-drag-x, 0), var(--playlist-drag-y, 0), 0);
+  transition: none;
+  will-change: transform;
+}
+
+.grid-view-holder-placeholder {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 13px;
+  width: 180px;
+  min-height: 236px;
+  border: 2px dashed rgba(var(--accent-rgb), 0.76);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--accent);
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.45;
+  text-align: center;
+  box-shadow: none;
+}
+
+.grid-view-holder-placeholder svg {
+  width: 30px;
+  height: 30px;
+  padding: 5px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+}
+
+.grid-view-holder-placeholder span {
+  max-width: 92px;
 }
 
 .grid-view-holder-drag-handle {
@@ -158,6 +205,7 @@
   backdrop-filter: blur(16px) saturate(150%);
   -webkit-backdrop-filter: blur(16px) saturate(150%);
   cursor: grab;
+  touch-action: none;
   opacity: 0;
   pointer-events: none;
   user-select: none;
@@ -182,6 +230,14 @@
 .grid-view-holder-drag-handle svg {
   width: 18px;
   height: 18px;
+}
+
+@media (pointer: coarse) {
+  .grid-view-holder-drag-handle {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
 }
 
 .grid-view-holder-drop-target {

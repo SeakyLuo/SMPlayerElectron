@@ -76,6 +76,12 @@ export interface NowPlayingSnapshot {
   songIds: number[]
 }
 
+export interface MyFavoritesSnapshot {
+  playlistId: number
+  songIds: number[]
+  sortCriterion: PlaylistSortCriterion
+}
+
 export interface SearchHistoryEntry {
   id: number
   query: string
@@ -228,6 +234,7 @@ export interface LibrarySnapshot {
   folders: LibraryFolder[]
   recentSongs: RecentLibrarySong[]
   playlists: LibraryPlaylist[]
+  favorites: MyFavoritesSnapshot
   nowPlaying: NowPlayingSnapshot
   search: SearchSnapshot
 }
@@ -347,6 +354,7 @@ export interface SmplayerApi {
   revealItemInFolder: (path: string) => Promise<void>
   startWindowDrag: () => Promise<void>
   stopWindowDrag: () => Promise<void>
+  setWindowControlsLight: (light: boolean) => Promise<void>
   createLocalFolder: (rootPath: string, relativePath: string, name: string) => Promise<void>
   revealSystemLogs: () => Promise<void>
   showTrackNotification: (track: TrackNotificationPayload) => Promise<void>
@@ -363,6 +371,7 @@ export interface SmplayerApi {
   moveSongToFolder: (songId: number, folderPath: string) => Promise<void>
   moveSongsToFolder: (songIds: number[], folderPath: string) => Promise<void>
   moveLocalFolderToFolder: (sourceFolderPath: string, targetFolderPath: string) => Promise<void>
+  moveLocalItemsToFolder: (songIds: number[], folderPaths: string[], targetFolderPath: string) => Promise<void>
   deleteSongsFromDisk: (songIds: number[]) => Promise<void>
   deleteLocalItems: (songIds: number[], folderPaths: string[]) => Promise<void>
   updateLocalFolderSort: (folderPath: string, sortCriterion: LocalFolderSortCriterion) => Promise<void>
@@ -374,13 +383,15 @@ export interface SmplayerApi {
   pickLibraryRoot: () => Promise<ChooseLibraryRootResult>
   scanLibrary: (rootPath?: string) => Promise<ScanLibraryResult>
   scanLocalFolder: (folderPath: string) => Promise<ScanLibraryResult>
+  takePendingOpenFiles: () => Promise<number[]>
   exportData: () => Promise<DataTransferResult>
   importData: () => Promise<DataTransferResult>
   sendFeedbackEmail: () => Promise<void>
   openFeedbackInBrowser: () => Promise<void>
   openVoiceAssistantPrivacySettings: () => Promise<void>
   setSongFavorite: (songId: number, favorite: boolean) => Promise<void>
-  createPlaylist: (name: string, songIds?: number[]) => Promise<void>
+  setSongsFavorite: (songIds: number[], favorite: boolean) => Promise<void>
+  createPlaylist: (name: string, songIds?: number[]) => Promise<LibraryPlaylist>
   deletePlaylist: (playlistId: number) => Promise<void>
   renamePlaylist: (playlistId: number, name: string) => Promise<void>
   reorderPlaylists: (playlistIds: number[]) => Promise<void>
@@ -393,7 +404,7 @@ export interface SmplayerApi {
   removeSongFromNowPlaying: (songId: number) => Promise<void>
   clearNowPlaying: () => Promise<void>
   saveSearchQuery: (query: string) => Promise<void>
-  addRecentSearch: (query: string) => Promise<void>
+  addRecentSearch: (query: string) => Promise<SearchHistoryEntry | null>
   removeRecentSearch: (entryId: number) => Promise<void>
   removeRecentSearches: (entryIds: number[]) => Promise<void>
   clearRecentSearches: () => Promise<void>
@@ -410,4 +421,5 @@ export interface SmplayerApi {
   markSongPlayed: (songId: number) => Promise<void>
   updateSongDuration: (songId: number, duration: number) => Promise<void>
   onGlobalMediaCommand: (callback: (command: GlobalMediaCommand) => void) => () => void
+  onOpenFiles: (callback: (songIds: number[]) => void) => () => void
 }

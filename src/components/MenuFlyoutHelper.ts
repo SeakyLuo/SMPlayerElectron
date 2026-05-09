@@ -1,6 +1,7 @@
-import type { LibraryFolder, LibraryPlaylist, LibrarySong, PreferenceEntityType, PreferenceItemSnapshot, PreferenceLevel } from '../shared/contracts'
+import type { LibraryFolder, LibraryPlaylist, LibrarySong, PreferenceEntityType, PreferenceItemSnapshot, PreferenceLevel, PreferenceSettingsSnapshot } from '../shared/contracts'
 import { getSongArtists } from '../shared/artists'
 import type { Translator } from '../shared/i18n'
+import { usePreferenceStore } from '../state/usePreferenceStore'
 import {
   randomAlbum,
   randomArtist,
@@ -60,7 +61,7 @@ export function getPreferenceMenuFlyoutItem({
   name: string
   preferenceItem?: PreferenceItemSnapshot | null
   t: Translator
-  onUpdated?: () => void | Promise<void>
+  onUpdated?: (snapshot?: PreferenceSettingsSnapshot | null) => void | Promise<void>
   onSetPreference?: (level: PreferenceLevel) => void | Promise<void>
 }) {
   const submenu: MenuFlyoutItem[] = []
@@ -71,7 +72,7 @@ export function getPreferenceMenuFlyoutItem({
         key: `${key}-undo`,
         text: t('preferences.undoPrefer'),
         onClick: () => {
-          void window.smplayer?.removePreferenceItem(preferenceItem.id).then(onUpdated)
+          void usePreferenceStore.getState().removeItem(preferenceItem).then(() => onUpdated?.(usePreferenceStore.getState().snapshot))
         },
       },
       { key: `${key}-undo-separator`, text: '', separator: true },
@@ -84,11 +85,11 @@ export function getPreferenceMenuFlyoutItem({
     icon: preferenceItem?.level === level ? 'check' as const : undefined,
     onClick: () => {
       if (onSetPreference) {
-        void Promise.resolve(onSetPreference(level)).then(onUpdated)
+        void Promise.resolve(onSetPreference(level)).then(() => onUpdated?.(usePreferenceStore.getState().snapshot))
         return
       }
 
-      void window.smplayer?.addPreferenceItem(type, itemId, name, level).then(onUpdated)
+      void usePreferenceStore.getState().addItem(type, itemId, name, level).then(onUpdated)
     },
   })))
 
@@ -147,7 +148,7 @@ export function getAddToPlaylistMenuFlyoutItem({
     })
   }
 
-  if (includeFavorites) {
+  if (includeFavorites && onToggleFavorite) {
     submenu.push({
       key: `${key}-favorites`,
       text: t('common.myFavorites'),
@@ -156,7 +157,7 @@ export function getAddToPlaylistMenuFlyoutItem({
     })
   }
 
-  if ((includeNowPlaying || includeFavorites) && (onCreatePlaylist || addablePlaylists.length > 0)) {
+  if ((includeNowPlaying || (includeFavorites && onToggleFavorite)) && (onCreatePlaylist || addablePlaylists.length > 0)) {
     submenu.push({ key: `${key}-built-in-separator`, text: '', separator: true })
   }
 
@@ -515,6 +516,7 @@ export function getShuffleMenuItems({
   return [
     { key: 'quick', text: t('nowPlaying.quickPlay'), disabled: librarySongs.length === 0, onClick: onQuickPlay ?? (() => playSongs(librarySongs)) },
     { key: 'now-playing', text: t('common.nowPlaying'), disabled: songs.length === 0, onClick: () => playSongs(songs) },
+    { key: 'shuffle-library-separator', text: '', separator: true },
     { key: 'library', text: t('random.musicLibrary'), disabled: librarySongs.length === 0, onClick: () => playSongs(librarySongs) },
     { key: 'artist', text: t('common.artist'), disabled: artists.size === 0, onClick: () => onPlaySongs(randomArtist(librarySongs, randomLimit)) },
     { key: 'album', text: t('common.album'), disabled: albums.size === 0, onClick: () => onPlaySongs(randomAlbum(librarySongs, randomLimit)) },
@@ -527,6 +529,7 @@ export function getShuffleMenuItems({
       },
     },
     { key: 'folder', text: t('random.localFolder'), disabled: playableFolders.length === 0, onClick: () => onPlaySongs(randomFolder(librarySongs, playableFolders, randomLimit)) },
+    { key: 'shuffle-history-separator', text: '', separator: true },
     {
       key: 'recent-added',
       text: t('common.recentAdded'),
@@ -546,7 +549,7 @@ export function getShuffleMenuItems({
       disabled: librarySongs.length <= randomLimit,
       onClick: () => onPlaySongs(randomLeastPlayed(librarySongs, randomLimit)),
     },
-  ]
+  ] satisfies MenuFlyoutItem[]
 }
 
 function getParentPath(path: string) {

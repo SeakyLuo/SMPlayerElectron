@@ -1,4 +1,5 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { GridViewHolder } from '../components/GridViewHolder'
@@ -6,8 +7,9 @@ import { HeaderedPlaylistControl } from '../components/HeaderedPlaylistControl'
 import { Icon } from '../components/icons'
 import { MenuFlyout } from '../components/MenuFlyout'
 import { getAddToPlaylistMenuFlyoutItem, getPreferenceMenuFlyoutItem, type MenuFlyoutItem } from '../components/MenuFlyoutHelper'
-import type { LibraryPlaylist, LibrarySnapshot, PlaylistSortCriterion, PreferenceItemSnapshot, PreferenceLevel } from '../shared/contracts'
+import type { LibraryPlaylist, LibrarySnapshot, PlaylistSortCriterion, PreferenceItemSnapshot, PreferenceLevel, PreferenceSettingsSnapshot } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
+import { usePreferenceStore } from '../state/usePreferenceStore'
 
 interface PlaylistsPageProps {
   snapshot: LibrarySnapshot
@@ -40,6 +42,21 @@ function reorderPlaylistByDrop(playlistIds: number[], draggedPlaylistId: number,
   return nextPlaylistIds
 }
 
+function playlistIdsEqual(left: number[], right: number[]) {
+  return left.length === right.length && left.every((playlistId, index) => playlistId === right[index])
+}
+
+interface PlaylistDragState {
+  playlist: LibraryPlaylist
+  active: boolean
+  startX: number
+  startY: number
+  x: number
+  y: number
+  offsetX: number
+  offsetY: number
+}
+
 export function PlaylistsPage({
   snapshot,
   t,
@@ -66,34 +83,51 @@ export function PlaylistsPage({
   const navigate = useNavigate()
   const params = useParams()
   const draggedPlaylistIdRef = useRef<number | null>(null)
+  const previewPlaylistIdsRef = useRef<number[] | null>(null)
+  const playlistCardElementsRef = useRef(new Map<number, HTMLDivElement>())
+  const playlistDragStateRef = useRef<PlaylistDragState | null>(null)
+  const dragFrameRef = useRef<number | null>(null)
+  const latestDragPointRef = useRef<{ x: number; y: number } | null>(null)
+  const suppressNextOpenRef = useRef(false)
+  const dragOverlayElementRef = useRef<HTMLDivElement | null>(null)
   const [playlistMenu, setPlaylistMenu] = useState<{ playlist: LibraryPlaylist; x: number; y: number } | null>(null)
   const [draggingPlaylistId, setDraggingPlaylistId] = useState<number | null>(null)
   const [previewPlaylistIds, setPreviewPlaylistIds] = useState<number[] | null>(null)
+  const [playlistDragState, setPlaylistDragState] = useState<PlaylistDragState | null>(null)
   const [playlistPreferenceItems, setPlaylistPreferenceItems] = useState<Map<string, PreferenceItemSnapshot>>(new Map())
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [pendingCreatedPlaylistName, setPendingCreatedPlaylistName] = useState('')
+  const refreshPreferences = usePreferenceStore((state) => state.refresh)
   const routePlaylistId = params.playlistId ? Number(params.playlistId) : null
   const songsById = useMemo(
     () => new Map(snapshot.songs.map((song) => [song.id, song])),
     [snapshot.songs],
   )
+  const customPlaylists = useMemo(
+    () => snapshot.playlists.filter((playlist) => !playlist.isBuiltIn),
+    [snapshot.playlists],
+  )
+  const customPlaylistIds = useMemo(
+    () => customPlaylists.map((playlist) => playlist.id),
+    [customPlaylists],
+  )
   const visiblePlaylists = useMemo(() => {
-    const customPlaylists = snapshot.playlists.filter((playlist) => !playlist.isBuiltIn)
+    const displayPlaylists = customPlaylists.filter((playlist) =>
+      playlist.name !== t('common.nowPlaying') &&
+      playlist.name !== 'Now Playing',
+    )
     const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase()
     if (!normalizedSearchQuery) {
-      return customPlaylists
+      return displayPlaylists
     }
 
-    return customPlaylists.filter((playlist) => playlist.name.toLocaleLowerCase().includes(normalizedSearchQuery))
-  }, [searchQuery, snapshot.playlists])
+    return displayPlaylists.filter((playlist) => playlist.name.toLocaleLowerCase().includes(normalizedSearchQuery))
+  }, [customPlaylists, searchQuery, t])
   const selectedPlaylistId =
     routePlaylistId != null && snapshot.playlists.some((playlist) => playlist.id === routePlaylistId)
       ? routePlaylistId
       : 0
   const selectedPlaylist = snapshot.playlists.find((playlist) => playlist.id === selectedPlaylistId) ?? null
-  const customPlaylistIds = snapshot.playlists
-    .filter((playlist) => !playlist.isBuiltIn)
-    .map((playlist) => playlist.id)
   const orderedVisiblePlaylists = useMemo(() => {
     const visiblePlaylistMap = new Map(visiblePlaylists.map((playlist) => [playlist.id, playlist]))
     const orderedIds = previewPlaylistIds ?? customPlaylistIds
@@ -108,26 +142,223 @@ export function PlaylistsPage({
         .filter((song) => song !== undefined),
     [selectedPlaylist?.songIds, songsById],
   )
-  const filteredPlaylistSongs = useMemo(() => {
-    const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase()
-    if (!normalizedSearchQuery) {
-      return selectedPlaylistSongs
+  const refreshPlaylistPreferenceItems = async (snapshot?: PreferenceSettingsSnapshot | null) => {
+    const settings = snapshot ?? await refreshPreferences()
+    if (!settings) {
+      return
+    }
+    setPlaylistPreferenceItems(new Map([...settings.playlists, ...settings.others].map((item) => [`${item.type}:${item.itemId}`, item])))
+  }
+  const updatePreviewPlaylistIds = (playlistIds: number[] | null) => {
+    previewPlaylistIdsRef.current = playlistIds
+    setPreviewPlaylistIds(playlistIds)
+  }
+  const animatePlaylistCardsFrom = (previousRects: Map<number, DOMRect>) => {
+    window.requestAnimationFrame(() => {
+      for (const [playlistId, element] of playlistCardElementsRef.current) {
+        const previousRect = previousRects.get(playlistId)
+        if (!previousRect) {
+          continue
+        }
+
+        const nextRect = element.getBoundingClientRect()
+        const deltaX = previousRect.left - nextRect.left
+        const deltaY = previousRect.top - nextRect.top
+        if (deltaX === 0 && deltaY === 0) {
+          continue
+        }
+
+        element.style.transition = 'none'
+        element.style.transform = `translate(${deltaX}px, ${deltaY}px)`
+        window.requestAnimationFrame(() => {
+          element.style.transition = ''
+          element.style.transform = ''
+        })
+      }
+    })
+  }
+  const updateAnimatedPreviewPlaylistIds = (playlistIds: number[]) => {
+    const previousRects = new Map<number, DOMRect>()
+    for (const [playlistId, element] of playlistCardElementsRef.current) {
+      previousRects.set(playlistId, element.getBoundingClientRect())
     }
 
-    return selectedPlaylistSongs.filter((song) =>
-      [song.title, song.artist, ...song.artists, song.album].join(' ').toLocaleLowerCase().includes(normalizedSearchQuery),
-    )
-  }, [searchQuery, selectedPlaylistSongs])
-  const refreshPlaylistPreferenceItems = async () => {
-    const settings = await window.smplayer!.getPreferenceSettings()
-    setPlaylistPreferenceItems(new Map([...settings.playlists, ...settings.others].map((item) => [`${item.type}:${item.itemId}`, item])))
+    updatePreviewPlaylistIds(playlistIds)
+    animatePlaylistCardsFrom(previousRects)
+  }
+  const setPlaylistCardElement = (playlistId: number, element: HTMLDivElement | null) => {
+    if (element) {
+      playlistCardElementsRef.current.set(playlistId, element)
+    } else {
+      playlistCardElementsRef.current.delete(playlistId)
+    }
+  }
+  const updatePlaylistDragState = (nextState: PlaylistDragState | null) => {
+    playlistDragStateRef.current = nextState
+    setPlaylistDragState(nextState)
+  }
+  const positionPlaylistDragOverlay = (dragState: PlaylistDragState) => {
+    const overlayElement = dragOverlayElementRef.current
+    if (!overlayElement) {
+      return
+    }
+
+    overlayElement.style.setProperty('--playlist-drag-x', `${dragState.x - dragState.offsetX}px`)
+    overlayElement.style.setProperty('--playlist-drag-y', `${dragState.y - dragState.offsetY}px`)
+  }
+  const movePlaylistPreviewToPoint = (clientX: number, clientY: number) => {
+    const draggedPlaylistId = draggedPlaylistIdRef.current
+    if (draggedPlaylistId === null) {
+      return
+    }
+
+    const orderedPlaylistIds = previewPlaylistIdsRef.current ?? customPlaylistIds
+    let closestTarget: { playlistId: number; distance: number; insertAfter: boolean } | null = null
+    for (const playlistId of orderedPlaylistIds) {
+      if (playlistId === draggedPlaylistId) {
+        continue
+      }
+
+      const element = playlistCardElementsRef.current.get(playlistId)
+      if (!element) {
+        continue
+      }
+
+      const rect = element.getBoundingClientRect()
+      const centerX = rect.left + rect.width / 2
+      const centerY = rect.top + rect.height / 2
+      const distance = (clientX - centerX) ** 2 + (clientY - centerY) ** 2
+      const insertAfter = Math.abs(clientY - centerY) > rect.height / 3
+        ? clientY > centerY
+        : clientX > centerX
+
+      if (!closestTarget || distance < closestTarget.distance) {
+        closestTarget = { playlistId, distance, insertAfter }
+      }
+    }
+
+    if (closestTarget) {
+      const nextPlaylistIds = reorderPlaylistByDrop(
+        orderedPlaylistIds,
+        draggedPlaylistId,
+        closestTarget.playlistId,
+        closestTarget.insertAfter,
+      )
+      if (!playlistIdsEqual(orderedPlaylistIds, nextPlaylistIds)) {
+        updateAnimatedPreviewPlaylistIds(nextPlaylistIds)
+      }
+    }
+  }
+  const finishPlaylistDrag = (commit: boolean) => {
+    const nextPlaylistIds = previewPlaylistIdsRef.current ?? customPlaylistIds
+    draggedPlaylistIdRef.current = null
+    setDraggingPlaylistId(null)
+    updatePreviewPlaylistIds(null)
+    updatePlaylistDragState(null)
+    if (commit && !playlistIdsEqual(customPlaylistIds, nextPlaylistIds)) {
+      onReorderPlaylists(nextPlaylistIds)
+    }
+  }
+  const startPlaylistPointerDrag = (playlist: LibraryPlaylist, event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    const dragSourceElement = event.currentTarget
+    const pointerId = event.pointerId
+    dragSourceElement.setPointerCapture(pointerId)
+    const rect = event.currentTarget.getBoundingClientRect()
+    latestDragPointRef.current = { x: event.clientX, y: event.clientY }
+    updatePlaylistDragState({
+      playlist,
+      active: false,
+      startX: event.clientX,
+      startY: event.clientY,
+      x: event.clientX,
+      y: event.clientY,
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top,
+    })
+
+    const processPlaylistDrag = () => {
+      dragFrameRef.current = null
+      const point = latestDragPointRef.current
+      const currentDragState = playlistDragStateRef.current
+      if (!point || !currentDragState) {
+        return
+      }
+
+      const movedDistance = Math.hypot(point.x - currentDragState.startX, point.y - currentDragState.startY)
+      if (!currentDragState.active && movedDistance < 5) {
+        return
+      }
+
+      if (!currentDragState.active) {
+        draggedPlaylistIdRef.current = playlist.id
+        setDraggingPlaylistId(playlist.id)
+        updatePreviewPlaylistIds(customPlaylistIds)
+      }
+
+      updatePlaylistDragState({
+        ...currentDragState,
+        active: true,
+        x: point.x,
+        y: point.y,
+      })
+      positionPlaylistDragOverlay({
+        ...currentDragState,
+        active: true,
+        x: point.x,
+        y: point.y,
+      })
+      movePlaylistPreviewToPoint(point.x, point.y)
+    }
+
+    const movePlaylist = (pointerEvent: PointerEvent) => {
+      pointerEvent.preventDefault()
+      latestDragPointRef.current = { x: pointerEvent.clientX, y: pointerEvent.clientY }
+      if (dragFrameRef.current === null) {
+        dragFrameRef.current = window.requestAnimationFrame(processPlaylistDrag)
+      }
+    }
+    const stopPlaylistDrag = () => {
+      window.removeEventListener('pointermove', movePlaylist)
+      window.removeEventListener('pointerup', completePlaylistDrag)
+      window.removeEventListener('pointercancel', cancelPlaylistDrag)
+      if (dragSourceElement.hasPointerCapture(pointerId)) {
+        dragSourceElement.releasePointerCapture(pointerId)
+      }
+      if (dragFrameRef.current !== null) {
+        window.cancelAnimationFrame(dragFrameRef.current)
+        dragFrameRef.current = null
+      }
+
+      const shouldCommit = playlistDragStateRef.current?.active === true
+      suppressNextOpenRef.current = shouldCommit
+      latestDragPointRef.current = null
+      finishPlaylistDrag(shouldCommit)
+      window.setTimeout(() => {
+        suppressNextOpenRef.current = false
+      }, 0)
+    }
+    const completePlaylistDrag = () => {
+      stopPlaylistDrag()
+    }
+    const cancelPlaylistDrag = () => {
+      stopPlaylistDrag()
+    }
+
+    window.addEventListener('pointermove', movePlaylist)
+    window.addEventListener('pointerup', completePlaylistDrag)
+    window.addEventListener('pointercancel', cancelPlaylistDrag)
   }
 
   useEffect(() => {
-    void window.smplayer!.getPreferenceSettings().then((settings) => {
-      setPlaylistPreferenceItems(new Map([...settings.playlists, ...settings.others].map((item) => [`${item.type}:${item.itemId}`, item])))
-    })
+    void refreshPlaylistPreferenceItems()
   }, [])
+
+  useEffect(() => {
+    if (playlistDragState?.active) {
+      positionPlaylistDragOverlay(playlistDragState)
+    }
+  }, [playlistDragState])
 
   useEffect(() => {
     if (!pendingCreatedPlaylistName) {
@@ -151,14 +382,16 @@ export function PlaylistsPage({
           title={selectedPlaylist.name}
           headerSongs={selectedPlaylistSongs}
           t={t}
-          songs={filteredPlaylistSongs}
+          songs={selectedPlaylistSongs}
           selectedTrackId={selectedTrackId}
           isPlaying={isPlaying}
           playlists={snapshot.playlists}
+          favoritePlaylistId={snapshot.favorites.playlistId}
           artworkUrl={selectedPlaylistSongs.find((song) => song.artworkUrl)?.artworkUrl ?? ''}
           removable
           showAlbum
           showArtist
+          showSongArtwork
           canRename={!selectedPlaylist.isBuiltIn}
           canDelete={!selectedPlaylist.isBuiltIn}
           canClear={selectedPlaylistSongs.length > 0}
@@ -231,36 +464,27 @@ export function PlaylistsPage({
               .map((songId) => songsById.get(songId))
               .filter((song) => song !== undefined)
 
-            return (
-              <Fragment key={playlist.id}>
-                {draggingPlaylistId === playlist.id ? (
-                  <div
-                    className="grid-view-holder-drop-target"
-                    aria-hidden="true"
-                    onDragOver={(event) => {
-                      event.preventDefault()
-                      event.dataTransfer.dropEffect = 'move'
-                    }}
-                    onDrop={(event) => {
-                      event.preventDefault()
-                      const nextPlaylistIds = previewPlaylistIds ?? customPlaylistIds
-                      draggedPlaylistIdRef.current = null
-                      setDraggingPlaylistId(null)
-                      setPreviewPlaylistIds(null)
-                      onReorderPlaylists(nextPlaylistIds)
-                    }}
-                  >
-                    <Icon name="plus" />
-                    <span>{t('playlists.dropHere')}</span>
-                  </div>
-                ) : null}
+            return draggingPlaylistId === playlist.id ? (
+              <div className="grid-view-holder-placeholder" key={playlist.id} aria-hidden="true">
+                <Icon name="plus" />
+                <span>{t('playlists.dropHere')}</span>
+              </div>
+            ) : (
                 <GridViewHolder
+                  key={playlist.id}
+                  cardRef={(element) => {
+                    setPlaylistCardElement(playlist.id, element)
+                  }}
                   playlist={playlist}
                   songs={playlistSongs}
                   selected={false}
-                  dragging={draggingPlaylistId === playlist.id}
+                  dragging={false}
                   t={t}
                   onOpen={() => {
+                    if (suppressNextOpenRef.current) {
+                      return
+                    }
+
                     navigate(`/playlists/${playlist.id}`)
                     onSelectPlaylist(playlist.id)
                   }}
@@ -270,45 +494,36 @@ export function PlaylistsPage({
                       onPlayTrack(firstSong.id, playlistSongs.map((song) => song.id))
                     }
                   }}
-                  onDragStart={(event) => {
-                    draggedPlaylistIdRef.current = playlist.id
-                    setDraggingPlaylistId(playlist.id)
-                    setPreviewPlaylistIds(customPlaylistIds)
-                    event.dataTransfer.effectAllowed = 'move'
-                    event.dataTransfer.setData('application/x-smplayer-playlist-id', String(playlist.id))
-                    event.dataTransfer.setData('text/plain', String(playlist.id))
-                  }}
-                  onDragEnd={() => {
-                    draggedPlaylistIdRef.current = null
-                    setDraggingPlaylistId(null)
-                    setPreviewPlaylistIds(null)
-                  }}
-                  onDragOver={(event) => {
-                    event.preventDefault()
-                    event.dataTransfer.dropEffect = 'move'
-                    const draggedPlaylistId = draggedPlaylistIdRef.current
-                    if (draggedPlaylistId === null || draggedPlaylistId === playlist.id) {
-                      return
-                    }
-                    const targetRect = event.currentTarget.getBoundingClientRect()
-                    const insertAfter = event.clientX > targetRect.left + targetRect.width / 2
-                    setPreviewPlaylistIds((current) => reorderPlaylistByDrop(current ?? customPlaylistIds, draggedPlaylistId, playlist.id, insertAfter))
-                  }}
-                  onDrop={(event) => {
-                    event.preventDefault()
-                    const nextPlaylistIds = previewPlaylistIds ?? customPlaylistIds
-                    draggedPlaylistIdRef.current = null
-                    setDraggingPlaylistId(null)
-                    setPreviewPlaylistIds(null)
-                    onReorderPlaylists(nextPlaylistIds)
+                  onPointerDragStart={(event) => {
+                    startPlaylistPointerDrag(playlist, event)
                   }}
                   onContextMenu={(x, y) => {
                     setPlaylistMenu({ playlist, x, y })
                   }}
                 />
-              </Fragment>
             )
           })}
+          {playlistDragState?.active ? createPortal(
+            <GridViewHolder
+              dragOverlay
+              dragging
+              cardRef={(element) => {
+                dragOverlayElementRef.current = element
+                if (element) {
+                  positionPlaylistDragOverlay(playlistDragState)
+                }
+              }}
+              playlist={playlistDragState.playlist}
+              songs={playlistDragState.playlist.songIds
+                .map((songId) => songsById.get(songId))
+                .filter((song) => song !== undefined)}
+              selected={false}
+              t={t}
+              onOpen={() => {}}
+              onPlay={() => {}}
+            />,
+            document.body,
+          ) : null}
         </div>
       )}
       {playlistMenu ? (
@@ -320,7 +535,7 @@ export function PlaylistsPage({
           items={getPlaylistCardMenuItems({
             playlist: playlistMenu.playlist,
             playlists: snapshot.playlists,
-            favoritePlaylist: snapshot.playlists.find((playlist) => playlist.isBuiltIn)!,
+            favoritePlaylistId: snapshot.favorites.playlistId,
             t,
             onPlayTrack,
             onAddSongsToNowPlaying,
@@ -423,7 +638,7 @@ function PlaylistNameDialog({
 function getPlaylistCardMenuItems({
   playlist,
   playlists,
-  favoritePlaylist,
+  favoritePlaylistId,
   t,
   onPlayTrack,
   onAddSongsToNowPlaying,
@@ -436,14 +651,14 @@ function getPlaylistCardMenuItems({
 }: {
   playlist: LibraryPlaylist
   playlists: LibraryPlaylist[]
-  favoritePlaylist: LibraryPlaylist
+  favoritePlaylistId: number
   t: Translator
   onPlayTrack: (trackId: number, queueSongIds: number[]) => void
   onAddSongsToNowPlaying: (songIds: number[]) => void
   onCreatePlaylistWithSongs: (name: string, songIds: number[]) => void
   onAddSongsToPlaylist: (playlistId: number, songIds: number[]) => void
   preferenceItem: PreferenceItemSnapshot | null
-  onPreferenceChanged: () => void | Promise<void>
+  onPreferenceChanged: (snapshot?: PreferenceSettingsSnapshot | null) => void | Promise<void>
   onRenamePlaylist: (playlistId: number, name: string) => void
   onDeletePlaylist: (playlistId: number) => void
 }) {
@@ -471,7 +686,7 @@ function getPlaylistCardMenuItems({
       onAddSongsToNowPlaying(playlist.songIds)
     },
     onToggleFavorite: () => {
-      onAddSongsToPlaylist(favoritePlaylist.id, playlist.songIds)
+      onAddSongsToPlaylist(favoritePlaylistId, playlist.songIds)
     },
     onCreatePlaylist: (name) => {
       onCreatePlaylistWithSongs(name, playlist.songIds)

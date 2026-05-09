@@ -2,10 +2,11 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerE
 
 import { getDisplayArtists } from '../shared/artists'
 import { extractArtworkColorRgb, getDefaultArtworkColorRgb } from '../shared/artworkColor'
-import type { LibraryPlaylist, LibrarySong, MusicLibrarySortCriterion, PlaylistSortCriterion, PreferenceEntityType, PreferenceItemSnapshot, PreferenceLevel } from '../shared/contracts'
+import type { LibraryPlaylist, LibrarySong, MusicLibrarySortCriterion, PlaylistSortCriterion, PreferenceEntityType, PreferenceItemSnapshot, PreferenceLevel, PreferenceSettingsSnapshot } from '../shared/contracts'
 import { formatDuration } from '../shared/formatters'
 import type { Translator } from '../shared/i18n'
 import { useLibraryStore } from '../state/useLibraryStore'
+import { usePreferenceStore } from '../state/usePreferenceStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
 import { ArtworkImage } from './ArtworkImage'
 import { DefaultAlbumArtwork } from './DefaultAlbumArtwork'
@@ -15,6 +16,7 @@ import { getAddToPlaylistMenuFlyoutItem, getMusicMenuFlyoutItems, getPreferenceM
 import { MultiSelectCommandBar } from './MultiSelectCommandBar'
 import { PlaylistControlItem } from './PlaylistControlItem'
 import { MusicDialog } from './MusicDialog'
+import { getPlaylistArtworkDisplayUrls, usePlaylistArtwork } from './playlistArtwork'
 
 type HeaderedPlaylistType = 'album' | 'playlist' | 'favorites'
 
@@ -29,10 +31,12 @@ interface HeaderedPlaylistControlProps {
   selectedTrackId: number | null
   isPlaying?: boolean
   playlists: LibraryPlaylist[]
+  favoritePlaylistId: number
   artworkUrl: string
   removable?: boolean
   showAlbum?: boolean
   showArtist?: boolean
+  showSongArtwork?: boolean
   canRename?: boolean
   canDelete?: boolean
   canClear?: boolean
@@ -70,10 +74,12 @@ export function HeaderedPlaylistControl({
   selectedTrackId,
   isPlaying = false,
   playlists,
+  favoritePlaylistId,
   artworkUrl,
   removable = false,
   showAlbum = false,
   showArtist = true,
+  showSongArtwork = false,
   canRename = false,
   canDelete = false,
   canClear = false,
@@ -115,39 +121,51 @@ export function HeaderedPlaylistControl({
   const [selectedSortCriterion, setSelectedSortCriterion] = useState<PlaylistSortCriterion | null>(null)
   const [orderedSongIds, setOrderedSongIds] = useState<number[] | null>(null)
   const [coverColorRgb, setCoverColorRgb] = useState(getDefaultArtworkColorRgb)
+  const resolvedPlaylistArtworkUrls = usePlaylistArtwork(type === 'album' ? [] : headerSongs ?? songs)
   const hideMultiSelectCommandBarAfterOperation = useLibraryStore(
     (state) => state.snapshot.settings.hideMultiSelectCommandBarAfterOperation,
   )
-  const refresh = useLibraryStore((state) => state.refresh)
   const hideSong = useLibraryStore((state) => state.hideSong)
   const deleteSongFromDisk = useLibraryStore((state) => state.deleteSongFromDisk)
   const createPlaylist = useLibraryStore((state) => state.createPlaylist)
+  const resumeHiddenStorageItemByPath = useLibraryStore((state) => state.resumeHiddenStorageItemByPath)
   const folders = useLibraryStore((state) => state.snapshot.folders)
   const nowPlayingSongIds = useLibraryStore((state) => state.snapshot.nowPlaying.songIds)
   const moveSongToFolder = useLibraryStore((state) => state.moveSongToFolder)
   const replaceNowPlaying = useLibraryStore((state) => state.replaceNowPlaying)
+  const refreshPreferences = usePreferenceStore((state) => state.refresh)
+  const addPreferenceItem = usePreferenceStore((state) => state.addItem)
+  const removePreferenceItem = usePreferenceStore((state) => state.removeItem)
   const removeSongFromPlaylist = useLibraryStore((state) => state.removeSongFromPlaylist)
+  const removeSongsFromPlaylist = useLibraryStore((state) => state.removeSongsFromPlaylist)
   const addSongsToPlaylist = useLibraryStore((state) => state.addSongsToPlaylist)
   const setSongFavorite = useLibraryStore((state) => state.setSongFavorite)
+  const setSongsFavorite = useLibraryStore((state) => state.setSongsFavorite)
+  const refresh = useLibraryStore((state) => state.refresh)
   const showUndoableNotification = useUndoableNotificationStore((state) => state.show)
   const songsById = useMemo(() => new Map(songs.map((song) => [song.id, song])), [songs])
   const inferredSortCriterion = useMemo(() => inferSortCriterion(songs), [songs])
   const activeSortCriterion = selectedSortCriterion ?? sortCriterion ?? inferredSortCriterion
-  const visibleSongs = useMemo(
-    () => orderedSongIds ? orderedSongIds.map((songId) => songsById.get(songId)!) : songs,
-    [orderedSongIds, songs, songsById],
-  )
+  const visibleSongs = useMemo(() => {
+    if (!orderedSongIds) {
+      return songs
+    }
+
+    const orderedSongIdSet = new Set(orderedSongIds)
+    return [
+      ...orderedSongIds.map((songId) => songsById.get(songId)).filter((song) => song !== undefined),
+      ...songs.filter((song) => !orderedSongIdSet.has(song.id)),
+    ]
+  }, [orderedSongIds, songs, songsById])
   const queueSongIds = useMemo(() => visibleSongs.map((song) => song.id), [visibleSongs])
   const visibleSongIds = visibleSongs.map((song) => song.id)
   const headerInfo = getHeaderPlaylistInfo(headerSongs ?? songs, translateCaption)
   const effectiveSelectedSongIds = [...selectedSongIds].filter((songId) => queueSongIds.includes(songId))
   const customPlaylists = playlists.filter((playlist) => !playlist.isBuiltIn)
-  const currentSavedPlaylist = type === 'favorites'
-    ? playlists.find((playlist) => playlist.isBuiltIn)
-    : type === 'playlist'
+  const currentSavedPlaylist = type === 'playlist'
       ? playlists.find((playlist) => playlist.name === title)
       : undefined
-  const currentPlaylistName = type === 'album' ? title : currentSavedPlaylist?.name
+  const currentPlaylistName = type === 'album' || type === 'favorites' ? title : currentSavedPlaylist?.name
   const defaultPlaylistName = getNextPlaylistName(
     isBadNewPlaylistName(title, translateCaption) ? '' : title,
     playlists,
@@ -161,11 +179,15 @@ export function HeaderedPlaylistControl({
     effectiveSelectedSongIds.length === 0 || hasAddablePlaylist(effectiveSelectedSongIds)
       ? customPlaylists
       : []
+  const headerArtworkUrls = type === 'album'
+    ? artworkUrl ? [artworkUrl] : []
+    : getPlaylistArtworkDisplayUrls(resolvedPlaylistArtworkUrls)
+  const headerArtworkUrl = headerArtworkUrls[0] ?? ''
 
   useEffect(() => {
     let isDisposed = false
 
-    extractArtworkColorRgb(artworkUrl)
+    extractArtworkColorRgb(headerArtworkUrl)
       .then((nextColor) => {
         if (!isDisposed) {
           setCoverColorRgb(nextColor)
@@ -180,15 +202,18 @@ export function HeaderedPlaylistControl({
     return () => {
       isDisposed = true
     }
-  }, [artworkUrl])
+  }, [headerArtworkUrl])
 
   useEffect(() => {
     setOrderedSongIds(null)
     setSelectedSortCriterion(null)
   }, [songs])
 
-  const refreshSongPreferenceItem = async (songId: number) => {
-    const settings = await window.smplayer!.getPreferenceSettings()
+  const refreshSongPreferenceItem = async (songId: number, snapshot?: PreferenceSettingsSnapshot | null) => {
+    const settings = snapshot ?? await refreshPreferences()
+    if (!settings) {
+      return
+    }
     setSongPreferenceItem(settings.songs.find((item) => item.itemId === String(songId)) ?? null)
   }
   const songMenuSongId = songMenu?.song.id
@@ -229,7 +254,7 @@ export function HeaderedPlaylistControl({
         : translateCaption('notification.songsRemovedFrom', { count: songIds.length, target: currentSavedPlaylist.name }),
       () =>
         type === 'favorites'
-          ? Promise.all(songIds.map((songId) => setSongFavorite(songId, true))).then(() => undefined)
+          ? setSongsFavorite(songIds, true)
           : addSongsToPlaylist(currentSavedPlaylist.id, songIds),
     )
   }
@@ -282,8 +307,11 @@ export function HeaderedPlaylistControl({
     }
   }
 
-  const refreshHeaderPreferenceItem = async () => {
-    const snapshot = await window.smplayer!.getPreferenceSettings()
+  const refreshHeaderPreferenceItem = async (latestSnapshot?: PreferenceSettingsSnapshot | null) => {
+    const snapshot = latestSnapshot ?? await refreshPreferences()
+    if (!snapshot) {
+      return
+    }
     const item = [
       ...snapshot.songs,
       ...snapshot.artists,
@@ -320,7 +348,6 @@ export function HeaderedPlaylistControl({
       style={{
         '--header-cover-rgb': coverColorRgb,
         '--playlist-control-row-count': visibleSongs.length,
-        '--playlist-control-height': `${44 + visibleSongs.length * 58}px`,
       } as CSSProperties}
     >
       <div className="headered-playlist-drag-region" aria-hidden="true" />
@@ -337,15 +364,10 @@ export function HeaderedPlaylistControl({
       >
         <div className="headered-playlist-hero-drag-layer" aria-hidden="true" />
         <div className="headered-playlist-hero-inner">
-          <ArtworkImage
-            className="headered-playlist-cover"
-            src={artworkUrl}
+          <HeaderedPlaylistCover
+            artworkUrls={headerArtworkUrls}
             title={title}
-            renderFallback={() => (
-              <div className="headered-playlist-cover headered-playlist-cover-fallback" aria-hidden="true">
-                {type === 'album' ? <DefaultAlbumArtwork className="headered-playlist-cover-fallback-image" /> : <Icon name="playlists" />}
-              </div>
-            )}
+            type={type}
           />
           <div className="headered-playlist-copy">
             {editingName ? (
@@ -470,10 +492,11 @@ export function HeaderedPlaylistControl({
         </div>
       </header>
 
-      <section className={`PlaylistControl headered-playlist-list${showAlbum ? ' has-album' : ''}`}>
+      <section className={`PlaylistControl headered-playlist-list${showAlbum ? ' has-album' : ''}${showSongArtwork ? ' has-song-artwork' : ''}`}>
         <div className="headered-playlist-list-header">
-          <span className="headered-playlist-title-head">
+          <span className={`headered-playlist-title-head${showSongArtwork ? ' has-song-artwork' : ''}`}>
             <span>#</span>
+            {showSongArtwork ? <span aria-hidden="true" /> : null}
             <span>{captionFor('name')}</span>
           </span>
           {showArtist ? <span>{captionFor('artist')}</span> : null}
@@ -494,6 +517,7 @@ export function HeaderedPlaylistControl({
               queueSongIds={queueSongIds}
               showAlbum={showAlbum}
               showArtist={showArtist}
+              showArtwork={showSongArtwork}
               showDuration
               removable={removable}
               onRemoveFromListClick={(contextSong) => {
@@ -510,7 +534,7 @@ export function HeaderedPlaylistControl({
               onTogglePlayPause={onTogglePlayPause}
               onSelect={toggleSongSelection}
               onContextMenu={(contextSong, x, y) => {
-                setSongMenu({ song: contextSong, songIndex: queueSongIds.indexOf(contextSong.id), x, y })
+                setSongMenu({ song: contextSong, songIndex: index, x, y })
               }}
               onArtistClick={onArtistClick}
               onAlbumClick={onAlbumClick}
@@ -581,8 +605,7 @@ export function HeaderedPlaylistControl({
                 hideSelectionAfterOperation()
               },
               onToggleFavorite: () => {
-                const favoritePlaylist = playlists.find((playlist) => playlist.isBuiltIn)!
-                void addSongsToPlaylist(favoritePlaylist.id, addToMenu.songIds)
+                void addSongsToPlaylist(favoritePlaylistId, addToMenu.songIds)
                 showUndo(
                   addToMenu.songIds.length === 1
                     ? translateCaption('notification.songAddedTo', {
@@ -590,7 +613,7 @@ export function HeaderedPlaylistControl({
                         target: translateCaption('common.myFavorites'),
                       })
                     : translateCaption('notification.songsAddedTo', { count: addToMenu.songIds.length, target: translateCaption('common.myFavorites') }),
-                  () => Promise.all(addToMenu.songIds.map((songId) => removeSongFromPlaylist(favoritePlaylist.id, songId))).then(() => undefined),
+                  () => removeSongsFromPlaylist(favoritePlaylistId, addToMenu.songIds),
                 )
                 hideSelectionAfterOperation()
               },
@@ -737,10 +760,10 @@ export function HeaderedPlaylistControl({
             },
             preferenceItem: songPreferenceItem,
             onUndoPreference: () => {
-              void window.smplayer?.removePreferenceItem(songPreferenceItem!.id).then(() => refreshSongPreferenceItem(songMenu.song.id))
+              void removePreferenceItem(songPreferenceItem!).then(() => refreshSongPreferenceItem(songMenu.song.id, usePreferenceStore.getState().snapshot))
             },
             onSetPreference: (level) => {
-              void window.smplayer?.addPreferenceItem('song', String(songMenu.song.id), songMenu.song.title, level).then(() => refreshSongPreferenceItem(songMenu.song.id))
+              void addPreferenceItem('song', String(songMenu.song.id), songMenu.song.title, level).then((snapshot) => refreshSongPreferenceItem(songMenu.song.id, snapshot))
             },
             onMoveToFolder: (folderPath) => {
               const originalFolderPath = getParentFolderPath(songMenu.song.path)
@@ -770,10 +793,7 @@ export function HeaderedPlaylistControl({
             onHide: () => {
               void hideSong(songMenu.song.id)
               showUndo(translateCaption('notification.hiddenStorageItem', { name: songMenu.song.title }), async () => {
-                const hiddenItems = await window.smplayer!.getHiddenStorageItems()
-                const hiddenItem = hiddenItems.find((item) => item.path === songMenu.song.path)
-                await window.smplayer!.resumeHiddenStorageItem(hiddenItem!)
-                await refresh()
+                await resumeHiddenStorageItemByPath(songMenu.song.path)
               })
             },
             onSeeArtist: (artist) => {
@@ -835,7 +855,7 @@ function useHeaderedPlaylistScroll(controlRef: RefObject<HTMLElement | null>) {
 
   useEffect(() => {
     const control = controlRef.current as HTMLElement
-    const scrollContainer = control.closest('.immersive-detail-page') as HTMLElement
+    const scrollContainer = control.closest('.workspace-content') as HTMLElement
     scrollContainerRef.current = scrollContainer
     let animationFrame = 0
 
@@ -937,6 +957,48 @@ function useHeaderedPlaylistScroll(controlRef: RefObject<HTMLElement | null>) {
 function getParentFolderPath(filePath: string) {
   const index = Math.max(filePath.lastIndexOf('\\'), filePath.lastIndexOf('/'))
   return filePath.slice(0, index)
+}
+
+function HeaderedPlaylistCover({
+  artworkUrls,
+  title,
+  type,
+}: {
+  artworkUrls: string[]
+  title: string
+  type: HeaderedPlaylistType
+}) {
+  if (artworkUrls.length >= 3 && type !== 'album') {
+    return (
+      <span className="headered-playlist-cover headered-playlist-cover-mosaic" aria-hidden="true">
+        {artworkUrls.slice(0, 4).map((artworkUrl, index) => (
+          <img
+            alt=""
+            key={`${artworkUrl}:${index}`}
+            src={artworkUrl}
+          />
+        ))}
+        {artworkUrls.length === 3 ? (
+          <span className="headered-playlist-cover-mosaic-fallback">
+            <img src="/colorful_bg_wide.png" alt="" />
+          </span>
+        ) : null}
+      </span>
+    )
+  }
+
+  return (
+    <ArtworkImage
+      className="headered-playlist-cover"
+      src={artworkUrls[0] ?? ''}
+      title={title}
+      renderFallback={() => (
+        <div className="headered-playlist-cover headered-playlist-cover-fallback" aria-hidden="true">
+          {type === 'album' ? <DefaultAlbumArtwork className="headered-playlist-cover-fallback-image" /> : <Icon name="playlists" />}
+        </div>
+      )}
+    />
+  )
 }
 
 const captions: Record<string, string> = {
