@@ -7,6 +7,7 @@ import type {
   AppSettingsUpdate,
   LibrarySnapshot,
   LyricsRequestMode,
+  NightMode,
   NotificationDisplayMode,
   NotificationSendMode,
   PreferredLanguage,
@@ -42,6 +43,19 @@ interface SelectSettingRowProps<T extends string> {
   onChange: (value: T) => void
 }
 
+interface TimeSettingRowProps {
+  label: string
+  startLabel: string
+  endLabel: string
+  startValue: string
+  endValue: string
+  onStartChange: (value: string) => void
+  onEndChange: (value: string) => void
+}
+
+const TIME_HOURS = Array.from({ length: 24 }, (_, index) => index.toString().padStart(2, '0'))
+const TIME_MINUTES = Array.from({ length: 60 }, (_, index) => index.toString().padStart(2, '0'))
+
 function ToggleSettingRow({ label, hint, checked, onChange }: ToggleSettingRowProps) {
   return (
     <label className="settings-row">
@@ -67,6 +81,130 @@ function ToggleSettingRow({ label, hint, checked, onChange }: ToggleSettingRowPr
   )
 }
 
+function TimePicker({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const pickerRef = useRef<HTMLSpanElement | null>(null)
+  const selectedHourRef = useRef<HTMLButtonElement | null>(null)
+  const selectedMinuteRef = useRef<HTMLButtonElement | null>(null)
+  const [selectedHour, selectedMinute] = value.split(':')
+
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+
+    const closePicker = (event: PointerEvent) => {
+      const target = event.target
+      if (target instanceof Node && pickerRef.current?.contains(target)) {
+        return
+      }
+
+      setOpen(false)
+    }
+
+    document.addEventListener('pointerdown', closePicker, true)
+    return () => {
+      document.removeEventListener('pointerdown', closePicker, true)
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+
+    window.requestAnimationFrame(() => {
+      selectedHourRef.current?.scrollIntoView({ block: 'center' })
+      selectedMinuteRef.current?.scrollIntoView({ block: 'center' })
+    })
+  }, [open, selectedHour, selectedMinute])
+
+  return (
+    <span className={`settings-time-picker${open ? ' is-open' : ''}`} ref={pickerRef}>
+      <button
+        type="button"
+        className="settings-time-trigger"
+        onClick={() => {
+          setOpen((current) => !current)
+        }}
+      >
+        <span>{value}</span>
+        <Icon name="recent" />
+      </button>
+      {open ? (
+        <>
+          <span className="dropdown-dismiss-layer" onPointerDown={() => setOpen(false)} />
+          <span className="settings-time-panel">
+            <span className="settings-time-column" role="listbox" aria-label="Hour">
+              {TIME_HOURS.map((hour) => (
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={hour === selectedHour}
+                  className={hour === selectedHour ? 'is-selected' : ''}
+                  key={hour}
+                  ref={hour === selectedHour ? selectedHourRef : null}
+                  onClick={() => {
+                    onChange(`${hour}:${selectedMinute}`)
+                  }}
+                >
+                  {hour}
+                </button>
+              ))}
+            </span>
+            <span className="settings-time-column" role="listbox" aria-label="Minute">
+              {TIME_MINUTES.map((minute) => (
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={minute === selectedMinute}
+                  className={minute === selectedMinute ? 'is-selected' : ''}
+                  key={minute}
+                  ref={minute === selectedMinute ? selectedMinuteRef : null}
+                  onClick={() => {
+                    onChange(`${selectedHour}:${minute}`)
+                    setOpen(false)
+                  }}
+                >
+                  {minute}
+                </button>
+              ))}
+            </span>
+          </span>
+        </>
+      ) : null}
+    </span>
+  )
+}
+
+function TimeSettingRow({
+  label,
+  startLabel,
+  endLabel,
+  startValue,
+  endValue,
+  onStartChange,
+  onEndChange,
+}: TimeSettingRowProps) {
+  return (
+    <div className="settings-row settings-row-with-control">
+      <span className="settings-row-copy">
+        <strong>{label}</strong>
+      </span>
+      <span className="settings-time-range">
+        <label>
+          <span>{startLabel}</span>
+          <TimePicker value={startValue} onChange={onStartChange} />
+        </label>
+        <label>
+          <span>{endLabel}</span>
+          <TimePicker value={endValue} onChange={onEndChange} />
+        </label>
+      </span>
+    </div>
+  )
+}
+
 function SelectSettingRow<T extends string>({
   label,
   value,
@@ -82,17 +220,18 @@ function SelectSettingRow<T extends string>({
       return
     }
 
-    const closeMenu = (event: MouseEvent) => {
-      if (menuRef.current?.contains(event.target as Node)) {
+    const closeMenu = (event: PointerEvent) => {
+      const target = event.target
+      if (target instanceof Node && menuRef.current?.contains(target)) {
         return
       }
 
       setOpen(false)
     }
 
-    document.addEventListener('mousedown', closeMenu)
+    document.addEventListener('pointerdown', closeMenu, true)
     return () => {
-      document.removeEventListener('mousedown', closeMenu)
+      document.removeEventListener('pointerdown', closeMenu, true)
     }
   }, [open])
 
@@ -113,22 +252,25 @@ function SelectSettingRow<T extends string>({
           <Icon name="chevronDown" />
         </button>
         {open ? (
-          <span className="settings-select-options">
-            {options.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                className={option.value === value ? 'is-selected' : ''}
-                onClick={() => {
-                  onChange(option.value)
-                  setOpen(false)
-                }}
-              >
-                <Icon name={option.value === value ? 'check' : 'blank'} />
-                <span>{option.label}</span>
-              </button>
-            ))}
-          </span>
+          <>
+            <span className="dropdown-dismiss-layer" onPointerDown={() => setOpen(false)} />
+            <span className="settings-select-options">
+              {options.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={option.value === value ? 'is-selected' : ''}
+                  onClick={() => {
+                    onChange(option.value)
+                    setOpen(false)
+                  }}
+                >
+                  <Icon name={option.value === value ? 'check' : 'blank'} />
+                  <span>{option.label}</span>
+                </button>
+              ))}
+            </span>
+          </>
         ) : null}
       </span>
     </div>
@@ -202,6 +344,14 @@ export function SettingsPage({
     { value: 'en-US', label: t('settings.languageEnglish') },
     { value: 'zh-CN', label: t('settings.languageChinese') },
   ]
+  const nightModeOptions: Array<{
+    value: NightMode
+    label: string
+  }> = [
+    { value: 'auto', label: t('settings.nightModeAuto') },
+    { value: 'on', label: t('settings.nightModeOn') },
+    { value: 'never', label: t('settings.nightModeNever') },
+  ]
   const lyricsSourceOptions: Array<{
     value: LyricsRequestMode
     label: string
@@ -255,18 +405,19 @@ export function SettingsPage({
       return
     }
 
-    const closeFeedbackOptions = (event: MouseEvent) => {
-      if (feedbackMenuRef.current?.contains(event.target as Node)) {
+    const closeFeedbackOptions = (event: PointerEvent) => {
+      const target = event.target
+      if (target instanceof Node && feedbackMenuRef.current?.contains(target)) {
         return
       }
 
       setShowFeedbackOptions(false)
     }
 
-    document.addEventListener('mousedown', closeFeedbackOptions)
+    document.addEventListener('pointerdown', closeFeedbackOptions, true)
 
     return () => {
-      document.removeEventListener('mousedown', closeFeedbackOptions)
+      document.removeEventListener('pointerdown', closeFeedbackOptions, true)
     }
   }, [showFeedbackOptions])
 
@@ -601,6 +752,29 @@ export function SettingsPage({
                 onUpdateSettings({ preferredLanguage: value })
               }}
             />
+            <SelectSettingRow
+              label={t('settings.nightMode')}
+              value={snapshot.settings.nightMode}
+              options={nightModeOptions}
+              onChange={(value) => {
+                onUpdateSettings({ nightMode: value })
+              }}
+            />
+            {snapshot.settings.nightMode === 'auto' ? (
+              <TimeSettingRow
+                label={t('settings.nightModeTimeRange')}
+                startLabel={t('settings.nightModeStartTime')}
+                endLabel={t('settings.nightModeEndTime')}
+                startValue={snapshot.settings.nightModeStartTime}
+                endValue={snapshot.settings.nightModeEndTime}
+                onStartChange={(value) => {
+                  onUpdateSettings({ nightModeStartTime: value })
+                }}
+                onEndChange={(value) => {
+                  onUpdateSettings({ nightModeEndTime: value })
+                }}
+              />
+            ) : null}
             <ToggleSettingRow
               label={t('settings.showCounts')}
               checked={snapshot.settings.showCount}
@@ -687,26 +861,29 @@ export function SettingsPage({
                   {t('settings.feedback')}
                 </SettingsActionButton>
                 {showFeedbackOptions ? (
-                  <div className="settings-feedback-options">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void window.smplayer?.sendFeedbackEmail()
-                        setShowFeedbackOptions(false)
-                      }}
-                    >
-                      {t('settings.viaEmail')}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void window.smplayer?.openFeedbackInBrowser()
-                        setShowFeedbackOptions(false)
-                      }}
-                    >
-                      {t('settings.viaWebBrowser')}
-                    </button>
-                  </div>
+                  <>
+                    <div className="dropdown-dismiss-layer" onPointerDown={() => setShowFeedbackOptions(false)} />
+                    <div className="settings-feedback-options">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void window.smplayer?.sendFeedbackEmail()
+                          setShowFeedbackOptions(false)
+                        }}
+                      >
+                        {t('settings.viaEmail')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void window.smplayer?.openFeedbackInBrowser()
+                          setShowFeedbackOptions(false)
+                        }}
+                      >
+                        {t('settings.viaWebBrowser')}
+                      </button>
+                    </div>
+                  </>
                 ) : null}
               </div>
               <SettingsActionButton onClick={showSystemLog}>{t('settings.systemLog')}</SettingsActionButton>

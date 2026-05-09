@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 
-import { Icon } from './icons'
+import { Icon, type IconName } from './icons'
 import type { Translator } from '../shared/i18n'
 import { useLibraryStore } from '../state/useLibraryStore'
 
@@ -22,6 +22,14 @@ interface MultiSelectCommandBarProps {
   onAddToPlaylist?: (playlistId: number) => void
   onAddToPlaylistMenuClick?: (event: MouseEvent<HTMLButtonElement>) => void
   onRemove?: () => void
+  extraActions?: Array<{
+    key: string
+    text: string
+    icon: IconName
+    disabled?: boolean
+    hideAfterClick?: boolean
+    onClick: (event: MouseEvent<HTMLButtonElement>) => void
+  }>
   onSelectAll: () => void
   onReverseSelection: () => void
   onClearSelection: () => void
@@ -40,6 +48,7 @@ export function MultiSelectCommandBar({
   onAddToPlaylist,
   onAddToPlaylistMenuClick,
   onRemove,
+  extraActions = [],
   onSelectAll,
   onReverseSelection,
   onClearSelection,
@@ -167,6 +176,22 @@ export function MultiSelectCommandBar({
             <span>{removeLabel}</span>
           </button>
         ) : null}
+        {extraActions.map((action) => (
+          <button
+            key={action.key}
+            type="button"
+            disabled={action.disabled}
+            onClick={(event) => {
+              action.onClick(event)
+              if (action.hideAfterClick) {
+                hideIfNeeded()
+              }
+            }}
+          >
+            <Icon name={action.icon} />
+            <span>{action.text}</span>
+          </button>
+        ))}
         <button type="button" onClick={onSelectAll}>
           <Icon name="selectAll" />
           <span>{t('albums.selectAll')}</span>

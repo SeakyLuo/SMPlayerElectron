@@ -5,6 +5,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { GridViewHolder } from '../components/GridViewHolder'
 import { HeaderedPlaylistControl } from '../components/HeaderedPlaylistControl'
 import { Icon } from '../components/icons'
+import { LoadingState } from '../components/LoadingState'
 import { MenuFlyout } from '../components/MenuFlyout'
 import { getAddToPlaylistMenuFlyoutItem, getPreferenceMenuFlyoutItem, type MenuFlyoutItem } from '../components/MenuFlyoutHelper'
 import type { LibraryPlaylist, LibrarySnapshot, PlaylistSortCriterion, PreferenceItemSnapshot, PreferenceLevel, PreferenceSettingsSnapshot } from '../shared/contracts'
@@ -14,6 +15,7 @@ import { usePreferenceStore } from '../state/usePreferenceStore'
 interface PlaylistsPageProps {
   snapshot: LibrarySnapshot
   t: Translator
+  loading: boolean
   selectedTrackId: number | null
   isPlaying: boolean
   searchQuery: string
@@ -60,6 +62,7 @@ interface PlaylistDragState {
 export function PlaylistsPage({
   snapshot,
   t,
+  loading,
   selectedTrackId,
   isPlaying,
   searchQuery,
@@ -453,10 +456,14 @@ export function PlaylistsPage({
       {error ? <div className="error-banner">{error}</div> : null}
 
       {orderedVisiblePlaylists.length === 0 ? (
+        loading ? (
+          <LoadingState t={t} compact />
+        ) : (
         <div className="empty-state compact">
           <h3>{t('playlists.none')}</h3>
           <p>{t('playlists.noneCopy')}</p>
         </div>
+        )
       ) : (
         <div className="grid-view-holder-grid">
           {orderedVisiblePlaylists.map((playlist) => {
@@ -667,10 +674,11 @@ function getPlaylistCardMenuItems({
       key: 'shuffle',
       text: t('nowPlaying.randomPlay'),
       icon: 'shuffle',
-      disabled: playlist.songIds.length === 0,
       onClick: () => {
         const shuffledSongIds = shuffleSongIds(playlist.songIds)
-        onPlayTrack(shuffledSongIds[0]!, shuffledSongIds)
+        if (shuffledSongIds.length > 0) {
+          onPlayTrack(shuffledSongIds[0]!, shuffledSongIds)
+        }
       },
     },
   ]

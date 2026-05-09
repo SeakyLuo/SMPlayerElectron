@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 
 import { HeaderedPlaylistControl } from '../components/HeaderedPlaylistControl'
+import { LoadingState } from '../components/LoadingState'
 import type { LibraryPlaylist, LibrarySong, PreferenceLevel } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
 
@@ -10,6 +11,7 @@ interface MyFavoritesPageProps {
   favoritePlaylistId: number
   sortCriterion: LibraryPlaylist['sortCriterion']
   t: Translator
+  loading: boolean
   selectedTrackId: number | null
   isPlaying: boolean
   onPlayTrack: (trackId: number, queueSongIds: number[]) => void
@@ -30,6 +32,7 @@ export function MyFavoritesPage({
   favoritePlaylistId,
   sortCriterion,
   t,
+  loading,
   selectedTrackId,
   isPlaying,
   onPlayTrack,
@@ -45,6 +48,14 @@ export function MyFavoritesPage({
 }: MyFavoritesPageProps) {
   const navigate = useNavigate()
   const artworkUrl = songs.find((song) => song.artworkUrl)?.artworkUrl ?? ''
+
+  if (loading && songs.length === 0) {
+    return (
+      <section className="page-panel immersive-detail-page">
+        <LoadingState t={t} />
+      </section>
+    )
+  }
 
   return (
     <section className="page-panel immersive-detail-page">

@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import type { KeyboardEvent, MouseEvent } from 'react'
+import type { DragEvent, KeyboardEvent, MouseEvent } from 'react'
 
 import { ArtworkImage } from './ArtworkImage'
 import { DefaultAlbumArtwork } from './DefaultAlbumArtwork'
@@ -16,11 +16,13 @@ interface GridViewMusicItemControlProps {
   playing: boolean
   multiSelect: boolean
   t: Translator
+  draggable?: boolean
   onPlayTrack: (trackId: number, queueSongIds: number[]) => void
   onTogglePlayPause: () => void
   onToggleSelection: (songId: number) => void
   onAddToPlaylistClick?: (event: MouseEvent<HTMLButtonElement>, song: LibrarySong) => void
   onContextMenu: (event: MouseEvent<HTMLElement>, song: LibrarySong) => void
+  onDragStart?: (event: DragEvent<HTMLDivElement>, song: LibrarySong) => void
 }
 
 export function GridViewMusicItemControl({
@@ -31,10 +33,12 @@ export function GridViewMusicItemControl({
   playing,
   multiSelect,
   t,
+  draggable,
   onPlayTrack,
   onToggleSelection,
   onAddToPlaylistClick,
   onContextMenu,
+  onDragStart,
 }: GridViewMusicItemControlProps) {
   const artistLabel = getDisplayArtists(song)
   const open = () => {
@@ -61,8 +65,12 @@ export function GridViewMusicItemControl({
         'is-selected': selected,
         'is-selecting': multiSelect,
       })}
+      draggable={draggable}
       onClick={open}
       onKeyDown={onKeyDown}
+      onDragStart={(event) => {
+        onDragStart?.(event, song)
+      }}
       onContextMenu={(event) => {
         event.preventDefault()
         onContextMenu(event, song)

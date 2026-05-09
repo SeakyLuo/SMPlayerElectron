@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { mkdir, readFile, readdir, rename, rmdir, stat, unlink, writeFile } from 'node:fs/promises'
 import { basename, dirname, extname, join } from 'node:path'
@@ -18,6 +19,7 @@ import type {
   LyricsRequestMode,
   LyricsSnapshot,
   LyricsSource,
+  NightMode,
   MusicLibrarySortCriterion,
   PlaylistSortCriterion,
   AlbumSortCriterion,
@@ -38,6 +40,8 @@ import type {
   SettingsSnapshot,
   SongPropertiesSnapshot,
   SongPropertiesUpdate,
+  SongArtworkSnapshot,
+  SongArtworkSource,
 } from '../../src/shared/contracts.ts'
 import { normalizeArtists } from '../../src/shared/artists.ts'
 import { stripLyricsTimestamps } from '../../src/shared/lyrics.ts'
@@ -74,6 +78,9 @@ interface SettingsRow {
   MyFavorites: number
   NowPlaying: number
   ThemeColor: string
+  NightMode: number
+  NightModeStartTime: string
+  NightModeEndTime: string
   NotificationSend: number
   NotificationDisplay: number
   AutoLyrics: number
@@ -124,6 +131,12 @@ interface StoredLibrarySong extends Omit<LibrarySong, 'mediaUrl' | 'artworkUrl' 
 }
 
 interface StoredRecentLibrarySong extends Omit<RecentLibrarySong, 'mediaUrl' | 'artworkUrl' | 'artists'> {
+  thumbnailPath: string
+}
+
+interface SongArtworkRow {
+  id: number
+  path: string
   thumbnailPath: string
 }
 
@@ -241,6 +254,9 @@ export class SmplayerDataStore {
         MyFavorites,
         NowPlaying,
         ThemeColor,
+        NightMode,
+        NightModeStartTime,
+        NightModeEndTime,
         NotificationSend,
         NotificationDisplay,
         AutoLyrics,
@@ -326,6 +342,9 @@ export class SmplayerDataStore {
         UseFilenameNotMusicName = ?,
         ShowCount = ?,
         ThemeColor = ?,
+        NightMode = ?,
+        NightModeStartTime = ?,
+        NightModeEndTime = ?,
         NotificationDisplay = ?,
         NotificationSend = ?,
         AutoLyrics = ?,
@@ -717,6 +736,9 @@ export class SmplayerDataStore {
       useFilenameNotMusicName: Boolean(settings.UseFilenameNotMusicName),
       showCount: Boolean(settings.ShowCount),
       themeColor: settings.ThemeColor || '#0078D7',
+      nightMode: this.mapNightMode(settings.NightMode),
+      nightModeStartTime: settings.NightModeStartTime,
+      nightModeEndTime: settings.NightModeEndTime,
       notificationSend: this.mapNotificationSend(settings.NotificationSend),
       notificationDisplay: this.mapNotificationDisplay(settings.NotificationDisplay),
       showNotifications: this.mapNotificationSend(settings.NotificationSend) !== 'never',
@@ -814,6 +836,9 @@ export class SmplayerDataStore {
         useFilenameNotMusicName: Boolean(settings.UseFilenameNotMusicName),
         showCount: Boolean(settings.ShowCount),
         themeColor: settings.ThemeColor || '#0078D7',
+        nightMode: this.mapNightMode(settings.NightMode),
+        nightModeStartTime: settings.NightModeStartTime,
+        nightModeEndTime: settings.NightModeEndTime,
         notificationSend: this.mapNotificationSend(settings.NotificationSend),
         notificationDisplay: this.mapNotificationDisplay(settings.NotificationDisplay),
         showNotifications: this.mapNotificationSend(settings.NotificationSend) !== 'never',
@@ -876,9 +901,43 @@ export class SmplayerDataStore {
     }
   }
 
-  async getSongArtwork(songId: number) {
-    const thumbnailUrl = await this.getSongArtworkFileUrl(songId)
-    return thumbnailUrl ? this.getSongArtworkUrl(songId) : ''
+  async getSongArtworkSnapshot(songId: number): Promise<SongArtworkSnapshot> {
+    const song = this.getSongArtworkRow(songId)
+    const result = await this.resolveSongArtworkFile(song)
+
+    return {
+      songId,
+      artworkUrl: result.fileUrl ? this.getSongArtworkUrl(songId, result.cacheKey) : '',
+      source: result.source,
+    }
+  }
+
+  async getSongArtworkSnapshots(songIds: number[]): Promise<SongArtworkSnapshot[]> {
+    const uniqueSongIds = [...new Set(songIds)]
+    if (uniqueSongIds.length === 0) {
+      return []
+    }
+
+    const placeholders = uniqueSongIds.map(() => '?').join(',')
+    const rows = this.db.prepare(`
+      SELECT
+        Id AS id,
+        Path AS path,
+        ThumbnailPath AS thumbnailPath
+      FROM Music
+      WHERE State = ?
+        AND Id IN (${placeholders})
+    `).all(ACTIVE_STATE.active, ...uniqueSongIds) as unknown as SongArtworkRow[]
+    const rowsBySongId = new Map(rows.map((row) => [row.id, row]))
+
+    return mapWithConcurrency(uniqueSongIds, 6, async (songId) => {
+      const result = await this.resolveSongArtworkFile(rowsBySongId.get(songId)!)
+      return {
+        songId,
+        artworkUrl: result.fileUrl ? this.getSongArtworkUrl(songId, result.cacheKey) : '',
+        source: result.source,
+      }
+    })
   }
 
   setAlbumArtwork(albumName: string, thumbnailPath: string) {
@@ -1851,25 +1910,35 @@ export class SmplayerDataStore {
   }
 
   async getSongArtworkFileUrl(songId: number) {
+    const result = await this.resolveSongArtworkFile(this.getSongArtworkRow(songId))
+    return result.fileUrl
+  }
+
+  private getSongArtworkRow(songId: number) {
     const song = this.db.prepare(`
       SELECT
+        Id AS id,
         Path AS path,
         ThumbnailPath AS thumbnailPath
       FROM Music
       WHERE Id = ?
         AND State = ?
       LIMIT 1
-    `).get(songId, ACTIVE_STATE.active) as { path: string; thumbnailPath: string } | undefined
+    `).get(songId, ACTIVE_STATE.active) as SongArtworkRow | undefined
 
     if (!song) {
       throw new Error('Song not found.')
     }
 
+    return song
+  }
+
+  private async resolveSongArtworkFile(song: SongArtworkRow): Promise<{ fileUrl: string; source: SongArtworkSource; cacheKey: string }> {
     if (song.thumbnailPath) {
       try {
         await stat(song.thumbnailPath)
         if (!shouldRebuildShellThumbnail(this.thumbnailCachePath, song.path, song.thumbnailPath)) {
-          return pathToFileURL(song.thumbnailPath).href
+          return { fileUrl: pathToFileURL(song.thumbnailPath).href, source: 'cached', cacheKey: song.thumbnailPath }
         }
       } catch {
         // Rebuild stale thumbnail cache entries below.
@@ -1889,9 +1958,9 @@ export class SmplayerDataStore {
           SET ThumbnailPath = ?
           WHERE Id = ?
             AND State = ?
-        `).run(thumbnailPath, songId, ACTIVE_STATE.active)
+        `).run(thumbnailPath, song.id, ACTIVE_STATE.active)
 
-        return pathToFileURL(thumbnailPath).href
+        return { fileUrl: pathToFileURL(thumbnailPath).href, source: 'embedded', cacheKey: thumbnailPath }
       }
     } catch {
       // Fall back to a shell thumbnail below.
@@ -1901,7 +1970,7 @@ export class SmplayerDataStore {
       const thumbnailPath = await writeShellThumbnailCache(this.thumbnailCachePath, song.path)
 
       if (!thumbnailPath) {
-        return ''
+        return { fileUrl: '', source: 'none', cacheKey: '' }
       }
 
       this.db.prepare(`
@@ -1909,11 +1978,11 @@ export class SmplayerDataStore {
         SET ThumbnailPath = ?
         WHERE Id = ?
           AND State = ?
-      `).run(thumbnailPath, songId, ACTIVE_STATE.active)
+      `).run(thumbnailPath, song.id, ACTIVE_STATE.active)
 
-      return pathToFileURL(thumbnailPath).href
+      return { fileUrl: pathToFileURL(thumbnailPath).href, source: 'shell', cacheKey: thumbnailPath }
     } catch {
-      return ''
+      return { fileUrl: '', source: 'none', cacheKey: '' }
     }
   }
 
@@ -2200,6 +2269,9 @@ export class SmplayerDataStore {
       Number(update.useFilenameNotMusicName ?? Boolean(settings.UseFilenameNotMusicName)),
       Number(update.showCount ?? Boolean(settings.ShowCount)),
       update.themeColor ?? settings.ThemeColor ?? '#5b87b6',
+      this.toNightModeValue(update.nightMode ?? this.mapNightMode(settings.NightMode)),
+      update.nightModeStartTime ?? settings.NightModeStartTime,
+      update.nightModeEndTime ?? settings.NightModeEndTime,
       this.toNotificationDisplayValue(
         update.notificationDisplay ?? this.mapNotificationDisplay(settings.NotificationDisplay),
       ),
@@ -2590,6 +2662,16 @@ export class SmplayerDataStore {
       WHERE Type = 0
         AND ItemId IN (${placeholders})
     `).run(ACTIVE_STATE.inactive, ...songIds.map((songId) => songId.toString()))
+  }
+
+  restoreRecentPlayed(songIds: number[]) {
+    const placeholders = songIds.map(() => '?').join(',')
+    this.db.prepare(`
+      UPDATE RecentRecord
+      SET State = ?
+      WHERE Type = 0
+        AND ItemId IN (${placeholders})
+    `).run(ACTIVE_STATE.active, ...songIds.map((songId) => songId.toString()))
   }
 
   clearRecentPlayed() {
@@ -3193,7 +3275,7 @@ export class SmplayerDataStore {
       id: song.id,
       path: song.path,
       mediaUrl: this.getSongMediaUrl(song.id),
-      artworkUrl: song.thumbnailPath ? this.getSongArtworkUrl(song.id) : '',
+      artworkUrl: this.getSongArtworkUrl(song.id, song.thumbnailPath),
       title: song.title,
       artist: song.artist,
       artists,
@@ -3209,8 +3291,13 @@ export class SmplayerDataStore {
     return `smplayer-media://song/${songId}`
   }
 
-  private getSongArtworkUrl(songId: number) {
-    return `smplayer-artwork://song/${songId}`
+  private getSongArtworkUrl(songId: number, cacheKey = '') {
+    if (!cacheKey) {
+      return `smplayer-artwork://song/${songId}`
+    }
+
+    const revision = createHash('sha1').update(cacheKey).digest('hex').slice(0, 12)
+    return `smplayer-artwork://song/${songId}?v=${revision}`
   }
 
   private normalizeStoredDate(value: unknown) {
@@ -3386,6 +3473,28 @@ export class SmplayerDataStore {
         return 1
       default:
         return 0
+    }
+  }
+
+  private mapNightMode(modeValue: number): NightMode {
+    switch (modeValue) {
+      case 0:
+        return 'auto'
+      case 1:
+        return 'on'
+      default:
+        return 'never'
+    }
+  }
+
+  private toNightModeValue(mode: NightMode) {
+    switch (mode) {
+      case 'auto':
+        return 0
+      case 'on':
+        return 1
+      default:
+        return 2
     }
   }
 
@@ -4436,4 +4545,24 @@ export class SmplayerDataStore {
       .replace(/&#(\d+);/g, (_match, code) => String.fromCodePoint(Number(code)))
       .replace(/\\n/g, '\n')
   }
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T) => Promise<R>,
+) {
+  const results: R[] = []
+  let nextIndex = 0
+
+  async function runWorker() {
+    while (nextIndex < items.length) {
+      const index = nextIndex
+      nextIndex += 1
+      results[index] = await worker(items[index]!)
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, runWorker))
+  return results
 }

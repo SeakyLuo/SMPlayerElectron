@@ -173,12 +173,6 @@ export function HeaderedPlaylistControl({
   const showUndo = (message: string, action: () => void | Promise<void>) => {
     showUndoableNotification(message, translateCaption('common.undo'), action)
   }
-  const hasAddablePlaylist = (songIds: number[]) =>
-    customPlaylists.some((playlist) => songIds.some((songId) => !playlist.songIds.includes(songId)))
-  const multiSelectPlaylists =
-    effectiveSelectedSongIds.length === 0 || hasAddablePlaylist(effectiveSelectedSongIds)
-      ? customPlaylists
-      : []
   const headerArtworkUrls = type === 'album'
     ? artworkUrl ? [artworkUrl] : []
     : getPlaylistArtworkDisplayUrls(resolvedPlaylistArtworkUrls)
@@ -523,13 +517,9 @@ export function HeaderedPlaylistControl({
               onRemoveFromListClick={(contextSong) => {
                 onRemoveSongs?.([contextSong.id])
               }}
-              onAddToPlaylistClick={
-                hasAddablePlaylist([song.id])
-                  ? (contextSong, x, y) => {
-                      setAddToMenu({ songIds: [contextSong.id], x, y })
-                    }
-                  : undefined
-              }
+              onAddToPlaylistClick={(contextSong, x, y) => {
+                setAddToMenu({ songIds: [contextSong.id], x, y })
+              }}
               onPlayTrack={onPlayTrack}
               onTogglePlayPause={onTogglePlayPause}
               onSelect={toggleSongSelection}
@@ -549,7 +539,7 @@ export function HeaderedPlaylistControl({
         visible={selectionMode}
         selectedCount={effectiveSelectedSongIds.length}
         t={translateCaption}
-        playlists={multiSelectPlaylists}
+        playlists={customPlaylists}
         removeLabel={captionFor('removeSelected')}
         onPlay={() => {
           onPlayTrack(effectiveSelectedSongIds[0]!, effectiveSelectedSongIds)
@@ -994,7 +984,9 @@ function HeaderedPlaylistCover({
       title={title}
       renderFallback={() => (
         <div className="headered-playlist-cover headered-playlist-cover-fallback" aria-hidden="true">
-          {type === 'album' ? <DefaultAlbumArtwork className="headered-playlist-cover-fallback-image" /> : <Icon name="playlists" />}
+          {type === 'album'
+            ? <DefaultAlbumArtwork className="headered-playlist-cover-fallback-image" />
+            : <img className="headered-playlist-cover-fallback-image" src="/monotone_bg_wide.png" alt="" />}
         </div>
       )}
     />

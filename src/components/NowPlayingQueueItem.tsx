@@ -5,6 +5,7 @@ import { getSongArtists } from '../shared/artists'
 import type { LibrarySong } from '../shared/contracts'
 import { formatDuration } from '../shared/formatters'
 import type { Translator } from '../shared/i18n'
+import { useSongArtwork } from '../hooks/useSongArtwork'
 import { ArtworkImage } from './ArtworkImage'
 import { DefaultAlbumArtwork } from './DefaultAlbumArtwork'
 import { Icon } from './icons'
@@ -64,6 +65,7 @@ export function NowPlayingQueueItem({
 }: NowPlayingQueueItemProps) {
   const artists = getSongArtists(song)
   const artistLabel = artists.join(', ')
+  const { artworkUrl, refreshArtwork } = useSongArtwork(song.id, song.artworkUrl)
   const open = () => {
     if (selectionMode) {
       onToggleSelection()
@@ -119,8 +121,9 @@ export function NowPlayingQueueItem({
       <span className="now-playing-queue-artwork-wrap">
         <ArtworkImage
           className="now-playing-queue-artwork"
-          src={song.artworkUrl}
+          src={artworkUrl}
           title={song.title}
+          onError={refreshArtwork}
           renderFallback={() => (
             <span className="now-playing-queue-artwork now-playing-queue-artwork-fallback" aria-hidden="true">
               <DefaultAlbumArtwork className="now-playing-queue-artwork-fallback-image" />

@@ -1,15 +1,7 @@
 import { useEffect } from 'react'
 
 import type { LibrarySnapshot, PlaybackMode } from '../shared/contracts'
-import { currentIndex } from '../shared/mediaHelper'
-
-type PlaybackStatus = 'idle' | 'loading' | 'ready' | 'playing' | 'paused' | 'buffering' | 'seeking'
-
-interface LoadTrackOptions {
-  autoplay: boolean
-  startAt: number
-  queueIndex?: number
-}
+import type { PlaybackTransition } from './playbackStateMachine'
 
 interface MutableRef<T> {
   current: T
@@ -19,20 +11,15 @@ interface PlaybackAudioElementOptions {
   audioRef: MutableRef<HTMLAudioElement | null>
   snapshotRef: MutableRef<LibrarySnapshot>
   currentTrackIdRef: MutableRef<number | null>
-  currentQueueIndexRef: MutableRef<number | null>
   pendingStartSecondsRef: MutableRef<number>
   pendingAutoplayRef: MutableRef<boolean>
   volumeRef: MutableRef<number>
   isMutedRef: MutableRef<boolean>
-  modeRef: MutableRef<PlaybackMode>
-  statusRef: MutableRef<PlaybackStatus>
   isUserSeekingRef: MutableRef<boolean>
   pendingSeekSecondsRef: MutableRef<number | null>
   durationSecondsRef: MutableRef<number>
   failedTrackIdsRef: MutableRef<Set<number>>
-  loadTrackRef: MutableRef<(trackId: number, options: LoadTrackOptions) => Promise<void>>
-  getPlaybackSongIds: () => number[]
-  setStatus: (status: PlaybackStatus) => void
+  transitionStatus: (transition: PlaybackTransition) => void
   setIsPlaying: (isPlaying: boolean) => void
   clearStalledTimer: () => void
   armStalledTimer: () => void
@@ -50,7 +37,7 @@ interface PlaybackAudioElementOptions {
   }>) => Promise<void>
   persistResolvedDuration: (trackId: number | null, duration: number) => void
   recoverFromPlaybackFailure: () => Promise<void>
-  markSongPlayed: (songId: number) => Promise<void>
+  finishCurrentTrack: () => Promise<void>
   clamp: (value: number, min: number, max: number) => number
 }
 
@@ -58,20 +45,15 @@ export function usePlaybackAudioElement({
   audioRef,
   snapshotRef,
   currentTrackIdRef,
-  currentQueueIndexRef,
   pendingStartSecondsRef,
   pendingAutoplayRef,
   volumeRef,
   isMutedRef,
-  modeRef,
-  statusRef,
   isUserSeekingRef,
   pendingSeekSecondsRef,
   durationSecondsRef,
   failedTrackIdsRef,
-  loadTrackRef,
-  getPlaybackSongIds,
-  setStatus,
+  transitionStatus,
   setIsPlaying,
   clearStalledTimer,
   armStalledTimer,
@@ -83,7 +65,7 @@ export function usePlaybackAudioElement({
   persistPlaybackSettings,
   persistResolvedDuration,
   recoverFromPlaybackFailure,
-  markSongPlayed,
+  finishCurrentTrack,
   clamp,
 }: PlaybackAudioElementOptions) {
   useEffect(() => {
@@ -94,7 +76,9 @@ export function usePlaybackAudioElement({
     audioRef.current = audio
 
     const handleLoadStart = () => {
-      setStatus('loading')
+      if (pendingAutoplayRef.current) {
+        transitionStatus({ type: 'play-requested' })
+      }
     }
 
     const handleLoadedMetadata = async () => {
@@ -128,13 +112,20 @@ export function usePlaybackAudioElement({
           await recoverFromPlaybackFailure()
         }
       } else {
-        setStatus('ready')
+        transitionStatus({ type: 'ready' })
       }
     }
 
     const handleTimeUpdate = () => {
       clearStalledTimer()
       updateProgressFromAudio()
+    }
+
+    const isAtPlaybackEnd = () => {
+      const duration = Number.isFinite(audio.duration) && audio.duration > 0
+        ? audio.duration
+        : durationSecondsRef.current
+      return duration > 0 && duration - audio.currentTime <= 0.5
     }
 
     const handleDurationChange = () => {
@@ -146,7 +137,7 @@ export function usePlaybackAudioElement({
 
     const handlePlay = () => {
       setIsPlaying(true)
-      setStatus('playing')
+      transitionStatus({ type: 'playing' })
       startProgressSync()
     }
 
@@ -154,7 +145,7 @@ export function usePlaybackAudioElement({
       clearStalledTimer()
       failedTrackIdsRef.current.clear()
       setIsPlaying(true)
-      setStatus('playing')
+      transitionStatus({ type: 'playing' })
       startProgressSync()
     }
 
@@ -162,9 +153,7 @@ export function usePlaybackAudioElement({
       setIsPlaying(false)
       stopProgressSync()
       clearStalledTimer()
-      if (statusRef.current !== 'loading' && statusRef.current !== 'seeking' && statusRef.current !== 'buffering') {
-        setStatus('paused')
-      }
+      transitionStatus({ type: 'pause' })
       void persistPlaybackSettings({ musicProgress: audio.currentTime })
     }
 
@@ -174,12 +163,21 @@ export function usePlaybackAudioElement({
         return
       }
 
-      setStatus(audio.paused ? 'ready' : 'playing')
+      transitionStatus({
+        type: 'can-play',
+        paused: audio.paused,
+        pendingAutoplay: pendingAutoplayRef.current,
+      })
     }
 
     const handleWaiting = () => {
       if (!audio.paused) {
-        setStatus('buffering')
+        if (isAtPlaybackEnd()) {
+          void finishCurrentTrack()
+          return
+        }
+
+        transitionStatus({ type: 'buffering' })
         armStalledTimer()
       }
     }
@@ -187,7 +185,7 @@ export function usePlaybackAudioElement({
     const handleSeeking = () => {
       clearStalledTimer()
       if (!isUserSeekingRef.current) {
-        setStatus('seeking')
+        transitionStatus({ type: 'seeking' })
       }
     }
 
@@ -196,59 +194,22 @@ export function usePlaybackAudioElement({
       pendingSeekSecondsRef.current = null
       updateProgressFromAudio()
       if (!audio.paused) {
-        setStatus('playing')
+        transitionStatus({ type: 'playing' })
         startProgressSync()
         return
       }
 
-      setStatus('paused')
+      transitionStatus({ type: 'seeked', paused: true })
     }
 
     const handlePlaybackFailure = () => {
       stopProgressSync()
-      setStatus('buffering')
+      transitionStatus({ type: 'buffering' })
       void recoverFromPlaybackFailure()
     }
 
     const handleEnded = async () => {
-      clearStalledTimer()
-      const playbackSongIds = getPlaybackSongIds()
-      const activeIndex = currentIndex(playbackSongIds, currentTrackIdRef.current, currentQueueIndexRef.current ?? -1)
-      const activeTrack =
-        currentTrackIdRef.current == null
-          ? null
-          : snapshotRef.current.songs.find((song) => song.id === currentTrackIdRef.current) ?? null
-
-      if (activeTrack) {
-        await markSongPlayed(activeTrack.id)
-      }
-
-      if (playbackSongIds.length === 0) {
-        setIsPlaying(false)
-        setStatus('idle')
-        return
-      }
-
-      if (modeRef.current === 'repeat-one' && activeTrack) {
-        await loadTrackRef.current(activeTrack.id, { autoplay: true, queueIndex: activeIndex, startAt: 0 })
-        return
-      }
-
-      const nextIndex = activeIndex + 1
-      if (nextIndex < playbackSongIds.length) {
-        await loadTrackRef.current(playbackSongIds[nextIndex], { autoplay: true, queueIndex: nextIndex, startAt: 0 })
-        return
-      }
-
-      if (modeRef.current === 'repeat' || modeRef.current === 'shuffle') {
-        await loadTrackRef.current(playbackSongIds[0], { autoplay: true, queueIndex: 0, startAt: 0 })
-        return
-      }
-
-      setIsPlaying(false)
-      setStatus('paused')
-      setProgressFromPlayback(durationSecondsRef.current)
-      await persistPlaybackSettings({ musicProgress: durationSecondsRef.current })
+      await finishCurrentTrack()
     }
 
     const handleBeforeUnload = () => {
@@ -298,16 +259,12 @@ export function usePlaybackAudioElement({
     audioRef,
     clearStalledTimer,
     clamp,
-    currentQueueIndexRef,
     currentTrackIdRef,
     durationSecondsRef,
     failedTrackIdsRef,
-    getPlaybackSongIds,
+    finishCurrentTrack,
     isMutedRef,
     isUserSeekingRef,
-    loadTrackRef,
-    markSongPlayed,
-    modeRef,
     pendingAutoplayRef,
     pendingSeekSecondsRef,
     pendingStartSecondsRef,
@@ -317,11 +274,10 @@ export function usePlaybackAudioElement({
     setDurationFromPlayback,
     setIsPlaying,
     setProgressFromPlayback,
-    setStatus,
     snapshotRef,
     startProgressSync,
-    statusRef,
     stopProgressSync,
+    transitionStatus,
     updateProgressFromAudio,
     volumeRef,
   ])

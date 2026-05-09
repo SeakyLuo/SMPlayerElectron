@@ -154,6 +154,111 @@
   min-width: 210px;
 }
 
+.settings-time-range {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.settings-time-range label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.settings-time-picker {
+  position: relative;
+  display: inline-flex;
+}
+
+.settings-time-trigger {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 8px;
+  width: 112px;
+  height: 38px;
+  box-sizing: border-box;
+  border: 1px solid rgba(126, 139, 154, 0.22);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--text-strong);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  padding: 0 10px;
+  cursor: pointer;
+}
+
+.settings-time-trigger svg {
+  width: 15px;
+  height: 15px;
+  color: var(--text-muted);
+}
+
+.settings-time-trigger:hover,
+.settings-time-picker.is-open .settings-time-trigger {
+  border-color: rgba(var(--accent-rgb), 0.34);
+  background: rgba(var(--accent-rgb), 0.08);
+  color: var(--accent-strong);
+}
+
+.settings-time-trigger:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.18);
+}
+
+.settings-time-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 121;
+  display: grid;
+  grid-template-columns: repeat(2, 58px);
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid rgba(126, 139, 154, 0.2);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 18px 44px rgba(38, 51, 68, 0.18);
+}
+
+.settings-time-column {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 220px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.settings-time-column button {
+  min-height: 32px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-strong);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.settings-time-column button:hover {
+  background: rgba(var(--accent-rgb), 0.08);
+  color: var(--accent-strong);
+}
+
+.settings-time-column button.is-selected {
+  background: var(--accent);
+  color: #fff;
+}
+
 .settings-select-trigger {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 16px;
@@ -197,7 +302,7 @@
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
-  z-index: 40;
+  z-index: 121;
   display: flex;
   flex-direction: column;
   min-width: 100%;

@@ -130,12 +130,19 @@ export function getAddToPlaylistMenuFlyoutItem({
   onAddToPlaylist: (playlistId: number) => void
   key?: string
 }) {
+  const songIdSet = new Set(songIds)
   const addablePlaylists = playlists.filter((playlist) => {
     if (playlist.isBuiltIn || playlist.name === (excludePlaylistName ?? currentPlaylistName)) {
       return false
     }
 
-    return songIds.length > 1 || songIds.some((songId) => !playlist.songIds.includes(songId))
+    const playlistSongIds = new Set(playlist.songIds)
+    for (const songId of songIdSet) {
+      if (!playlistSongIds.has(songId)) {
+        return true
+      }
+    }
+    return false
   })
   const submenu: MenuFlyoutItem[] = []
 
@@ -164,7 +171,7 @@ export function getAddToPlaylistMenuFlyoutItem({
   if (onCreatePlaylist) {
     submenu.push({
       key: `${key}-new-playlist`,
-      text: t('playlists.newName'),
+      text: t('playlists.newPlaylist'),
       icon: 'plus',
       onClick: () => {
         const name = window.prompt(t('playlists.newName'), defaultPlaylistName ?? t('playlists.newName'))
@@ -375,7 +382,7 @@ export function getMusicMenuFlyoutItems({
     key: 'show-in-explorer',
     text: t('context.reveal'),
     pendingText: t('context.openingLocal'),
-    icon: 'folder',
+    icon: 'local',
     onClick: onReveal,
   })
 
@@ -508,48 +515,71 @@ export function getShuffleMenuItems({
     onPlaySongs(randomLibrary(sourceSongs.map((song) => song.id), randomLimit))
   }
 
-  const artists = new Set(librarySongs.flatMap((song) => getSongArtists(song)))
-  const albums = new Set(librarySongs.map((song) => song.album))
   const playableFolders = folders.filter((folder) => librarySongs.some((song) => isSongDirectlyInFolder(song, folder.path)))
   const playablePlaylists = playlists.filter((playlist) => playlist.songIds.length > 0)
+  const items: MenuFlyoutItem[] = [
+    { key: 'quick', text: t('nowPlaying.quickPlay'), onClick: onQuickPlay ?? (() => playSongs(librarySongs)) },
+  ]
 
-  return [
-    { key: 'quick', text: t('nowPlaying.quickPlay'), disabled: librarySongs.length === 0, onClick: onQuickPlay ?? (() => playSongs(librarySongs)) },
-    { key: 'now-playing', text: t('common.nowPlaying'), disabled: songs.length === 0, onClick: () => playSongs(songs) },
+  if (songs.length > 0) {
+    items.push(
+      { key: 'now-playing-separator', text: '', separator: true },
+      { key: 'now-playing', text: t('common.nowPlaying'), onClick: () => playSongs(songs) },
+    )
+  }
+
+  if (librarySongs.length === 0) {
+    return items
+  }
+
+  items.push(
     { key: 'shuffle-library-separator', text: '', separator: true },
-    { key: 'library', text: t('random.musicLibrary'), disabled: librarySongs.length === 0, onClick: () => playSongs(librarySongs) },
-    { key: 'artist', text: t('common.artist'), disabled: artists.size === 0, onClick: () => onPlaySongs(randomArtist(librarySongs, randomLimit)) },
-    { key: 'album', text: t('common.album'), disabled: albums.size === 0, onClick: () => onPlaySongs(randomAlbum(librarySongs, randomLimit)) },
-    {
+    { key: 'library', text: t('random.musicLibrary'), onClick: () => playSongs(librarySongs) },
+    { key: 'artist', text: t('common.artist'), onClick: () => onPlaySongs(randomArtist(librarySongs, randomLimit)) },
+    { key: 'album', text: t('common.album'), onClick: () => onPlaySongs(randomAlbum(librarySongs, randomLimit)) },
+  )
+
+  if (playablePlaylists.length > 0) {
+    items.push({
       key: 'playlist',
       text: t('common.playlists'),
-      disabled: playablePlaylists.length === 0,
       onClick: () => {
         onPlaySongs(randomPlaylist(librarySongs, playablePlaylists, randomLimit))
       },
-    },
-    { key: 'folder', text: t('random.localFolder'), disabled: playableFolders.length === 0, onClick: () => onPlaySongs(randomFolder(librarySongs, playableFolders, randomLimit)) },
-    { key: 'shuffle-history-separator', text: '', separator: true },
-    {
-      key: 'recent-added',
-      text: t('common.recentAdded'),
-      disabled: librarySongs.length === 0,
-      onClick: () => onPlaySongs(randomRecentAdded(librarySongs, randomLimit)),
-    },
-    { key: 'recent-played', text: t('random.recentPlayed'), disabled: recentSongs.length === 0, onClick: () => onPlaySongs(randomRecentPlayed(recentSongs)) },
-    {
-      key: 'most-played',
-      text: t('random.mostPlayed'),
-      disabled: librarySongs.length <= randomLimit,
-      onClick: () => onPlaySongs(randomMostPlayed(librarySongs, randomLimit)),
-    },
-    {
-      key: 'least-played',
-      text: t('random.leastPlayed'),
-      disabled: librarySongs.length <= randomLimit,
-      onClick: () => onPlaySongs(randomLeastPlayed(librarySongs, randomLimit)),
-    },
-  ] satisfies MenuFlyoutItem[]
+    })
+  }
+
+  if (playableFolders.length > 0) {
+    items.push({ key: 'folder', text: t('random.localFolder'), onClick: () => onPlaySongs(randomFolder(librarySongs, playableFolders, randomLimit)) })
+  }
+
+  items.push({
+    key: 'recent-added',
+    text: t('common.recentAdded'),
+    onClick: () => onPlaySongs(randomRecentAdded(librarySongs, randomLimit)),
+  })
+
+  if (recentSongs.length > 0) {
+    items.push({ key: 'recent-played', text: t('random.recentPlayed'), onClick: () => onPlaySongs(randomRecentPlayed(recentSongs)) })
+  }
+
+  if (librarySongs.length > randomLimit) {
+    items.push(
+      { key: 'shuffle-history-separator', text: '', separator: true },
+      {
+        key: 'most-played',
+        text: t('random.mostPlayed'),
+        onClick: () => onPlaySongs(randomMostPlayed(librarySongs, randomLimit)),
+      },
+      {
+        key: 'least-played',
+        text: t('random.leastPlayed'),
+        onClick: () => onPlaySongs(randomLeastPlayed(librarySongs, randomLimit)),
+      },
+    )
+  }
+
+  return items
 }
 
 function getParentPath(path: string) {

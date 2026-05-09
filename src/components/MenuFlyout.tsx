@@ -109,7 +109,11 @@ function MenuFlyoutSubmenu({
   }, [submenuLength, menuBoundaryHeight])
 
   return (
-    <div className="library-context-submenu" onFocus={updateLayout} onPointerEnter={updateLayout}>
+    <div
+      className="library-context-submenu"
+      onFocus={updateLayout}
+      onPointerEnter={updateLayout}
+    >
       <span ref={triggerRef}>
         {item.icon ? <Icon name={item.icon} /> : <span />}
         <span>{item.text}</span>

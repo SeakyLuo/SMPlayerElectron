@@ -3,7 +3,10 @@ import clsx from 'clsx'
 import { useRef } from 'react'
 import { Link } from 'react-router-dom'
 
+import { ArtworkImage } from '../components/ArtworkImage'
+import { DefaultAlbumArtwork } from '../components/DefaultAlbumArtwork'
 import { Icon } from '../components/icons'
+import { LoadingState } from '../components/LoadingState'
 import { MenuFlyout } from '../components/MenuFlyout'
 import { getAddToPlaylistMenuFlyoutItem, type MenuFlyoutItem, type MenuFlyoutPosition } from '../components/MenuFlyoutHelper'
 import { MusicMenuFlyout, type MusicMenuFlyoutState } from '../components/MusicMenuFlyout'
@@ -11,6 +14,9 @@ import type { AppSettingsUpdate, LibrarySnapshot, LibrarySong, MusicLibrarySortC
 import { getDisplayArtists, getSongArtists } from '../shared/artists'
 import { formatDuration } from '../shared/formatters'
 import type { Translator } from '../shared/i18n'
+import { getQuickJumpTooltip } from '../shared/quickJumpTooltip'
+import { compareLocalText, getLocalTextQuickJumpBucket, LOCAL_TEXT_QUICK_JUMP_KEYS } from '../shared/textCompare'
+import { useSongArtwork } from '../hooks/useSongArtwork'
 
 interface MusicLibraryPageProps {
   snapshot: LibrarySnapshot
@@ -39,8 +45,8 @@ interface MusicLibraryPageProps {
   onUpdateSettings: (update: AppSettingsUpdate) => void
 }
 
-type LibrarySortColumn = 'title' | 'artist' | 'album' | 'duration' | 'favorite' | 'playCount' | 'dateAdded'
-type LibrarySortableColumn = Exclude<LibrarySortColumn, 'favorite'>
+type LibrarySortColumn = 'artwork' | 'title' | 'artist' | 'album' | 'duration' | 'favorite' | 'playCount' | 'dateAdded'
+type LibrarySortableColumn = Exclude<LibrarySortColumn, 'artwork' | 'favorite'>
 type LibrarySortDirection = 'ascending' | 'descending'
 
 interface LibrarySortState {
@@ -50,11 +56,14 @@ interface LibrarySortState {
 
 type ColumnWidths = Record<LibrarySortColumn, number>
 
-const VIRTUAL_ROW_HEIGHT = 58
+const WIDE_VIRTUAL_ROW_HEIGHT = 58
+const COMPACT_VIRTUAL_ROW_HEIGHT = 76
 const VIRTUAL_OVERSCAN_ROWS = 12
 const MIN_COLUMN_WIDTH = 86
-const QUICK_JUMP_KEYS = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
+const COMPACT_LIBRARY_BREAKPOINT = 720
+const QUICK_JUMP_KEYS = LOCAL_TEXT_QUICK_JUMP_KEYS
 const DEFAULT_COLUMN_WIDTHS: ColumnWidths = {
+  artwork: 66,
   title: 280,
   artist: 200,
   album: 240,
@@ -68,6 +77,8 @@ export function MusicLibraryPage({
   snapshot,
   t,
   songs,
+  loading,
+  scanning,
   error,
   selectedTrackId,
   isPlaying,
@@ -103,26 +114,31 @@ export function MusicLibraryPage({
   const [selectionAnchorSongId, setSelectionAnchorSongId] = useState<number | null>(null)
   const [columnWidths, setColumnWidths] = useState<ColumnWidths>(DEFAULT_COLUMN_WIDTHS)
   const [scrollTop, setScrollTop] = useState(0)
-  const [viewportHeight, setViewportHeight] = useState(640)
-  const [viewportWidth, setViewportWidth] = useState(1160)
+  const [viewportSize, setViewportSize] = useState({ height: 640, width: 1160 })
+  const [isCompactLayout, setIsCompactLayout] = useState(() => window.innerWidth < COMPACT_LIBRARY_BREAKPOINT)
+  const viewportHeight = viewportSize.height
+  const viewportWidth = viewportSize.width
+  const virtualRowHeight = isCompactLayout ? COMPACT_VIRTUAL_ROW_HEIGHT : WIDE_VIRTUAL_ROW_HEIGHT
   const quickJumpColumn = sortState.column
-  const visibleStartIndex = Math.max(0, Math.floor(scrollTop / VIRTUAL_ROW_HEIGHT) - VIRTUAL_OVERSCAN_ROWS)
+  const visibleStartIndex = Math.max(0, Math.floor(scrollTop / virtualRowHeight) - VIRTUAL_OVERSCAN_ROWS)
   const visibleEndIndex = Math.min(
     visibleSongs.length,
-    Math.ceil((scrollTop + viewportHeight) / VIRTUAL_ROW_HEIGHT) + VIRTUAL_OVERSCAN_ROWS,
+    Math.ceil((scrollTop + viewportHeight) / virtualRowHeight) + VIRTUAL_OVERSCAN_ROWS,
   )
   const renderedSongs = visibleSongs.slice(visibleStartIndex, visibleEndIndex)
-  const topSpacerHeight = visibleStartIndex * VIRTUAL_ROW_HEIGHT
-  const bottomSpacerHeight = (visibleSongs.length - visibleEndIndex) * VIRTUAL_ROW_HEIGHT
+  const topSpacerHeight = visibleStartIndex * virtualRowHeight
+  const bottomSpacerHeight = (visibleSongs.length - visibleEndIndex) * virtualRowHeight
   const queueSongIds = useMemo(() => visibleSongs.map((song) => song.id), [visibleSongs])
   const effectiveSelectedSongIds = useMemo(
     () => queueSongIds.filter((songId) => selectedSongIds.has(songId)),
     [queueSongIds, selectedSongIds],
   )
-  const tableWidth = Math.max(
-    Object.values(columnWidths).reduce((total, width) => total + width, 0),
-    viewportWidth,
-  )
+  const tableWidth = isCompactLayout
+    ? viewportWidth
+    : Math.max(
+        Object.values(columnWidths).reduce((total, width) => total + width, 0),
+        viewportWidth,
+      )
   const customPlaylists = snapshot.playlists.filter((playlist) => !playlist.isBuiltIn)
   const quickJumpMap = useMemo(
     () => buildQuickJumpMap(visibleSongs, quickJumpColumn),
@@ -131,16 +147,25 @@ export function MusicLibraryPage({
   const quickJumpKeys = sortState.direction === 'descending'
     ? QUICK_JUMP_KEYS.slice().reverse()
     : QUICK_JUMP_KEYS
+  const compactSortOptions: Array<{ column: LibrarySortableColumn; label: string }> = [
+    { column: 'title', label: t('musicLibrary.titleHeader') },
+    { column: 'artist', label: t('common.artist') },
+    { column: 'album', label: t('common.album') },
+    { column: 'duration', label: t('common.duration') },
+    { column: 'playCount', label: t('common.playCount') },
+    { column: 'dateAdded', label: t('common.dateAdded') },
+  ]
+  const quickJumpBasisName = getLibraryQuickJumpBasisName(quickJumpColumn, t)
   const activeQuickJumpKey = getQuickJumpBucket(
-    visibleSongs[Math.min(visibleSongs.length - 1, Math.max(0, Math.floor(scrollTop / VIRTUAL_ROW_HEIGHT)))],
+    visibleSongs[Math.min(visibleSongs.length - 1, Math.max(0, Math.floor(scrollTop / virtualRowHeight)))],
     quickJumpColumn,
   )
 
   useEffect(() => {
-    setSortState((current) => ({
-      ...current,
+    setSortState({
       column: toLibrarySortColumn(snapshot.settings.musicLibrarySort),
-    }))
+      direction: 'ascending',
+    })
   }, [snapshot.settings.musicLibrarySort])
 
   const toggleSort = (column: LibrarySortableColumn) => {
@@ -177,7 +202,7 @@ export function MusicLibraryPage({
 
     const tableShell = tableShellRef.current as HTMLDivElement
     tableShell.scrollTo({
-      top: targetIndex * VIRTUAL_ROW_HEIGHT,
+      top: targetIndex * virtualRowHeight,
     })
   }
 
@@ -211,29 +236,39 @@ export function MusicLibraryPage({
   }
 
   useEffect(() => {
-    const tableShell = tableShellRef.current
-    if (!tableShell) {
-      return
+    const updateLayout = () => {
+      setIsCompactLayout(window.innerWidth < COMPACT_LIBRARY_BREAKPOINT)
+      const tableShell = tableShellRef.current
+      if (!tableShell) {
+        return
+      }
+
+      const nextViewportSize = {
+        height: tableShell.clientHeight,
+        width: tableShell.clientWidth,
+      }
+      setViewportSize((current) => (
+        current.height === nextViewportSize.height && current.width === nextViewportSize.width
+          ? current
+          : nextViewportSize
+      ))
     }
 
-    const updateViewport = () => {
-      setViewportHeight(tableShell.clientHeight)
-      setViewportWidth(tableShell.clientWidth)
-    }
-    const resizeObserver = new ResizeObserver(updateViewport)
-    updateViewport()
-    resizeObserver.observe(tableShell)
-
+    updateLayout()
+    window.addEventListener('resize', updateLayout)
     return () => {
-      resizeObserver.disconnect()
+      window.removeEventListener('resize', updateLayout)
     }
-  }, [])
+  }, [hasSongs])
 
   return (
     <section className="page-panel library-page">
       {error ? <div className="error-banner">{error}</div> : null}
 
       {!hasSongs ? (
+        loading || scanning ? (
+          <LoadingState t={t} />
+        ) : (
         <div className="empty-state">
           <h3>
             {hasLibrary
@@ -246,8 +281,9 @@ export function MusicLibraryPage({
               : t('library.scanHelp')}
           </p>
         </div>
+        )
       ) : (
-        <div className="library-content-shell">
+        <div className={clsx('library-content-shell', { 'is-compact': isCompactLayout })}>
           <nav className="library-quick-jump" aria-label={t('common.search')}>
             {quickJumpKeys.map((key) => {
               const enabled = quickJumpMap.has(key)
@@ -258,6 +294,7 @@ export function MusicLibraryPage({
                   type="button"
                   className={clsx({ 'is-active': activeQuickJumpKey === key })}
                   disabled={!enabled}
+                  title={getQuickJumpTooltip(key, enabled, t('common.songs'), quickJumpBasisName, t)}
                   onClick={() => {
                     jumpToKey(key)
                   }}
@@ -284,6 +321,29 @@ export function MusicLibraryPage({
             }}
           >
           <table className="music-table" style={{ width: tableWidth }}>
+            {isCompactLayout ? (
+              <caption className="library-compact-sort-bar">
+                {compactSortOptions.map(({ column, label }) => {
+                  const direction = sortState.column === column ? sortState.direction : null
+
+                  return (
+                    <button
+                      key={column}
+                      type="button"
+                      className={clsx('library-compact-sort-button', { 'is-sorted': direction })}
+                      onClick={() => {
+                        toggleSort(column)
+                      }}
+                    >
+                      <span>{label}</span>
+                      {direction ? (
+                        <Icon name={direction === 'ascending' ? 'chevronUp' : 'chevronDown'} />
+                      ) : null}
+                    </button>
+                  )
+                })}
+              </caption>
+            ) : null}
             <colgroup>
               {(Object.keys(columnWidths) as LibrarySortColumn[]).map((column) => (
                 <col key={column} style={{ width: columnWidths[column] }} />
@@ -291,6 +351,9 @@ export function MusicLibraryPage({
             </colgroup>
             <thead>
               <tr>
+                <ResizableHeader column="artwork" onResize={resizeColumn}>
+                  {''}
+                </ResizableHeader>
                 <SortableHeader column="title" sortState={sortState} onSort={toggleSort} onResize={resizeColumn}>
                   {t('musicLibrary.titleHeader')}
                 </SortableHeader>
@@ -304,7 +367,7 @@ export function MusicLibraryPage({
                   {t('common.duration')}
                 </SortableHeader>
                 <ResizableHeader column="favorite" onResize={resizeColumn}>
-                  {t('common.favorite')}
+                  {t('table.favorite')}
                 </ResizableHeader>
                 <SortableHeader column="playCount" sortState={sortState} onSort={toggleSort} onResize={resizeColumn}>
                   {t('common.playCount')}
@@ -317,7 +380,7 @@ export function MusicLibraryPage({
             <tbody>
               {topSpacerHeight > 0 ? (
                 <tr className="virtual-spacer-row">
-                  <td colSpan={7} style={{ height: topSpacerHeight }} />
+                  <td colSpan={8} style={{ height: topSpacerHeight }} />
                 </tr>
               ) : null}
               {renderedSongs.map((song) => {
@@ -334,6 +397,7 @@ export function MusicLibraryPage({
                     key={song.id}
                     className={clsx({
                       'is-current': isCurrent,
+                      'is-playing': isCurrent && isPlaying,
                       'is-selected': selectedSongIds.has(song.id),
                     })}
                     onClick={(event) => {
@@ -368,17 +432,27 @@ export function MusicLibraryPage({
                       })
                     }}
                   >
-                    <td title={song.title}>
+                    <td className="library-artwork-cell">
+                      <LibraryRowArtwork
+                        song={song}
+                        t={t}
+                        current={isCurrent}
+                        isPlaying={isCurrent && isPlaying}
+                        onPlay={() => {
+                          if (isCurrent) {
+                            onTogglePlayPause()
+                          } else {
+                            onAddNextAndPlay(song.id)
+                          }
+                        }}
+                      />
+                    </td>
+                    <td className="library-title-cell" title={song.title}>
                       <div className="cell-title">
-                        {isCurrent ? (
-                          <span className="play-indicator">
-                            <Icon name="play" />
-                          </span>
-                        ) : null}
                         <span className="song-name">{song.title}</span>
                       </div>
                     </td>
-                    <td title={artistLabel}>
+                    <td className="library-artist-cell" title={artistLabel}>
                       <div className="music-table-cell-content">
                         {artists.map((artist, index) => (
                           <span key={artist}>
@@ -397,12 +471,12 @@ export function MusicLibraryPage({
                         ))}
                       </div>
                     </td>
-                    <td title={albumLabel}>
+                    <td className="library-album-cell" title={albumLabel}>
                       <div className="music-table-cell-content">
                         <Link
                           className="table-link"
                           title={albumLabel}
-                          to={`/albums/${encodeURIComponent(song.album || 'Unknown album')}`}
+                          to={`/albums/${encodeURIComponent(albumLabel)}`}
                           onClick={(event) => {
                             event.stopPropagation()
                           }}
@@ -411,10 +485,10 @@ export function MusicLibraryPage({
                         </Link>
                       </div>
                     </td>
-                    <td title={durationLabel}>
+                    <td className="library-duration-cell" title={durationLabel}>
                       <span className="music-table-cell-content">{durationLabel}</span>
                     </td>
-                    <td title={song.favorite ? t('common.favorite') : ''}>
+                    <td className="library-favorite-cell" title={song.favorite ? t('common.favorite') : ''}>
                       {song.favorite ? (
                         <button
                           type="button"
@@ -429,10 +503,10 @@ export function MusicLibraryPage({
                         </button>
                       ) : null}
                     </td>
-                    <td title={playCountLabel}>
+                    <td className="library-play-count-cell" title={playCountLabel}>
                       <span className="music-table-cell-content">{playCountLabel}</span>
                     </td>
-                    <td title={dateAddedLabel}>
+                    <td className="library-date-cell" title={dateAddedLabel}>
                       <span className="music-table-cell-content">{dateAddedLabel}</span>
                     </td>
                   </tr>
@@ -440,7 +514,7 @@ export function MusicLibraryPage({
               })}
               {bottomSpacerHeight > 0 ? (
                 <tr className="virtual-spacer-row">
-                  <td colSpan={7} style={{ height: bottomSpacerHeight }} />
+                  <td colSpan={8} style={{ height: bottomSpacerHeight }} />
                 </tr>
               ) : null}
             </tbody>
@@ -482,10 +556,11 @@ export function MusicLibraryPage({
               key: 'shuffle',
               text: t('nowPlaying.randomPlay'),
               icon: 'shuffle',
-              disabled: effectiveSelectedSongIds.length === 0,
               onClick: () => {
                 const shuffledSongIds = shuffleSongIds(effectiveSelectedSongIds)
-                onPlayTrack(shuffledSongIds[0]!, shuffledSongIds)
+                if (shuffledSongIds.length > 0) {
+                  onPlayTrack(shuffledSongIds[0]!, shuffledSongIds)
+                }
               },
             } satisfies MenuFlyoutItem,
             getAddToPlaylistMenuFlyoutItem({
@@ -512,6 +587,61 @@ export function MusicLibraryPage({
         />
       ) : null}
     </section>
+  )
+}
+
+function LibraryRowArtwork({
+  song,
+  t,
+  current,
+  isPlaying,
+  onPlay,
+}: {
+  song: LibrarySong
+  t: Translator
+  current: boolean
+  isPlaying: boolean
+  onPlay: () => void
+}) {
+  const { artworkUrl, refreshArtwork } = useSongArtwork(song.id, song.artworkUrl)
+
+  return (
+    <span className="library-row-artwork-wrap">
+      <ArtworkImage
+        className="library-row-artwork"
+        src={artworkUrl}
+        title={song.title}
+        onError={refreshArtwork}
+        renderFallback={() => (
+          <span className="library-row-artwork library-row-artwork-fallback" aria-hidden="true">
+            <DefaultAlbumArtwork className="library-row-artwork-fallback-image" />
+          </span>
+        )}
+      />
+      {current ? (
+        <span className="playlist-control-item-playing-wave library-row-playing-wave" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+          <span />
+        </span>
+      ) : null}
+      <button
+        type="button"
+        className="library-row-artwork-play"
+        aria-label={isPlaying ? t('context.pause') : t('context.play')}
+        title={isPlaying ? t('context.pause') : t('context.play')}
+        onPointerDown={(event) => {
+          event.stopPropagation()
+        }}
+        onClick={(event) => {
+          event.stopPropagation()
+          onPlay()
+        }}
+      >
+        <Icon name={isPlaying ? 'pause' : 'play'} />
+      </button>
+    </span>
   )
 }
 
@@ -666,6 +796,25 @@ function toMusicLibrarySortCriterion(column: LibrarySortableColumn): MusicLibrar
   }
 }
 
+function getLibraryQuickJumpBasisName(column: LibrarySortColumn, t: Translator) {
+  switch (column) {
+    case 'artist':
+      return t('common.artist')
+    case 'album':
+      return t('common.album')
+    case 'duration':
+      return t('common.duration')
+    case 'playCount':
+      return t('common.playCount')
+    case 'dateAdded':
+      return t('common.dateAdded')
+    case 'artwork':
+    case 'favorite':
+    case 'title':
+      return t('musicLibrary.titleHeader')
+  }
+}
+
 function buildQuickJumpMap(songs: LibrarySong[], column: LibrarySortColumn) {
   const indexes = new Map<string, number>()
 
@@ -680,14 +829,7 @@ function buildQuickJumpMap(songs: LibrarySong[], column: LibrarySortColumn) {
 }
 
 function getQuickJumpBucket(song: LibrarySong | undefined, column: LibrarySortColumn) {
-  const firstChar = getQuickJumpValue(song, column)
-    .trim()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .charAt(0)
-    .toLocaleUpperCase()
-
-  return /^[A-Z]$/.test(firstChar) ? firstChar : '#'
+  return getLocalTextQuickJumpBucket(getQuickJumpValue(song, column))
 }
 
 function getQuickJumpValue(song: LibrarySong | undefined, column: LibrarySortColumn) {
@@ -733,7 +875,7 @@ function compareSongs(left: LibrarySong, right: LibrarySong, column: LibrarySort
 }
 
 function compareText(left: string, right: string) {
-  return left.localeCompare(right, undefined, { sensitivity: 'base' })
+  return compareLocalText(left, right)
 }
 
 function formatDateTime(value: string) {

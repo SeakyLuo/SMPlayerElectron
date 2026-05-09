@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Route, Routes, useLocation, useNavigate, useNavigationType, useParams } from 'react-router-dom'
+import { Route, Routes, useLocation, useNavigate, useNavigationType } from 'react-router-dom'
 
 import { AlbumDetailPage } from './pages/AlbumDetailPage'
 import { AlbumsPage } from './pages/AlbumsPage'
 import { ArtistsPage } from './pages/ArtistsPage'
-import { PlayerBar } from './components/PlayerBar'
+import { LoadingState } from './components/LoadingState'
+import { MediaControl } from './components/MediaControl'
 import { Sidebar } from './components/Sidebar'
 import { UndoableNotificationHost } from './components/UndoableNotificationHost'
 import { useOpenFilesPlayback } from './hooks/useOpenFilesPlayback'
@@ -24,11 +25,11 @@ import { PlaylistsPage } from './pages/PlaylistsPage'
 import { RecentPage } from './pages/RecentPage'
 import { SearchPage } from './pages/SearchPage'
 import { SettingsPage } from './pages/SettingsPage'
-import { buildLocalRoute, decodeLocalRoute } from './pages/localPagePaths'
 import type { LibraryCounts, LibraryFolder, LibraryPlaylist, LibrarySong, LocalFolderSortCriterion, PreferenceLevel, ScanLibraryResult } from './shared/contracts'
 import { getDisplayArtists, getSongArtists } from './shared/artists'
 import { createTranslator, resolveLocale, type Translator } from './shared/i18n'
 import { sortLibrarySongs } from './shared/sorting'
+import { compareLocalText } from './shared/textCompare'
 import { addNextAndPlay as setQueueAddNextAndPlay, moveToMusicOrPlay as setQueueMoveToMusicOrPlay, playNext as setQueuePlayNext, quickPlay, setMusicAndPlayFromPlaylist } from './shared/mediaHelper'
 import { ByArtistRequest, MatchType, VoiceAssistantHelper, type VolumeRequest } from './shared/VoiceAssistantHelper'
 import { useLibraryStore } from './state/useLibraryStore'
@@ -83,6 +84,7 @@ const RESTORABLE_SCROLL_SELECTORS = [
   '.recent-page',
   '.settings-page',
 ]
+const NAVIGATION_MINIMAL_BREAKPOINT = 720
 
 function resolveRestoredPage(lastPage: string) {
   const normalizedPath = lastPage.trim()
@@ -287,6 +289,8 @@ function App() {
       return false
     }
   })
+  const [isNavigationMinimal, setIsNavigationMinimal] = useState(() => window.innerWidth < NAVIGATION_MINIMAL_BREAKPOINT)
+  const [isMinimalNavigationOpen, setIsMinimalNavigationOpen] = useState(false)
   const hasSeenNavigationRef = useRef(false)
   const workspaceContentRef = useRef<HTMLElement | null>(null)
   const currentRouteScrollKeyRef = useRef('')
@@ -305,6 +309,7 @@ function App() {
 
   const snapshot = useLibraryStore((state) => state.snapshot)
   const loading = useLibraryStore((state) => state.loading)
+  const pageLoading = loading || !initialLoadComplete
   const scanning = useLibraryStore((state) => state.scanning)
   const error = useLibraryStore((state) => state.error)
   const refresh = useLibraryStore((state) => state.refresh)
@@ -339,9 +344,11 @@ function App() {
   const removeRecentSearches = useLibraryStore((state) => state.removeRecentSearches)
   const clearRecentSearches = useLibraryStore((state) => state.clearRecentSearches)
   const removeRecentPlayed = useLibraryStore((state) => state.removeRecentPlayed)
+  const restoreRecentPlayed = useLibraryStore((state) => state.restoreRecentPlayed)
   const clearRecentPlayed = useLibraryStore((state) => state.clearRecentPlayed)
   const updateSettings = useLibraryStore((state) => state.updateSettings)
   const saveViewState = useLibraryStore((state) => state.saveViewState)
+  const [localRelativePath, setLocalRelativePath] = useState('')
 
   const playback = usePlaybackController(snapshot)
   const {
@@ -422,16 +429,14 @@ function App() {
   const restoreScrollSnapshot = () => {
     const root = workspaceContentRef.current
     const routePositions = routeScrollPositionsRef.current.get(routeScrollKey)
-    if (!root || !routePositions) {
+    if (!root) {
       return
     }
 
     const restoreElement = (element: HTMLElement) => {
       const key = getScrollElementKey(root, element)
-      const position = key ? routePositions.get(key) : undefined
-      if (position) {
-        element.scrollTo({ top: position.top, left: position.left })
-      }
+      const position = key ? routePositions?.get(key) : undefined
+      element.scrollTo(position ?? { top: 0, left: 0 })
     }
 
     restoreElement(root)
@@ -564,6 +569,22 @@ function App() {
       // Ignore storage failures in restricted renderer previews.
     }
   }, [isNavigationCollapsed])
+
+  useEffect(() => {
+    const updateNavigationMode = () => {
+      const nextIsMinimal = window.innerWidth < NAVIGATION_MINIMAL_BREAKPOINT
+      setIsNavigationMinimal(nextIsMinimal)
+      if (!nextIsMinimal) {
+        setIsMinimalNavigationOpen(false)
+      }
+    }
+
+    updateNavigationMode()
+    window.addEventListener('resize', updateNavigationMode)
+    return () => {
+      window.removeEventListener('resize', updateNavigationMode)
+    }
+  }, [])
 
   useTrackNotification(playback.currentTrack)
 
@@ -982,19 +1003,45 @@ function App() {
     }
   }
 
-  const isLocalRoute = location.pathname === '/local' || location.pathname.startsWith('/local/')
-  const currentLocalRelativePath = isLocalRoute
-    ? decodeLocalRoute(location.pathname.replace(/^\/local\/?/, ''))
-    : ''
+  const isLocalRoute = location.pathname === '/local'
+  const isNavigationRail = isNavigationMinimal ? !isMinimalNavigationOpen : isNavigationCollapsed
+  const currentLocalRelativePath = isLocalRoute ? localRelativePath : ''
   const searchFolderRelativePath = new URLSearchParams(location.search).get('folder') ?? ''
   const searchFolderPath = getSearchFolderPath(snapshot.settings.rootPath, searchFolderRelativePath)
   const searchFolderName = getSearchFolderName(snapshot.settings.rootPath, searchFolderRelativePath)
+  const playerControlBindings = {
+    isPlaying: playback.isPlaying,
+    volume: playback.volume,
+    isMuted: playback.isMuted,
+    mode: playback.mode,
+    onTogglePlayPause: () => {
+      void playback.togglePlayPause()
+    },
+    onPrevious: () => {
+      void playback.playPrevious()
+    },
+    onNext: () => {
+      void playback.playNext()
+    },
+    onSeek: playback.seekToSeconds,
+    onBeginSeek: playback.beginSeek,
+    onEndSeek: playback.endSeek,
+    onVolumeChange: playback.setVolumeLevel,
+    onToggleMute: playback.toggleMute,
+    onToggleShuffle: playback.toggleShuffle,
+    onToggleRepeat: playback.toggleRepeat,
+    onToggleRepeatOne: playback.toggleRepeatOne,
+    onVoiceCommand: handleVoiceCommand,
+    getVoiceHint,
+    getVoiceHelpText,
+    voiceLanguage: resolveLocale(snapshot.settings.preferredLanguage),
+  }
 
   return (
-    <div className={`app-shell${isNavigationCollapsed ? ' nav-collapsed' : ''}`}>
+    <div className={`app-shell${isNavigationRail ? ' nav-collapsed' : ''}${isNavigationMinimal ? ' nav-minimal' : ''}${isNavigationMinimal && isMinimalNavigationOpen ? ' nav-minimal-open' : ''}`}>
       <Sidebar
         t={t}
-        collapsed={isNavigationCollapsed}
+        collapsed={isNavigationRail}
         appName={t('app.shell')}
         playlists={snapshot.playlists}
         canGoBack={navigationDepth > 0 || isInAlbumDetail}
@@ -1004,6 +1051,7 @@ function App() {
         onGoBack={goBackFromSidebar}
         onNavigate={() => {
           setShowNowPlayingFullPage(false)
+          setIsMinimalNavigationOpen(false)
         }}
         onReorderPlaylists={(playlistIds) => {
           void reorderPlaylists(playlistIds)
@@ -1026,6 +1074,11 @@ function App() {
           void clearRecentSearches()
         }}
         onToggleCollapsed={() => {
+          if (isNavigationMinimal) {
+            setIsMinimalNavigationOpen((current) => !current)
+            return
+          }
+
           setIsNavigationCollapsed((current) => !current)
         }}
       />
@@ -1054,7 +1107,8 @@ function App() {
                 navigate('/hidden-folders')
               }}
               onOpenFolder={(targetRelativePath) => {
-                navigate(buildLocalRoute(targetRelativePath), { replace: true })
+                setLocalRelativePath(targetRelativePath)
+                navigate('/local', { replace: true })
               }}
               onRevealFolder={revealItem}
               onSearchDirectory={(query, folderRelativePath) => {
@@ -1120,7 +1174,7 @@ function App() {
                   snapshot={snapshot}
                   t={t}
                   songs={visibleSongs}
-                  loading={loading}
+                  loading={pageLoading}
                   scanning={scanning}
                   error={error}
                   selectedTrackId={playback.currentTrackId}
@@ -1184,7 +1238,7 @@ function App() {
                   error={error}
                   playlists={snapshot.playlists}
                   favoritePlaylistId={snapshot.favorites.playlistId}
-                  loading={loading}
+                  loading={pageLoading}
                   scanning={scanning}
                   targetArtistName={targetArtistQuery ?? undefined}
                   onPlayTrack={(trackId, queueSongIds) => {
@@ -1228,6 +1282,7 @@ function App() {
                   <AlbumDetailRoute
                     albumName={targetAlbumQuery}
                     songs={snapshot.songs}
+                    loading={pageLoading}
                     t={t}
                     selectedTrackId={playback.currentTrackId}
                     isPlaying={playback.isPlaying}
@@ -1267,7 +1322,7 @@ function App() {
                     playlists={snapshot.playlists}
                     favoritePlaylistId={snapshot.favorites.playlistId}
                     t={t}
-                    loading={loading}
+                    loading={pageLoading}
                     scanning={scanning}
                     onPlayTrack={(trackId, queueSongIds) => {
                       void playTrackInQueue(trackId, queueSongIds)
@@ -1300,7 +1355,7 @@ function App() {
                   error={error}
                   playlists={snapshot.playlists}
                   favoritePlaylistId={snapshot.favorites.playlistId}
-                  loading={loading}
+                    loading={pageLoading}
                   scanning={scanning}
                   targetArtistName={targetArtistQuery ?? decodeURIComponent(location.pathname.slice('/artists/'.length))}
                   onPlayTrack={(trackId, queueSongIds) => {
@@ -1343,6 +1398,7 @@ function App() {
                 <AlbumDetailRoute
                   albumName={targetAlbumQuery ?? undefined}
                   songs={snapshot.songs}
+                  loading={pageLoading}
                   t={t}
                   selectedTrackId={playback.currentTrackId}
                   isPlaying={playback.isPlaying}
@@ -1383,6 +1439,7 @@ function App() {
               element={
                 <NowPlayingPage
                   songs={nowPlayingSongs}
+                  loading={pageLoading}
                   librarySongs={snapshot.songs}
                   recentSongs={snapshot.recentSongs}
                   playlists={snapshot.playlists}
@@ -1437,6 +1494,7 @@ function App() {
                   songs={snapshot.songs}
                   recentSongs={snapshot.recentSongs}
                   recentSearches={snapshot.search.recentSearches}
+                  loading={pageLoading}
                   playlists={snapshot.playlists}
                   favoritePlaylistId={snapshot.favorites.playlistId}
                   favoriteSongIds={snapshot.favorites.songIds}
@@ -1444,6 +1502,7 @@ function App() {
                   selectedTrackId={playback.currentTrackId}
                   isPlaying={playback.isPlaying}
                   showCount={showCount}
+                  preferredLanguage={snapshot.settings.preferredLanguage}
                   onPlayTrack={(trackId, queueSongIds) => {
                     void playTrackInQueue(trackId, queueSongIds)
                   }}
@@ -1478,6 +1537,9 @@ function App() {
                   onRemoveRecentPlayed={(songIds) => {
                     void removeRecentPlayed(songIds)
                   }}
+                  onRestoreRecentPlayed={(songIds) => {
+                    void restoreRecentPlayed(songIds)
+                  }}
                   onClearRecentPlayed={() => {
                     void clearRecentPlayed()
                   }}
@@ -1494,7 +1556,7 @@ function App() {
               }
             />
             <Route
-              path="/local/*"
+              path="/local"
               element={
                 <LocalPageRoute
                   songs={snapshot.songs}
@@ -1503,15 +1565,17 @@ function App() {
                   favoritePlaylistId={snapshot.favorites.playlistId}
                   t={t}
                   rootPath={snapshot.settings.rootPath}
+                  currentRelativePath={localRelativePath}
                   selectedTrackId={playback.currentTrackId}
                   isPlaying={playback.isPlaying}
                   searchQuery=""
-                  loading={loading}
+                  loading={pageLoading}
                   scanning={scanning}
                   error={error}
                   onPickLibraryRoot={() => {
                     void pickLibraryRoot()
                   }}
+                  onOpenFolder={setLocalRelativePath}
                   onRefreshFolder={(folderPath) => scanLocalFolder(folderPath)}
                   onPlayTrack={(trackId, queueSongIds) => {
                     void playTrackInQueue(trackId, queueSongIds)
@@ -1581,6 +1645,7 @@ function App() {
                 <HiddenFoldersPage
                   active={location.pathname === '/hidden-folders'}
                   t={t}
+                  loading={pageLoading}
                   onResumeHiddenStorageItem={async (item) => {
                     await resumeHiddenStorageItem(item)
                   }}
@@ -1592,6 +1657,7 @@ function App() {
               element={
                 <PlaylistsPage
                   snapshot={snapshot}
+                  loading={pageLoading}
                   t={t}
                   selectedTrackId={playback.currentTrackId}
                   isPlaying={playback.isPlaying}
@@ -1650,6 +1716,7 @@ function App() {
               element={
                 <MyFavoritesPage
                   songs={favoriteSongs}
+                  loading={pageLoading}
                   playlists={snapshot.playlists}
                   favoritePlaylistId={snapshot.favorites.playlistId}
                   sortCriterion={snapshot.favorites.sortCriterion}
@@ -1696,7 +1763,7 @@ function App() {
                   t={t}
                   query={searchResultQuery}
                   requestedQuery={submittedSearchQuery}
-                  loading={searchResultsLoading}
+                  loading={searchResultsLoading || pageLoading}
                   songs={snapshot.songs}
                   folders={snapshot.folders}
                   playlists={snapshot.playlists}
@@ -1748,6 +1815,9 @@ function App() {
                   onUpdateSettings={(update) => {
                     void updateSettings(update)
                   }}
+                  onOpenLocalFolder={(folderRelativePath) => {
+                    setLocalRelativePath(folderRelativePath)
+                  }}
                   onSearchDirectory={(query, folderRelativePath) => {
                     commitDirectorySearchQuery(query, folderRelativePath)
                   }}
@@ -1760,7 +1830,7 @@ function App() {
                 <SettingsPage
                   t={t}
                   snapshot={snapshot}
-                  loading={loading}
+                  loading={pageLoading}
                   scanning={scanning}
                   error={error}
                   onPickLibraryRoot={() => {
@@ -1790,10 +1860,8 @@ function App() {
           t={t}
           selectedTrackId={playback.currentTrackId}
           selectedQueueIndex={playback.currentQueueIndex}
-          isPlaying={playback.isPlaying}
-          volume={playback.volume}
-          isMuted={playback.isMuted}
-          mode={playback.mode}
+          loading={pageLoading}
+          {...playerControlBindings}
           resolvedArtworkUrl={
             playback.currentTrack && resolvedArtwork?.trackId === playback.currentTrack.id
               ? resolvedArtwork.artworkUrl
@@ -1803,23 +1871,6 @@ function App() {
           onClose={() => {
             setShowNowPlayingFullPage(false)
           }}
-          onTogglePlayPause={() => {
-            void playback.togglePlayPause()
-          }}
-          onPrevious={() => {
-            void playback.playPrevious()
-          }}
-          onNext={() => {
-            void playback.playNext()
-          }}
-          onSeek={playback.seekToSeconds}
-          onBeginSeek={playback.beginSeek}
-          onEndSeek={playback.endSeek}
-          onVolumeChange={playback.setVolumeLevel}
-          onToggleMute={playback.toggleMute}
-          onToggleShuffle={playback.toggleShuffle}
-          onToggleRepeat={playback.toggleRepeat}
-          onToggleRepeatOne={playback.toggleRepeatOne}
           onPlayTrack={(trackId, queueSongIds, queueIndex) => {
             void playback.playTrack(trackId, queueSongIds, queueIndex)
           }}
@@ -1857,35 +1908,15 @@ function App() {
         />
       ) : null}
 
-      {!showNowPlayingFullPage ? (
-        <PlayerBar
+      <div className={showNowPlayingFullPage ? 'media-control-host is-hidden' : 'media-control-host'}>
+        <MediaControl
           track={playerTrack}
           currentSong={playback.currentTrack}
           playlists={snapshot.playlists}
           queueSongIds={snapshot.nowPlaying.songIds}
           disabled={snapshot.nowPlaying.songIds.length === 0}
-          isPlaying={playback.isPlaying}
-          volume={playback.volume}
-          isMuted={playback.isMuted}
-          mode={playback.mode}
           t={t}
-          onTogglePlayPause={() => {
-            void playback.togglePlayPause()
-          }}
-          onPrevious={() => {
-            void playback.playPrevious()
-          }}
-          onNext={() => {
-            void playback.playNext()
-          }}
-          onSeek={playback.seekToSeconds}
-          onBeginSeek={playback.beginSeek}
-          onEndSeek={playback.endSeek}
-          onVolumeChange={playback.setVolumeLevel}
-          onToggleMute={playback.toggleMute}
-          onToggleShuffle={playback.toggleShuffle}
-          onToggleRepeat={playback.toggleRepeat}
-          onToggleRepeatOne={playback.toggleRepeatOne}
+          {...playerControlBindings}
           onToggleFavorite={() => {
             if (playback.currentTrack) {
               void setSongFavorite(playback.currentTrack.id, !playback.currentTrack.favorite)
@@ -1894,18 +1925,20 @@ function App() {
           onQuickPlay={() => {
             void playQuick()
           }}
-          onVoiceCommand={handleVoiceCommand}
-          getVoiceHint={getVoiceHint}
-          getVoiceHelpText={getVoiceHelpText}
-          voiceLanguage={resolveLocale(snapshot.settings.preferredLanguage)}
+          onPlayTrack={(trackId, queueSongIds) => {
+            void playTrackInQueue(trackId, queueSongIds)
+          }}
           onOpenNowPlaying={() => {
             setShowNowPlayingFullPage(true)
           }}
           onArtworkResolved={(trackId, artworkUrl) => {
             setResolvedArtwork({ trackId, artworkUrl })
           }}
+          onSaved={() => {
+            void refresh()
+          }}
         />
-      ) : null}
+      </div>
       <UndoableNotificationHost />
     </div>
   )
@@ -1914,6 +1947,7 @@ function App() {
 function AlbumDetailRoute({
   albumName,
   songs,
+  loading,
   t,
   selectedTrackId,
   isPlaying,
@@ -1931,6 +1965,7 @@ function AlbumDetailRoute({
 }: {
   albumName?: string
   songs: LibrarySong[]
+  loading: boolean
   t: Translator
   selectedTrackId: number | null
   isPlaying: boolean
@@ -1951,7 +1986,15 @@ function AlbumDetailRoute({
   const routeAlbumName = albumName ?? decodeURIComponent(location.pathname.slice('/albums/'.length))
   const albumSongs = songs
     .filter((song) => (song.album || t('common.albumUnknown')) === routeAlbumName)
-    .sort((left, right) => left.title.localeCompare(right.title))
+    .sort((left, right) => compareLocalText(left.title, right.title))
+
+  if (loading && songs.length === 0) {
+    return (
+      <section className="page-panel">
+        <LoadingState t={t} />
+      </section>
+    )
+  }
 
   if (!routeAlbumName || albumSongs.length === 0) {
     return (
@@ -2005,6 +2048,7 @@ function LocalPageRoute({
   favoritePlaylistId,
   t,
   rootPath,
+  currentRelativePath,
   selectedTrackId,
   isPlaying,
   searchQuery,
@@ -2012,6 +2056,7 @@ function LocalPageRoute({
   scanning,
   error,
   onPickLibraryRoot,
+  onOpenFolder,
   onRefreshFolder,
   onPlayTrack,
   onMoveToMusicOrPlay,
@@ -2041,6 +2086,7 @@ function LocalPageRoute({
   favoritePlaylistId: number
   t: Translator
   rootPath: string
+  currentRelativePath: string
   selectedTrackId: number | null
   isPlaying: boolean
   searchQuery: string
@@ -2048,6 +2094,7 @@ function LocalPageRoute({
   scanning: boolean
   error: string | null
   onPickLibraryRoot: () => void
+  onOpenFolder: (targetRelativePath: string) => void
   onRefreshFolder: (folderPath: string) => void | ScanLibraryResult | null | Promise<ScanLibraryResult | null | void>
   onPlayTrack: (trackId: number, queueSongIds: number[]) => void
   onMoveToMusicOrPlay: (songId: number) => void
@@ -2071,9 +2118,6 @@ function LocalPageRoute({
   onUpdateFolderSort: (folderPath: string, sortCriterion: LocalFolderSortCriterion) => void | Promise<void>
   onSearchDirectory: (query: string, folderRelativePath: string) => void
 }) {
-  const params = useParams()
-  const currentRelativePath = decodeLocalRoute(params['*'])
-
   return (
     <LocalPage
       songs={songs}
@@ -2090,6 +2134,7 @@ function LocalPageRoute({
       scanning={scanning}
       error={error}
       onPickLibraryRoot={onPickLibraryRoot}
+      onOpenFolder={onOpenFolder}
       onRefreshFolder={onRefreshFolder}
       onPlayTrack={onPlayTrack}
       onMoveToMusicOrPlay={onMoveToMusicOrPlay}
