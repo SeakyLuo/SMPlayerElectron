@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 
 import type { AuthorizedDevice, RemoteHost, RemoteShareStatus } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
@@ -88,20 +89,20 @@ export function RemoteShareDialog({
   }
 
   return (
-    <div className="input-dialog-overlay" role="presentation">
-      <section className="remote-share-dialog" role="dialog" aria-modal="true" aria-labelledby="remote-share-title">
-        <header className="remote-share-header">
+    <div className="settings-modal-backdrop" role="presentation">
+      <section className="settings-modal remote-share-dialog" role="dialog" aria-modal="true" aria-labelledby="remote-share-title">
+        <header>
           <div>
-            <h3 id="remote-share-title">{t('remoteShare.title')}</h3>
+            <h2 id="remote-share-title">{t('remoteShare.title')}</h2>
             <p>{t('remoteShare.description')}</p>
           </div>
-          <button className="song-dialog-icon-button" type="button" aria-label={t('common.close')} onClick={onClose}>
+          <button type="button" aria-label={t('common.close')} onClick={onClose}>
             <Icon name="close" />
           </button>
         </header>
 
         {status ? (
-          <>
+          <div className="remote-share-body">
             <section className="remote-share-section">
               <div className="remote-share-status-row">
                 <div>
@@ -180,6 +181,9 @@ export function RemoteShareDialog({
                         <strong>{host.name}</strong>
                         <span>{host.baseUrl}</span>
                       </div>
+                      <Link className="remote-share-device-link" to={`/remote/${host.id}`}>
+                        {t('remoteShare.openLibrary')}
+                      </Link>
                       <button
                         type="button"
                         onClick={async () => {
@@ -233,7 +237,7 @@ export function RemoteShareDialog({
               )}
             </section>
             {message ? <p className="remote-share-message">{message}</p> : null}
-          </>
+          </div>
         ) : null}
       </section>
     </div>

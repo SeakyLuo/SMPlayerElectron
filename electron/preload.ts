@@ -56,6 +56,7 @@ const api: SmplayerApi = {
   deleteAuthorizedDevice: (deviceId) => ipcRenderer.invoke('authorized-devices:delete', deviceId),
   getRemoteHosts: () => ipcRenderer.invoke('remote-hosts:list'),
   connectRemoteHost: (request) => ipcRenderer.invoke('remote-hosts:connect', request),
+  getRemoteHostLibrary: (hostId) => ipcRenderer.invoke('remote-hosts:get-library', hostId),
   deleteRemoteHost: (hostId) => ipcRenderer.invoke('remote-hosts:delete', hostId),
   pickLibraryRoot: () => ipcRenderer.invoke('library:pick-root'),
   scanLibrary: (rootPath?: string) => ipcRenderer.invoke('library:scan', rootPath),

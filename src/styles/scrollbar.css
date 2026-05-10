@@ -1,7 +1,21 @@
+.workspace-content,
+.table-shell,
+.albums-grid,
+.artists-list,
+.artists-detail,
+.local-scroll-shell,
+.local-table-shell,
+.now-playing-list-shell,
+.recent-grid-shell,
+.recent-search-list,
+.lyrics-scroll-shell,
 .preference-page {
-  scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
+}
+
+.preference-page {
+  scrollbar-gutter: stable;
 }
 
 .sidebar:hover,
@@ -10,7 +24,11 @@
 .albums-grid:hover,
 .artists-list:hover,
 .artists-detail:hover,
+.local-scroll-shell:hover,
+.local-table-shell:hover,
 .now-playing-list-shell:hover,
+.recent-grid-shell:hover,
+.recent-search-list:hover,
 .lyrics-scroll-shell:hover,
 .preference-page:hover {
   scrollbar-color: rgba(91, 105, 122, 0.5) transparent;
@@ -22,7 +40,11 @@
 .albums-grid::-webkit-scrollbar,
 .artists-list::-webkit-scrollbar,
 .artists-detail::-webkit-scrollbar,
+.local-scroll-shell::-webkit-scrollbar,
+.local-table-shell::-webkit-scrollbar,
 .now-playing-list-shell::-webkit-scrollbar,
+.recent-grid-shell::-webkit-scrollbar,
+.recent-search-list::-webkit-scrollbar,
 .lyrics-scroll-shell::-webkit-scrollbar,
 .preference-page::-webkit-scrollbar {
   width: 9px;
@@ -35,7 +57,11 @@
 .albums-grid:hover::-webkit-scrollbar,
 .artists-list:hover::-webkit-scrollbar,
 .artists-detail:hover::-webkit-scrollbar,
+.local-scroll-shell:hover::-webkit-scrollbar,
+.local-table-shell:hover::-webkit-scrollbar,
 .now-playing-list-shell:hover::-webkit-scrollbar,
+.recent-grid-shell:hover::-webkit-scrollbar,
+.recent-search-list:hover::-webkit-scrollbar,
 .lyrics-scroll-shell:hover::-webkit-scrollbar,
 .preference-page:hover::-webkit-scrollbar {
   width: 9px;
@@ -48,7 +74,11 @@
 .albums-grid::-webkit-scrollbar:hover,
 .artists-list::-webkit-scrollbar:hover,
 .artists-detail::-webkit-scrollbar:hover,
+.local-scroll-shell::-webkit-scrollbar:hover,
+.local-table-shell::-webkit-scrollbar:hover,
 .now-playing-list-shell::-webkit-scrollbar:hover,
+.recent-grid-shell::-webkit-scrollbar:hover,
+.recent-search-list::-webkit-scrollbar:hover,
 .lyrics-scroll-shell::-webkit-scrollbar:hover,
 .preference-page::-webkit-scrollbar:hover {
   width: 9px;
@@ -61,7 +91,11 @@
 .albums-grid::-webkit-scrollbar-track,
 .artists-list::-webkit-scrollbar-track,
 .artists-detail::-webkit-scrollbar-track,
+.local-scroll-shell::-webkit-scrollbar-track,
+.local-table-shell::-webkit-scrollbar-track,
 .now-playing-list-shell::-webkit-scrollbar-track,
+.recent-grid-shell::-webkit-scrollbar-track,
+.recent-search-list::-webkit-scrollbar-track,
 .lyrics-scroll-shell::-webkit-scrollbar-track,
 .preference-page::-webkit-scrollbar-track {
   background: transparent;
@@ -73,7 +107,11 @@
 .albums-grid::-webkit-scrollbar-thumb,
 .artists-list::-webkit-scrollbar-thumb,
 .artists-detail::-webkit-scrollbar-thumb,
+.local-scroll-shell::-webkit-scrollbar-thumb,
+.local-table-shell::-webkit-scrollbar-thumb,
 .now-playing-list-shell::-webkit-scrollbar-thumb,
+.recent-grid-shell::-webkit-scrollbar-thumb,
+.recent-search-list::-webkit-scrollbar-thumb,
 .lyrics-scroll-shell::-webkit-scrollbar-thumb,
 .preference-page::-webkit-scrollbar-thumb {
   border-radius: 999px;
@@ -88,7 +126,11 @@
 .albums-grid:hover::-webkit-scrollbar-thumb,
 .artists-list:hover::-webkit-scrollbar-thumb,
 .artists-detail:hover::-webkit-scrollbar-thumb,
+.local-scroll-shell:hover::-webkit-scrollbar-thumb,
+.local-table-shell:hover::-webkit-scrollbar-thumb,
 .now-playing-list-shell:hover::-webkit-scrollbar-thumb,
+.recent-grid-shell:hover::-webkit-scrollbar-thumb,
+.recent-search-list:hover::-webkit-scrollbar-thumb,
 .lyrics-scroll-shell:hover::-webkit-scrollbar-thumb,
 .preference-page:hover::-webkit-scrollbar-thumb {
   border-width: 4px;
@@ -101,7 +143,11 @@
 .albums-grid.is-scrollbar-hovered::-webkit-scrollbar-thumb,
 .artists-list.is-scrollbar-hovered::-webkit-scrollbar-thumb,
 .artists-detail.is-scrollbar-hovered::-webkit-scrollbar-thumb,
+.local-scroll-shell.is-scrollbar-hovered::-webkit-scrollbar-thumb,
+.local-table-shell.is-scrollbar-hovered::-webkit-scrollbar-thumb,
 .now-playing-list-shell.is-scrollbar-hovered::-webkit-scrollbar-thumb,
+.recent-grid-shell.is-scrollbar-hovered::-webkit-scrollbar-thumb,
+.recent-search-list.is-scrollbar-hovered::-webkit-scrollbar-thumb,
 .lyrics-scroll-shell.is-scrollbar-hovered::-webkit-scrollbar-thumb,
 .preference-page.is-scrollbar-hovered::-webkit-scrollbar-thumb {
   border-width: 0;
@@ -114,7 +160,11 @@
 .albums-grid::-webkit-scrollbar-thumb:hover,
 .artists-list::-webkit-scrollbar-thumb:hover,
 .artists-detail::-webkit-scrollbar-thumb:hover,
+.local-scroll-shell::-webkit-scrollbar-thumb:hover,
+.local-table-shell::-webkit-scrollbar-thumb:hover,
 .now-playing-list-shell::-webkit-scrollbar-thumb:hover,
+.recent-grid-shell::-webkit-scrollbar-thumb:hover,
+.recent-search-list::-webkit-scrollbar-thumb:hover,
 .lyrics-scroll-shell::-webkit-scrollbar-thumb:hover,
 .preference-page::-webkit-scrollbar-thumb:hover {
   border-width: 1px;

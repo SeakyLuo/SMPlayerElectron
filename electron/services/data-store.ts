@@ -221,6 +221,10 @@ interface RemoteHostRow {
   LastConnectedTime: string
 }
 
+interface RemoteHostConnectionRow extends RemoteHostRow {
+  Token: string
+}
+
 export class SmplayerDataStore {
   private readonly db: DatabaseSync
   private readonly nowPlayingJsonPath: string
@@ -790,7 +794,7 @@ export class SmplayerDataStore {
     }
 
     const deviceId = randomUUID()
-    const deviceName = process.env.COMPUTERNAME || process.env.HOSTNAME || 'SMPlayer'
+    const deviceName = process.env.COMPUTERNAME || process.env.HOSTNAME || 'Simple Melody Player'
     const password = randomUUID().replaceAll('-', '').slice(0, 20)
     this.db.prepare(`
       INSERT INTO RemoteSetting (Id, DeviceId, DeviceName, ShareEnabled, Port, Password)
@@ -980,6 +984,30 @@ export class SmplayerDataStore {
         UpdateTime = ?
       WHERE Id = ?
     `).run(ACTIVE_STATE.inactive, this.getCurrentIsoTime(), hostId)
+  }
+
+  getRemoteHostConnection(hostId: number) {
+    const row = this.db.prepare(`
+      SELECT
+        Id,
+        HostId,
+        Name,
+        BaseUrl,
+        Platform,
+        Token,
+        CreateTime,
+        UpdateTime,
+        LastConnectedTime
+      FROM RemoteHost
+      WHERE Id = ?
+        AND State = ?
+      LIMIT 1
+    `).get(hostId, ACTIVE_STATE.active) as unknown as RemoteHostConnectionRow
+
+    return {
+      host: this.toRemoteHost(row),
+      token: row.Token,
+    }
   }
 
   isRemoteDeviceBlocked(deviceId: string, ip: string) {

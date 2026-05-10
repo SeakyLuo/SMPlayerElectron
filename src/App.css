@@ -16,6 +16,7 @@
 @import './styles/collection.css';
 @import './styles/search.css';
 @import './styles/local.css';
+@import './styles/remote.css';
 @import './styles/recent.css';
 @import './styles/playlists.css';
 @import './styles/headered-playlist.css';

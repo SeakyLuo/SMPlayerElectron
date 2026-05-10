@@ -4,6 +4,7 @@ import { Route, Routes, useLocation, useNavigate, useNavigationType } from 'reac
 import { AlbumDetailPage } from './pages/AlbumDetailPage'
 import { AlbumsPage } from './pages/AlbumsPage'
 import { ArtistsPage } from './pages/ArtistsPage'
+import { DialogHost } from './components/DialogHost'
 import { LoadingState } from './components/LoadingState'
 import { MediaControl } from './components/MediaControl'
 import { RenameDialog } from './components/RenameDialog'
@@ -27,9 +28,10 @@ import { NowPlayingFullPage } from './pages/NowPlayingFullPage'
 import { NowPlayingPage } from './pages/NowPlayingPage'
 import { PlaylistsPage } from './pages/PlaylistsPage'
 import { RecentPage } from './pages/RecentPage'
+import { RemoteLibraryPage } from './pages/RemoteLibraryPage'
 import { SearchPage } from './pages/SearchPage'
 import { SettingsPage } from './pages/SettingsPage'
-import type { LibraryCounts, LibraryFolder, LibraryPlaylist, LibrarySong, LocalFolderSortCriterion, LocalViewMode, PreferenceLevel, ScanLibraryResult } from './shared/contracts'
+import type { LibraryCounts, LibraryFolder, LibraryPlaylist, LibrarySong, LocalFolderSortCriterion, PreferenceLevel, ScanLibraryResult } from './shared/contracts'
 import { getDisplayArtists, getSongArtists } from './shared/artists'
 import { createTranslator, resolveLocale, type Translator } from './shared/i18n'
 import { getNextPlaylistName } from './shared/playlistNames'
@@ -437,9 +439,10 @@ function App() {
         snapshot.settings.lastReleaseNotesVersion !== appInfo.version
       ) {
         setReleaseNotesDialogVersion(appInfo.version)
+        void updateSettings({ lastReleaseNotesVersion: appInfo.version })
       }
     })
-  }, [initialLoadComplete, snapshot.settings.lastReleaseNotesVersion])
+  }, [initialLoadComplete, snapshot.settings.lastReleaseNotesVersion, updateSettings])
 
   const playback = usePlaybackController(snapshot)
   const {
@@ -1166,7 +1169,23 @@ function App() {
   }
 
   return (
-    <div className={`app-shell${isNavigationRail ? ' nav-collapsed' : ''}${isNavigationMinimal ? ' nav-minimal' : ''}${isNavigationMinimal && isMinimalNavigationOpen ? ' nav-minimal-open' : ''}`}>
+    <div
+      className={`app-shell${isNavigationRail ? ' nav-collapsed' : ''}${isNavigationMinimal ? ' nav-minimal' : ''}${isNavigationMinimal && isMinimalNavigationOpen ? ' nav-minimal-open' : ''}`}
+      onPointerDownCapture={(event) => {
+        if (!isNavigationMinimal || !isMinimalNavigationOpen) {
+          return
+        }
+
+        const target = event.target as Element
+        if (target.closest('.sidebar')) {
+          return
+        }
+
+        setIsMinimalNavigationOpen(false)
+        event.stopPropagation()
+        event.preventDefault()
+      }}
+    >
       {isNavigationMinimal ? (
         <div className="minimal-titlebar">
           {canNavigateBack ? (
@@ -1230,27 +1249,19 @@ function App() {
           toggleNavigation()
         }}
       />
-      {isNavigationMinimal && isMinimalNavigationOpen ? (
-        <button
-          className="minimal-sidebar-dismiss"
-          type="button"
-          aria-label={t('common.close')}
-          onClick={() => {
-            setIsMinimalNavigationOpen(false)
-          }}
-        />
-      ) : null}
-      <div className={
-        location.pathname === '/recent'
-          ? 'workspace is-headerless-route'
-          : isInAlbumDetail ||
-            location.pathname.startsWith('/playlists/') ||
-            location.pathname.startsWith('/favorites')
-          ? 'workspace is-immersive-route'
-          : isLocalRoute
-            ? 'workspace is-local-route'
-            : 'workspace'
-      }>
+      <div
+        className={
+          location.pathname === '/recent'
+            ? 'workspace is-headerless-route'
+            : isInAlbumDetail ||
+              location.pathname.startsWith('/playlists/') ||
+              location.pathname.startsWith('/favorites')
+            ? 'workspace is-immersive-route'
+            : isLocalRoute
+              ? 'workspace is-local-route'
+              : 'workspace'
+        }
+      >
         <header className="workspace-header">
           {isNavigationMinimal ? (
             <div className="appbar-title-group">
@@ -1740,7 +1751,6 @@ function App() {
                   favoritePlaylistId={snapshot.favorites.playlistId}
                   t={t}
                   rootPath={snapshot.settings.rootPath}
-                  viewMode={snapshot.settings.localViewMode}
                   currentRelativePath={localRelativePath}
                   selectedTrackId={playback.currentTrackId}
                   isPlaying={playback.isPlaying}
@@ -1809,9 +1819,6 @@ function App() {
                   onUpdateFolderSort={async (folderPath, sortCriterion) => {
                     await updateLocalFolderSort(folderPath, sortCriterion)
                   }}
-                  onUpdateViewMode={(localViewMode) => {
-                    void updateSettings({ localViewMode })
-                  }}
                   onSearchDirectory={(query, folderRelativePath) => {
                     commitDirectorySearchQuery(query, folderRelativePath)
                   }}
@@ -1830,6 +1837,10 @@ function App() {
                   }}
                 />
               }
+            />
+            <Route
+              path="/remote/:hostId/*"
+              element={<RemoteLibraryPage t={t} />}
             />
             <Route
               path="/playlists/:playlistId?"
@@ -2142,12 +2153,11 @@ function App() {
           t={t}
           preferredLanguage={snapshot.settings.preferredLanguage}
           onClose={() => {
-            const version = releaseNotesDialogVersion
             setReleaseNotesDialogVersion('')
-            void updateSettings({ lastReleaseNotesVersion: version })
           }}
         />
       ) : null}
+      <DialogHost t={t} />
       <InAppNotificationWithButton />
     </div>
   )
@@ -2257,7 +2267,6 @@ function LocalPageRoute({
   favoritePlaylistId,
   t,
   rootPath,
-  viewMode,
   currentRelativePath,
   selectedTrackId,
   isPlaying,
@@ -2288,7 +2297,6 @@ function LocalPageRoute({
   onMoveFolderToFolder,
   onDeleteLocalItems,
   onUpdateFolderSort,
-  onUpdateViewMode,
   onSearchDirectory,
 }: {
   songs: LibrarySong[]
@@ -2297,7 +2305,6 @@ function LocalPageRoute({
   favoritePlaylistId: number
   t: Translator
   rootPath: string
-  viewMode: LocalViewMode
   currentRelativePath: string
   selectedTrackId: number | null
   isPlaying: boolean
@@ -2328,7 +2335,6 @@ function LocalPageRoute({
   onMoveFolderToFolder: (sourceFolderPath: string, targetFolderPath: string) => void | Promise<void>
   onDeleteLocalItems: (songIds: number[], folderPaths: string[]) => void | Promise<void>
   onUpdateFolderSort: (folderPath: string, sortCriterion: LocalFolderSortCriterion) => void | Promise<void>
-  onUpdateViewMode: (viewMode: LocalViewMode) => void
   onSearchDirectory: (query: string, folderRelativePath: string) => void
 }) {
   return (
@@ -2339,7 +2345,6 @@ function LocalPageRoute({
       favoritePlaylistId={favoritePlaylistId}
       t={t}
       rootPath={rootPath}
-      viewMode={viewMode}
       currentRelativePath={currentRelativePath}
       selectedTrackId={selectedTrackId}
       isPlaying={isPlaying}
@@ -2370,7 +2375,6 @@ function LocalPageRoute({
       onMoveFolderToFolder={onMoveFolderToFolder}
       onDeleteLocalItems={onDeleteLocalItems}
       onUpdateFolderSort={onUpdateFolderSort}
-      onUpdateViewMode={onUpdateViewMode}
       onSearchDirectory={onSearchDirectory}
     />
   )
@@ -2423,6 +2427,10 @@ function getPageTitle(
 
   if (pathname.startsWith('/local')) {
     return t('common.local')
+  }
+
+  if (pathname.startsWith('/remote')) {
+    return t('remoteShare.remoteLibrary')
   }
 
   if (pathname.startsWith('/playlists')) {

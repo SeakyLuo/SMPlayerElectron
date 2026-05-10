@@ -104,14 +104,14 @@ export function randomLeastPlayed(songs: LibrarySong[], randomLimit = 100) {
 }
 
 export function isSongInFolder(song: LibrarySong, folderPath: string) {
-  return getParentPath(song.path) === folderPath || song.path.startsWith(`${folderPath}\\`) || song.path.startsWith(`${folderPath}/`)
+  return getFileParentPath(song.path) === folderPath || song.path.startsWith(`${folderPath}\\`) || song.path.startsWith(`${folderPath}/`)
 }
 
 export function isSongDirectlyInFolder(song: LibrarySong, folderPath: string) {
-  return getParentPath(song.path) === folderPath
+  return getFileParentPath(song.path) === folderPath
 }
 
-export function getParentPath(path: string) {
+export function getFileParentPath(path: string) {
   const separatorIndex = Math.max(path.lastIndexOf('\\'), path.lastIndexOf('/'))
   return separatorIndex > -1 ? path.slice(0, separatorIndex) : ''
 }

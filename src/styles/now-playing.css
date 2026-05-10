@@ -96,12 +96,6 @@
   overflow: auto;
   padding-right: 14px;
   scrollbar-gutter: stable;
-  scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
-}
-
-.now-playing-list-shell:hover {
-  scrollbar-color: rgba(91, 105, 122, 0.42) transparent;
 }
 
 .now-playing-playlist-control {

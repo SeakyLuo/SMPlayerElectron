@@ -43,6 +43,8 @@ interface MusicLibraryPageProps {
   onRevealSong: (songPath: string) => void | Promise<void>
   onDeleteSongFromDisk: (songId: number) => void
   onUpdateSettings: (update: AppSettingsUpdate) => void
+  readOnly?: boolean
+  resolveArtwork?: boolean
 }
 
 type LibrarySortColumn = 'artwork' | 'title' | 'artist' | 'album' | 'duration' | 'favorite' | 'playCount' | 'dateAdded'
@@ -96,6 +98,8 @@ export function MusicLibraryPage({
   onRevealSong,
   onDeleteSongFromDisk,
   onUpdateSettings,
+  readOnly = false,
+  resolveArtwork = true,
 }: MusicLibraryPageProps) {
   const hasSongs = songs.length > 0
   const hasLibrary = snapshot.songs.length > 0
@@ -492,6 +496,10 @@ export function MusicLibraryPage({
                       onAddNextAndPlay(song.id)
                     }}
                     onContextMenu={(event) => {
+                      if (readOnly) {
+                        return
+                      }
+
                       event.preventDefault()
                       const selectedIds = selectedSongIds.has(song.id)
                         ? effectiveSelectedSongIds
@@ -524,6 +532,7 @@ export function MusicLibraryPage({
                             onAddNextAndPlay(song.id)
                           }
                         }}
+                        resolveArtwork={resolveArtwork}
                       />
                     </td>
                     <td className="library-title-cell" title={song.title}>
@@ -568,7 +577,7 @@ export function MusicLibraryPage({
                       <span className="music-table-cell-content">{durationLabel}</span>
                     </td>
                     <td className="library-favorite-cell" title={song.favorite ? t('common.favorite') : ''}>
-                      {song.favorite ? (
+                      {song.favorite && !readOnly ? (
                         <button
                           type="button"
                           className="favorite-icon-button"
@@ -676,14 +685,18 @@ function LibraryRowArtwork({
   current,
   isPlaying,
   onPlay,
+  resolveArtwork,
 }: {
   song: LibrarySong
   t: Translator
   current: boolean
   isPlaying: boolean
   onPlay: () => void
+  resolveArtwork: boolean
 }) {
-  const { artworkUrl, refreshArtwork } = useSongArtwork(song.id, song.artworkUrl)
+  const resolved = useSongArtwork(resolveArtwork ? song.id : null, song.artworkUrl)
+  const artworkUrl = resolveArtwork ? resolved.artworkUrl : song.artworkUrl
+  const refreshArtwork = resolveArtwork ? resolved.refreshArtwork : undefined
 
   return (
     <span className="library-row-artwork-wrap">

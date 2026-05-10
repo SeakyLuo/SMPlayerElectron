@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { CommandBar, CommandBarButton } from '../components/CommandBar'
+import { requestConfirmDialog } from '../components/dialogService'
 import { GridViewMusicItemControl } from '../components/GridViewMusicItemControl'
 import { Icon } from '../components/icons'
 import { LoadingState } from '../components/LoadingState'
@@ -226,15 +227,25 @@ export function RecentPage({
 
   const clearHistory = () => {
     if (activeTab === 'played') {
-      if (window.confirm(t('recent.clearPlayedConfirm'))) {
-        onClearRecentPlayed()
-      }
+      void requestConfirmDialog({
+        title: t('common.confirm'),
+        message: t('recent.clearPlayedConfirm'),
+      }).then((confirmed) => {
+        if (confirmed) {
+          onClearRecentPlayed()
+        }
+      })
       return
     }
 
-    if (window.confirm(t('recent.clearSearchesConfirm'))) {
-      onClearRecentSearches()
-    }
+    void requestConfirmDialog({
+      title: t('common.confirm'),
+      message: t('recent.clearSearchesConfirm'),
+    }).then((confirmed) => {
+      if (confirmed) {
+        onClearRecentSearches()
+      }
+    })
   }
 
   return (
@@ -446,9 +457,15 @@ export function RecentPage({
               onRevealSong(songMenu.song.path)
             },
             onDelete: () => {
-              if (window.confirm(t('context.deleteSongConfirm', { title: songMenu.song.title }))) {
-                onDeleteSongFromDisk(songMenu.song.id)
-              }
+              void requestConfirmDialog({
+                title: t('playlists.delete'),
+                message: t('context.deleteSongConfirm', { title: songMenu.song.title }),
+                confirmText: t('playlists.delete'),
+              }).then((confirmed) => {
+                if (confirmed) {
+                  onDeleteSongFromDisk(songMenu.song.id)
+                }
+              })
             },
             onHide: async () => {
               await window.smplayer?.hideSong(songMenu.song.id)

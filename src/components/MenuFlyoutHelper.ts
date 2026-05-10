@@ -1,8 +1,9 @@
 import type { LibraryFolder, LibraryPlaylist, LibrarySong, PreferenceEntityType, PreferenceItemSnapshot, PreferenceLevel, PreferenceSettingsSnapshot } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
 import { usePreferenceStore } from '../state/usePreferenceStore'
+import { requestTextDialog } from './dialogService'
 import {
-  getParentPath,
+  getFileParentPath,
   isSongDirectlyInFolder,
   randomAlbum,
   randomArtist,
@@ -181,11 +182,15 @@ export function getAddToPlaylistMenuFlyoutItem({
           return
         }
 
-        const name = window.prompt(t('playlists.newName'), defaultPlaylistName ?? t('playlists.newName'))
-        const nextName = name?.trim()
-        if (nextName) {
-          onCreatePlaylist(nextName)
-        }
+        void requestTextDialog({
+          title: t('playlists.newName'),
+          defaultValue: defaultPlaylistName ?? t('playlists.newName'),
+          placeholder: t('playlists.namePlaceholder'),
+        }).then((name) => {
+          if (name) {
+            onCreatePlaylist(name)
+          }
+        })
       },
     })
   }
@@ -428,7 +433,7 @@ function getMoveToFolderMenuFlyoutItem({
   t: Translator
   onMoveToFolder: (folderPath: string) => void | Promise<void>
 }) {
-  const currentFolderPath = getParentPath(songPath)
+  const currentFolderPath = getFileParentPath(songPath)
   const targetFolders = folders.filter((folder) => folder.path !== currentFolderPath)
 
   if (targetFolders.length === 0) {

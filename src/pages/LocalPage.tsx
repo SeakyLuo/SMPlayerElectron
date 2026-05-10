@@ -12,10 +12,9 @@ import { getAddToPlaylistMenuFlyoutItem, type MenuFlyoutItem, type MenuFlyoutPos
 import { MusicMenuFlyout } from '../components/MusicMenuFlyout'
 import { MultiSelectCommandBar } from '../components/MultiSelectCommandBar'
 import { RemoveDialog } from '../components/RemoveDialog'
-import { RemoteShareDialog } from '../components/RemoteShareDialog'
 import { useFolderPreferenceMenuItem } from '../hooks/useFolderPreferenceMenuItem'
 import { resolveSongArtworks } from '../hooks/useSongArtwork'
-import type { LibraryFolder, LibraryPlaylist, LibrarySong, LocalFolderSortCriterion, LocalViewMode, ScanLibraryResult } from '../shared/contracts'
+import type { LibraryFolder, LibraryPlaylist, LibrarySong, LocalFolderSortCriterion, ScanLibraryResult } from '../shared/contracts'
 import { getSongArtists } from '../shared/artists'
 import { formatDuration } from '../shared/formatters'
 import type { Translator } from '../shared/i18n'
@@ -40,6 +39,7 @@ import {
 } from './localFolderModel'
 
 type LocalSortMode = LocalFolderSortCriterion
+const LOCAL_COMPACT_BREAKPOINT = 720
 
 interface LocalPageProps {
   songs: LibrarySong[]
@@ -48,7 +48,6 @@ interface LocalPageProps {
   favoritePlaylistId: number
   t: Translator
   rootPath: string
-  viewMode: LocalViewMode
   currentRelativePath: string
   searchQuery: string
   selectedTrackId: number | null
@@ -79,7 +78,6 @@ interface LocalPageProps {
   onMoveFolderToFolder: (sourceFolderPath: string, targetFolderPath: string) => void | Promise<void>
   onDeleteLocalItems: (songIds: number[], folderPaths: string[]) => void | Promise<void>
   onUpdateFolderSort: (folderPath: string, sortCriterion: LocalSortMode) => void | Promise<void>
-  onUpdateViewMode: (viewMode: LocalViewMode) => void
   onSearchDirectory: (query: string, folderRelativePath: string) => void
 }
 
@@ -107,9 +105,7 @@ interface LocalSongAddMenuState extends MenuFlyoutPosition {
 type LocalSelectionAddMenuState = MenuFlyoutPosition
 type LocalSelectionMoveMenuState = MenuFlyoutPosition
 
-interface LocalToolbarMenuState extends MenuFlyoutPosition {
-  kind: 'sort' | 'view'
-}
+type LocalToolbarMenuState = MenuFlyoutPosition
 
 function getFolderListItemKey(folderPath: string) {
   return `folder:${folderPath}`
@@ -543,7 +539,6 @@ export function LocalPage({
   favoritePlaylistId,
   t,
   rootPath,
-  viewMode,
   currentRelativePath: routeRelativePath,
   searchQuery,
   selectedTrackId,
@@ -574,7 +569,6 @@ export function LocalPage({
   onMoveFolderToFolder,
   onDeleteLocalItems,
   onUpdateFolderSort,
-  onUpdateViewMode,
   onSearchDirectory,
 }: LocalPageProps) {
   const currentRelativePath = routeRelativePath
@@ -587,7 +581,7 @@ export function LocalPage({
   const [localNotification, setLocalNotification] = useState('')
   const [foldersExpanded, setFoldersExpanded] = useState(true)
   const [songsExpanded, setSongsExpanded] = useState(true)
-  const [remoteShareDialogOpen, setRemoteShareDialogOpen] = useState(false)
+  const [isCompactLayout, setIsCompactLayout] = useState(() => window.innerWidth < LOCAL_COMPACT_BREAKPOINT)
   const resumeHiddenStorageItemByPath = useLibraryStore((state) => state.resumeHiddenStorageItemByPath)
   const hideMultiSelectCommandBarAfterOperation = useLibraryStore(
     (state) => state.snapshot.settings.hideMultiSelectCommandBarAfterOperation,
@@ -624,10 +618,23 @@ export function LocalPage({
   )
   const currentNode = nodes.get(currentRelativePath) ?? null
   const currentSortMode = currentNode ? localSortModeFromCriterion(currentNode.criterion) : 'title'
+  const effectiveViewMode = isCompactLayout ? 'list' : 'grid'
 
   const openFolder = (targetRelativePath: string) => {
     onOpenFolder(targetRelativePath)
   }
+
+  useEffect(() => {
+    const updateCompactLayout = () => {
+      setIsCompactLayout(window.innerWidth < LOCAL_COMPACT_BREAKPOINT)
+    }
+
+    updateCompactLayout()
+    window.addEventListener('resize', updateCompactLayout)
+    return () => {
+      window.removeEventListener('resize', updateCompactLayout)
+    }
+  }, [])
 
   const currentSongs = useMemo(() => {
     if (!currentNode) {
@@ -1032,18 +1039,9 @@ export function LocalPage({
     setFolderMenu(null)
   }
 
-  const switchViewMode = (nextViewMode: LocalViewMode) => {
-    if (PleaseExitMultiSelectMode()) {
-      return
-    }
-
-    onUpdateViewMode(nextViewMode)
-  }
-
-  const showToolbarMenu = (event: MouseEvent<HTMLElement>, kind: LocalToolbarMenuState['kind']) => {
+  const showSortMenu = (event: MouseEvent<HTMLElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
     setToolbarMenu({
-      kind,
       x: rect.left,
       y: rect.bottom + 6,
     })
@@ -1214,28 +1212,13 @@ export function LocalPage({
             label={t('common.sort')}
             canOverflow={false}
             onClick={(event) => {
-              showToolbarMenu(event, 'sort')
+              showSortMenu(event)
             }}
           />
           <CommandBarButton
             icon="folder"
             label={t('local.newFolder')}
             onClick={createFolder}
-          />
-          <CommandBarButton
-            icon="view"
-            label={t('local.viewMode')}
-            canOverflow={false}
-            onClick={(event) => {
-              showToolbarMenu(event, 'view')
-            }}
-          />
-          <CommandBarButton
-            icon="local"
-            label={t('remoteShare.title')}
-            onClick={() => {
-              setRemoteShareDialogOpen(true)
-            }}
           />
           <CommandBarButton
             icon="menu"
@@ -1332,7 +1315,7 @@ export function LocalPage({
           ) : null}
         </div>
         )
-      ) : viewMode === 'grid' ? (
+      ) : effectiveViewMode === 'grid' ? (
         <div className="local-scroll-shell" ref={localScrollShellRef}>
           {childFolders.length > 0 ? (
             showLocalSectionHeaders ? (
@@ -1575,21 +1558,22 @@ export function LocalPage({
                     setFolderMenu({ folder, x: event.clientX, y: event.clientY })
                   }}
                 >
-                  <td>
+                  <td className="local-table-name-cell local-table-folder-name-cell">
                     {multiSelect ? (
                       <span className={selectedFolderPaths.has(folder.relativePath) ? 'local-check is-selected' : 'local-check'}>
                         {selectedFolderPaths.has(folder.relativePath) ? <Icon name="check" /> : null}
                       </span>
                     ) : null}
                     <button className="table-link table-link-button" type="button">
+                      <Icon name="folder" />
                       {folder.name}
                     </button>
                   </td>
-                  <td>{t('common.folders')}</td>
-                  <td>{t('local.childFolderCount', { count: folder.childPaths.length })}</td>
-                  <td>{t('local.folderSongs', { count: folder.directSongIds.length })}</td>
+                  <td className="local-table-folder-type-cell">{t('common.folders')}</td>
+                  <td className="local-table-folder-count-cell">{t('local.childFolderCount', { count: folder.childPaths.length })}</td>
+                  <td className="local-table-duration-cell">{t('local.folderSongs', { count: folder.directSongIds.length })}</td>
                   <td className="local-path-cell">{folder.relativePath || t('local.libraryRoot')}</td>
-                  <td>
+                  <td className="local-table-action-cell">
                     <button
                       type="button"
                       className="table-action-button subtle"
@@ -1598,7 +1582,8 @@ export function LocalPage({
                         void hideFolder(folder)
                       }}
                     >
-                      {t('local.hideFolder')}
+                      <Icon name="close" />
+                      <span>{t('local.hideFolder')}</span>
                     </button>
                   </td>
                 </tr>
@@ -1657,13 +1642,16 @@ export function LocalPage({
                     setSongMenu({ song, x: event.clientX, y: event.clientY })
                   }}
                 >
-                  <td>
+                  <td className="local-table-name-cell local-table-song-name-cell">
                     {multiSelect ? (
                       <span className={selectedSongIds.has(song.id) ? 'local-check is-selected' : 'local-check'}>
                         {selectedSongIds.has(song.id) ? <Icon name="check" /> : null}
                       </span>
                     ) : null}
-                    {song.title}
+                    <span className="local-table-row-icon">
+                      <Icon name={song.id === selectedTrackId && isPlaying ? 'play' : 'songs'} />
+                    </span>
+                    <span className="local-table-primary-text">{song.title}</span>
                     {!multiSelect ? (
                       <span className="local-table-song-actions">
                         <button
@@ -1703,7 +1691,7 @@ export function LocalPage({
                       </span>
                     ) : null}
                   </td>
-                  <td>
+                  <td className="local-table-artist-cell">
                     {getSongArtists(song).map((artist, index) => (
                       <span key={artist}>
                         {index > 0 ? ', ' : null}
@@ -1717,7 +1705,7 @@ export function LocalPage({
                       </span>
                     ))}
                   </td>
-                  <td>
+                  <td className="local-table-album-cell">
                     <Link
                       className="table-link"
                       to={`/albums/${encodeURIComponent(song.album || t('common.albumUnknown'))}`}
@@ -1726,7 +1714,7 @@ export function LocalPage({
                       {song.album || t('common.albumUnknown')}
                     </Link>
                   </td>
-                  <td>{formatDuration(song.duration)}</td>
+                  <td className="local-table-duration-cell">{formatDuration(song.duration)}</td>
                   <td className="local-path-cell">
                     {normalizePath(song.path)
                       .replace(`${normalizePath(rootPath)}/`, '')
@@ -1734,7 +1722,7 @@ export function LocalPage({
                       .slice(0, -1)
                       .join('/') || t('local.libraryRoot')}
                   </td>
-                  <td>
+                  <td className="local-table-action-cell">
                     <button
                       type="button"
                       className="table-action-button subtle"
@@ -1743,7 +1731,8 @@ export function LocalPage({
                         onRevealSong(song.path)
                       }}
                     >
-                      {t('local.reveal')}
+                      <Icon name="local" />
+                      <span>{t('local.reveal')}</span>
                     </button>
                   </td>
                 </tr>
@@ -1912,18 +1901,13 @@ export function LocalPage({
           onClose={() => {
             setToolbarMenu(null)
           }}
-          items={(toolbarMenu.kind === 'sort'
-            ? [
-                { key: 'toolbar-sort-reverse', text: t('local.sortReverseList'), onClick: () => updateSortMode('reverse') },
-                { key: 'toolbar-sort-separator', text: '', separator: true },
-                { key: 'toolbar-sort-title', text: t('local.sortByTitle'), icon: sortMode === 'title' ? 'check' : undefined, onClick: () => updateSortMode('title') },
-                { key: 'toolbar-sort-artist', text: t('local.sortByArtist'), icon: sortMode === 'artist' ? 'check' : undefined, onClick: () => updateSortMode('artist') },
-                { key: 'toolbar-sort-album', text: t('local.sortByAlbum'), icon: sortMode === 'album' ? 'check' : undefined, onClick: () => updateSortMode('album') },
-              ]
-            : [
-                { key: 'toolbar-view-list', text: t('local.viewList'), icon: viewMode === 'list' ? 'check' : undefined, onClick: () => switchViewMode('list') },
-                { key: 'toolbar-view-grid', text: t('local.viewGrid'), icon: viewMode === 'grid' ? 'check' : undefined, onClick: () => switchViewMode('grid') },
-              ]) as MenuFlyoutItem[]}
+          items={[
+            { key: 'toolbar-sort-reverse', text: t('local.sortReverseList'), onClick: () => updateSortMode('reverse') },
+            { key: 'toolbar-sort-separator', text: '', separator: true },
+            { key: 'toolbar-sort-title', text: t('local.sortByTitle'), icon: sortMode === 'title' ? 'check' : undefined, onClick: () => updateSortMode('title') },
+            { key: 'toolbar-sort-artist', text: t('local.sortByArtist'), icon: sortMode === 'artist' ? 'check' : undefined, onClick: () => updateSortMode('artist') },
+            { key: 'toolbar-sort-album', text: t('local.sortByAlbum'), icon: sortMode === 'album' ? 'check' : undefined, onClick: () => updateSortMode('album') },
+          ] as MenuFlyoutItem[]}
         />
       ) : null}
       {folderAddMenu ? (
@@ -2021,14 +2005,6 @@ export function LocalPage({
           }}
           onConfirm={() => {
             void removeDialog.onConfirm()
-          }}
-        />
-      ) : null}
-      {remoteShareDialogOpen ? (
-        <RemoteShareDialog
-          t={t}
-          onClose={() => {
-            setRemoteShareDialogOpen(false)
           }}
         />
       ) : null}

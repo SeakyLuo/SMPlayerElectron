@@ -12,6 +12,7 @@ import { useUndoableNotificationStore } from '../state/useUndoableNotificationSt
 import { ArtworkImage } from './ArtworkImage'
 import { CommandBar, CommandBarButton } from './CommandBar'
 import { DefaultAlbumArtwork } from './DefaultAlbumArtwork'
+import { requestConfirmDialog } from './dialogService'
 import { MenuFlyout } from './MenuFlyout'
 import { getAddToPlaylistMenuFlyoutItem, getMusicMenuFlyoutItems, getPreferenceMenuFlyoutItem, type MenuFlyoutPosition } from './MenuFlyoutHelper'
 import { MultiSelectCommandBar } from './MultiSelectCommandBar'
@@ -760,9 +761,15 @@ export function HeaderedPlaylistControl({
               void window.smplayer?.revealItemInFolder(songMenu.song.path)
             },
             onDelete: () => {
-              if (window.confirm(translateCaption('context.deleteSongConfirm', { title: songMenu.song.title }))) {
-                void deleteSongFromDisk(songMenu.song.id)
-              }
+              void requestConfirmDialog({
+                title: translateCaption('playlists.delete'),
+                message: translateCaption('context.deleteSongConfirm', { title: songMenu.song.title }),
+                confirmText: translateCaption('playlists.delete'),
+              }).then((confirmed) => {
+                if (confirmed) {
+                  void deleteSongFromDisk(songMenu.song.id)
+                }
+              })
             },
             onHide: () => {
               void hideSong(songMenu.song.id)

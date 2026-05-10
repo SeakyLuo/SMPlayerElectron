@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 import { Icon } from '../components/icons'
 import { ReleaseNotesDialog } from '../components/ReleaseNotesDialog'
 import { RemoveDialog } from '../components/RemoveDialog'
+import { RemoteShareDialog } from '../components/RemoteShareDialog'
 import type {
   AppSettingsUpdate,
   LibrarySnapshot,
@@ -371,6 +372,7 @@ export function SettingsPage({
   const [showPreferenceSettings, setShowPreferenceSettings] = useState(false)
   const [showFeedbackOptions, setShowFeedbackOptions] = useState(false)
   const [showImportDataDialog, setShowImportDataDialog] = useState(false)
+  const [showRemoteShareDialog, setShowRemoteShareDialog] = useState(false)
   const feedbackMenuRef = useRef<HTMLDivElement | null>(null)
   const [lyricsJob, setLyricsJob] = useState({
     status: 'idle' as 'idle' | 'running' | 'stopping' | 'done',
@@ -818,6 +820,13 @@ export function SettingsPage({
             <div className="settings-action-list">
               <SettingsActionButton
                 onClick={() => {
+                  setShowRemoteShareDialog(true)
+                }}
+              >
+                {t('remoteShare.title')}
+              </SettingsActionButton>
+              <SettingsActionButton
+                onClick={() => {
                   setShowReleaseNotes(true)
                 }}
               >
@@ -910,6 +919,15 @@ export function SettingsPage({
           t={t}
           onClose={() => {
             setShowPreferenceSettings(false)
+          }}
+        />
+      ) : null}
+
+      {showRemoteShareDialog ? (
+        <RemoteShareDialog
+          t={t}
+          onClose={() => {
+            setShowRemoteShareDialog(false)
           }}
         />
       ) : null}

@@ -86,8 +86,6 @@
   min-height: 0;
   overflow: auto;
   scrollbar-gutter: stable;
-  scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
   -webkit-app-region: no-drag;
 }
 
@@ -102,11 +100,6 @@
 
 .recent-search-list {
   padding-right: 14px;
-}
-
-.recent-grid-shell:hover,
-.recent-search-list:hover {
-  scrollbar-color: rgba(91, 105, 122, 0.42) transparent;
 }
 
 .recent-grid-virtual {

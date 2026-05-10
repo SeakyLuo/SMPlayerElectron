@@ -25,6 +25,14 @@ const text = {
     en: 'Start menu tiles are no longer supported in this version.',
     zh: '当前版本不再支持开始菜单磁贴。',
   },
+  newUiComing: {
+    en: 'A brand-new UI version is coming soon.',
+    zh: '全新 UI 版本即将到来。',
+  },
+  renameToSimpleMelodyPlayer: {
+    en: 'The English name is updated to Simple Melody Player.',
+    zh: '英文名称更新为 Simple Melody Player。',
+  },
   bugFixes: {
     en: 'Bug fixes and various improvements.',
     zh: '问题修复和优化。',
@@ -110,7 +118,7 @@ const text = {
     zh: '你可以选择通知中歌词默认的来源，也可以直接在通知中切换。歌词来源包括网络歌词、lrc文件歌词、音乐文件本身的歌词。',
   },
   useHideFolder: {
-    en: 'You can now hide a folder or a file in the local page by right-clicking one and select "Hide Folder" or "Hide File". The hidden file or hidden folder and its content will not display in SMPlayer. You can resume it in the local page.',
+    en: 'You can now hide a folder or a file in the local page by right-clicking one and select "Hide Folder" or "Hide File". The hidden file or hidden folder and its content will not display in Simple Melody Player. You can resume it in the local page.',
     zh: '你现在可以隐藏文件夹或者音乐文件了，在本地页面的右键菜单中选择“隐藏文件夹”或者“隐藏文件”，该文件夹或文件将不会出现在简音播放器中。你可以通过本地页面恢复它。',
   },
   useFilenameInsteadOfMusicName: {
@@ -214,7 +222,7 @@ const text = {
     zh: '修复了偏好设置不起作用的问题',
   },
   improvedLocalManagement: {
-    en: 'You can now add/delete folder, move music file in SMPlayer.',
+    en: 'You can now add/delete folder and move music files in Simple Melody Player.',
     zh: '增强了本地文件管理功能，支持在播放器中新增删除文件夹、移动歌曲至其他文件夹等。',
   },
   bugFixesForAddingPlaylistWhenNone: {
@@ -278,7 +286,7 @@ const text = {
     zh: '修复音乐拖拽的问题。',
   },
   playWithSmplayer: {
-    en: 'Now supports play music with SMPlayer.',
+    en: 'Now supports playing music with Simple Melody Player.',
     zh: '支持用简音播放器播放音乐文件。',
   },
   improveSearchPage: {
@@ -310,7 +318,7 @@ const text = {
     zh: '通过添加日期搜索。',
   },
   openWithSmplayer: {
-    en: 'Now supports open music with SMPlayer.',
+    en: 'Now supports opening music with Simple Melody Player.',
     zh: '支持用简音播放器打开音乐文件。',
   },
   supportsMultiSelect: {
@@ -321,6 +329,7 @@ const text = {
 
 const releaseNoteDefinitions: Array<{ version: string; items: Array<keyof typeof text> }> = [
   { version: '3.0.0', items: ['modernUi', 'nightMode', 'removedNotificationLyrics', 'tilesUnsupported'] },
+  { version: '2.10.7', items: ['newUiComing', 'renameToSimpleMelodyPlayer', 'bugFixes'] },
   { version: '2.10.3', items: ['bugFixes'] },
   { version: '2.10.1', items: ['switchLanguageSupported', 'improvedVoiceAssistant'] },
   { version: '2.9.15', items: ['addSeeAlbumArtToFullPage', 'crashFixes'] },

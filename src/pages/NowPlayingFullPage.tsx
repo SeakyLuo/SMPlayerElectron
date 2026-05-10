@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import { useNavigate } from 'react-router-dom'
 
 import { AlbumArtControl } from '../components/AlbumArtControl'
+import { requestConfirmDialog, requestTextDialog } from '../components/dialogService'
 import { Icon } from '../components/icons'
 import { LoadingState } from '../components/LoadingState'
 import { MenuFlyout } from '../components/MenuFlyout'
@@ -40,6 +41,7 @@ const QUICK_PLAY_LIMIT = 100
 const DEFAULT_ARTWORK_URL = '/monotone_bg_wide.png'
 const LYRICS_RESTORE_DELAY_MS = 5000
 const LYRICS_SCROLL_DURATION_MS = 360
+const PLAYER_BAR_AUTO_HIDE_DELAY_MS = 5000
 
 type FullPanel = 'playlist' | 'info' | 'lyrics' | 'album-art'
 type FullDialogMode = 'properties' | 'lyrics' | 'album-art'
@@ -154,11 +156,14 @@ export function NowPlayingFullPage({
   const [isLyricDragging, setIsLyricDragging] = useState(false)
   const [lyricsLoading, setLyricsLoading] = useState(false)
   const [lyricPreviewIndex, setLyricPreviewIndex] = useState<number | null>(null)
+  const [isPlayerBarRaised, setIsPlayerBarRaised] = useState(true)
   const [coverColorRgb, setCoverColorRgb] = useState(getDefaultArtworkColorRgb)
   const coverWrapRef = useRef<HTMLDivElement | null>(null)
   const lyricStageRef = useRef<HTMLDivElement | null>(null)
   const lyricLineRefs = useRef<Array<HTMLDivElement | null>>([])
   const lyricRestoreTimerRef = useRef<number | null>(null)
+  const playerBarHideTimerRef = useRef<number | null>(null)
+  const playerBarPinnedRef = useRef(false)
   const lyricScrollAnimationRef = useRef<number | null>(null)
   const activeLyricsIndexRef = useRef(-1)
   const lyricDragRef = useRef<{ pointerId: number; clientY: number; scrollTop: number; moved: boolean } | null>(null)
@@ -197,6 +202,7 @@ export function NowPlayingFullPage({
     [displayLyricsLines],
   )
   const previewLyricIndex = isLyricPreviewing ? lyricPreviewIndex : null
+  const isPlayerBarPinned = showPlaylistPanel || dialogMode !== null || moreMenu !== null
   const immersiveNightActive = nightMode === 'on' || (
     nightMode === 'auto' &&
     isMinuteInNightRange(currentClockMinute, timeToMinute(nightModeStartTime), timeToMinute(nightModeEndTime))
@@ -313,6 +319,36 @@ export function NowPlayingFullPage({
     }
   }, [])
 
+  const clearPlayerBarHideTimer = useCallback(() => {
+    if (playerBarHideTimerRef.current != null) {
+      window.clearTimeout(playerBarHideTimerRef.current)
+      playerBarHideTimerRef.current = null
+    }
+  }, [])
+
+  const raisePlayerBar = useCallback(() => {
+    clearPlayerBarHideTimer()
+    setIsPlayerBarRaised(true)
+  }, [clearPlayerBarHideTimer])
+
+  const schedulePlayerBarHide = useCallback(() => {
+    clearPlayerBarHideTimer()
+    playerBarHideTimerRef.current = window.setTimeout(() => {
+      if (!playerBarPinnedRef.current) {
+        setIsPlayerBarRaised(false)
+      }
+    }, PLAYER_BAR_AUTO_HIDE_DELAY_MS)
+  }, [clearPlayerBarHideTimer])
+
+  useEffect(() => {
+    playerBarPinnedRef.current = isPlayerBarPinned
+    if (isPlayerBarPinned) {
+      raisePlayerBar()
+    } else {
+      schedulePlayerBarHide()
+    }
+  }, [isPlayerBarPinned, raisePlayerBar, schedulePlayerBarHide])
+
   const scrollLyricsToIndex = useCallback((index: number, animated: boolean) => {
     const container = lyricStageRef.current
     const cover = coverWrapRef.current
@@ -401,8 +437,9 @@ export function NowPlayingFullPage({
 
   useEffect(() => () => {
     clearLyricRestoreTimer()
+    clearPlayerBarHideTimer()
     cancelLyricScrollAnimation()
-  }, [cancelLyricScrollAnimation, clearLyricRestoreTimer])
+  }, [cancelLyricScrollAnimation, clearLyricRestoreTimer, clearPlayerBarHideTimer])
 
   const openMoreMenu = (event: MouseEvent<HTMLButtonElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
@@ -521,11 +558,15 @@ export function NowPlayingFullPage({
 
   const saveQueueAsPlaylist = () => {
     const defaultName = getDefaultNewPlaylistName(t, playlists)
-    const name = window.prompt(t('nowPlaying.savePlaylist'), defaultName)
-    const nextName = name?.trim()
-    if (nextName) {
-      void createPlaylist(nextName, queueSongIds)
-    }
+    void requestTextDialog({
+      title: t('nowPlaying.savePlaylist'),
+      defaultValue: defaultName,
+      placeholder: t('playlists.namePlaceholder'),
+    }).then((name) => {
+      if (name) {
+        void createPlaylist(name, queueSongIds)
+      }
+    })
   }
 
   const goBack = () => {
@@ -607,11 +648,15 @@ export function NowPlayingFullPage({
 
   return (
     <section
-      className={clsx('now-playing-full-page', immersiveNightActive ? 'is-night' : 'is-day')}
+      className={clsx('now-playing-full-page', immersiveNightActive ? 'is-night' : 'is-day', {
+        'is-player-bar-raised': isPlayerBarRaised,
+      })}
       style={{
         '--now-playing-full-artwork': `url("${displayArtworkUrl}")`,
         '--now-playing-full-cover-rgb': coverColorRgb,
       } as CSSProperties}
+      onPointerEnter={raisePlayerBar}
+      onPointerLeave={schedulePlayerBarHide}
     >
       <div className="now-playing-full-backdrop" aria-hidden="true" />
       <div className="now-playing-full-titlebar" aria-hidden="true" />
@@ -1338,9 +1383,15 @@ function NowPlayingFullPlaylist({
               onRevealSong(songMenu.song.path)
             },
             onDelete: () => {
-              if (window.confirm(t('context.deleteSongConfirm', { title: songMenu.song.title }))) {
-                onDeleteSongFromDisk(songMenu.song.id)
-              }
+              void requestConfirmDialog({
+                title: t('playlists.delete'),
+                message: t('context.deleteSongConfirm', { title: songMenu.song.title }),
+                confirmText: t('playlists.delete'),
+              }).then((confirmed) => {
+                if (confirmed) {
+                  onDeleteSongFromDisk(songMenu.song.id)
+                }
+              })
             },
             onHide: async () => {
               const removedQueueEntries = queueSongIds
