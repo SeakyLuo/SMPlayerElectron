@@ -90,7 +90,7 @@ export function AlbumArtworkDialog({
         </nav>
         {statusMessage ? <p className="song-dialog-status">{statusMessage}</p> : null}
         <div className="song-dialog-body song-dialog-artwork">
-          <CommandBar className="song-dialog-commandbar">
+          <CommandBar className="song-dialog-commandbar" overflowLabel={t('player.more')}>
             <CommandBarButton icon="albums" label={t('song.changeArtwork')} disabled={saving} onClick={() => void changeArtwork()} />
             <CommandBarButton icon="save" label={t('settings.save')} className="song-dialog-primary-button" disabled={saving} onClick={() => void saveArtwork()} />
             <CommandBarButton icon="trash" label={t('playlists.delete')} disabled={saving} onClick={() => setShowDeleteConfirm(true)} />

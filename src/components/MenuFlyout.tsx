@@ -38,6 +38,29 @@ export function MenuFlyout({
     }
   }, [onClose])
 
+  useEffect(() => {
+    const closeOnOutsidePointerDown = (event: PointerEvent) => {
+      const menuElement = menuRef.current as HTMLDivElement
+      if (!menuElement.contains(event.target as Node)) {
+        onClose()
+      }
+    }
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose()
+      }
+    }
+
+    document.addEventListener('pointerdown', closeOnOutsidePointerDown, true)
+    document.addEventListener('keydown', closeOnEscape)
+
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsidePointerDown, true)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [onClose])
+
   return createPortal(
     <>
       <div className="library-context-menu-overlay" onClick={onClose} />

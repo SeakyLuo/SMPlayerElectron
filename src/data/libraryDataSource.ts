@@ -150,6 +150,7 @@ export function createLocalLibraryDataSource(snapshot: LibrarySnapshot, updateSe
 export function createRemoteLibraryDataSource(hostId: number): LibraryDataSource {
   let cachedSnapshot: RemoteLibrarySnapshot | null = null
   let cachedLibrarySnapshot: LibrarySnapshot | null = null
+  let loadingSnapshot: Promise<LibrarySnapshot> | null = null
   let musicLibrarySort: MusicLibrarySortCriterion = 'title'
 
   const loadSnapshot = async () => {
@@ -183,7 +184,16 @@ export function createRemoteLibraryDataSource(hostId: number): LibraryDataSource
     return cachedLibrarySnapshot
   }
 
-  const getSnapshot = async () => cachedLibrarySnapshot ?? await loadSnapshot()
+  const getSnapshot = async () => {
+    if (cachedLibrarySnapshot) {
+      return cachedLibrarySnapshot
+    }
+
+    loadingSnapshot ??= loadSnapshot().finally(() => {
+      loadingSnapshot = null
+    })
+    return await loadingSnapshot
+  }
 
   return {
     kind: 'remote',

@@ -1,6 +1,6 @@
 .app-shell {
   position: relative;
-  --player-height: 116px;
+  --player-height: 120px;
   --shell-padding: 14px;
   --sidebar-player-gap: 0px;
   --sidebar-width: 320px;
@@ -31,6 +31,17 @@
   box-shadow: none;
   backdrop-filter: blur(28px);
   -webkit-backdrop-filter: blur(28px);
+}
+
+.app-shell.nav-minimal:has(.workspace.is-immersive-route)::before {
+  height: 430px;
+  background:
+    linear-gradient(180deg, rgba(var(--immersive-header-cover-rgb, 91, 135, 182), 0.18), rgba(var(--immersive-header-cover-rgb, 91, 135, 182), 0.1) 52%, rgba(248, 251, 254, 0) 100%),
+    radial-gradient(circle at 50% 12%, rgba(var(--immersive-header-cover-rgb, 91, 135, 182), 0.2), transparent 54%),
+    rgba(248, 251, 254, 0.82);
+  box-shadow: none;
+  backdrop-filter: blur(34px) saturate(126%);
+  -webkit-backdrop-filter: blur(34px) saturate(126%);
 }
 
 .app-shell.nav-collapsed {
@@ -80,11 +91,21 @@
   align-items: center;
   min-width: 0;
   height: 32px;
-  padding: 0 138px 0 0;
+  padding: 0 138px 0 8px;
   background: var(--minimal-toolbar-background);
   color: #111827;
   -webkit-app-region: drag;
   app-region: drag;
+}
+
+.app-shell.nav-minimal:has(.workspace.is-immersive-route) .minimal-titlebar {
+  background: transparent;
+  color: #111827;
+}
+
+.app-shell.nav-minimal:has(.workspace.is-immersive-route) .minimal-titlebar-back-button:hover,
+.app-shell.nav-minimal:has(.workspace.is-immersive-route) .minimal-titlebar-back-button:focus-visible {
+  background: rgba(17, 24, 39, 0.07);
 }
 
 .minimal-titlebar-back-button {
@@ -123,7 +144,7 @@
 }
 
 .minimal-titlebar-title.has-back-button {
-  padding-left: 0;
+  padding-left: 6px;
 }
 
 .app-shell.nav-minimal .sidebar {
@@ -166,12 +187,19 @@
 }
 
 .app-shell.nav-minimal-open .sidebar {
+  z-index: 260;
   pointer-events: auto;
   visibility: visible;
   transform: translateX(0);
   transition:
     transform 180ms cubic-bezier(0.2, 0, 0, 1),
     visibility 0s;
+}
+
+.app-shell.nav-minimal-open .workspace-header {
+  pointer-events: none;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 .app-shell:has(.workspace.is-immersive-route) {

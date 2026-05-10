@@ -45,6 +45,7 @@ interface MusicLibraryPageProps {
   onUpdateSettings: (update: AppSettingsUpdate) => void
   readOnly?: boolean
   resolveArtwork?: boolean
+  routeBase?: string
 }
 
 type LibrarySortColumn = 'artwork' | 'title' | 'artist' | 'album' | 'duration' | 'favorite' | 'playCount' | 'dateAdded'
@@ -100,6 +101,7 @@ export function MusicLibraryPage({
   onUpdateSettings,
   readOnly = false,
   resolveArtwork = true,
+  routeBase = '',
 }: MusicLibraryPageProps) {
   const hasSongs = songs.length > 0
   const hasLibrary = snapshot.songs.length > 0
@@ -548,7 +550,7 @@ export function MusicLibraryPage({
                             <Link
                               className="table-link"
                               title={artist}
-                              to={`/artists?artist=${encodeURIComponent(artist)}`}
+                              to={getArtistRoute(routeBase, artist)}
                               onClick={(event) => {
                                 event.stopPropagation()
                               }}
@@ -564,7 +566,7 @@ export function MusicLibraryPage({
                         <Link
                           className="table-link"
                           title={albumLabel}
-                          to={`/albums?album=${encodeURIComponent(albumLabel)}`}
+                          to={getAlbumRoute(routeBase, albumLabel)}
                           onClick={(event) => {
                             event.stopPropagation()
                           }}
@@ -736,6 +738,16 @@ function LibraryRowArtwork({
       </button>
     </span>
   )
+}
+
+function getArtistRoute(routeBase: string, artist: string) {
+  const encodedArtist = encodeURIComponent(artist)
+  return routeBase ? `${routeBase}/artists/${encodedArtist}` : `/artists?artist=${encodedArtist}`
+}
+
+function getAlbumRoute(routeBase: string, album: string) {
+  const encodedAlbum = encodeURIComponent(album)
+  return routeBase ? `${routeBase}/albums/${encodedAlbum}` : `/albums?album=${encodedAlbum}`
 }
 
 function shuffleSongIds(songIds: number[]) {

@@ -20,6 +20,10 @@
   display: none;
 }
 
+.app-shell.nav-minimal .workspace.is-immersive-route .workspace-header {
+  display: flex;
+}
+
 .workspace.is-immersive-route {
   padding: 0;
   background:
@@ -35,6 +39,11 @@
   scrollbar-gutter: auto;
 }
 
+.app-shell.nav-minimal .workspace.is-immersive-route .workspace-content {
+  flex: 0 0 calc(100% - var(--player-height) - 40px);
+  max-height: calc(100% - var(--player-height) - 40px);
+}
+
 .workspace.is-headerless-route .workspace-content {
   overflow: hidden;
   scrollbar-gutter: auto;
@@ -47,10 +56,31 @@
   backdrop-filter: none;
 }
 
+.app-shell.nav-minimal .workspace.is-immersive-route {
+  border-color: transparent;
+  background: transparent;
+}
+
 .workspace-content {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
   padding: 0;
   scrollbar-gutter: stable;
+}
+
+.app-shell.nav-minimal .workspace-content {
+  flex: 1 1 auto;
+  max-height: none;
+}
+
+.app-shell.nav-minimal .workspace-content > * {
+  height: calc(100% - var(--player-height));
+  max-height: calc(100% - var(--player-height));
+}
+
+.app-shell.nav-minimal .workspace.is-immersive-route .workspace-content > * {
+  height: auto;
+  min-height: 100%;
+  max-height: none;
 }

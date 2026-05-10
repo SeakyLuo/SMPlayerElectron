@@ -49,7 +49,7 @@ export function MusicLyricsControl({
 }) {
   return (
     <>
-      <CommandBar className="song-dialog-commandbar music-info-control-commandbar MusicLyricsControllerCommandBar">
+      <CommandBar className="song-dialog-commandbar music-info-control-commandbar MusicLyricsControllerCommandBar" overflowLabel={t('player.more')}>
         <CommandBarButton icon="search" label={t('common.search')} className="SearchLyricsButton" disabled={saving} onClick={onSearch} />
         <CommandBarButton icon="import" label={t('common.import')} className="ImportLyricsButton" disabled={saving} onClick={onImport} />
         <CommandBarButton icon="save" label={t('settings.save')} className="song-dialog-primary-button save-lyrics-button SaveLyricsButton" disabled={saving} onClick={onSave} />

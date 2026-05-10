@@ -481,8 +481,9 @@
 
 .local-song-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fill, 180px);
+  gap: 26px 30px;
+  align-items: start;
 }
 
 .local-song-grid-shell {
@@ -498,6 +499,7 @@
 
 .local-song-grid-item {
   min-width: 0;
+  width: 180px;
 }
 
 .local-song-quick-jump {
@@ -563,7 +565,8 @@
 }
 
 .local-folder-card,
-.local-song-card {
+.local-song-card,
+.local-grid-song-card {
   position: relative;
   display: flex;
   flex-direction: column;
@@ -586,6 +589,7 @@
 }
 
 .local-folder-card {
+  box-sizing: border-box;
   width: 180px;
   gap: 12px;
   padding: 10px;
@@ -671,10 +675,8 @@
 .local-folder-card:focus-visible,
 .local-folder-card:focus-within,
 .local-folder-card.is-selected {
-  background: rgba(var(--accent-rgb), 0.08);
-  box-shadow:
-    0 12px 26px rgba(30, 42, 58, 0.12),
-    inset 0 0 0 1px rgba(var(--accent-rgb), 0.16);
+  background: transparent;
+  box-shadow: none;
 }
 
 .local-folder-card:hover .grid-artwork-card-actions,
@@ -698,6 +700,17 @@
     inset 0 0 0 1px rgba(var(--accent-rgb), 0.16);
 }
 
+.local-folder-card:hover .grid-artwork-card-cover,
+.local-folder-card:focus-visible .grid-artwork-card-cover,
+.local-folder-card:focus-within .grid-artwork-card-cover,
+.local-folder-card.is-selected .grid-artwork-card-cover,
+.local-grid-song-card:hover .local-grid-song-cover,
+.local-grid-song-card:focus-visible .local-grid-song-cover,
+.local-grid-song-card:focus-within .local-grid-song-cover,
+.local-grid-song-card.is-selected .local-grid-song-cover {
+  box-shadow: 10px 10px 20px rgba(32, 45, 63, 0.28);
+}
+
 .grid-artwork-card-cover {
   position: relative;
   display: grid;
@@ -710,7 +723,8 @@
   border-radius: 8px;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.72);
-  box-shadow: 0 8px 18px rgba(32, 45, 63, 0.13);
+  box-shadow: 10px 10px 20px rgba(32, 45, 63, 0);
+  transition: box-shadow 120ms ease;
 }
 
 .grid-artwork-card-cover.artwork-count-1 {
@@ -764,25 +778,155 @@
 
 .local-folder-type-badge {
   position: absolute;
-  right: 7px;
-  bottom: 7px;
+  right: 0;
+  bottom: 0;
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.82);
-  box-shadow:
-    0 8px 18px rgba(30, 42, 58, 0.16),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.62);
-  backdrop-filter: blur(16px) saturate(150%);
-  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  width: 20px;
+  height: 20px;
+  border-radius: 0;
+  background: #fff;
+  box-shadow: none;
 }
 
 .local-folder-type-badge img {
   width: 20px;
   height: 20px;
   object-fit: contain;
+}
+
+.local-grid-song-card {
+  box-sizing: border-box;
+  width: 180px;
+  max-width: 180px;
+  gap: 0;
+  padding: 10px;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+
+.local-grid-song-cover-wrap {
+  position: relative;
+  display: grid;
+  width: 160px;
+  height: 160px;
+  margin: 0 0 5px;
+}
+
+.local-grid-song-cover {
+  display: block;
+  width: 160px;
+  height: 160px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 10px 10px 20px rgba(32, 45, 63, 0);
+  transition: box-shadow 120ms ease;
+}
+
+.local-grid-song-cover-fallback {
+  overflow: hidden;
+}
+
+.local-grid-song-cover-fallback-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.local-grid-song-actions {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  transition: opacity 120ms ease;
+}
+
+.local-grid-song-card:hover .local-grid-song-actions,
+.local-grid-song-card:focus-within .local-grid-song-actions,
+.local-grid-song-card.is-selected .local-grid-song-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.local-grid-song-actions button {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(30, 34, 40, 0.72);
+  color: #fff;
+  box-shadow: 0 12px 28px rgba(14, 22, 32, 0.28);
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    transform 120ms ease;
+}
+
+.local-grid-song-actions button:hover {
+  background: rgba(20, 24, 30, 0.82);
+  transform: scale(1.08);
+}
+
+.local-grid-song-actions svg {
+  width: 19px;
+  height: 19px;
+}
+
+.local-grid-song-title-row {
+  display: flex;
+  align-items: center;
+  width: 160px;
+  min-width: 0;
+}
+
+.local-grid-song-title-row strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-strong);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.local-grid-song-playing-icon {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin-left: auto;
+  color: var(--accent-strong);
+}
+
+.local-grid-song-playing-icon svg {
+  width: 13px;
+  height: 13px;
+}
+
+.local-grid-song-subtitle {
+  width: 160px;
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .grid-artwork-card-copy {
@@ -1187,7 +1331,21 @@
 }
 
 .app-shell.nav-minimal .local-table-item-actions {
-  display: none;
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.app-shell.nav-minimal .local-table-item-actions button {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+}
+
+.app-shell.nav-minimal .local-table-item-actions svg {
+  width: 14px;
+  height: 14px;
 }
 
 .app-shell.nav-minimal .local-check {

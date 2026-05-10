@@ -2,6 +2,8 @@ import { useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent 
 import { createPortal } from 'react-dom'
 
 import { Icon, type IconName } from './icons'
+import { MenuFlyout } from './MenuFlyout'
+import type { MenuFlyoutItem, MenuFlyoutPosition } from './MenuFlyoutHelper'
 import type { Translator } from '../shared/i18n'
 import { useLibraryStore } from '../state/useLibraryStore'
 
@@ -57,6 +59,7 @@ export function MultiSelectCommandBar({
   const hasSelection = selectedCount > 0
   const anchorRef = useRef<HTMLSpanElement | null>(null)
   const hideAfterOperation = useLibraryStore((state) => state.snapshot.settings.hideMultiSelectCommandBarAfterOperation)
+  const [selectionMenu, setSelectionMenu] = useState<MenuFlyoutPosition | null>(null)
   const [layout, setLayout] = useState({
     left: 0,
     width: window.innerWidth,
@@ -100,6 +103,12 @@ export function MultiSelectCommandBar({
     onCancel()
   }
 
+  const selectionMenuItems: MenuFlyoutItem[] = [
+    { key: 'select-all', text: t('albums.selectAll'), icon: 'selectAll', onClick: onSelectAll },
+    { key: 'reverse-selection', text: t('albums.reverseSelection'), icon: 'sort', onClick: onReverseSelection },
+    { key: 'clear-selection', text: t('albums.clearSelection'), icon: 'clearSelection', onClick: onClearSelection },
+  ]
+
   const commandBar = (
     <div
       className={visible ? 'multi-select-command-bar is-visible' : 'multi-select-command-bar'}
@@ -119,6 +128,11 @@ export function MultiSelectCommandBar({
         ) : null}
       </div>
       <div className="multi-select-command-actions">
+        <button type="button" className="multi-select-command-cancel" onClick={cancel}>
+          <Icon name="close" />
+          <span>{t('common.cancel')}</span>
+        </button>
+        <span className="multi-select-command-separator" aria-hidden="true" />
         {showPlay && onPlay ? (
           <button
             type="button"
@@ -192,23 +206,41 @@ export function MultiSelectCommandBar({
             <span>{action.text}</span>
           </button>
         ))}
-        <button type="button" onClick={onSelectAll}>
+        <span className="multi-select-command-separator multi-select-command-selection-separator" aria-hidden="true" />
+        <button type="button" className="multi-select-command-selection-action" onClick={onSelectAll}>
           <Icon name="selectAll" />
           <span>{t('albums.selectAll')}</span>
         </button>
-        <button type="button" onClick={onReverseSelection}>
+        <button type="button" className="multi-select-command-selection-action" onClick={onReverseSelection}>
           <Icon name="sort" />
           <span>{t('albums.reverseSelection')}</span>
         </button>
-        <button type="button" onClick={onClearSelection}>
+        <button type="button" className="multi-select-command-selection-action" onClick={onClearSelection}>
           <Icon name="clearSelection" />
           <span>{t('albums.clearSelection')}</span>
         </button>
-        <button type="button" onClick={cancel}>
-          <Icon name="close" />
-          <span>{t('common.cancel')}</span>
+        <button
+          type="button"
+          className="multi-select-command-more"
+          aria-label={t('player.more')}
+          title={t('player.more')}
+          onClick={(event) => {
+            const rect = event.currentTarget.getBoundingClientRect()
+            setSelectionMenu({ x: rect.left, y: rect.top - 8 })
+          }}
+        >
+          <Icon name="moreHorizontal" />
         </button>
       </div>
+      {selectionMenu ? (
+        <MenuFlyout
+          position={selectionMenu}
+          onClose={() => {
+            setSelectionMenu(null)
+          }}
+          items={selectionMenuItems}
+        />
+      ) : null}
     </div>
   )
 

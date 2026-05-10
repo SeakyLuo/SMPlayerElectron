@@ -247,6 +247,13 @@
   margin-left: auto;
 }
 
+.multi-select-command-separator {
+  width: 1px;
+  height: 28px;
+  flex: 0 0 auto;
+  background: rgba(92, 103, 118, 0.22);
+}
+
 .multi-select-command-bar button,
 .multi-select-command-select {
   display: inline-flex;
@@ -331,6 +338,59 @@
   width: 16px;
   height: 16px;
   flex: 0 0 auto;
+}
+
+.multi-select-command-bar .multi-select-command-more {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .multi-select-command-bar {
+    gap: 12px;
+    padding: 0 12px 0 18px;
+  }
+
+  .multi-select-command-count {
+    min-width: 112px;
+  }
+
+  .multi-select-command-actions {
+    flex: 1 1 auto;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .multi-select-command-separator {
+    height: 26px;
+  }
+
+  .multi-select-command-selection-action,
+  .multi-select-command-selection-separator {
+    display: none !important;
+  }
+
+  .multi-select-command-bar .multi-select-command-more {
+    display: inline-flex;
+    min-width: 44px;
+    padding: 0 10px;
+  }
+}
+
+@media (max-width: 520px) {
+  .multi-select-command-bar {
+    gap: 8px;
+    padding-left: 12px;
+    padding-right: 10px;
+  }
+
+  .multi-select-command-count {
+    min-width: 98px;
+  }
+
+  .multi-select-command-bar .multi-select-command-more {
+    min-width: 40px;
+    padding: 0 9px;
+  }
 }
 
 .albums-grid-shell {

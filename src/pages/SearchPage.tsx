@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 
 import { AlbumArtControl } from '../components/AlbumArtControl'
 import { ArtworkImage } from '../components/ArtworkImage'
@@ -111,6 +111,7 @@ export function SearchPage({
   onOpenLocalFolder,
   onSearchDirectory,
 }: SearchPageProps) {
+  const navigate = useNavigate()
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
   const [activeFilter, setActiveFilter] = useState<SearchFilterKey>('all')
   const [songContextMenu, setSongContextMenu] = useState<MusicMenuFlyoutState | null>(null)
@@ -406,15 +407,18 @@ export function SearchPage({
                     song={song}
                     t={t}
                     current={song.id === selectedTrackId}
-                    isPlaying={isPlaying}
+                    playing={isPlaying}
                     queueSongIds={queueSongIds}
                     selectionMode={searchSelectionMode}
                     selected={selectedSongIds.has(song.id)}
+                    dropPosition={null}
+                    draggable={false}
                     showAlbum
-                    showArtist
                     onPlayTrack={onPlayTrack}
                     onTogglePlayPause={onTogglePlayPause}
-                    onSelect={toggleSongSelection}
+                    onToggleSelection={() => {
+                      toggleSongSelection(song.id)
+                    }}
                     onAddToPlaylistClick={(contextSong, x, y) => {
                       setSongContextMenu(null)
                       setCardContextMenu(null)
@@ -423,6 +427,12 @@ export function SearchPage({
                     onContextMenu={(contextSong, x, y) => {
                       setSongAddMenu(null)
                       setSongContextMenu({ song: contextSong, x, y })
+                    }}
+                    onSeeArtist={(artist) => {
+                      navigate(`/artists?artist=${encodeURIComponent(artist)}`)
+                    }}
+                    onSeeAlbum={(contextSong) => {
+                      navigate(`/albums?album=${encodeURIComponent(contextSong.album || t('common.albumUnknown'))}`)
                     }}
                   />
                 ))}

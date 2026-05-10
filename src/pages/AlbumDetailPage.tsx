@@ -19,11 +19,13 @@ interface AlbumDetailPageProps {
   onTogglePlayPause: () => void
   onAddSongToPlaylist: (playlistId: number, songId: number) => void
   onAddSongsToPlaylist: (playlistId: number, songIds: number[]) => void
-  onToggleFavorite: (songId: number, favorite: boolean) => void
-  onSetAlbumPreferred: (albumName: string, level: PreferenceLevel) => void
+  onToggleFavorite?: (songId: number, favorite: boolean) => void
+  onSetAlbumPreferred?: (albumName: string, level: PreferenceLevel) => void
   onAlbumArtworkSaved: () => void
   onArtistClick: (artist: string) => void
   onAlbumClick: (album: string) => void
+  canEditArtwork?: boolean
+  canSetPreferred?: boolean
 }
 
 export function AlbumDetailPage({
@@ -45,6 +47,8 @@ export function AlbumDetailPage({
   onAlbumArtworkSaved,
   onArtistClick,
   onAlbumClick,
+  canEditArtwork = true,
+  canSetPreferred = true,
 }: AlbumDetailPageProps) {
   const [showArtworkDialog, setShowArtworkDialog] = useState(false)
   const artworkUrl = songs.find((song) => song.artworkUrl)?.artworkUrl ?? ''
@@ -63,8 +67,8 @@ export function AlbumDetailPage({
         artworkUrl={artworkUrl}
         showAlbum={false}
         showArtist
-        canEditArtwork
-        canSetPreferred
+        canEditArtwork={canEditArtwork}
+        canSetPreferred={canSetPreferred}
         preferenceType="album"
         preferenceItemId={albumName}
         onPlayTrack={onPlayTrack}
@@ -77,7 +81,7 @@ export function AlbumDetailPage({
         onArtistClick={onArtistClick}
         onAlbumClick={onAlbumClick}
         onSetPreferred={(level) => {
-          onSetAlbumPreferred(albumName, level)
+          onSetAlbumPreferred?.(albumName, level)
         }}
         onEditArtwork={() => {
           setShowArtworkDialog(true)

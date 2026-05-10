@@ -28,6 +28,8 @@ interface LibraryDataSourcePlaylistsPageProps {
   onAddSongsToPlaylist: (playlistId: number, songIds: number[]) => void
   onRemoveSongsFromPlaylist: (playlistId: number, songIds: number[]) => void
   onReorderPlaylistSongs: (playlistId: number, songIds: number[], sortCriterion?: PlaylistSortCriterion) => void
+  routeBase?: string
+  routePlaylistId?: number | null
 }
 
 export function LibraryDataSourcePlaylistsPage({
@@ -52,6 +54,8 @@ export function LibraryDataSourcePlaylistsPage({
   onAddSongsToPlaylist,
   onRemoveSongsFromPlaylist,
   onReorderPlaylistSongs,
+  routeBase = '',
+  routePlaylistId = null,
 }: LibraryDataSourcePlaylistsPageProps) {
   const [snapshot, setSnapshot] = useState<LibrarySnapshot | null>(null)
   const [sourceLoading, setSourceLoading] = useState(true)
@@ -116,6 +120,8 @@ export function LibraryDataSourcePlaylistsPage({
       onAddSongsToPlaylist={onAddSongsToPlaylist}
       onRemoveSongsFromPlaylist={onRemoveSongsFromPlaylist}
       onReorderPlaylistSongs={onReorderPlaylistSongs}
+      routeBase={routeBase}
+      routePlaylistId={routePlaylistId}
     />
   )
 }

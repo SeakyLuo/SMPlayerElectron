@@ -3,7 +3,7 @@ import clsx from 'clsx'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 
 import { ArtworkImage } from '../components/ArtworkImage'
-import { AppBarSearchPortal } from '../components/AppBarSearchPortal'
+import { AppBarSearch } from '../components/AppBarPortal'
 import { DefaultAlbumArtwork } from '../components/DefaultAlbumArtwork'
 import { Icon } from '../components/icons'
 import { LoadingState } from '../components/LoadingState'
@@ -48,6 +48,7 @@ interface ArtistsPageProps {
   onRevealSong: (songPath: string) => void | Promise<void>
   onDeleteSongFromDisk: (songId: number) => void
   onCompactTitleChange?: (title: string) => void
+  routeBase?: string
 }
 
 interface ArtistGroup {
@@ -127,6 +128,7 @@ export function ArtistsPage({
   onRevealSong,
   onDeleteSongFromDisk,
   onCompactTitleChange,
+  routeBase = '',
 }: ArtistsPageProps) {
   const [artistSearch, setArtistSearch] = useState('')
   const [artistSearchFocused, setArtistSearchFocused] = useState(false)
@@ -305,9 +307,9 @@ export function ArtistsPage({
     setMultiSelect(false)
     clearSelection()
     if (isCompactArtistLayout) {
-      const artistDetailSearch = `?artist=${encodeURIComponent(artistName)}`
-      if (location.pathname !== '/artists' || location.search !== artistDetailSearch) {
-        navigate(`/artists${artistDetailSearch}`)
+      const artistRoute = getArtistRoute(routeBase, artistName)
+      if (`${location.pathname}${location.search}` !== artistRoute) {
+        navigate(artistRoute)
       }
     }
     scrollToArtist(artistName)
@@ -318,9 +320,9 @@ export function ArtistsPage({
     setMultiSelect(false)
     clearSelection()
     if (isCompactArtistLayout) {
-      const artistDetailSearch = `?artist=${encodeURIComponent(artistName)}`
-      if (location.pathname !== '/artists' || location.search !== artistDetailSearch) {
-        navigate(`/artists${artistDetailSearch}`)
+      const artistRoute = getArtistRoute(routeBase, artistName)
+      if (`${location.pathname}${location.search}` !== artistRoute) {
+        navigate(artistRoute)
       }
       artistDetailRef.current?.scrollTo({ top: 0 })
       setArtistDetailScrollTop(0)
@@ -331,8 +333,9 @@ export function ArtistsPage({
     setSelectedArtistName('')
     setMultiSelect(false)
     clearSelection()
-    if (location.pathname !== '/artists' || location.search) {
-      navigate('/artists', { replace: true })
+    const artistsRoute = `${routeBase}/artists`
+    if (location.pathname !== artistsRoute || location.search) {
+      navigate(artistsRoute, { replace: true })
     }
   }
 
@@ -546,14 +549,14 @@ export function ArtistsPage({
       'is-compact-detail-open': isCompactArtistLayout && selectedArtist,
     })}>
       {error ? <div className="error-banner">{error}</div> : null}
-      <AppBarSearchPortal
+      <AppBarSearch
         t={t}
         active={Boolean(artistSearch)}
         open={appBarSearchOpen}
         onOpenChange={setAppBarSearchOpen}
       >
         {renderArtistSearch('appbar')}
-      </AppBarSearchPortal>
+      </AppBarSearch>
 
       <aside className="artists-master">
         {renderArtistSearch('page')}
@@ -698,7 +701,7 @@ export function ArtistsPage({
                     <header className="artist-album-header">
                       <AlbumArtwork title={album.name} artworkUrl={album.artworkUrl} songId={album.songs[0]!.id} />
                       <div className="artist-album-copy">
-                        <Link to={`/albums?album=${encodeURIComponent(album.name)}`}>{album.name}</Link>
+                        <Link to={getAlbumRoute(routeBase, album.name)}>{album.name}</Link>
                         <p>
                           {t('artists.albumSummary', {
                             songs: album.songs.length,
@@ -733,22 +736,27 @@ export function ArtistsPage({
                       </div>
                     </header>
 
-                    <div className="artist-song-list">
-                      {album.songs.map((song, index) => (
+                    <div className="artist-song-list playlist-control-compact">
+                      {album.songs.map((song) => (
                         <PlaylistControlItem
                           key={song.id}
                           song={song}
                           t={t}
-                          rowNumber={index + 1}
                           current={song.id === selectedTrackId}
-                          isPlaying={isPlaying}
+                          playing={isPlaying}
                           queueSongIds={selectedQueueSongIds}
                           selectionMode={multiSelect}
                           selected={selectedSongIds.has(song.id)}
+                          dropPosition={null}
+                          draggable={false}
+                          showAlbum={false}
+                          showArtist={false}
                           onPlayTrack={onPlayTrack}
                           onTogglePlayPause={onTogglePlayPause}
                           onToggleFavorite={onToggleFavorite}
-                          onSelect={toggleSongSelection}
+                          onToggleSelection={() => {
+                            toggleSongSelection(song.id)
+                          }}
                           onAddToPlaylistClick={(contextSong, x, y) => {
                             setGroupMenu(null)
                             setSongContextMenu({
@@ -764,6 +772,12 @@ export function ArtistsPage({
                               x,
                               y,
                             })
+                          }}
+                          onSeeArtist={(artist) => {
+                            navigate(getArtistRoute(routeBase, artist))
+                          }}
+                          onSeeAlbum={(contextSong) => {
+                            navigate(getAlbumRoute(routeBase, contextSong.album || t('common.albumUnknown')))
                           }}
                         />
                       ))}
@@ -845,7 +859,7 @@ export function ArtistsPage({
             reloadArtist(groupMenu.label)
           }}
           onSeeAlbum={(albumName) => {
-            navigate(`/albums?album=${encodeURIComponent(albumName)}`)
+            navigate(getAlbumRoute(routeBase, albumName))
           }}
         />
       ) : null}
@@ -1345,6 +1359,16 @@ function getArtistAlbumVirtualWindow(heights: number[], scrollTop: number, viewp
     topSpacerHeight,
     bottomSpacerHeight,
   }
+}
+
+function getArtistRoute(routeBase: string, artistName: string) {
+  const encodedArtist = encodeURIComponent(artistName)
+  return routeBase ? `${routeBase}/artists/${encodedArtist}` : `/artists?artist=${encodedArtist}`
+}
+
+function getAlbumRoute(routeBase: string, albumName: string) {
+  const encodedAlbum = encodeURIComponent(albumName)
+  return routeBase ? `${routeBase}/albums/${encodedAlbum}` : `/albums?album=${encodedAlbum}`
 }
 
 function ArtistListArtwork({ artist }: { artist: ArtistGroup }) {

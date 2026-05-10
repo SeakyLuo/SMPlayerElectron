@@ -8,7 +8,7 @@ import { Icon } from '../components/icons'
 import { LoadingState } from '../components/LoadingState'
 import { MenuFlyout } from '../components/MenuFlyout'
 import { MusicDialog } from '../components/MusicDialog'
-import { NowPlayingQueueItem } from '../components/NowPlayingQueueItem'
+import { PlaylistControlItem } from '../components/PlaylistControlItem'
 import { MediaControlSurface, type VoiceAssistantResponse } from '../components/MediaControl'
 import {
   getAddToPlaylistMenuFlyoutItem,
@@ -42,6 +42,7 @@ const DEFAULT_ARTWORK_URL = '/monotone_bg_wide.png'
 const LYRICS_RESTORE_DELAY_MS = 5000
 const LYRICS_SCROLL_DURATION_MS = 360
 const PLAYER_BAR_AUTO_HIDE_DELAY_MS = 5000
+const COMPACT_IMMERSIVE_QUERY = '(max-width: 760px)'
 
 type FullPanel = 'playlist' | 'info' | 'lyrics' | 'album-art'
 type FullDialogMode = 'properties' | 'lyrics' | 'album-art'
@@ -166,6 +167,7 @@ export function NowPlayingFullPage({
   const playerBarPinnedRef = useRef(false)
   const lyricScrollAnimationRef = useRef<number | null>(null)
   const activeLyricsIndexRef = useRef(-1)
+  const isCompactImmersiveRef = useRef(window.matchMedia(COMPACT_IMMERSIVE_QUERY).matches)
   const lyricDragRef = useRef<{ pointerId: number; clientY: number; scrollTop: number; moved: boolean } | null>(null)
   const createPlaylist = useLibraryStore((state) => state.createPlaylist)
   const removeSongFromPlaylist = useLibraryStore((state) => state.removeSongFromPlaylist)
@@ -214,6 +216,19 @@ export function NowPlayingFullPage({
       setPreferenceItem(settings.songs.find((item) => item.itemId === String(currentSong.id)) ?? null)
     }
   }
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia(COMPACT_IMMERSIVE_QUERY)
+    const updateCompactImmersive = () => {
+      isCompactImmersiveRef.current = mediaQuery.matches
+    }
+
+    updateCompactImmersive()
+    mediaQuery.addEventListener('change', updateCompactImmersive)
+    return () => {
+      mediaQuery.removeEventListener('change', updateCompactImmersive)
+    }
+  }, [])
 
   useEffect(() => {
     let canceled = false
@@ -359,7 +374,9 @@ export function NowPlayingFullPage({
 
     const containerRect = container.getBoundingClientRect()
     const coverRect = cover.getBoundingClientRect()
-    const anchorOffset = coverRect.top + coverRect.height / 2 - containerRect.top
+    const anchorOffset = isCompactImmersiveRef.current
+      ? containerRect.height / 2
+      : coverRect.top + coverRect.height / 2 - containerRect.top
     const targetTop = line.offsetTop - anchorOffset + line.offsetHeight / 2
 
     cancelLyricScrollAnimation()
@@ -407,8 +424,11 @@ export function NowPlayingFullPage({
       return null
     }
 
+    const containerRect = container.getBoundingClientRect()
     const coverRect = cover.getBoundingClientRect()
-    const centerY = coverRect.top + coverRect.height / 2
+    const centerY = isCompactImmersiveRef.current
+      ? containerRect.top + containerRect.height / 2
+      : coverRect.top + coverRect.height / 2
     let nextIndex = 0
     let nextDistance = Number.POSITIVE_INFINITY
 
@@ -662,6 +682,15 @@ export function NowPlayingFullPage({
       <div className="now-playing-full-titlebar" aria-hidden="true" />
       <button
         type="button"
+        className="now-playing-full-back-button"
+        aria-label={t('sidebar.back')}
+        title={t('sidebar.back')}
+        onClick={goBack}
+      >
+        <Icon name="arrowLeft" />
+      </button>
+      <button
+        type="button"
         className={clsx('now-playing-full-queue-button', { 'is-active': showPlaylistPanel })}
         onClick={() => {
           setDialogMode(null)
@@ -686,7 +715,9 @@ export function NowPlayingFullPage({
           </div>
           <div
             ref={lyricStageRef}
-            className={clsx('now-playing-full-lyric-stage', { 'is-dragging': isLyricDragging })}
+            className={clsx('now-playing-full-lyric-stage', {
+              'is-dragging': isLyricDragging,
+            })}
             onPointerDown={beginLyricsDrag}
             onPointerMove={moveLyricsDrag}
             onPointerUp={finishLyricsDrag}
@@ -729,7 +760,7 @@ export function NowPlayingFullPage({
                   ) : null}
                 </div>
               )) : (
-                <div className="now-playing-full-lyric-row is-active">
+                <div className="now-playing-full-lyric-row is-loading">
                   <p>{t('nowPlaying.noLyrics')}</p>
                 </div>
               )}
@@ -1167,13 +1198,13 @@ function NowPlayingFullPlaylist({
         </button>
       </header>
       <section className="now-playing-full-list-shell" ref={listShellRef}>
-        <div className="now-playing-playlist-control now-playing-full-queue-list">
+        <div className="now-playing-playlist-control now-playing-full-queue-list playlist-control-compact">
           {songs.map((song, queueIndex) => {
             const current = selectedQueueIndex !== null
               ? queueIndex === selectedQueueIndex
               : song.id === selectedTrackId
             return (
-              <NowPlayingQueueItem
+              <PlaylistControlItem
                 key={queueEntryKeys[queueIndex]}
                 containerRef={current ? currentRowRef : undefined}
                 song={song}
@@ -1184,7 +1215,6 @@ function NowPlayingFullPlaylist({
                 selectionMode={multiSelect}
                 dropPosition={dropIndicator?.queueIndex === queueIndex ? dropIndicator.position : null}
                 queueSongIds={queueSongIds}
-                rowNumber={queueIndex + 1}
                 onPlayTrack={(trackId, nextQueueSongIds) => {
                   onPlayTrack(trackId, nextQueueSongIds, queueIndex)
                 }}

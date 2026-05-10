@@ -7,6 +7,7 @@ export function RenameDialog({
   playlists,
   title = t('playlists.createNew'),
   defaultName,
+  confirmText,
   onCancel,
   onConfirm,
 }: {
@@ -14,6 +15,7 @@ export function RenameDialog({
   playlists: LibraryPlaylist[]
   title?: string
   defaultName: string
+  confirmText?: string
   onCancel: () => void
   onConfirm: (name: string) => void
 }) {
@@ -23,6 +25,7 @@ export function RenameDialog({
       title={title}
       defaultValue={defaultName}
       placeholder={t('playlists.namePlaceholder')}
+      confirmText={confirmText}
       validate={(name) => validatePlaylistName(name, playlists, t)}
       onCancel={onCancel}
       onConfirm={onConfirm}

@@ -62,6 +62,7 @@ export function RemoteLibraryPage({ t }: { t: Translator }) {
   }
 
   const remoteRoute = getRemoteLibraryRoute(location.pathname, hostId)
+  const routeBase = `/remote/${hostId}`
   const commonPlaybackProps = {
     selectedTrackId: currentTrackId,
     isPlaying,
@@ -89,6 +90,7 @@ export function RemoteLibraryPage({ t }: { t: Translator }) {
           searchQuery=""
           error={null}
           targetArtistName={remoteRoute.targetName}
+          routeBase={routeBase}
           onAddSongsToNowPlaying={noop}
           onCreatePlaylistWithSongs={noop}
           onToggleFavorite={noop}
@@ -103,9 +105,22 @@ export function RemoteLibraryPage({ t }: { t: Translator }) {
           dataSource={dataSource}
           t={t}
           error={null}
+          targetAlbumName={remoteRoute.targetName}
+          routeBase={routeBase}
+          selectedTrackId={currentTrackId}
+          isPlaying={isPlaying}
           onAddSongsToPlaylist={noop}
           onAddSongsToNowPlaying={noop}
           onCreatePlaylistWithSongs={noop}
+          onMoveToMusicOrPlay={(trackId) => {
+            void playTrack(trackId)
+          }}
+          onPlayNext={() => {
+            void playNext()
+          }}
+          onTogglePlayPause={() => {
+            void togglePlayPause()
+          }}
           onPlayTrack={(trackId) => {
             void playTrack(trackId)
           }}
@@ -116,6 +131,8 @@ export function RemoteLibraryPage({ t }: { t: Translator }) {
           t={t}
           searchQuery=""
           error={null}
+          routeBase={routeBase}
+          routePlaylistId={remoteRoute.playlistId}
           onSelectPlaylist={noop}
           onDeletePlaylist={noop}
           onRenamePlaylist={noop}
@@ -151,6 +168,7 @@ export function RemoteLibraryPage({ t }: { t: Translator }) {
           onDeleteSongFromDisk={noop}
           readOnly
           resolveArtwork={false}
+          routeBase={routeBase}
           {...commonPlaybackProps}
         />
       )}
@@ -169,6 +187,7 @@ function getRemoteLibraryRoute(pathname: string, hostId: number) {
 
   return {
     section,
+    playlistId: section === 'playlists' && rest[0] ? Number(rest[0]) : null,
     targetName: rest.length > 0 ? decodeURIComponent(rest.join('/')) : undefined,
   }
 }

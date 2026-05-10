@@ -2,7 +2,7 @@
   display: grid;
   grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
   gap: 0;
-  height: calc(100% - var(--player-height));
+  height: 100%;
   min-height: 0;
   padding: 0;
   overflow: hidden;
@@ -557,25 +557,4 @@
   display: flex;
   flex-direction: column;
   gap: 0;
-}
-
-.artist-song-list .playlist-control-item {
-  grid-template-columns: minmax(0, 1fr) 72px;
-  min-height: 48px;
-  border-top: 1px solid rgba(126, 139, 154, 0.16);
-  border-radius: 0;
-  padding: 0 18px;
-  background: transparent;
-}
-
-.artist-song-list .playlist-control-item-title {
-  grid-template-columns: 34px minmax(0, 1fr);
-}
-
-.artist-song-list .playlist-control-item-title-text {
-  padding-right: 84px;
-}
-
-.artist-song-list .playlist-control-item time {
-  justify-self: end;
 }
