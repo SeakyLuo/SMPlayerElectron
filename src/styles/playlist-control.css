@@ -124,6 +124,17 @@
   text-overflow: ellipsis;
 }
 
+.playlist-control-item-title-primary {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.playlist-control-item-compact-meta {
+  display: none;
+}
+
 .playlist-control-item-artwork-wrap {
   position: relative;
   display: block;
@@ -387,7 +398,12 @@
   cursor: pointer;
 }
 
-.playlist-control-item-hover-actions button:hover {
+.playlist-control-item-hover-actions button:focus {
+  outline: 0;
+}
+
+.playlist-control-item-hover-actions button:hover,
+.playlist-control-item-hover-actions button:focus-visible {
   background: rgba(255, 255, 255, 0.56);
   color: var(--accent-strong);
 }

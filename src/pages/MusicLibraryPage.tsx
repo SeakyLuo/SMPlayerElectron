@@ -548,7 +548,7 @@ export function MusicLibraryPage({
                             <Link
                               className="table-link"
                               title={artist}
-                              to={`/artists/${encodeURIComponent(artist)}`}
+                              to={`/artists?artist=${encodeURIComponent(artist)}`}
                               onClick={(event) => {
                                 event.stopPropagation()
                               }}
@@ -564,7 +564,7 @@ export function MusicLibraryPage({
                         <Link
                           className="table-link"
                           title={albumLabel}
-                          to={`/albums/${encodeURIComponent(albumLabel)}`}
+                          to={`/albums?album=${encodeURIComponent(albumLabel)}`}
                           onClick={(event) => {
                             event.stopPropagation()
                           }}

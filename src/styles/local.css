@@ -423,6 +423,55 @@
   background: transparent;
 }
 
+.local-table-shell .music-table {
+  min-width: 760px;
+  table-layout: fixed;
+}
+
+.local-table-shell .music-table thead {
+  display: none;
+}
+
+.local-table-shell .music-table tbody tr:not(.local-table-section-row, .local-table-quick-jump-row) {
+  height: 44px;
+}
+
+.local-table-shell .music-table tbody td {
+  height: 44px;
+  padding: 0 10px;
+  border-top: 0;
+  font-size: 15px;
+}
+
+.local-table-shell .music-table tbody tr:hover td {
+  background: rgba(var(--accent-rgb), 0.055);
+}
+
+.local-table-shell .music-table tbody tr.is-selected td {
+  background: rgba(var(--accent-rgb), 0.12);
+  box-shadow: none;
+}
+
+.local-table-shell .music-table tbody tr.is-current td {
+  color: var(--accent-strong);
+}
+
+.local-table-name-cell {
+  width: 52%;
+}
+
+.local-table-artist-cell {
+  width: 22%;
+}
+
+.local-table-album-cell {
+  width: 26%;
+}
+
+.local-table-folder-name-cell {
+  width: 100%;
+}
+
 .local-folder-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, 180px);
@@ -907,15 +956,24 @@
   height: 17px;
 }
 
-.local-table-song-actions {
+.local-table-item-actions {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   margin-left: 10px;
   vertical-align: middle;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
 }
 
-.local-table-song-actions button {
+.local-table-shell .music-table tbody tr:hover .local-table-item-actions,
+.local-table-shell .music-table tbody tr:focus-within .local-table-item-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.local-table-item-actions button {
   display: inline-grid;
   place-items: center;
   width: 26px;
@@ -927,12 +985,17 @@
   cursor: pointer;
 }
 
-.local-table-song-actions button:hover {
+.local-table-item-actions button:hover {
   background: rgba(var(--accent-rgb), 0.12);
   color: var(--accent-strong);
 }
 
-.local-table-song-actions svg {
+.local-table-item-actions button:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
+.local-table-item-actions svg {
   width: 15px;
   height: 15px;
 }
@@ -951,6 +1014,14 @@
 .table-link-button svg {
   width: 20px;
   height: 20px;
+}
+
+.local-table-type-icon {
+  display: block;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
 }
 
 .local-table-primary-text {
@@ -1029,12 +1100,12 @@
 
 .app-shell.nav-minimal .local-table-shell .music-table tbody tr:not(.local-table-section-row, .local-table-quick-jump-row) {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: 24px 18px 18px;
   grid-template-areas:
-    "name action"
-    "artist duration"
-    "album duration";
+    "name"
+    "artist"
+    "album";
   align-items: center;
   gap: 0 10px;
   min-height: 72px;
@@ -1093,27 +1164,13 @@
   color: var(--text-muted);
 }
 
-.app-shell.nav-minimal .local-table-album-cell,
-.app-shell.nav-minimal .local-table-duration-cell {
+.app-shell.nav-minimal .local-table-album-cell {
   overflow: hidden;
   color: var(--text-muted);
 }
 
 .app-shell.nav-minimal .local-table-album-cell {
   grid-area: album;
-}
-
-.app-shell.nav-minimal .local-table-duration-cell {
-  grid-area: duration;
-  justify-content: flex-end;
-  align-self: start;
-  padding-top: 2px !important;
-  font-variant-numeric: tabular-nums;
-}
-
-.app-shell.nav-minimal .local-table-action-cell {
-  grid-area: action;
-  justify-content: flex-end;
 }
 
 .app-shell.nav-minimal .local-table-folder-type-cell,
@@ -1129,21 +1186,7 @@
   white-space: nowrap;
 }
 
-.app-shell.nav-minimal .local-table-action-cell .table-action-button {
-  display: inline-grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  min-height: 0;
-  padding: 0;
-  border-radius: 7px;
-}
-
-.app-shell.nav-minimal .local-table-action-cell .table-action-button span {
-  display: none;
-}
-
-.app-shell.nav-minimal .local-table-song-actions {
+.app-shell.nav-minimal .local-table-item-actions {
   display: none;
 }
 

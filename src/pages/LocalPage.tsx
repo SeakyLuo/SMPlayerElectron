@@ -16,7 +16,6 @@ import { useFolderPreferenceMenuItem } from '../hooks/useFolderPreferenceMenuIte
 import { resolveSongArtworks } from '../hooks/useSongArtwork'
 import type { LibraryFolder, LibraryPlaylist, LibrarySong, LocalFolderSortCriterion, ScanLibraryResult } from '../shared/contracts'
 import { getSongArtists } from '../shared/artists'
-import { formatDuration } from '../shared/formatters'
 import type { Translator } from '../shared/i18n'
 import { getQuickJumpTooltip } from '../shared/quickJumpTooltip'
 import { getLocalTextQuickJumpBucket, LOCAL_TEXT_QUICK_JUMP_KEYS } from '../shared/textCompare'
@@ -40,6 +39,8 @@ import {
 
 type LocalSortMode = LocalFolderSortCriterion
 const LOCAL_COMPACT_BREAKPOINT = 720
+const LOCAL_FILE_TYPE_ICON_URL = '/colorful_no_bg.png'
+const LOCAL_FOLDER_TYPE_ICON_URL = '/folder.png'
 
 interface LocalPageProps {
   songs: LibrarySong[]
@@ -1508,9 +1509,6 @@ export function LocalPage({
                 <th>{t('common.name')}</th>
                 <th>{t('common.artist')}</th>
                 <th>{t('common.album')}</th>
-                <th>{t('common.duration')}</th>
-                <th>{t('local.location')}</th>
-                <th>{t('local.action')}</th>
               </tr>
             </thead>
             <tbody>
@@ -1526,6 +1524,7 @@ export function LocalPage({
                 <tr
                   key={folder.relativePath}
                   className={joinClassNames(
+                    'local-table-folder-row',
                     !multiSelect && selectedListItemKey === getFolderListItemKey(folder.relativePath) && 'is-selected',
                     multiSelect && selectedFolderPaths.has(folder.relativePath) && 'is-selected',
                   )}
@@ -1558,33 +1557,72 @@ export function LocalPage({
                     setFolderMenu({ folder, x: event.clientX, y: event.clientY })
                   }}
                 >
-                  <td className="local-table-name-cell local-table-folder-name-cell">
+                  <td className="local-table-name-cell local-table-folder-name-cell" colSpan={3}>
                     {multiSelect ? (
                       <span className={selectedFolderPaths.has(folder.relativePath) ? 'local-check is-selected' : 'local-check'}>
                         {selectedFolderPaths.has(folder.relativePath) ? <Icon name="check" /> : null}
                       </span>
                     ) : null}
                     <button className="table-link table-link-button" type="button">
-                      <Icon name="folder" />
-                      {folder.name}
+                      <img className="local-table-type-icon" src={LOCAL_FOLDER_TYPE_ICON_URL} alt="" />
+                      <span className="local-table-primary-text">{folder.name}</span>
                     </button>
-                  </td>
-                  <td className="local-table-folder-type-cell">{t('common.folders')}</td>
-                  <td className="local-table-folder-count-cell">{t('local.childFolderCount', { count: folder.childPaths.length })}</td>
-                  <td className="local-table-duration-cell">{t('local.folderSongs', { count: folder.directSongIds.length })}</td>
-                  <td className="local-path-cell">{folder.relativePath || t('local.libraryRoot')}</td>
-                  <td className="local-table-action-cell">
-                    <button
-                      type="button"
-                      className="table-action-button subtle"
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        void hideFolder(folder)
-                      }}
-                    >
-                      <Icon name="close" />
-                      <span>{t('local.hideFolder')}</span>
-                    </button>
+                    {!multiSelect ? (
+                      <span className="local-table-item-actions">
+                        <button
+                          type="button"
+                          title={t('nowPlaying.randomPlay')}
+                          disabled={folder.subtreeSongIds.length === 0}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            shuffleFolder(folder)
+                          }}
+                        >
+                          <Icon name="shuffle" />
+                        </button>
+                        <button
+                          type="button"
+                          title={t('context.addToPlaylist')}
+                          disabled={folder.subtreeSongIds.length === 0}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            setFolderAddMenu({ folder, x: event.clientX, y: event.clientY })
+                          }}
+                        >
+                          <Icon name="plus" />
+                        </button>
+                        <button
+                          type="button"
+                          title={t('local.updateFolder')}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            void refreshFolderWithResult(folder)
+                          }}
+                        >
+                          <Icon name="refresh" />
+                        </button>
+                        <button
+                          type="button"
+                          title={t('local.searchDirectory')}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            searchDirectory(folder)
+                          }}
+                        >
+                          <Icon name="search" />
+                        </button>
+                        <button
+                          type="button"
+                          title={t('context.reveal')}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            onRevealFolder(folder.path)
+                          }}
+                        >
+                          <Icon name="local" />
+                        </button>
+                      </span>
+                    ) : null}
                   </td>
                 </tr>
               )) : null}
@@ -1598,7 +1636,7 @@ export function LocalPage({
               ) : null}
               {showSongItems && showSongQuickJump ? (
                 <tr className="local-table-quick-jump-row">
-                  <td colSpan={6}>
+                  <td colSpan={3}>
                     <LocalSongQuickJump
                       basisName={songQuickJumpBasisName}
                       enabledKeys={songQuickJumpMap}
@@ -1616,6 +1654,7 @@ export function LocalPage({
                     localSongItemRefs.current[index] = element
                   }}
                   className={joinClassNames(
+                    'local-table-song-row',
                     song.id === selectedTrackId && 'is-current',
                     !multiSelect && selectedListItemKey === getSongListItemKey(song.id) && 'is-selected',
                     multiSelect && selectedSongIds.has(song.id) && 'is-selected',
@@ -1649,11 +1688,15 @@ export function LocalPage({
                       </span>
                     ) : null}
                     <span className="local-table-row-icon">
-                      <Icon name={song.id === selectedTrackId && isPlaying ? 'play' : 'songs'} />
+                      {song.id === selectedTrackId ? (
+                        <Icon name="play" />
+                      ) : (
+                        <img className="local-table-type-icon" src={LOCAL_FILE_TYPE_ICON_URL} alt="" />
+                      )}
                     </span>
                     <span className="local-table-primary-text">{song.title}</span>
                     {!multiSelect ? (
-                      <span className="local-table-song-actions">
+                      <span className="local-table-item-actions local-table-song-actions">
                         <button
                           type="button"
                           title={song.id === selectedTrackId && isPlaying ? t('context.pause') : t('context.play')}
@@ -1697,7 +1740,7 @@ export function LocalPage({
                         {index > 0 ? ', ' : null}
                         <Link
                           className="table-link"
-                          to={`/artists/${encodeURIComponent(artist)}`}
+                          to={`/artists?artist=${encodeURIComponent(artist)}`}
                           onClick={(event) => event.stopPropagation()}
                         >
                           {artist}
@@ -1708,32 +1751,11 @@ export function LocalPage({
                   <td className="local-table-album-cell">
                     <Link
                       className="table-link"
-                      to={`/albums/${encodeURIComponent(song.album || t('common.albumUnknown'))}`}
+                      to={`/albums?album=${encodeURIComponent(song.album || t('common.albumUnknown'))}`}
                       onClick={(event) => event.stopPropagation()}
                     >
                       {song.album || t('common.albumUnknown')}
                     </Link>
-                  </td>
-                  <td className="local-table-duration-cell">{formatDuration(song.duration)}</td>
-                  <td className="local-path-cell">
-                    {normalizePath(song.path)
-                      .replace(`${normalizePath(rootPath)}/`, '')
-                      .split('/')
-                      .slice(0, -1)
-                      .join('/') || t('local.libraryRoot')}
-                  </td>
-                  <td className="local-table-action-cell">
-                    <button
-                      type="button"
-                      className="table-action-button subtle"
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        onRevealSong(song.path)
-                      }}
-                    >
-                      <Icon name="local" />
-                      <span>{t('local.reveal')}</span>
-                    </button>
                   </td>
                 </tr>
               )) : null}
@@ -2191,7 +2213,7 @@ function LocalTableSectionHeader({
 }) {
   return (
     <tr className="local-table-section-row">
-      <td colSpan={6}>
+      <td colSpan={3}>
         <button className="local-content-section-header" type="button" onClick={onToggle}>
           <Icon name={expanded ? 'chevronDown' : 'chevronRight'} />
           <span>{title}</span>
@@ -2245,7 +2267,7 @@ function LocalSongQuickJump({
 function FolderTypeBadge() {
   return (
     <span className="local-folder-type-badge" aria-hidden="true">
-      <img src="/folder.png" alt="" />
+      <img src={LOCAL_FOLDER_TYPE_ICON_URL} alt="" />
     </span>
   )
 }

@@ -195,10 +195,10 @@ export function MusicMenuFlyout({
               })
             },
             onSeeArtist: (artist) => {
-              navigate(`/artists/${encodeURIComponent(artist)}`)
+              navigate(`/artists?artist=${encodeURIComponent(artist)}`)
             },
             onSeeAlbum: () => {
-              navigate(`/albums/${encodeURIComponent(menu.song.album || t('common.albumUnknown'))}`)
+              navigate(`/albums?album=${encodeURIComponent(menu.song.album || t('common.albumUnknown'))}`)
             },
             onSeeMusicInfo: () => {
               setDialogMode('properties')

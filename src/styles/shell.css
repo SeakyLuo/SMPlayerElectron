@@ -37,8 +37,32 @@
   --sidebar-width: 64px;
 }
 
+.app-shell.nav-overlay {
+  --sidebar-width: 64px;
+}
+
+.app-shell.nav-overlay .workspace {
+  grid-column: 2;
+}
+
+.app-shell.nav-overlay-open .sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: var(--player-height);
+  z-index: 95;
+  width: 320px;
+  height: auto;
+  max-height: none;
+  background: var(--minimal-toolbar-background);
+  box-shadow: 18px 0 48px rgba(42, 56, 78, 0.18);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+}
+
 .app-shell.nav-minimal {
   --sidebar-width: 0px;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: 32px minmax(0, 1fr);
   background: var(--minimal-toolbar-background);
 }
