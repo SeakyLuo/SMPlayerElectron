@@ -12,7 +12,7 @@ import { useUndoableNotificationStore } from '../state/useUndoableNotificationSt
 import { ArtworkImage } from './ArtworkImage'
 import { CommandBar, CommandBarButton } from './CommandBar'
 import { DefaultAlbumArtwork } from './DefaultAlbumArtwork'
-import { requestConfirmDialog } from './dialogService'
+import { requestConfirmDialog, requestTextDialog } from './dialogService'
 import { MenuFlyout } from './MenuFlyout'
 import { getAddToPlaylistMenuFlyoutItem, getMusicMenuFlyoutItems, getPreferenceMenuFlyoutItem, type MenuFlyoutPosition } from './MenuFlyoutHelper'
 import { MultiSelectCommandBar } from './MultiSelectCommandBar'
@@ -38,7 +38,6 @@ interface HeaderedPlaylistControlProps {
   removable?: boolean
   showAlbum?: boolean
   showArtist?: boolean
-  showSongArtwork?: boolean
   canRename?: boolean
   canDelete?: boolean
   canClear?: boolean
@@ -81,7 +80,6 @@ export function HeaderedPlaylistControl({
   removable = false,
   showAlbum = false,
   showArtist = true,
-  showSongArtwork = false,
   canRename = false,
   canDelete = false,
   canClear = false,
@@ -108,7 +106,7 @@ export function HeaderedPlaylistControl({
   onPlayNext,
 }: HeaderedPlaylistControlProps) {
   const controlRef = useRef<HTMLElement | null>(null)
-  const onScrollbarPointerDown = useHeaderedPlaylistScroll(controlRef)
+  const onScrollbarPointerDown = useHeaderedPlaylistScroll(controlRef, title)
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedSongIds, setSelectedSongIds] = useState<Set<number>>(new Set())
   const [addToMenu, setAddToMenu] = useState<(MenuFlyoutPosition & { songIds: number[] }) | null>(null)
@@ -118,8 +116,6 @@ export function HeaderedPlaylistControl({
   const [songDialog, setSongDialog] = useState<{ song: LibrarySong; mode: 'properties' | 'lyrics' | 'album-art' } | null>(null)
   const [songPreferenceItem, setSongPreferenceItem] = useState<PreferenceItemSnapshot | null>(null)
   const [headerPreferenceItem, setHeaderPreferenceItem] = useState<PreferenceItemSnapshot | null>(null)
-  const [editingName, setEditingName] = useState(false)
-  const [renameDraft, setRenameDraft] = useState(title)
   const [selectedSortCriterion, setSelectedSortCriterion] = useState<PlaylistSortCriterion | null>(null)
   const [orderedSongIds, setOrderedSongIds] = useState<number[] | null>(null)
   const [coverColorRgb, setCoverColorRgb] = useState(getDefaultArtworkColorRgb)
@@ -168,6 +164,7 @@ export function HeaderedPlaylistControl({
       ? playlists.find((playlist) => playlist.name === title)
       : undefined
   const currentPlaylistName = type === 'album' || type === 'favorites' ? title : currentSavedPlaylist?.name
+  const preferenceDisplayName = type === 'album' ? getAlbumPreferenceDisplayName(title, songs, translateCaption) : title
   const defaultPlaylistName = getNextPlaylistName(
     isBadNewPlaylistName(title, translateCaption) ? '' : title,
     playlists,
@@ -199,6 +196,14 @@ export function HeaderedPlaylistControl({
       isDisposed = true
     }
   }, [headerArtworkUrl])
+
+  useEffect(() => {
+    document.documentElement.style.setProperty('--immersive-header-cover-rgb', coverColorRgb)
+
+    return () => {
+      document.documentElement.style.removeProperty('--immersive-header-cover-rgb')
+    }
+  }, [coverColorRgb])
 
   useEffect(() => {
     setOrderedSongIds(null)
@@ -303,6 +308,55 @@ export function HeaderedPlaylistControl({
     }
   }
 
+  const openPreferenceMenuFromButton = (button: HTMLElement) => {
+    const rect = button.getBoundingClientRect()
+    openPreferenceMenu(rect.left, rect.bottom + 4)
+  }
+
+  const openSortMenuFromButton = (button: HTMLElement) => {
+    const rect = button.getBoundingClientRect()
+    setPreferenceMenu(null)
+    setSortMenu({ x: rect.left, y: rect.bottom + 4 })
+  }
+
+  const openRenameDialog = () => {
+    void requestTextDialog({
+      title: translateCaption('playlists.rename'),
+      defaultValue: title,
+      placeholder: translateCaption('playlists.namePlaceholder'),
+      confirmText: translateCaption('playlists.rename'),
+      validate: (name) => validatePlaylistName(name, playlists, title, translateCaption),
+    }).then((name) => {
+      if (name && name !== title) {
+        onRename?.(name)
+      }
+    })
+  }
+
+  const requestClear = () => {
+    void requestConfirmDialog({
+      title: captionFor('clear'),
+      message: translateCaption('headeredPlaylist.clearConfirm', { name: title }),
+      confirmText: captionFor('clear'),
+    }).then((confirmed) => {
+      if (confirmed) {
+        onClear?.()
+      }
+    })
+  }
+
+  const requestDelete = () => {
+    void requestConfirmDialog({
+      title: captionFor('delete'),
+      message: translateCaption('headeredPlaylist.deleteConfirm', { name: title }),
+      confirmText: captionFor('delete'),
+    }).then((confirmed) => {
+      if (confirmed) {
+        onDelete?.()
+      }
+    })
+  }
+
   const refreshHeaderPreferenceItem = async (latestSnapshot?: PreferenceSettingsSnapshot | null) => {
     const snapshot = latestSnapshot ?? await refreshPreferences()
     if (!snapshot) {
@@ -337,6 +391,69 @@ export function HeaderedPlaylistControl({
     void window.smplayer?.stopWindowDrag()
   }
 
+  const renderCommandBar = () => (
+    <CommandBar className="headered-playlist-commandbar" overflowLabel={t('player.more')}>
+      <CommandBarButton
+        icon="shuffle"
+        label={captionFor('shuffle')}
+        disabled={songs.length === 0}
+        onClick={shuffle}
+      />
+      <CommandBarButton
+        icon="menu"
+        label={captionFor('multiSelect')}
+        disabled={songs.length === 0}
+        onClick={() => {
+          setSelectionMode(true)
+        }}
+      />
+      {canSetPreferred && onSetPreferred ? (
+        <CommandBarButton
+          icon="star"
+          label={captionFor('preferenceSettings')}
+          onClick={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            openPreferenceMenuFromButton(event.currentTarget)
+          }}
+          onOverflowClick={(position) => {
+            openPreferenceMenu(position.x, position.y)
+          }}
+        />
+      ) : null}
+      <CommandBarButton
+        icon="sort"
+        label={captionFor('sort')}
+        disabled={songs.length === 0}
+        onClick={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          openSortMenuFromButton(event.currentTarget)
+        }}
+        onOverflowClick={(position) => {
+          setPreferenceMenu(null)
+          setSortMenu(position)
+        }}
+      />
+      {canRename ? (
+        <CommandBarButton
+          icon="rename"
+          label={captionFor('rename')}
+          onClick={openRenameDialog}
+        />
+      ) : null}
+      {canClear ? (
+        <CommandBarButton icon="clear" label={captionFor('clear')} disabled={songs.length === 0} onClick={requestClear} />
+      ) : null}
+      {canDelete ? (
+        <CommandBarButton icon="trash" label={captionFor('delete')} onClick={requestDelete} />
+      ) : null}
+      {canEditArtwork && onEditArtwork ? (
+        <CommandBarButton icon="pictures" label={captionFor('editArtwork')} onClick={onEditArtwork} />
+      ) : null}
+    </CommandBar>
+  )
+
   return (
     <section
       ref={controlRef}
@@ -351,6 +468,12 @@ export function HeaderedPlaylistControl({
         <div className="headered-playlist-scrollbar-thumb" onPointerDown={onScrollbarPointerDown} />
       </div>
       <div className="headered-playlist-backdrop" aria-hidden="true" />
+      <div className="headered-playlist-shy-bar">
+        <div className="headered-playlist-shy-header">
+          <strong title={title}>{title}</strong>
+        </div>
+        {renderCommandBar()}
+      </div>
       <header
         className="headered-playlist-hero"
         onPointerDownCapture={startHeaderDrag}
@@ -366,119 +489,20 @@ export function HeaderedPlaylistControl({
             type={type}
           />
           <div className="headered-playlist-copy">
-            {editingName ? (
-              <form
-                className="headered-playlist-rename"
-                onSubmit={(event) => {
-                  event.preventDefault()
-                  const nextName = renameDraft.trim()
-                  if (!nextName) {
-                    return
-                  }
-                  onRename?.(nextName)
-                  setEditingName(false)
-                }}
-              >
-                <input
-                  value={renameDraft}
-                  onChange={(event) => {
-                    setRenameDraft(event.currentTarget.value)
-                  }}
-                />
-                <button type="submit">{captionFor('save')}</button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditingName(false)
-                    setRenameDraft(title)
-                  }}
-                >
-                  {captionFor('cancel')}
-                </button>
-              </form>
-            ) : (
-              <h2 title={title}>{title}</h2>
-            )}
+            <h2 title={title}>{title}</h2>
             <p>{headerInfo}</p>
-            <CommandBar className="headered-playlist-commandbar" dynamicOverflow>
-              <CommandBarButton
-                icon="shuffle"
-                label={captionFor('shuffle')}
-                disabled={songs.length === 0}
-                onClick={shuffle}
-              />
-              <CommandBarButton
-                icon="menu"
-                label={captionFor('multiSelect')}
-                disabled={songs.length === 0}
-                onClick={() => {
-                  setSelectionMode(true)
-                }}
-              />
-              {canSetPreferred && onSetPreferred ? (
-                <CommandBarButton
-                  icon="star"
-                  label={captionFor('preferenceSettings')}
-                  canOverflow={false}
-                  onPointerDown={(event) => {
-                    event.preventDefault()
-                    event.stopPropagation()
-                    openPreferenceMenu(event.clientX, event.clientY)
-                  }}
-                  onClick={(event) => {
-                    event.preventDefault()
-                    event.stopPropagation()
-                  }}
-                />
-              ) : null}
-              <CommandBarButton
-                icon="sort"
-                label={captionFor('sort')}
-                canOverflow={false}
-                disabled={songs.length === 0}
-                onPointerDown={(event) => {
-                  event.preventDefault()
-                  event.stopPropagation()
-                  setPreferenceMenu(null)
-                  setSortMenu({ x: event.clientX, y: event.clientY })
-                }}
-                onClick={(event) => {
-                  event.preventDefault()
-                  event.stopPropagation()
-                }}
-              />
-              {canRename ? (
-                <CommandBarButton
-                  icon="settings"
-                  label={captionFor('rename')}
-                  onClick={() => {
-                    setRenameDraft(title)
-                    setEditingName(true)
-                  }}
-                />
-              ) : null}
-              {canClear ? (
-                <CommandBarButton icon="clearSelection" label={captionFor('clear')} disabled={songs.length === 0} onClick={onClear} />
-              ) : null}
-              {canDelete ? (
-                <CommandBarButton icon="trash" label={captionFor('delete')} onClick={onDelete} />
-              ) : null}
-              {canEditArtwork && onEditArtwork ? (
-                <CommandBarButton icon="albums" label={captionFor('editArtwork')} onClick={onEditArtwork} />
-              ) : null}
-            </CommandBar>
+            <div className="headered-playlist-hero-commandbar">
+              {renderCommandBar()}
+            </div>
           </div>
         </div>
       </header>
 
-      <section className={`PlaylistControl headered-playlist-list${showAlbum ? ' has-album' : ''}${showSongArtwork ? ' has-song-artwork' : ''}`}>
+      <section className={`PlaylistControl headered-playlist-list${showAlbum ? ' has-album' : ''}`}>
         <div className="headered-playlist-list-header">
-          <span className={`headered-playlist-title-head${showSongArtwork ? ' has-song-artwork' : ''}`}>
-            <span>#</span>
-            {showSongArtwork ? <span aria-hidden="true" /> : null}
-            <span>{captionFor('name')}</span>
-          </span>
-          {showArtist ? <span>{captionFor('artist')}</span> : null}
+          <span aria-hidden="true" />
+          <span>{showArtist ? captionFor('songArtist') : captionFor('name')}</span>
+          <span aria-hidden="true" />
           {showAlbum ? <span>{captionFor('album')}</span> : null}
           <span>{captionFor('duration')}</span>
         </div>
@@ -486,33 +510,36 @@ export function HeaderedPlaylistControl({
           {visibleSongs.map((song, index) => (
             <PlaylistControlItem
               key={song.id}
+              className="headered-playlist-queue-item"
               song={song}
               t={translateCaption}
-              rowNumber={index + 1}
               current={song.id === selectedTrackId}
-              isPlaying={isPlaying}
+              playing={isPlaying}
               selected={effectiveSelectedSongIds.includes(song.id)}
               selectionMode={selectionMode}
+              dropPosition={null}
               queueSongIds={queueSongIds}
+              draggable={false}
               showAlbum={showAlbum}
               showArtist={showArtist}
-              showArtwork={showSongArtwork}
-              showDuration
-              removable={removable}
-              onRemoveFromListClick={(contextSong) => {
-                onRemoveSongs?.([contextSong.id])
+              onToggleSelection={() => {
+                toggleSongSelection(song.id)
               }}
+              onRemoveFromListClick={removable ? (contextSong) => {
+                onRemoveSongs?.([contextSong.id])
+              } : undefined}
               onAddToPlaylistClick={(contextSong, x, y) => {
                 setAddToMenu({ songIds: [contextSong.id], x, y })
               }}
               onPlayTrack={onPlayTrack}
               onTogglePlayPause={onTogglePlayPause}
-              onSelect={toggleSongSelection}
               onContextMenu={(contextSong, x, y) => {
                 setSongMenu({ song: contextSong, songIndex: index, x, y })
               }}
-              onArtistClick={onArtistClick}
-              onAlbumClick={onAlbumClick}
+              onSeeArtist={onArtistClick}
+              onSeeAlbum={(contextSong) => {
+                onAlbumClick?.(contextSong.album || translateCaption('common.albumUnknown'))
+              }}
               onToggleFavorite={onToggleFavorite}
             />
           ))}
@@ -648,7 +675,7 @@ export function HeaderedPlaylistControl({
             getPreferenceMenuFlyoutItem({
               type: preferenceType!,
               itemId: preferenceItemId!,
-              name: title,
+              name: preferenceDisplayName,
               preferenceItem: headerPreferenceItem,
               t,
               onUpdated: refreshHeaderPreferenceItem,
@@ -830,9 +857,10 @@ export function HeaderedPlaylistControl({
   }
 }
 
-function useHeaderedPlaylistScroll(controlRef: RefObject<HTMLElement | null>) {
+function useHeaderedPlaylistScroll(controlRef: RefObject<HTMLElement | null>, title: string) {
   const scrollContainerRef = useRef<HTMLElement | null>(null)
   const headerCollapsedRef = useRef(false)
+  const appBarTitleRef = useRef('')
 
   useEffect(() => {
     const control = controlRef.current as HTMLElement
@@ -845,16 +873,24 @@ function useHeaderedPlaylistScroll(controlRef: RefObject<HTMLElement | null>) {
       const scrollTop = scrollContainer.scrollTop
       const maxScrollTop = scrollContainer.scrollHeight - scrollContainer.clientHeight
       const isNarrow = window.matchMedia('(max-width: 720px)').matches
-      const collapseProgress = Math.min(scrollTop / 210, 1)
+      const collapseDistance = isNarrow ? 136 : 210
+      const collapseProgress = Math.min(scrollTop / collapseDistance, 1)
       const isCollapsed = headerCollapsedRef.current
-        ? scrollTop > 186
-        : scrollTop >= 224
+        ? scrollTop > (isNarrow ? 76 : 186)
+        : scrollTop >= (isNarrow ? 112 : 224)
       headerCollapsedRef.current = isCollapsed
+      const nextAppBarTitle = isNarrow && isCollapsed ? title : ''
+      if (appBarTitleRef.current !== nextAppBarTitle) {
+        appBarTitleRef.current = nextAppBarTitle
+        window.dispatchEvent(new CustomEvent('smplayer:immersive-title-change', {
+          detail: { title: nextAppBarTitle },
+        }))
+      }
       const heroHeight = isNarrow
-        ? Math.round(326 - collapseProgress * 170)
+        ? Math.round(320 - collapseProgress * 182)
         : Math.round(326 - collapseProgress * 200)
       const heroPaddingTop = isNarrow
-        ? Math.round(38 - collapseProgress * 16)
+        ? 0
         : Math.round(50 - collapseProgress * 26)
       const coverSize = isNarrow
         ? Math.round(180 - collapseProgress * 112)
@@ -863,10 +899,12 @@ function useHeaderedPlaylistScroll(controlRef: RefObject<HTMLElement | null>) {
         ? Math.round(24 - collapseProgress * 4)
         : Math.round(48 - collapseProgress * 22)
       const commandMargin = isNarrow
-        ? Math.round(14 - collapseProgress * 8)
+        ? Math.round(8 - collapseProgress * 4)
         : Math.round(30 - collapseProgress * 22)
       const scrollbarTop = Math.round(heroHeight + 4)
       const scrollContainerRect = scrollContainer.getBoundingClientRect()
+      const fixedHeaderLeft = Math.round(scrollContainerRect.left)
+      const fixedHeaderRight = Math.max(0, Math.round(window.innerWidth - scrollContainerRect.right))
       const playerRect = document.querySelector('.player-bar')?.getBoundingClientRect()
       const scrollbarBottom = Math.max(10, Math.round(window.innerHeight - (playerRect?.top ?? scrollContainerRect.bottom) + 10))
       const scrollbarHeight = Math.max(48, window.innerHeight - scrollbarTop - scrollbarBottom)
@@ -885,6 +923,8 @@ function useHeaderedPlaylistScroll(controlRef: RefObject<HTMLElement | null>) {
       control.style.setProperty('--header-cover-size', `${coverSize}px`)
       control.style.setProperty('--header-title-size', `${titleSize}px`)
       control.style.setProperty('--header-command-margin', `${commandMargin}px`)
+      control.style.setProperty('--header-fixed-left', `${fixedHeaderLeft}px`)
+      control.style.setProperty('--header-fixed-right', `${fixedHeaderRight}px`)
       control.style.setProperty('--header-scrollbar-top', `${scrollbarTop}px`)
       control.style.setProperty('--header-scrollbar-bottom', `${scrollbarBottom}px`)
       control.style.setProperty('--header-scrollbar-right', `${scrollbarRight}px`)
@@ -912,11 +952,17 @@ function useHeaderedPlaylistScroll(controlRef: RefObject<HTMLElement | null>) {
         window.cancelAnimationFrame(animationFrame)
       }
       control.classList.remove('is-header-collapsed')
+      if (appBarTitleRef.current) {
+        appBarTitleRef.current = ''
+        window.dispatchEvent(new CustomEvent('smplayer:immersive-title-change', {
+          detail: { title: '' },
+        }))
+      }
       resizeObserver.disconnect()
       scrollContainer.removeEventListener('scroll', scheduleUpdate)
       scrollContainerRef.current = null
     }
-  }, [controlRef])
+  }, [controlRef, title])
 
   return (event: PointerEvent<HTMLDivElement>) => {
     event.preventDefault()
@@ -1012,6 +1058,7 @@ const captions: Record<string, string> = {
   shuffle: 'nowPlaying.randomPlay',
   sort: 'common.sort',
   preferenceSettings: 'settings.preferenceSettings',
+  songArtist: 'headeredPlaylist.songArtist',
   songsPrefix: 'headeredPlaylist.songsPrefix',
   'sort.album': 'table.album',
   'sort.artist': 'table.artist',
@@ -1030,6 +1077,13 @@ function getHeaderPlaylistInfo(songs: LibrarySong[], t: Translator) {
 
   const duration = songs.reduce((total, song) => total + song.duration, 0)
   return `${countText} • ${formatDuration(duration)}`
+}
+
+function getAlbumPreferenceDisplayName(albumName: string, songs: LibrarySong[], t: Translator) {
+  const albumTitle = albumName || t('common.albumUnknown')
+  const firstSong = songs[0]
+  const artist = firstSong ? getDisplayArtists(firstSong) : t('common.artistUnknown')
+  return `${albumTitle} - ${artist}`
 }
 
 function sortSongs(songs: LibrarySong[], criterion: MusicLibrarySortCriterion) {
@@ -1066,6 +1120,26 @@ function inferSortCriterion(songs: LibrarySong[]) {
 
 function isBadNewPlaylistName(name: string, t: Translator) {
   return name === t('common.nowPlaying') || name === t('common.myFavorites')
+}
+
+function validatePlaylistName(name: string, playlists: LibraryPlaylist[], currentName: string, t: Translator) {
+  if (!name) {
+    return t('playlists.nameEmpty')
+  }
+
+  if (name.length > 50) {
+    return t('playlists.nameTooLong')
+  }
+
+  if (playlists.some((playlist) => playlist.name !== currentName && playlist.name === name)) {
+    return t('playlists.nameUsed')
+  }
+
+  if (name.includes('+++++') || name.includes('{0}') || name.includes('{1}')) {
+    return t('playlists.nameSpecial')
+  }
+
+  return ''
 }
 
 function getNextPlaylistName(name: string, playlists: LibraryPlaylist[]) {

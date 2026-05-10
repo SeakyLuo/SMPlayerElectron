@@ -1,7 +1,9 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
+import clsx from 'clsx'
 import { useNavigate } from 'react-router-dom'
 
 import { AlbumArtControl } from '../components/AlbumArtControl'
+import { AppBarPortal, AppBarSearch } from '../components/AppBarPortal'
 import { CommandBar, CommandBarButton } from '../components/CommandBar'
 import { Icon } from '../components/icons'
 import { LoadingState } from '../components/LoadingState'
@@ -45,6 +47,7 @@ interface AlbumsPageProps {
   onAddSongsToNowPlaying: (songIds: number[]) => void
   onCreatePlaylistWithSongs: (name: string, songIds: number[]) => void
   onUpdateSettings: (update: AppSettingsUpdate) => void
+  routeBase?: string
 }
 
 export function AlbumsPage({
@@ -59,12 +62,14 @@ export function AlbumsPage({
   onAddSongsToNowPlaying,
   onCreatePlaylistWithSongs,
   onUpdateSettings,
+  routeBase = '',
 }: AlbumsPageProps) {
   const navigate = useNavigate()
   const [searchDraft, setSearchDraft] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
-  const [isCompactAlbumLayout, setIsCompactAlbumLayout] = useState(false)
+  const [appBarSearchOpen, setAppBarSearchOpen] = useState(false)
+  const [isCompactAlbumLayout, setIsCompactAlbumLayout] = useState(() => window.matchMedia(ALBUM_COMPACT_QUERY).matches)
   const albumsSort = useLibraryStore((state) => state.snapshot.settings.albumsSort)
   const [sortCriterion, setSortCriterion] = useState<AlbumSortCriterion>(albumsSort)
   const [reverseDisplayOrder, setReverseDisplayOrder] = useState(false)
@@ -80,6 +85,7 @@ export function AlbumsPage({
   const [albumScrollTop, setAlbumScrollTop] = useState(0)
   const [albumViewportHeight, setAlbumViewportHeight] = useState(640)
   const [albumGridWidth, setAlbumGridWidth] = useState(960)
+  const [albumQuickJumpTarget, setAlbumQuickJumpTarget] = useState<{ key: string; row: number } | null>(null)
   const hideMultiSelectCommandBarAfterOperation = useLibraryStore(
     (state) => state.snapshot.settings.hideMultiSelectCommandBarAfterOperation,
   )
@@ -114,9 +120,10 @@ export function AlbumsPage({
     albumScrollTop,
     Math.max(0, albumListHeight - albumViewportHeight),
   )
+  const albumTopRow = Math.max(0, Math.floor(effectiveAlbumScrollTop / albumRowHeight))
   const albumStartRow = Math.max(
     0,
-    Math.floor(effectiveAlbumScrollTop / albumRowHeight) - ALBUM_OVERSCAN_ROWS,
+    albumTopRow - ALBUM_OVERSCAN_ROWS,
   )
   const albumEndRow = Math.min(
     albumRowCount,
@@ -128,9 +135,11 @@ export function AlbumsPage({
     () => buildAlbumQuickJumpMap(visibleAlbums),
     [visibleAlbums],
   )
-  const activeAlbumQuickJumpKey = visibleAlbums.length > 0
-    ? getLocalTextQuickJumpBucket(visibleAlbums[Math.min(visibleAlbums.length - 1, albumStartRow * albumColumns)]!.name)
-    : ''
+  const activeAlbumQuickJumpKey = albumQuickJumpTarget?.row === albumTopRow
+    ? albumQuickJumpTarget.key
+    : visibleAlbums.length > 0
+      ? getLocalTextQuickJumpBucket(visibleAlbums[Math.min(visibleAlbums.length - 1, albumTopRow * albumColumns)]!.name)
+      : ''
 
   const clearSelection = () => {
     setSelectedAlbumNames(new Set())
@@ -234,6 +243,17 @@ export function AlbumsPage({
   }, [albumsSort])
 
   useEffect(() => {
+    setAlbumQuickJumpTarget(null)
+  }, [albumColumns, visibleAlbums])
+
+  useEffect(() => {
+    if (isCompactAlbumLayout && multiSelect) {
+      setMultiSelect(false)
+      setSelectedAlbumNames(new Set())
+    }
+  }, [isCompactAlbumLayout, multiSelect])
+
+  useEffect(() => {
     void refreshAlbumPreferenceItems()
   }, [])
 
@@ -244,11 +264,14 @@ export function AlbumsPage({
     }
   }
 
-  const submitSearch = () => {
+  const submitSearch = (placement: 'page' | 'appbar') => {
     const nextQuery = searchDraft.trim()
     showProcessing()
     setSearchDraft(nextQuery)
     setSearchQuery(nextQuery)
+    if (placement === 'appbar') {
+      setAppBarSearchOpen(false)
+    }
     scrollAlbumsToTop()
   }
 
@@ -258,8 +281,10 @@ export function AlbumsPage({
       return
     }
 
+    const targetRow = Math.floor(targetIndex / albumColumns)
+    setAlbumQuickJumpTarget({ key, row: targetRow })
     albumGridRef.current?.scrollTo({
-      top: Math.floor(targetIndex / albumColumns) * albumRowHeight,
+      top: targetRow * albumRowHeight,
     })
   }
 
@@ -276,6 +301,11 @@ export function AlbumsPage({
     scrollAlbumsToTop()
   }
 
+  const openSortMenu = (event: MouseEvent<HTMLButtonElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    setSortMenu({ x: rect.left, y: rect.bottom + 4 })
+  }
+
   const albumSortOptions: AlbumSortCriterion[] = ['reverse', 'default', 'name', 'artist']
   const albumSortMenuItems: MenuFlyoutItem[] = albumSortOptions.map((criterion) => ({
     key: `albums-sort-${criterion}`,
@@ -286,8 +316,8 @@ export function AlbumsPage({
     },
   }))
 
-  const renderAlbumSearch = () => (
-    <div className="page-search-shell albums-search-shell">
+  const renderAlbumSearch = (placement: 'page' | 'appbar') => (
+    <div className={clsx('page-search-shell albums-search-shell', placement === 'appbar' && 'appbar-page-search-shell')}>
       <div className={`page-search-form${searchHasText ? ' has-query' : ''}`}>
         <button
           className="page-search-submit-button"
@@ -297,7 +327,7 @@ export function AlbumsPage({
             event.preventDefault()
           }}
           onClick={() => {
-            submitSearch()
+            submitSearch(placement)
           }}
         >
           <Icon name="search" />
@@ -305,6 +335,7 @@ export function AlbumsPage({
         <input
           type="search"
           value={searchDraft}
+          autoFocus={placement === 'appbar'}
           onFocus={() => {
             setSearchFocused(true)
           }}
@@ -317,7 +348,9 @@ export function AlbumsPage({
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
               event.preventDefault()
-              submitSearch()
+              submitSearch(placement)
+            } else if (event.key === 'Escape' && placement === 'appbar') {
+              setAppBarSearchOpen(false)
             }
           }}
           placeholder={t('albums.searchAlbumPlaceholder')}
@@ -356,6 +389,7 @@ export function AlbumsPage({
                   setSearchDraft(album.name)
                   setSearchQuery(album.name)
                   setSearchFocused(false)
+                  setAppBarSearchOpen(false)
                   scrollAlbumsToTop()
                 }}
               >
@@ -370,10 +404,32 @@ export function AlbumsPage({
 
   return (
     <section className="albums-page page-panel">
+      <AppBarSearch
+        t={t}
+        active={searchHasText}
+        open={appBarSearchOpen}
+        onOpenChange={setAppBarSearchOpen}
+      >
+        {renderAlbumSearch('appbar')}
+      </AppBarSearch>
+      <AppBarPortal>
+        <button
+          className="appbar-icon-button albums-appbar-sort-button"
+          type="button"
+          aria-label={t(`albums.sort.${sortCriterion}`)}
+          title={t(`albums.sort.${sortCriterion}`)}
+          aria-haspopup="menu"
+          aria-expanded={sortMenu != null}
+          onClick={openSortMenu}
+        >
+          <Icon name="sort" />
+        </button>
+      </AppBarPortal>
       <header className="albums-toolbar">
         <CommandBar
           className="albums-commandbar"
-          content={renderAlbumSearch()}
+          content={renderAlbumSearch('page')}
+          overflowLabel={t('player.more')}
         >
           <CommandBarButton
             icon="menu"
@@ -388,10 +444,8 @@ export function AlbumsPage({
             label={t(`albums.sort.${sortCriterion}`)}
             ariaHasPopup="menu"
             ariaExpanded={sortMenu != null}
-            onClick={(event) => {
-              const rect = event.currentTarget.getBoundingClientRect()
-              setSortMenu({ x: rect.left, y: rect.bottom + 4 })
-            }}
+            canOverflow={false}
+            onClick={openSortMenu}
           />
         </CommandBar>
       </header>
@@ -460,7 +514,7 @@ export function AlbumsPage({
                     selected={selectedAlbumNames.has(album.name)}
                     t={t}
                     onOpenAlbum={() => {
-                      navigate(`/albums?album=${encodeURIComponent(album.name)}`)
+                      navigate(getAlbumRoute(routeBase, album.name))
                     }}
                     onPlayAlbum={() => {
                       onPlayTrack(album.songs[0].id, album.songs.map((song) => song.id))
@@ -850,6 +904,11 @@ function buildAlbumQuickJumpMap(albums: AlbumView[]) {
   })
 
   return indexes
+}
+
+function getAlbumRoute(routeBase: string, albumName: string) {
+  const encodedAlbum = encodeURIComponent(albumName)
+  return routeBase ? `${routeBase}/albums/${encodedAlbum}` : `/albums?album=${encodedAlbum}`
 }
 
 function evaluateString(value: string, keyword: string, offset = 0) {

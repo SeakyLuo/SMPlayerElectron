@@ -7,6 +7,7 @@ export function InputDialog({
   title,
   defaultValue,
   placeholder,
+  confirmText = t('common.confirm'),
   validate,
   onCancel,
   onConfirm,
@@ -15,6 +16,7 @@ export function InputDialog({
   title: string
   defaultValue: string
   placeholder?: string
+  confirmText?: string
   validate?: (value: string) => string
   onCancel: () => void
   onConfirm: (value: string) => void
@@ -63,7 +65,7 @@ export function InputDialog({
         {error ? <p className="input-dialog-error">{error}</p> : null}
         <div className="input-dialog-actions">
           <button type="button" className="input-dialog-primary" onClick={confirm}>
-            {t('common.confirm')}
+            {confirmText}
           </button>
           <button type="button" onClick={onCancel}>
             {t('common.cancel')}

@@ -19,6 +19,13 @@ const paths = {
     <path key="x1" d="m9 9 6 6" />,
     <path key="x2" d="m15 9-6 6" />,
   ],
+  clear: [
+    <path key="list1" d="M5 7h10" />,
+    <path key="list2" d="M5 12h7" />,
+    <path key="list3" d="M5 17h5" />,
+    <path key="x1" d="m16 14 4 4" />,
+    <path key="x2" d="m20 14-4 4" />,
+  ],
   close: [
     <path key="a" d="M18 6 6 18" />,
     <path key="b" d="m6 6 12 12" />,
@@ -128,6 +135,11 @@ const paths = {
     <path key="c" d="M4 16h8" />,
     <path key="note" d="M18 10v7a2 2 0 1 1-1.2-1.8V11z" />,
   ],
+  pictures: [
+    <rect key="frame" x="3" y="5" width="18" height="14" rx="2" />,
+    <circle key="sun" cx="8" cy="10" r="1.5" />,
+    <path key="mountain" d="m5 17 4.5-4.5 3.5 3.5 2-2 4 4" />,
+  ],
   plus: [
     <path key="h" d="M5 12h14" />,
     <path key="v" d="M12 5v14" />,
@@ -145,6 +157,11 @@ const paths = {
     <path key="clock" d="M3 12a9 9 0 1 0 3-6.7" />,
     <path key="back" d="M3 4v5h5" />,
     <path key="hands" d="M12 7v5l3 2" />,
+  ],
+  rename: [
+    <path key="box" d="M4 17.5V20h2.5L18.8 7.7l-2.5-2.5z" />,
+    <path key="tip" d="m14.8 6.7 2.5 2.5" />,
+    <path key="line" d="M4 22h16" />,
   ],
   refresh: [
     <path key="top" d="M20 6v5h-5" />,

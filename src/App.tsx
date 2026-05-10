@@ -12,6 +12,7 @@ import { RenameDialog } from './components/RenameDialog'
 import { ReleaseNotesDialog } from './components/ReleaseNotesDialog'
 import { Sidebar } from './components/Sidebar'
 import { Icon } from './components/icons'
+import { createLocalLibraryDataSource } from './data/libraryDataSource'
 import { InAppNotificationWithButton } from './components/InAppNotificationWithButton'
 import { useOpenFilesPlayback } from './hooks/useOpenFilesPlayback'
 import { usePlaybackController } from './hooks/usePlaybackController'
@@ -22,7 +23,7 @@ import { useTrackNotification } from './hooks/useTrackNotification'
 import { useUndoableNotificationStore } from './state/useUndoableNotificationStore'
 import { CollectionPage } from './pages/CollectionPage'
 import { HiddenFoldersPage } from './pages/HiddenFoldersPage'
-import { MusicLibraryPage } from './pages/MusicLibraryPage'
+import { LibraryDataSourceMusicPage } from './pages/LibraryDataSourceMusicPage'
 import { LocalPage, LocalTitleGrid } from './pages/LocalPage'
 import { MyFavoritesPage } from './pages/MyFavoritesPage'
 import { NowPlayingFullPage } from './pages/NowPlayingFullPage'
@@ -161,6 +162,10 @@ function getRouteSection(pathname: string) {
 
 function isAlbumDetailRoute(pathname: string) {
   return pathname.startsWith('/albums/')
+}
+
+function isPlaylistDetailRoute(pathname: string) {
+  return pathname.startsWith('/playlists/') || pathname.startsWith('/favorites')
 }
 
 function LegacyArtistRouteRedirect() {
@@ -366,6 +371,7 @@ function App() {
   const [pendingCreatedPlaylistName, setPendingCreatedPlaylistName] = useState('')
   const [releaseNotesDialogVersion, setReleaseNotesDialogVersion] = useState('')
   const [compactArtistTitle, setCompactArtistTitle] = useState('')
+  const [immersiveHeaderTitle, setImmersiveHeaderTitle] = useState('')
   const [isLibraryQuickJumpOpen, setIsLibraryQuickJumpOpen] = useState(false)
   const releaseNotesCheckedRef = useRef(false)
   const revealItem = useRevealItem()
@@ -521,6 +527,11 @@ function App() {
       return
     }
 
+    if (isPlaylistDetailRoute(location.pathname) && navigationDepth === 0) {
+      navigate('/playlists', { replace: true })
+      return
+    }
+
     navigate(-1)
   }
 
@@ -580,6 +591,10 @@ function App() {
   const visibleSongs = useMemo(
     () => sortLibrarySongs(snapshot.songs, snapshot.settings.musicLibrarySort),
     [snapshot.settings.musicLibrarySort, snapshot.songs],
+  )
+  const localLibraryDataSource = useMemo(
+    () => createLocalLibraryDataSource(snapshot, updateSettings),
+    [snapshot, updateSettings],
   )
   const songsById = useMemo(
     () => new Map(snapshot.songs.map((song) => [song.id, song])),
@@ -732,6 +747,21 @@ function App() {
       setIsLibraryQuickJumpOpen(false)
     }
   }, [location.pathname])
+
+  useEffect(() => {
+    const updateImmersiveHeaderTitle = (event: Event) => {
+      setImmersiveHeaderTitle((event as CustomEvent<{ title: string }>).detail.title)
+    }
+
+    window.addEventListener('smplayer:immersive-title-change', updateImmersiveHeaderTitle)
+    return () => {
+      window.removeEventListener('smplayer:immersive-title-change', updateImmersiveHeaderTitle)
+    }
+  }, [])
+
+  useEffect(() => {
+    setImmersiveHeaderTitle('')
+  }, [location.pathname, location.search])
 
   useTrackNotification(playback.currentTrack)
 
@@ -1151,7 +1181,7 @@ function App() {
   }
 
   const isLocalRoute = location.pathname === '/local'
-  const canNavigateBack = navigationDepth > 0 || isInAlbumDetail
+  const canNavigateBack = navigationDepth > 0 || isInAlbumDetail || isPlaylistDetailRoute(location.pathname)
   const isNavigationRail = isNavigationMinimal ? !isMinimalNavigationOpen : isNavigationCollapsed
   const isNavigationOverlayOpen = isNavigationMinimal
     ? isMinimalNavigationOpen
@@ -1160,7 +1190,7 @@ function App() {
   const searchFolderRelativePath = new URLSearchParams(location.search).get('folder') ?? ''
   const searchFolderPath = getSearchFolderPath(snapshot.settings.rootPath, searchFolderRelativePath)
   const searchFolderName = getSearchFolderName(snapshot.settings.rootPath, searchFolderRelativePath)
-  const currentPageTitle = compactArtistTitle ||
+  const currentPageTitle = compactArtistTitle || immersiveHeaderTitle ||
     (location.pathname === '/' && !initialLoadComplete
     ? ''
     : getPageTitle(
@@ -1171,6 +1201,7 @@ function App() {
       submittedSearchQuery,
       searchFolderName,
       snapshot.nowPlaying.songIds.length,
+      snapshot.playlists.filter((playlist) => !playlist.isBuiltIn).length,
     ))
   const toggleNavigation = () => {
     if (isNavigationMinimal) {
@@ -1338,6 +1369,45 @@ function App() {
           >
             {location.pathname === '/recent' ? (
               <div className="appbar-page-actions appbar-title-page-actions" id={APPBAR_PAGE_ACTIONS_ID} />
+            ) : isLocalRoute && snapshot.settings.rootPath ? (
+              <LocalTitleGrid
+                songs={snapshot.songs}
+                folders={snapshot.folders}
+                playlists={snapshot.playlists}
+                favoritePlaylistId={snapshot.favorites.playlistId}
+                t={t}
+                rootPath={snapshot.settings.rootPath}
+                currentRelativePath={currentLocalRelativePath}
+                onHiddenFoldersListButtonClick={() => {
+                  navigate('/hidden-folders')
+                }}
+                onOpenFolder={(targetRelativePath) => {
+                  setLocalRelativePath(targetRelativePath)
+                  navigate('/local', { replace: true })
+                }}
+                onRevealFolder={revealItem}
+                onSearchDirectory={(query, folderRelativePath) => {
+                  commitDirectorySearchQuery(query, folderRelativePath)
+                }}
+                onPlayTrack={(trackId, queueSongIds) => {
+                  void playTrackInQueue(trackId, queueSongIds)
+                }}
+                onAddSongsToNowPlaying={(songIds) => {
+                  void replaceNowPlaying([...snapshot.nowPlaying.songIds, ...songIds])
+                }}
+                onCreatePlaylistWithSongs={(name, songIds) => {
+                  void createPlaylist(name, songIds)
+                }}
+                onAddSongsToPlaylist={(playlistId, songIds) => {
+                  void addSongsToPlaylist(playlistId, songIds)
+                }}
+                onDropLocalItems={async (payload, targetRelativePath) => {
+                  const targetFolderPath = targetRelativePath
+                    ? getSearchFolderPath(snapshot.settings.rootPath, targetRelativePath)
+                    : snapshot.settings.rootPath
+                  await moveLocalItemsToFolder(payload.songIds, payload.folderPaths, targetFolderPath)
+                }}
+              />
             ) : (
               <h1>{currentPageTitle}</h1>
             )}
@@ -1409,10 +1479,9 @@ function App() {
             <Route
               path="/songs"
               element={
-                <MusicLibraryPage
-                  snapshot={snapshot}
+                <LibraryDataSourceMusicPage
+                  dataSource={localLibraryDataSource}
                   t={t}
-                  songs={visibleSongs}
                   loading={pageLoading}
                   scanning={scanning}
                   error={error}
@@ -1458,9 +1527,6 @@ function App() {
                   onRevealSong={revealItem}
                   onDeleteSongFromDisk={(songId) => {
                     void deleteSongFromDisk(songId)
-                  }}
-                  onUpdateSettings={(update) => {
-                    return updateSettings(update)
                   }}
                 />
               }
@@ -2400,6 +2466,7 @@ function getPageTitle(
   searchQuery: string,
   searchFolderName: string,
   nowPlayingCount: number,
+  playlistCount: number,
 ) {
   if (pathname.startsWith('/artists/')) {
     return t('detail.artistEyebrow')
@@ -2444,11 +2511,17 @@ function getPageTitle(
   }
 
   if (pathname.startsWith('/playlists')) {
-    return t('common.playlists')
+    if (pathname.startsWith('/playlists/')) {
+      return ''
+    }
+
+    return showCount
+      ? t('search.playlistsWithCount', { count: playlistCount })
+      : t('common.playlists')
   }
 
   if (pathname.startsWith('/favorites')) {
-    return t('common.myFavorites')
+    return ''
   }
 
   if (pathname.startsWith('/search')) {

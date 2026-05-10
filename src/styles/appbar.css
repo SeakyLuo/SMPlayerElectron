@@ -38,6 +38,32 @@
   gap: 8px;
 }
 
+.app-shell.nav-minimal .appbar-page-actions:has(.appbar-page-search.is-open) {
+  flex: 1 1 auto;
+}
+
+.app-shell.nav-minimal .appbar-page-actions:has(.appbar-page-search.is-open) > :not(.appbar-page-search) {
+  display: none;
+}
+
+.appbar-commandbar {
+  width: auto;
+  min-height: 40px;
+}
+
+.appbar-commandbar .uwp-commandbar-primary {
+  flex: 0 0 auto;
+  margin-left: 0;
+}
+
+.appbar-commandbar .uwp-commandbar-button {
+  width: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  margin: 0;
+  padding: 0;
+}
+
 .appbar-title-page-actions {
   flex: 1 1 auto;
   min-width: 0;
@@ -102,6 +128,23 @@
   backdrop-filter: none;
 }
 
+.app-shell.nav-minimal .workspace.is-immersive-route .workspace-header {
+  background: transparent;
+  color: #111827;
+}
+
+.app-shell.nav-minimal .workspace.is-immersive-route .workspace-header h1,
+.app-shell.nav-minimal .workspace.is-immersive-route .appbar-icon-button {
+  color: inherit;
+  text-shadow: none;
+}
+
+.app-shell.nav-minimal .workspace.is-immersive-route .appbar-icon-button:hover,
+.app-shell.nav-minimal .workspace.is-immersive-route .appbar-icon-button:focus-visible {
+  background: rgba(var(--accent-rgb), 0.12);
+  color: var(--accent-strong);
+}
+
 .app-shell.nav-minimal .appbar-title-group {
   flex: 1 1 auto;
   gap: 10px;
@@ -109,6 +152,44 @@
 
 .app-shell.nav-minimal .workspace.is-local-route .workspace-header {
   padding: 0 14px 0 8px;
+}
+
+.app-shell.nav-minimal .workspace-header .local-title-grid {
+  flex: 1 1 auto;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  min-width: 0;
+}
+
+.app-shell.nav-minimal .workspace-header .current-path-grid {
+  display: none;
+}
+
+.app-shell.nav-minimal .workspace-header .folder-chain-list-view {
+  min-height: 32px;
+  height: 32px;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.app-shell.nav-minimal .workspace-header .folder-chain-item-path-button {
+  height: 32px;
+  max-width: min(220px, 42vw);
+  padding: 0 6px;
+  font-size: 14px;
+}
+
+.app-shell.nav-minimal .workspace-header .folder-chain-item-dropdown-button {
+  height: 32px;
+}
+
+.app-shell.nav-minimal .workspace-header .hidden-folders-list-button {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
 }
 
 .app-shell.nav-minimal .appbar-icon-button {
@@ -122,23 +203,22 @@
 
 .app-shell.nav-minimal .appbar-quick-jump-button {
   align-self: center;
-  width: auto;
-  min-width: 44px;
+  width: 40px;
+  min-width: 40px;
   min-height: 40px;
   height: 40px;
-  margin: 0 3px;
-  padding: 0 14px;
-  border: 1px solid rgba(83, 99, 121, 0.14);
+  margin: 0;
+  padding: 0;
+  border: 0;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.56);
+  background: transparent;
   color: inherit;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42);
+  box-shadow: none;
 }
 
 .app-shell.nav-minimal .appbar-quick-jump-button.is-open {
-  border-color: rgba(83, 99, 121, 0.14);
-  background: rgba(255, 255, 255, 0.74);
-  color: inherit;
+  background: rgba(17, 24, 39, 0.07);
+  color: #0f172a;
 }
 
 .app-shell.nav-minimal .appbar-quick-jump-button.is-open::after {
@@ -159,8 +239,47 @@
 
 .app-shell.nav-minimal .appbar-quick-jump-button:hover,
 .app-shell.nav-minimal .appbar-quick-jump-button:focus-visible {
-  background: rgba(255, 255, 255, 0.74);
-  color: inherit;
+  background: rgba(17, 24, 39, 0.07);
+  color: #0f172a;
+}
+
+.app-shell.nav-minimal .appbar-commandbar {
+  min-height: 40px;
+}
+
+.app-shell.nav-minimal .appbar-commandbar .uwp-commandbar-primary {
+  align-items: center;
+}
+
+.app-shell.nav-minimal .appbar-commandbar .uwp-commandbar-button {
+  width: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  height: 40px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #111827;
+  box-shadow: none;
+}
+
+.app-shell.nav-minimal .appbar-commandbar .uwp-commandbar-button:hover,
+.app-shell.nav-minimal .appbar-commandbar .uwp-commandbar-button:focus-visible,
+.app-shell.nav-minimal .appbar-commandbar .uwp-commandbar-button[aria-expanded='true'] {
+  background: rgba(17, 24, 39, 0.07);
+  color: #0f172a;
+  outline: none;
+}
+
+.app-shell.nav-minimal .appbar-commandbar .uwp-commandbar-button:active {
+  transform: translateY(1px);
+}
+
+.app-shell.nav-minimal .appbar-commandbar .uwp-commandbar-button svg {
+  width: 19px;
+  height: 19px;
 }
 
 .appbar-page-search {
@@ -170,10 +289,22 @@
 
 .app-shell.nav-minimal .appbar-page-search.is-open {
   position: static;
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .app-shell.nav-minimal .workspace-header:has(.appbar-page-search.is-open) .appbar-title-group h1 {
   display: none;
+}
+
+.app-shell.nav-minimal .workspace-header:has(.appbar-page-search.is-open) .appbar-title-group {
+  flex: 0 0 auto;
+}
+
+.app-shell.nav-minimal .workspace-header:has(.appbar-page-search.is-open) .appbar-actions {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .app-shell.nav-minimal .appbar-page-search.is-open .appbar-page-search-button {
@@ -208,15 +339,14 @@
 }
 
 .app-shell.nav-minimal .appbar-page-search.is-open .appbar-page-search-panel {
-  position: absolute;
-  top: 2px;
-  right: 8px;
-  left: 58px;
+  position: static;
   z-index: 40;
   display: flex;
   align-items: center;
   gap: 4px;
-  width: auto;
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
   height: 36px;
   padding: 0;
   border: 0;
@@ -229,9 +359,19 @@
 .app-shell.nav-minimal .appbar-page-search-content {
   flex: 1 1 auto;
   min-width: 0;
+  width: 100%;
+}
+
+.app-shell.nav-minimal .appbar-page-search-shell,
+.app-shell.nav-minimal .appbar-page-search-shell.albums-search-shell {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
 }
 
 .app-shell.nav-minimal .appbar-page-search-shell .page-search-form {
+  width: 100%;
+  box-sizing: border-box;
   height: 36px;
   padding: 0 12px;
   border: 1px solid rgba(83, 99, 121, 0.14);

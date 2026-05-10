@@ -793,9 +793,12 @@ export function LocalPage({
 
   const shuffleFolder = (folder: FolderNode) => {
     const shuffledSongIds = shuffleSongIds(folder.subtreeSongIds)
-    if (shuffledSongIds.length > 0) {
-      onPlayTrack(shuffledSongIds[0]!, shuffledSongIds)
+    if (shuffledSongIds.length === 0) {
+      setLocalNotification(t('local.noMusicUnderCurrentFolder'))
+      return
     }
+
+    onPlayTrack(shuffledSongIds[0]!, shuffledSongIds)
   }
 
   const jumpToLocalSongKey = (key: string) => {
@@ -1185,7 +1188,7 @@ export function LocalPage({
       <div className="local-toolbar">
         <CommandBar
           className="local-commandbar"
-          dynamicOverflow
+          overflowLabel={t('player.more')}
           content={(
             <p>
               {t('local.headerStats', {
@@ -1341,10 +1344,6 @@ export function LocalPage({
                         setFolderAddMenu({ folder, x: event.clientX, y: event.clientY })
                       }}
                       onOpenFolder={openFolder}
-                      onRefreshFolder={(folder) => {
-                        void refreshFolderWithResult(folder)
-                      }}
-                      onRevealFolder={onRevealFolder}
                       onToggleSelection={toggleFolderSelection}
                       onDragStart={(event, folder) => {
                         event.dataTransfer.setData('application/x-smplayer-local-items', JSON.stringify(dragPayloadForFolder(folder)))
@@ -1376,10 +1375,6 @@ export function LocalPage({
                       setFolderAddMenu({ folder, x: event.clientX, y: event.clientY })
                     }}
                     onOpenFolder={openFolder}
-                    onRefreshFolder={(folder) => {
-                      void refreshFolderWithResult(folder)
-                    }}
-                    onRevealFolder={onRevealFolder}
                     onToggleSelection={toggleFolderSelection}
                     onDragStart={(event, folder) => {
                       event.dataTransfer.setData('application/x-smplayer-local-items', JSON.stringify(dragPayloadForFolder(folder)))
@@ -1431,6 +1426,7 @@ export function LocalPage({
                         multiSelect={multiSelect}
                         queueSongIds={queueSongIds}
                         t={t}
+                        variant="local"
                         draggable
                         onPlayTrack={onPlayTrack}
                         onTogglePlayPause={onTogglePlayPause}
@@ -1479,6 +1475,7 @@ export function LocalPage({
                       multiSelect={multiSelect}
                       queueSongIds={queueSongIds}
                       t={t}
+                      variant="local"
                       draggable
                       onPlayTrack={onPlayTrack}
                       onTogglePlayPause={onTogglePlayPause}
@@ -1571,8 +1568,7 @@ export function LocalPage({
                       <span className="local-table-item-actions">
                         <button
                           type="button"
-                          title={t('nowPlaying.randomPlay')}
-                          disabled={folder.subtreeSongIds.length === 0}
+                          title={t('local.playAllButtonTooltip')}
                           onClick={(event) => {
                             event.stopPropagation()
                             shuffleFolder(folder)
@@ -1583,7 +1579,6 @@ export function LocalPage({
                         <button
                           type="button"
                           title={t('context.addToPlaylist')}
-                          disabled={folder.subtreeSongIds.length === 0}
                           onClick={(event) => {
                             event.stopPropagation()
                             setFolderAddMenu({ folder, x: event.clientX, y: event.clientY })
@@ -1603,7 +1598,7 @@ export function LocalPage({
                         </button>
                         <button
                           type="button"
-                          title={t('local.searchDirectory')}
+                          title={t('local.searchFolderButtonTooltip')}
                           onClick={(event) => {
                             event.stopPropagation()
                             searchDirectory(folder)
@@ -1613,7 +1608,7 @@ export function LocalPage({
                         </button>
                         <button
                           type="button"
-                          title={t('context.reveal')}
+                          title={t('local.openLocalButtonTooltip')}
                           onClick={(event) => {
                             event.stopPropagation()
                             onRevealFolder(folder.path)
@@ -1699,13 +1694,13 @@ export function LocalPage({
                       <span className="local-table-item-actions local-table-song-actions">
                         <button
                           type="button"
-                          title={song.id === selectedTrackId && isPlaying ? t('context.pause') : t('context.play')}
+                          title={t('context.play')}
                           onClick={(event) => {
                             event.stopPropagation()
                             if (song.id === selectedTrackId && isPlaying) {
                               onTogglePlayPause()
                             } else {
-                              onPlayTrack(song.id, queueSongIds)
+                              onMoveToMusicOrPlay(song.id)
                             }
                           }}
                         >
@@ -2044,8 +2039,6 @@ function LocalFolderCard({
   onPlayFolder,
   onAddFolder,
   onOpenFolder,
-  onRefreshFolder,
-  onRevealFolder,
   onToggleSelection,
   onDragStart,
   onDrop,
@@ -2060,8 +2053,6 @@ function LocalFolderCard({
   onPlayFolder: (folder: FolderNode) => void
   onAddFolder: (event: MouseEvent, folder: FolderNode) => void
   onOpenFolder: (targetRelativePath: string) => void
-  onRefreshFolder: (folder: FolderNode) => void
-  onRevealFolder: (folderPath: string) => void | Promise<void>
   onToggleSelection: (folderPath: string) => void
   onDragStart: (event: DragEvent, folder: FolderNode) => void
   onDrop: (event: DragEvent, folder: FolderNode) => void
@@ -2095,18 +2086,6 @@ function LocalFolderCard({
           icon: 'plus',
           disabled: folder.subtreeSongIds.length === 0,
           onClick: (event) => onAddFolder(event, folder),
-        },
-        {
-          key: 'refresh',
-          title: t('local.updateFolder'),
-          icon: 'refresh',
-          onClick: () => onRefreshFolder(folder),
-        },
-        {
-          key: 'reveal',
-          title: t('local.openInFileManager'),
-          icon: 'folder',
-          onClick: () => onRevealFolder(folder.path),
         },
       ]}
       artworkUrls={artworkUrls}

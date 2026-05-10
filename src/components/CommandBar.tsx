@@ -5,6 +5,7 @@ import {
   isValidElement,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -41,6 +42,7 @@ interface CommandBarButtonProps {
   ariaExpanded?: boolean
   ariaHasPopup?: boolean | 'menu' | 'listbox' | 'tree' | 'grid' | 'dialog'
   onClick?: MouseEventHandler<HTMLButtonElement>
+  onOverflowClick?: (position: MenuFlyoutPosition) => void
   onPointerDown?: PointerEventHandler<HTMLButtonElement>
 }
 
@@ -48,12 +50,13 @@ export function CommandBar({
   children,
   className,
   content,
-  dynamicOverflow = false,
+  dynamicOverflow = true,
   overflowItems = [],
   overflowLabel = 'More',
 }: CommandBarProps) {
   const [overflowPosition, setOverflowPosition] = useState<MenuFlyoutPosition | null>(null)
   const [overflowedIndexes, setOverflowedIndexes] = useState<Set<number>>(new Set())
+  const rootRef = useRef<HTMLDivElement | null>(null)
   const primaryRef = useRef<HTMLDivElement | null>(null)
   const moreRef = useRef<HTMLDivElement | null>(null)
   const itemRefs = useRef<Array<HTMLDivElement | null>>([])
@@ -64,15 +67,21 @@ export function CommandBar({
     const items: MenuFlyoutItem[] = []
     childrenArray.forEach((child, index) => {
       if (overflowedIndexes.has(index) && isCommandBarButtonElement(child)) {
-        items.push(commandBarButtonToMenuFlyoutItem(child, index))
+        items.push(commandBarButtonToMenuFlyoutItem(child, index, overflowPosition))
       }
     })
     return items
-  }, [childrenArray, overflowedIndexes])
+  }, [childrenArray, overflowedIndexes, overflowPosition])
   const overflowMenuItems = useMemo(
     () => [...dynamicOverflowItems, ...overflowItems],
     [dynamicOverflowItems, overflowItems],
   )
+
+  useEffect(() => {
+    if (overflowMenuItems.length === 0) {
+      setOverflowPosition(null)
+    }
+  }, [overflowMenuItems.length])
 
   const measureDynamicOverflow = useCallback(() => {
     if (!dynamicOverflow) {
@@ -123,34 +132,32 @@ export function CommandBar({
     })
   }, [measureDynamicOverflow])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     updateDynamicOverflow()
     return () => {
       window.cancelAnimationFrame(animationFrameRef.current)
     }
   }, [updateDynamicOverflow])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!dynamicOverflow) {
       return
     }
 
+    const rootElement = rootRef.current
     const primaryElement = primaryRef.current
-    if (!primaryElement) {
-      return
-    }
-
     const resizeObserver = new ResizeObserver(() => {
       updateDynamicOverflow()
     })
-    resizeObserver.observe(primaryElement)
+    resizeObserver.observe(rootElement!)
+    resizeObserver.observe(primaryElement!)
     return () => {
       resizeObserver.disconnect()
     }
   }, [dynamicOverflow, updateDynamicOverflow])
 
   return (
-    <div className={clsx('uwp-commandbar', dynamicOverflow && 'is-dynamic-overflow', className)} role="toolbar">
+    <div ref={rootRef} className={clsx('uwp-commandbar', dynamicOverflow && 'is-dynamic-overflow', className)} role="toolbar">
       {content ? <div className="uwp-commandbar-content">{content}</div> : null}
       <div className="uwp-commandbar-primary" ref={primaryRef}>
         {childrenArray.map((child, index) => (
@@ -222,6 +229,7 @@ function isCommandBarItemOverflowable(child: ReactNode) {
 function commandBarButtonToMenuFlyoutItem(
   button: ReactElement<CommandBarButtonProps>,
   index: number,
+  overflowPosition: MenuFlyoutPosition | null,
 ): MenuFlyoutItem {
   return {
     key: `commandbar-overflow-${index}`,
@@ -229,6 +237,10 @@ function commandBarButtonToMenuFlyoutItem(
     icon: button.props.icon,
     disabled: button.props.disabled,
     onClick: () => {
+      if (button.props.onOverflowClick) {
+        button.props.onOverflowClick(overflowPosition ?? { x: 0, y: 0 })
+        return
+      }
       button.props.onClick?.({} as Parameters<NonNullable<CommandBarButtonProps['onClick']>>[0])
     },
   }

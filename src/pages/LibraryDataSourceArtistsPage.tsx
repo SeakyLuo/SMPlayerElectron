@@ -25,6 +25,7 @@ interface LibraryDataSourceArtistsPageProps {
   onAddSongsToPlaylist: (playlistId: number, songIds: number[]) => void
   onRevealSong: (songPath: string) => void | Promise<void>
   onDeleteSongFromDisk: (songId: number) => void
+  routeBase?: string
 }
 
 export function LibraryDataSourceArtistsPage({
@@ -46,6 +47,7 @@ export function LibraryDataSourceArtistsPage({
   onAddSongsToPlaylist,
   onRevealSong,
   onDeleteSongFromDisk,
+  routeBase = '',
 }: LibraryDataSourceArtistsPageProps) {
   const [snapshot, setSnapshot] = useState<LibrarySnapshot | null>(null)
   const [songs, setSongs] = useState<LibrarySnapshot['songs']>([])
@@ -112,6 +114,7 @@ export function LibraryDataSourceArtistsPage({
       onAddSongsToPlaylist={onAddSongsToPlaylist}
       onRevealSong={onRevealSong}
       onDeleteSongFromDisk={onDeleteSongFromDisk}
+      routeBase={routeBase}
     />
   )
 }

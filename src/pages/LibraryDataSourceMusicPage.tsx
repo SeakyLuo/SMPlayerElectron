@@ -4,6 +4,7 @@ import { LoadingState } from '../components/LoadingState'
 import { getLibrarySnapshotFromDataSource, type LibraryDataSource } from '../data/libraryDataSource'
 import type { AppSettingsUpdate, LibrarySnapshot } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
+import { sortLibrarySongs } from '../shared/sorting'
 import { MusicLibraryPage } from './MusicLibraryPage'
 
 interface LibraryDataSourceMusicPageProps {
@@ -32,6 +33,7 @@ interface LibraryDataSourceMusicPageProps {
   onUpdateSettings?: (update: AppSettingsUpdate) => void | Promise<void>
   readOnly?: boolean
   resolveArtwork?: boolean
+  routeBase?: string
 }
 
 export function LibraryDataSourceMusicPage({
@@ -60,6 +62,7 @@ export function LibraryDataSourceMusicPage({
   onUpdateSettings,
   readOnly = false,
   resolveArtwork = true,
+  routeBase = '',
 }: LibraryDataSourceMusicPageProps) {
   const [snapshot, setSnapshot] = useState<LibrarySnapshot | null>(null)
   const [sourceLoading, setSourceLoading] = useState(true)
@@ -104,7 +107,7 @@ export function LibraryDataSourceMusicPage({
     <MusicLibraryPage
       snapshot={snapshot}
       t={t}
-      songs={snapshot.songs}
+      songs={sortLibrarySongs(snapshot.songs, snapshot.settings.musicLibrarySort)}
       loading={loading}
       scanning={scanning}
       error={sourceError ?? error}
@@ -133,6 +136,7 @@ export function LibraryDataSourceMusicPage({
       }}
       readOnly={readOnly}
       resolveArtwork={resolveArtwork}
+      routeBase={routeBase}
     />
   )
 }

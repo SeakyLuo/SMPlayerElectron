@@ -2,6 +2,7 @@ export interface TextDialogRequest {
   title: string
   defaultValue: string
   placeholder?: string
+  confirmText?: string
   validate?: (value: string) => string
   resolve: (value: string | null) => void
 }

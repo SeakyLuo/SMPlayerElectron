@@ -77,9 +77,10 @@ const RECENT_ADDED_LIMIT = 500
 const RECENT_GRID_MIN_COLUMN_WIDTH = 252
 const RECENT_GRID_COLUMN_GAP = 28
 const RECENT_GRID_ROW_HEIGHT = 136
+const RECENT_GRID_COMPACT_ROW_HEIGHT = 104
 const RECENT_GRID_BOTTOM_PADDING = 92
 const RECENT_GRID_OVERSCAN_ROWS = 3
-const RECENT_SEARCH_ROW_HEIGHT = 50
+const RECENT_SEARCH_ROW_HEIGHT = 56
 const RECENT_SEARCH_BOTTOM_PADDING = 92
 const RECENT_SEARCH_OVERSCAN_ROWS = 8
 
@@ -123,6 +124,7 @@ export function RecentPage({
   const [songDialog, setSongDialog] = useState<{ song: LibrarySong; mode: 'properties' | 'lyrics' | 'album-art' } | null>(null)
   const [songPreferenceItem, setSongPreferenceItem] = useState<PreferenceItemSnapshot | null>(null)
   const [recentAddedTimelineLabel, setRecentAddedTimelineLabel] = useState('')
+  const [recentPlayedTimelineLabel, setRecentPlayedTimelineLabel] = useState('')
   const [appBarActionsHost, setAppBarActionsHost] = useState<HTMLElement | null>(null)
   const navigate = useNavigate()
   const folders = useLibraryStore((state) => state.snapshot.folders)
@@ -295,6 +297,10 @@ export function RecentPage({
       />
     </>
   )
+  const commandBarTimelineLabel =
+    activeTab === 'added' ? recentAddedTimelineLabel :
+      activeTab === 'played' ? recentPlayedTimelineLabel :
+        ''
 
   return (
     <section className="recent-page page-panel">
@@ -312,7 +318,8 @@ export function RecentPage({
 
       <CommandBar
         className="recent-commandbar"
-        content={activeTab === 'added' ? <strong>{recentAddedTimelineLabel}</strong> : <span className="recent-commandbar-spacer" />}
+        content={commandBarTimelineLabel ? <strong>{commandBarTimelineLabel}</strong> : <span className="recent-commandbar-spacer" />}
+        overflowLabel={t('player.more')}
       >
         <CommandBarButton
           icon="menu"
@@ -366,7 +373,12 @@ export function RecentPage({
           onPlayTrack={onPlayTrack}
           onTogglePlayPause={onTogglePlayPause}
           onToggleSelection={toggleSongSelection}
-          onTimelineLabelChange={activeTab === 'added' ? setRecentAddedTimelineLabel : undefined}
+          getTimelineDate={(song) => activeTab === 'played' ? (song as RecentLibrarySong).playedAt : song.dateAdded}
+          getDetailLabel={(song) => formatRecentDateTime(
+            activeTab === 'played' ? (song as RecentLibrarySong).playedAt : song.dateAdded,
+            preferredLanguage,
+          )}
+          onTimelineLabelChange={activeTab === 'added' ? setRecentAddedTimelineLabel : setRecentPlayedTimelineLabel}
           onOpenAddToMenu={(menu) => {
             setSongMenu(null)
             setAddToMenu(menu)
@@ -647,6 +659,8 @@ function RecentSongGrid({
   onPlayTrack,
   onTogglePlayPause,
   onToggleSelection,
+  getTimelineDate,
+  getDetailLabel,
   onTimelineLabelChange,
   onOpenAddToMenu,
   onOpenMenu,
@@ -663,6 +677,8 @@ function RecentSongGrid({
   onPlayTrack: (trackId: number, queueSongIds: number[]) => void
   onTogglePlayPause: () => void
   onToggleSelection: (songId: number) => void
+  getTimelineDate: (song: LibrarySong) => string
+  getDetailLabel?: (song: LibrarySong) => string
   onTimelineLabelChange?: (label: string) => void
   onOpenAddToMenu: (menu: RecentAddToMenuState) => void
   onOpenMenu: (menu: RecentSongMenuState) => void
@@ -675,19 +691,20 @@ function RecentSongGrid({
     1,
     Math.floor((gridWidth + RECENT_GRID_COLUMN_GAP) / (RECENT_GRID_MIN_COLUMN_WIDTH + RECENT_GRID_COLUMN_GAP)),
   )
+  const rowHeight = gridWidth <= 520 ? RECENT_GRID_COMPACT_ROW_HEIGHT : RECENT_GRID_ROW_HEIGHT
   const rowCount = Math.ceil(songs.length / columnCount)
-  const listHeight = rowCount * RECENT_GRID_ROW_HEIGHT
+  const listHeight = rowCount * rowHeight
   const effectiveScrollTop = Math.min(scrollTop, Math.max(0, listHeight - viewportHeight))
   const startRow = Math.max(
     0,
-    Math.floor(effectiveScrollTop / RECENT_GRID_ROW_HEIGHT) - RECENT_GRID_OVERSCAN_ROWS,
+    Math.floor(effectiveScrollTop / rowHeight) - RECENT_GRID_OVERSCAN_ROWS,
   )
   const endRow = Math.min(
     rowCount,
-    Math.ceil((effectiveScrollTop + viewportHeight) / RECENT_GRID_ROW_HEIGHT) + RECENT_GRID_OVERSCAN_ROWS,
+    Math.ceil((effectiveScrollTop + viewportHeight) / rowHeight) + RECENT_GRID_OVERSCAN_ROWS,
   )
   const renderedSongs = songs.slice(startRow * columnCount, endRow * columnCount)
-  const windowTop = startRow * RECENT_GRID_ROW_HEIGHT
+  const windowTop = startRow * rowHeight
 
   useEffect(() => {
     const grid = gridRef.current
@@ -712,9 +729,9 @@ function RecentSongGrid({
   useEffect(() => {
     if (onTimelineLabelChange) {
       const topSong = songs[Math.min(startRow * columnCount, songs.length - 1)]
-      onTimelineLabelChange(topSong ? categorizeRecentAddedDate(topSong.dateAdded, t) : '')
+      onTimelineLabelChange(topSong ? categorizeRecentDate(getTimelineDate(topSong), t) : '')
     }
-  }, [columnCount, onTimelineLabelChange, songs, startRow, t])
+  }, [columnCount, getTimelineDate, onTimelineLabelChange, songs, startRow, t])
 
   if (songs.length === 0) {
     return loading ? <LoadingState t={t} compact /> : (
@@ -750,6 +767,7 @@ function RecentSongGrid({
               playing={song.id === selectedTrackId && isPlaying}
               multiSelect={multiSelect}
               t={t}
+              detailLabel={getDetailLabel?.(song)}
               onPlayTrack={onPlayTrack}
               onTogglePlayPause={onTogglePlayPause}
               onToggleSelection={onToggleSelection}
@@ -896,7 +914,7 @@ function toggleSetItem<T>(source: Set<T>, item: T) {
 }
 
 function RecentSearchTime({ value, preferredLanguage }: { value: string; preferredLanguage: PreferredLanguage }) {
-  const label = formatRecentSearchTime(value, preferredLanguage)
+  const label = formatRecentDateTime(value, preferredLanguage)
   return label ? <small>{label}</small> : null
 }
 
@@ -904,7 +922,7 @@ function dateValue(value: string) {
   return new Date(value).getTime()
 }
 
-function categorizeRecentAddedDate(value: string, t: Translator) {
+function categorizeRecentDate(value: string, t: Translator) {
   const date = new Date(value)
   const now = new Date()
 
@@ -947,7 +965,7 @@ function sameCalendarDate(left: Date, right: Date) {
     left.getDate() === right.getDate()
 }
 
-function formatRecentSearchTime(value: string, preferredLanguage: PreferredLanguage) {
+function formatRecentDateTime(value: string, preferredLanguage: PreferredLanguage) {
   if (!value) {
     return ''
   }

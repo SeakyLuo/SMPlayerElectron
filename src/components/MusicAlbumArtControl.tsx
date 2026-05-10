@@ -30,7 +30,7 @@ export function MusicAlbumArtControl({
 }) {
   return (
     <>
-      <CommandBar className="song-dialog-commandbar music-info-control-commandbar AlbumArtControllerCommandBar">
+      <CommandBar className="song-dialog-commandbar music-info-control-commandbar AlbumArtControllerCommandBar" overflowLabel={t('player.more')}>
         <CommandBarButton icon="albums" label={t('song.changeArtwork')} className="change-album-art-button ChangeAlbumArtButton" disabled={saving} onClick={onChangeArtwork} />
         <CommandBarButton icon="save" label={t('settings.save')} className="song-dialog-primary-button save-album-art-button SaveAlbumArtButton" disabled={saving} onClick={onSaveArtwork} />
         <CommandBarButton icon="trash" label={t('playlists.delete')} className="delete-album-art-button DeleteAlbumArtButton" disabled={saving} onClick={onRequestDelete} />

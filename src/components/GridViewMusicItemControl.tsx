@@ -15,7 +15,9 @@ interface GridViewMusicItemControlProps {
   playing: boolean
   multiSelect: boolean
   t: Translator
+  variant?: 'recent' | 'local'
   draggable?: boolean
+  detailLabel?: string
   onPlayTrack: (trackId: number, queueSongIds: number[]) => void
   onTogglePlayPause: () => void
   onToggleSelection: (songId: number) => void
@@ -32,8 +34,11 @@ export function GridViewMusicItemControl({
   playing,
   multiSelect,
   t,
+  variant = 'recent',
   draggable,
+  detailLabel,
   onPlayTrack,
+  onTogglePlayPause,
   onToggleSelection,
   onAddToPlaylistClick,
   onContextMenu,
@@ -54,11 +59,96 @@ export function GridViewMusicItemControl({
     }
   }
 
+  if (variant === 'local') {
+    return (
+      <div
+        role="button"
+        tabIndex={0}
+        className={clsx('local-grid-song-card', {
+          'is-current': current,
+          'is-playing': playing,
+          'is-selected': selected,
+          'is-selecting': multiSelect,
+        })}
+        draggable={draggable}
+        onClick={open}
+        onKeyDown={onKeyDown}
+        onDragStart={(event) => {
+          onDragStart?.(event, song)
+        }}
+        onContextMenu={(event) => {
+          event.preventDefault()
+          onContextMenu(event, song)
+        }}
+      >
+        <span className="local-grid-song-cover-wrap">
+          <ArtworkImage
+            className="local-grid-song-cover"
+            src={song.artworkUrl}
+            title={song.title}
+            renderFallback={() => (
+              <span className="local-grid-song-cover local-grid-song-cover-fallback" aria-hidden="true">
+                <img className="local-grid-song-cover-fallback-image" src="/monotone_bg_wide.png" alt="" />
+              </span>
+            )}
+          />
+          {multiSelect ? (
+            <span className={selected ? 'local-card-check is-selected' : 'local-card-check'} aria-hidden="true">
+              {selected ? <Icon name="check" /> : null}
+            </span>
+          ) : null}
+          {!multiSelect ? (
+            <span className="local-grid-song-actions">
+              <button
+                type="button"
+                aria-label={current && playing ? t('context.pause') : t('context.play')}
+                title={current && playing ? t('context.pause') : t('context.play')}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  if (current && playing) {
+                    onTogglePlayPause()
+                  } else {
+                    onPlayTrack(song.id, queueSongIds)
+                  }
+                }}
+              >
+                <Icon name={current && playing ? 'pause' : 'play'} />
+              </button>
+              {onAddToPlaylistClick ? (
+                <button
+                  type="button"
+                  aria-label={t('context.addToPlaylist')}
+                  title={t('context.addToPlaylist')}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    onAddToPlaylistClick(event, song)
+                  }}
+                >
+                  <Icon name="plus" />
+                </button>
+              ) : null}
+            </span>
+          ) : null}
+        </span>
+        <span className="local-grid-song-title-row">
+          <strong title={song.title}>{song.title}</strong>
+          {current ? (
+            <span className="local-grid-song-playing-icon" aria-hidden="true">
+              <Icon name="play" />
+            </span>
+          ) : null}
+        </span>
+        <span className="local-grid-song-subtitle" title={artistLabel}>{artistLabel}</span>
+      </div>
+    )
+  }
+
   return (
     <div
       role="button"
       tabIndex={0}
       className={clsx('recent-song-tile', {
+        'has-detail': detailLabel,
         'is-current': current,
         'is-playing': playing,
         'is-selected': selected,
@@ -109,6 +199,7 @@ export function GridViewMusicItemControl({
       <span className="recent-song-copy">
         <strong title={song.title}>{song.title}</strong>
         <span title={artistLabel}>{artistLabel}</span>
+        {detailLabel ? <small className="recent-song-time" title={detailLabel}>{detailLabel}</small> : null}
         {current ? (
           <span className="recent-song-playing-wave" aria-hidden="true">
             <span />

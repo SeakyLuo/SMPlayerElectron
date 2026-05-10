@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointer
 import { createPortal } from 'react-dom'
 import { useNavigate, useParams } from 'react-router-dom'
 
+import { AppBarPortal } from '../components/AppBarPortal'
 import { GridViewHolder } from '../components/GridViewHolder'
 import { HeaderedPlaylistControl } from '../components/HeaderedPlaylistControl'
 import { Icon } from '../components/icons'
@@ -36,10 +37,22 @@ interface PlaylistsPageProps {
   onAddSongsToPlaylist: (playlistId: number, songIds: number[]) => void
   onRemoveSongsFromPlaylist: (playlistId: number, songIds: number[]) => void
   onReorderPlaylistSongs: (playlistId: number, songIds: number[], sortCriterion?: PlaylistSortCriterion) => void
+  routeBase?: string
+  routePlaylistId?: number | null
 }
 
 function playlistIdsEqual(left: number[], right: number[]) {
   return left.length === right.length && left.every((playlistId, index) => playlistId === right[index])
+}
+
+function getArtistRoute(routeBase: string, artistName: string) {
+  const encodedArtist = encodeURIComponent(artistName)
+  return routeBase ? `${routeBase}/artists/${encodedArtist}` : `/artists?artist=${encodedArtist}`
+}
+
+function getAlbumRoute(routeBase: string, albumName: string) {
+  const encodedAlbum = encodeURIComponent(albumName)
+  return routeBase ? `${routeBase}/albums/${encodedAlbum}` : `/albums?album=${encodedAlbum}`
 }
 
 interface PlaylistDragState {
@@ -75,6 +88,8 @@ export function PlaylistsPage({
   onAddSongsToPlaylist,
   onRemoveSongsFromPlaylist,
   onReorderPlaylistSongs,
+  routeBase = '',
+  routePlaylistId: explicitRoutePlaylistId,
 }: PlaylistsPageProps) {
   const navigate = useNavigate()
   const params = useParams()
@@ -94,7 +109,7 @@ export function PlaylistsPage({
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [renamePlaylistDialog, setRenamePlaylistDialog] = useState<LibraryPlaylist | null>(null)
   const [pendingCreatedPlaylistName, setPendingCreatedPlaylistName] = useState('')
-  const routePlaylistId = params.playlistId ? Number(params.playlistId) : null
+  const routePlaylistId = explicitRoutePlaylistId ?? (params.playlistId ? Number(params.playlistId) : null)
   const songsById = useMemo(
     () => new Map(snapshot.songs.map((song) => [song.id, song])),
     [snapshot.songs],
@@ -168,28 +183,27 @@ export function PlaylistsPage({
       return
     }
 
-    const orderedPlaylistIds = customPlaylistIds
     const currentPreviewPlaylistIds = previewPlaylistIdsRef.current ?? customPlaylistIds
     const visiblePlaylistIdSet = new Set(visiblePlaylists.map((playlist) => playlist.id))
-    const orderedVisibleIds = orderedPlaylistIds.filter((playlistId) => visiblePlaylistIdSet.has(playlistId))
+    const orderedVisibleIds = currentPreviewPlaylistIds.filter((playlistId) => visiblePlaylistIdSet.has(playlistId))
     const targetRects = orderedVisibleIds
       .filter((playlistId) => playlistId !== draggedPlaylistId)
       .map((playlistId) => {
         const element = playlistCardElementsRef.current.get(playlistId)
-        const rect = playlistDragRectsRef.current.get(playlistId) ?? element?.getBoundingClientRect()
+        const rect = element?.getBoundingClientRect() ?? playlistDragRectsRef.current.get(playlistId)
         return rect ? { playlistId, rect } : null
       })
       .filter((target) => target !== null)
 
     const nextVisibleIds = orderedVisibleIds.filter((playlistId) => playlistId !== draggedPlaylistId)
     const insertIndex = targetRects.findIndex(({ rect }) =>
-      clientY < rect.top + rect.height / 2 ||
-      (clientY < rect.bottom && clientX < rect.left + rect.width / 2),
+      clientY < rect.top ||
+      (clientY <= rect.bottom && clientX < rect.left + rect.width / 2),
     )
     nextVisibleIds.splice(insertIndex === -1 ? nextVisibleIds.length : insertIndex, 0, draggedPlaylistId)
 
     let visibleIndex = 0
-    const nextPlaylistIds = orderedPlaylistIds.map((playlistId) =>
+    const nextPlaylistIds = currentPreviewPlaylistIds.map((playlistId) =>
       visiblePlaylistIdSet.has(playlistId) ? nextVisibleIds[visibleIndex++]! : playlistId,
     )
 
@@ -316,7 +330,7 @@ export function PlaylistsPage({
 
     const playlist = snapshot.playlists.find((item) => item.name === pendingCreatedPlaylistName)
     if (playlist) {
-      navigate(`/playlists/${playlist.id}`)
+      navigate(`${routeBase}/playlists/${playlist.id}`)
       onSelectPlaylist(playlist.id)
       setPendingCreatedPlaylistName('')
     }
@@ -340,7 +354,6 @@ export function PlaylistsPage({
           removable
           showAlbum
           showArtist
-          showSongArtwork
           canRename={!selectedPlaylist.isBuiltIn}
           canDelete={!selectedPlaylist.isBuiltIn}
           canClear={selectedPlaylistSongs.length > 0}
@@ -362,7 +375,7 @@ export function PlaylistsPage({
           }}
           onDelete={() => {
             onDeletePlaylist(selectedPlaylist.id)
-            navigate('/playlists')
+            navigate(`${routeBase}/playlists`)
           }}
           onClear={() => {
             onRemoveSongsFromPlaylist(selectedPlaylist.id, selectedPlaylistSongs.map((song) => song.id))
@@ -374,10 +387,10 @@ export function PlaylistsPage({
             onReorderPlaylistSongs(selectedPlaylist.id, songIds, sortCriterion)
           }}
           onArtistClick={(artist) => {
-            navigate(`/artists?artist=${encodeURIComponent(artist)}`)
+            navigate(getArtistRoute(routeBase, artist))
           }}
           onAlbumClick={(album) => {
-            navigate(`/albums?album=${encodeURIComponent(album)}`)
+            navigate(getAlbumRoute(routeBase, album))
           }}
         />
       </section>
@@ -386,6 +399,19 @@ export function PlaylistsPage({
 
   return (
     <section className="playlists-page page-panel">
+      <AppBarPortal>
+        <button
+          className="appbar-icon-button playlists-appbar-create-button"
+          type="button"
+          aria-label={t('playlists.newName')}
+          title={t('playlists.newName')}
+          onClick={() => {
+            setIsCreateDialogOpen(true)
+          }}
+        >
+          <Icon name="plus" />
+        </button>
+      </AppBarPortal>
       <div className="now-playing-commandbar playlists-commandbar">
         <button
           type="button"
@@ -438,7 +464,7 @@ export function PlaylistsPage({
                       return
                     }
 
-                    navigate(`/playlists/${playlist.id}`)
+                    navigate(`${routeBase}/playlists/${playlist.id}`)
                     onSelectPlaylist(playlist.id)
                   }}
                   onPlay={() => {
@@ -519,6 +545,7 @@ export function PlaylistsPage({
           title={t('playlists.rename')}
           playlists={snapshot.playlists.filter((playlist) => playlist.id !== renamePlaylistDialog.id)}
           defaultName={renamePlaylistDialog.name}
+          confirmText={t('playlists.rename')}
           onCancel={() => {
             setRenamePlaylistDialog(null)
           }}

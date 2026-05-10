@@ -34,6 +34,7 @@ export function DialogHost({ t }: { t: Translator }) {
           title={textDialog.title}
           defaultValue={textDialog.defaultValue}
           placeholder={textDialog.placeholder}
+          confirmText={textDialog.confirmText}
           validate={textDialog.validate}
           onCancel={() => closeTextDialog(null)}
           onConfirm={(value) => closeTextDialog(value)}

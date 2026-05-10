@@ -2,13 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } fro
 import { useNavigate } from 'react-router-dom'
 
 import { CommandBar, CommandBarButton } from '../components/CommandBar'
+import { AppBarPortal } from '../components/AppBarPortal'
 import { requestConfirmDialog } from '../components/dialogService'
 import { LoadingState } from '../components/LoadingState'
 import { MenuFlyout } from '../components/MenuFlyout'
 import { getAddToPlaylistMenuFlyoutItem, getMusicMenuFlyoutItems, getShuffleMenuItems } from '../components/MenuFlyoutHelper'
 import { MultiSelectCommandBar } from '../components/MultiSelectCommandBar'
 import { MusicDialog } from '../components/MusicDialog'
-import { NowPlayingQueueItem } from '../components/NowPlayingQueueItem'
+import { PlaylistControlItem } from '../components/PlaylistControlItem'
 import type { LibraryPlaylist, LibrarySong, PreferenceItemSnapshot, PreferenceSettingsSnapshot } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
 import { insertQueueEntries, insertQueueSongs, removeQueueRange } from '../shared/queueUndo'
@@ -19,7 +20,9 @@ import { useUndoableNotificationStore } from '../state/useUndoableNotificationSt
 
 const QUICK_PLAY_LIMIT = 100
 const NOW_PLAYING_ROW_HEIGHT = 82
+const NOW_PLAYING_COMPACT_ROW_HEIGHT = 78
 const NOW_PLAYING_OVERSCAN_ROWS = 12
+const NOW_PLAYING_COMPACT_QUERY = '(max-width: 720px)'
 
 interface NowPlayingPageProps {
   songs: LibrarySong[]
@@ -93,8 +96,9 @@ export function NowPlayingPage({
   const [addToMenu, setAddToMenu] = useState<NowPlayingAddToMenuState | null>(null)
   const [songDialog, setSongDialog] = useState<{ song: LibrarySong; mode: 'properties' | 'lyrics' | 'album-art' } | null>(null)
   const [songPreferenceItem, setSongPreferenceItem] = useState<PreferenceItemSnapshot | null>(null)
+  const [isCompactQueueLayout, setIsCompactQueueLayout] = useState(() => window.matchMedia(NOW_PLAYING_COMPACT_QUERY).matches)
   const listShellRef = useRef<HTMLElement | null>(null)
-  const randomMenuRef = useRef<HTMLDivElement | null>(null)
+  const randomMenuRefs = useRef(new Set<HTMLDivElement>())
   const currentRowRef = useRef<HTMLDivElement | null>(null)
   const createPlaylist = useLibraryStore((state) => state.createPlaylist)
   const folders = useLibraryStore((state) => state.snapshot.folders)
@@ -150,6 +154,19 @@ export function NowPlayingPage({
     }
   }, [songMenu?.song.id])
 
+  useEffect(() => {
+    const compactQuery = window.matchMedia(NOW_PLAYING_COMPACT_QUERY)
+    const updateCompactLayout = () => {
+      setIsCompactQueueLayout(compactQuery.matches)
+    }
+
+    updateCompactLayout()
+    compactQuery.addEventListener('change', updateCompactLayout)
+    return () => {
+      compactQuery.removeEventListener('change', updateCompactLayout)
+    }
+  }, [])
+
   const queueEntries = useMemo(
     () => songs.map((song, queueIndex) => ({ song, queueIndex })),
     [songs],
@@ -192,16 +209,17 @@ export function NowPlayingPage({
   )
   const canUseQueueCommands = songs.length > 0
   const canUseLibraryCommands = librarySongs.length > 0
-  const listHeight = visibleEntries.length * NOW_PLAYING_ROW_HEIGHT
+  const rowHeight = isCompactQueueLayout ? NOW_PLAYING_COMPACT_ROW_HEIGHT : NOW_PLAYING_ROW_HEIGHT
+  const listHeight = visibleEntries.length * rowHeight
   const effectiveScrollTop = Math.min(scrollTop, Math.max(0, listHeight - viewportHeight))
-  const startIndex = Math.max(0, Math.floor(effectiveScrollTop / NOW_PLAYING_ROW_HEIGHT) - NOW_PLAYING_OVERSCAN_ROWS)
+  const startIndex = Math.max(0, Math.floor(effectiveScrollTop / rowHeight) - NOW_PLAYING_OVERSCAN_ROWS)
   const endIndex = Math.min(
     visibleEntries.length,
-    Math.ceil((effectiveScrollTop + viewportHeight) / NOW_PLAYING_ROW_HEIGHT) + NOW_PLAYING_OVERSCAN_ROWS,
+    Math.ceil((effectiveScrollTop + viewportHeight) / rowHeight) + NOW_PLAYING_OVERSCAN_ROWS,
   )
   const renderedEntries = visibleEntries.slice(startIndex, endIndex)
-  const topSpacerHeight = startIndex * NOW_PLAYING_ROW_HEIGHT
-  const bottomSpacerHeight = (visibleEntries.length - endIndex) * NOW_PLAYING_ROW_HEIGHT
+  const topSpacerHeight = startIndex * rowHeight
+  const bottomSpacerHeight = (visibleEntries.length - endIndex) * rowHeight
   const randomActions = useMemo(
     () => {
       if (!randomMenuOpen) {
@@ -328,10 +346,172 @@ export function NowPlayingPage({
 
     const nextScrollTop = Math.max(
       0,
-      currentVisibleIndex * NOW_PLAYING_ROW_HEIGHT - (listShellRef.current?.clientHeight ?? viewportHeight) / 2,
+      currentVisibleIndex * rowHeight - (listShellRef.current?.clientHeight ?? viewportHeight) / 2,
     )
     listShellRef.current?.scrollTo({ top: nextScrollTop, behavior: 'smooth' })
   }
+
+  const openAddToMenu = (x: number, y: number) => {
+    setAddToMenu({
+      x,
+      y,
+      songIds: queueSongIds,
+      defaultPlaylistName: defaultNewPlaylistName,
+    })
+  }
+
+  const toggleMultiSelect = () => {
+    setMultiSelect((current) => {
+      if (current) {
+        clearSelection()
+      }
+      return !current
+    })
+  }
+
+  const nowPlayingOverflowItems = [
+    {
+      key: 'locate-current',
+      text: t('nowPlaying.locateCurrent'),
+      icon: 'nowPlaying' as const,
+      disabled: !canUseQueueCommands || !currentSong,
+      onClick: locateCurrent,
+    },
+    {
+      key: 'add-to-playlist',
+      text: t('context.addToPlaylist'),
+      icon: 'plus' as const,
+      disabled: !canUseQueueCommands,
+      onClick: () => {
+        openAddToMenu(window.innerWidth - 232, 44)
+      },
+    },
+    {
+      key: 'clear-queue',
+      text: t('nowPlaying.clearQueue'),
+      icon: 'close' as const,
+      disabled: !canUseQueueCommands,
+      onClick: onClearQueue,
+    },
+    {
+      key: 'play-mode',
+      text: t('nowPlaying.playMode'),
+      icon: 'albums' as const,
+      disabled: !canUseQueueCommands || !currentSong,
+      onClick: onOpenImmersiveMode,
+    },
+    {
+      key: 'multi-select',
+      text: t('albums.multiSelect'),
+      icon: 'menu' as const,
+      disabled: !canUseQueueCommands,
+      onClick: toggleMultiSelect,
+    },
+  ]
+
+  const renderPrimaryNowPlayingCommands = (variant: 'page' | 'appbar') => (
+    <>
+      <CommandBarButton
+        icon="play"
+        label={t('nowPlaying.quickPlay')}
+        disabled={!canUseLibraryCommands}
+        onClick={() => {
+          void playQuick()
+        }}
+      />
+      <div
+        className="now-playing-random-menu"
+        ref={(element) => {
+          if (element) {
+            randomMenuRefs.current.add(element)
+          }
+        }}
+      >
+        <CommandBarButton
+          icon="shuffle"
+          label={t('nowPlaying.randomPlay')}
+          disabled={!canUseLibraryCommands}
+          ariaHasPopup="menu"
+          ariaExpanded={randomMenuOpen}
+          onPointerDown={(event) => {
+            event.stopPropagation()
+          }}
+          onClick={() => {
+            setRandomMenuOpen((current) => !current)
+          }}
+        />
+        {randomMenuOpen ? (
+          <>
+            <div className="dropdown-dismiss-layer" onPointerDown={() => setRandomMenuOpen(false)} />
+            <div
+              className="now-playing-random-options"
+              role="menu"
+              onPointerDown={(event) => {
+                event.stopPropagation()
+              }}
+            >
+              {randomActions.map((action) => (
+                action.separator ? (
+                  <div className="now-playing-random-options-separator" key={action.key} role="separator" />
+                ) : (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    key={action.key}
+                    disabled={action.disabled}
+                    onClick={() => {
+                      void action.onClick?.()
+                      setRandomMenuOpen(false)
+                    }}
+                  >
+                    {action.text}
+                  </button>
+                )
+              ))}
+            </div>
+          </>
+        ) : null}
+      </div>
+      {variant === 'page' && canUseQueueCommands ? (
+        <CommandBarButton
+          icon="nowPlaying"
+          label={t('nowPlaying.locateCurrent')}
+          disabled={!currentSong}
+          onClick={locateCurrent}
+        />
+      ) : null}
+      {variant === 'page' && canUseQueueCommands ? (
+        <>
+          <CommandBarButton
+            icon="plus"
+            label={t('context.addToPlaylist')}
+            canOverflow={false}
+            onClick={(event) => {
+              const rect = event.currentTarget.getBoundingClientRect()
+              openAddToMenu(rect.left, rect.bottom + 8)
+            }}
+          />
+          <CommandBarButton
+            icon="close"
+            label={t('nowPlaying.clearQueue')}
+            onClick={onClearQueue}
+          />
+          <CommandBarButton
+            icon="albums"
+            label={t('nowPlaying.playMode')}
+            disabled={!currentSong}
+            onClick={onOpenImmersiveMode}
+          />
+          <CommandBarButton
+            active={multiSelect}
+            icon="menu"
+            label={t('albums.multiSelect')}
+            onClick={toggleMultiSelect}
+          />
+        </>
+      ) : null}
+    </>
+  )
 
   useEffect(() => {
     if (!randomMenuOpen) {
@@ -340,7 +520,7 @@ export function NowPlayingPage({
 
     const closeRandomMenu = (event: PointerEvent) => {
       const target = event.target
-      if (target instanceof Node && randomMenuRef.current?.contains(target)) {
+      if (target instanceof Node && [...randomMenuRefs.current].some((element) => element.contains(target))) {
         return
       }
 
@@ -379,109 +559,18 @@ export function NowPlayingPage({
 
   return (
     <section className="now-playing-page page-panel">
-      <CommandBar className="now-playing-commandbar" dynamicOverflow>
-        <CommandBarButton
-          icon="play"
-          label={t('nowPlaying.quickPlay')}
-          disabled={!canUseLibraryCommands}
-          onClick={() => {
-            void playQuick()
-          }}
-        />
-        <div className="now-playing-random-menu" ref={randomMenuRef}>
-          <CommandBarButton
-            icon="shuffle"
-            label={t('nowPlaying.randomPlay')}
-            disabled={!canUseLibraryCommands}
-            ariaHasPopup="menu"
-            ariaExpanded={randomMenuOpen}
-            onPointerDown={(event) => {
-              event.stopPropagation()
-            }}
-            onClick={() => {
-              setRandomMenuOpen((current) => !current)
-            }}
-          />
-          {randomMenuOpen ? (
-            <>
-              <div className="dropdown-dismiss-layer" onPointerDown={() => setRandomMenuOpen(false)} />
-              <div
-                className="now-playing-random-options"
-                role="menu"
-                onPointerDown={(event) => {
-                  event.stopPropagation()
-                }}
-              >
-                {randomActions.map((action) => (
-                  action.separator ? (
-                    <div className="now-playing-random-options-separator" key={action.key} role="separator" />
-                  ) : (
-                    <button
-                      type="button"
-                      role="menuitem"
-                      key={action.key}
-                      disabled={action.disabled}
-                      onClick={() => {
-                        void action.onClick?.()
-                        setRandomMenuOpen(false)
-                      }}
-                    >
-                      {action.text}
-                    </button>
-                  )
-                ))}
-              </div>
-            </>
-          ) : null}
-        </div>
-        {canUseQueueCommands ? (
-          <>
-            <CommandBarButton
-              icon="nowPlaying"
-              label={t('nowPlaying.locateCurrent')}
-              disabled={!currentSong}
-              onClick={locateCurrent}
-            />
-            <CommandBarButton
-              icon="plus"
-              label={t('context.addToPlaylist')}
-              canOverflow={false}
-              onClick={(event) => {
-                const rect = event.currentTarget.getBoundingClientRect()
-                setAddToMenu({
-                  x: rect.left,
-                  y: rect.bottom + 8,
-                  songIds: queueSongIds,
-                  defaultPlaylistName: defaultNewPlaylistName,
-                })
-              }}
-            />
-            <CommandBarButton
-              icon="close"
-              label={t('nowPlaying.clearQueue')}
-              onClick={onClearQueue}
-            />
-            <CommandBarButton
-              icon="albums"
-              label={t('nowPlaying.playMode')}
-              disabled={!currentSong}
-              onClick={onOpenImmersiveMode}
-            />
-            <CommandBarButton
-              active={multiSelect}
-              icon="menu"
-              label={t('albums.multiSelect')}
-              onClick={() => {
-                setMultiSelect((current) => {
-                  if (current) {
-                    clearSelection()
-                  }
-                  return !current
-                })
-              }}
-            />
-          </>
-        ) : null}
+      <AppBarPortal>
+        <CommandBar
+          className="appbar-commandbar now-playing-appbar-commandbar"
+          overflowItems={canUseQueueCommands ? nowPlayingOverflowItems : []}
+          overflowLabel={t('player.more')}
+        >
+          {renderPrimaryNowPlayingCommands('appbar')}
+        </CommandBar>
+      </AppBarPortal>
+
+      <CommandBar className="now-playing-commandbar" overflowLabel={t('player.more')}>
+        {renderPrimaryNowPlayingCommands('page')}
       </CommandBar>
 
       {error ? <div className="error-banner">{error}</div> : null}
@@ -513,7 +602,7 @@ export function NowPlayingPage({
               const current = selectedQueueIndex == null ? song.id === selectedTrackId : queueIndex === selectedQueueIndex
 
               return (
-                <NowPlayingQueueItem
+                <PlaylistControlItem
                   key={queueEntryKeys[queueIndex]}
                   containerRef={current ? currentRowRef : undefined}
                   song={song}

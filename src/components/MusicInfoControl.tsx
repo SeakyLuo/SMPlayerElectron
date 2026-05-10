@@ -68,7 +68,7 @@ export function MusicInfoControl({
 
   return (
     <>
-      <CommandBar className="song-dialog-commandbar music-info-control-commandbar MusicInfoControllerCommandBar">
+      <CommandBar className="song-dialog-commandbar music-info-control-commandbar MusicInfoControllerCommandBar" overflowLabel={t('player.more')}>
         <CommandBarButton icon={canPause ? 'pause' : 'play'} label={canPause ? t('context.pause') : t('context.play')} className={canPause ? 'PauseButton' : 'PlayButton'} onClick={onPlay} />
         <CommandBarButton icon="save" label={t('settings.save')} className="song-dialog-primary-button save-music-properties-button SaveMusicPropertiesButton" disabled={controlsDisabled} onClick={onSave} />
         <CommandBarButton icon="undo" label={t('common.reset')} className="reset-music-properties-button ResetMusicPropertiesButton" disabled={controlsDisabled} onClick={onReset} />

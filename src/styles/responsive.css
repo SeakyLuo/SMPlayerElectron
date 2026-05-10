@@ -49,10 +49,6 @@
     height: 64px;
   }
 
-  .albums-page {
-    height: calc(100% - var(--player-height));
-  }
-
   .albums-grid,
   .albums-quick-jump {
     padding-bottom: 18px;
@@ -147,7 +143,6 @@
 
   .artists-page {
     display: block;
-    height: calc(100% - var(--player-height));
     min-height: 0;
   }
 
@@ -278,10 +273,6 @@
     font-size: 14px;
   }
 
-  .artist-song-list .playlist-control-item {
-    min-height: 42px;
-    padding: 0 16px;
-  }
 }
 
 .app-shell.nav-minimal .appbar-page-search {
@@ -294,6 +285,11 @@
 }
 
 .app-shell.nav-minimal .albums-commandbar .uwp-commandbar-content {
+  display: none;
+}
+
+.app-shell.nav-minimal .albums-toolbar,
+.app-shell.nav-minimal .playlists-commandbar {
   display: none;
 }
 
@@ -314,10 +310,6 @@
 .app-shell.nav-minimal .albums-grid,
 .app-shell.nav-minimal .albums-quick-jump {
   padding-bottom: 2px;
-}
-
-.app-shell.nav-minimal .albums-toolbar {
-  margin-bottom: 2px;
 }
 
 .app-shell.nav-minimal .albums-grid {
