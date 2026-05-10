@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { Route, Routes, useLocation, useNavigate, useNavigationType } from 'react-router-dom'
 
 import { AlbumDetailPage } from './pages/AlbumDetailPage'
@@ -1212,6 +1212,24 @@ function App() {
     setIsNavigationCollapsed((current) => !current)
   }
 
+  const startMinimalTitlebarDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) {
+      return
+    }
+
+    const target = event.target as HTMLElement
+    if (target.closest('button')) {
+      return
+    }
+
+    event.currentTarget.setPointerCapture(event.pointerId)
+    void window.smplayer?.startWindowDrag()
+  }
+
+  const stopMinimalTitlebarDrag = () => {
+    void window.smplayer?.stopWindowDrag()
+  }
+
   useEffect(() => {
     if (!isNavigationOverlayOpen) {
       return
@@ -1269,7 +1287,13 @@ function App() {
       className={`app-shell${isNavigationRail ? ' nav-collapsed' : ''}${isNavigationOverlay ? ' nav-overlay' : ''}${isNavigationOverlayOpen && !isNavigationMinimal ? ' nav-overlay-open' : ''}${isNavigationMinimal ? ' nav-minimal' : ''}${isNavigationMinimal && isMinimalNavigationOpen ? ' nav-minimal-open' : ''}`}
     >
       {isNavigationMinimal ? (
-        <div className="minimal-titlebar">
+        <div
+          className="minimal-titlebar"
+          onPointerDownCapture={startMinimalTitlebarDrag}
+          onPointerUpCapture={stopMinimalTitlebarDrag}
+          onPointerCancelCapture={stopMinimalTitlebarDrag}
+          onLostPointerCapture={stopMinimalTitlebarDrag}
+        >
           {canNavigateBack ? (
             <button
               className="minimal-titlebar-back-button"

@@ -633,6 +633,7 @@
   top: 56px;
   right: 0;
   bottom: 132px;
+  z-index: 220;
   width: 40vw;
   max-height: none;
   border-color: rgba(255, 255, 255, 0.18);
@@ -648,12 +649,25 @@
     opacity 180ms ease,
     transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
   will-change: transform, opacity;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 .now-playing-full-queue-popover.is-open {
   opacity: 1;
   pointer-events: auto;
   transform: translateX(0);
+}
+
+.now-playing-full-queue-popover,
+.now-playing-full-queue-popover * {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.now-playing-full-queue-popover .now-playing-full-list-shell,
+.now-playing-full-queue-popover .now-playing-queue-item {
+  pointer-events: auto;
 }
 
 .now-playing-full-page.is-day .now-playing-full-panel {
