@@ -10,7 +10,7 @@ interface FolderPreferenceTarget {
   name: string
 }
 
-const preferenceLevels: PreferenceLevel[] = ['very-high', 'higher', 'high', 'normal', 'dislike', 'do-not-appear']
+const preferenceLevels: PreferenceLevel[] = ['do-not-appear', 'dislike', 'normal', 'high', 'higher', 'very-high']
 
 export function useFolderPreferenceMenuItem(t: Translator) {
   const [folderPreferenceItems, setFolderPreferenceItems] = useState<Map<string, PreferenceItemSnapshot>>(new Map())

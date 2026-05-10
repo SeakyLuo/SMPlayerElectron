@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 
 import type { Translator } from '../shared/i18n'
 import { AlbumArtControl } from './AlbumArtControl'
+import { CommandBar, CommandBarButton } from './CommandBar'
 import { Icon } from './icons'
 
 interface AlbumArtworkDialogProps {
@@ -89,11 +90,11 @@ export function AlbumArtworkDialog({
         </nav>
         {statusMessage ? <p className="song-dialog-status">{statusMessage}</p> : null}
         <div className="song-dialog-body song-dialog-artwork">
-          <div className="song-dialog-commandbar">
-            <button type="button" disabled={saving} onClick={() => void changeArtwork()}>{t('song.changeArtwork')}</button>
-            <button type="button" className="song-dialog-primary-button" disabled={saving} onClick={() => void saveArtwork()}>{t('settings.save')}</button>
-            <button type="button" disabled={saving} onClick={() => setShowDeleteConfirm(true)}>{t('playlists.delete')}</button>
-          </div>
+          <CommandBar className="song-dialog-commandbar">
+            <CommandBarButton icon="albums" label={t('song.changeArtwork')} disabled={saving} onClick={() => void changeArtwork()} />
+            <CommandBarButton icon="save" label={t('settings.save')} className="song-dialog-primary-button" disabled={saving} onClick={() => void saveArtwork()} />
+            <CommandBarButton icon="trash" label={t('playlists.delete')} disabled={saving} onClick={() => setShowDeleteConfirm(true)} />
+          </CommandBar>
           <AlbumArtControl title={albumName} artworkUrl={currentArtworkUrl} />
           {showDeleteConfirm ? (
             <div className="song-dialog-warning">

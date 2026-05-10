@@ -1,8 +1,7 @@
-import clsx from 'clsx'
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-import { Icon } from '../components/icons'
+import { CommandBar, CommandBarButton } from '../components/CommandBar'
 import { LoadingState } from '../components/LoadingState'
 import { MenuFlyout } from '../components/MenuFlyout'
 import { getAddToPlaylistMenuFlyoutItem, getMusicMenuFlyoutItems, getShuffleMenuItems } from '../components/MenuFlyoutHelper'
@@ -11,7 +10,8 @@ import { MusicDialog } from '../components/MusicDialog'
 import { NowPlayingQueueItem } from '../components/NowPlayingQueueItem'
 import type { LibraryPlaylist, LibrarySong, PreferenceItemSnapshot, PreferenceSettingsSnapshot } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
-import { quickPlay } from '../shared/mediaHelper'
+import { insertQueueEntries, insertQueueSongs, removeQueueRange } from '../shared/queueUndo'
+import { quickPlay } from '../shared/QuickPlayHelper'
 import { useLibraryStore } from '../state/useLibraryStore'
 import { usePreferenceStore } from '../state/usePreferenceStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
@@ -183,6 +183,7 @@ export function NowPlayingPage({
     [selectedVisibleEntries],
   )
   const customPlaylists = useMemo(() => playlists.filter((playlist) => !playlist.isBuiltIn), [playlists])
+  const favoriteSongIdSet = useMemo(() => new Set(songs.filter((song) => song.favorite).map((song) => song.id)), [songs])
   const defaultNewPlaylistName = useMemo(() => getDefaultNewPlaylistName(t, playlists), [playlists, t])
   const currentSong = useMemo(
     () => songs.find((song) => song.id === selectedTrackId) ?? null,
@@ -230,17 +231,18 @@ export function NowPlayingPage({
         t,
         defaultPlaylistName: addToMenu.defaultPlaylistName,
         currentPlaylistName: t('common.nowPlaying'),
-        includeFavorites: true,
+        includeFavorites: addToMenu.songIds.some((songId) => !favoriteSongIdSet.has(songId)),
         onToggleFavorite: () => {
-          onAddSongsToPlaylist(favoritePlaylistId, addToMenu.songIds)
+          const nextFavoriteSongIds = addToMenu.songIds.filter((songId) => !favoriteSongIdSet.has(songId))
+          onAddSongsToPlaylist(favoritePlaylistId, nextFavoriteSongIds)
           showUndo(
-            addToMenu.songIds.length === 1
+            nextFavoriteSongIds.length === 1
               ? t('notification.songAddedTo', {
-                  title: songs.find((song) => song.id === addToMenu.songIds[0])!.title,
+                  title: songs.find((song) => song.id === nextFavoriteSongIds[0])!.title,
                   target: t('common.myFavorites'),
                 })
-              : t('notification.songsAddedTo', { count: addToMenu.songIds.length, target: t('common.myFavorites') }),
-            () => removeSongsFromPlaylist(favoritePlaylistId, addToMenu.songIds),
+              : t('notification.songsAddedTo', { count: nextFavoriteSongIds.length, target: t('common.myFavorites') }),
+            () => removeSongsFromPlaylist(favoritePlaylistId, nextFavoriteSongIds),
           )
           if (hideMultiSelectCommandBarAfterOperation) {
             setMultiSelect(false)
@@ -376,35 +378,29 @@ export function NowPlayingPage({
 
   return (
     <section className="now-playing-page page-panel">
-      <header className="now-playing-commandbar">
-        <button
-          type="button"
-          className="now-playing-command"
+      <CommandBar className="now-playing-commandbar" dynamicOverflow>
+        <CommandBarButton
+          icon="play"
+          label={t('nowPlaying.quickPlay')}
           disabled={!canUseLibraryCommands}
           onClick={() => {
             void playQuick()
           }}
-        >
-          <Icon name="play" />
-          {t('nowPlaying.quickPlay')}
-        </button>
+        />
         <div className="now-playing-random-menu" ref={randomMenuRef}>
-          <button
-            type="button"
-            className="now-playing-command"
+          <CommandBarButton
+            icon="shuffle"
+            label={t('nowPlaying.randomPlay')}
             disabled={!canUseLibraryCommands}
-            aria-haspopup="menu"
-            aria-expanded={randomMenuOpen}
+            ariaHasPopup="menu"
+            ariaExpanded={randomMenuOpen}
             onPointerDown={(event) => {
               event.stopPropagation()
             }}
             onClick={() => {
               setRandomMenuOpen((current) => !current)
             }}
-          >
-            <Icon name="shuffle" />
-            {t('nowPlaying.randomPlay')}
-          </button>
+          />
           {randomMenuOpen ? (
             <>
               <div className="dropdown-dismiss-layer" onPointerDown={() => setRandomMenuOpen(false)} />
@@ -439,18 +435,16 @@ export function NowPlayingPage({
         </div>
         {canUseQueueCommands ? (
           <>
-            <button
-              type="button"
-              className="now-playing-command"
+            <CommandBarButton
+              icon="nowPlaying"
+              label={t('nowPlaying.locateCurrent')}
               disabled={!currentSong}
               onClick={locateCurrent}
-            >
-              <Icon name="nowPlaying" />
-              {t('nowPlaying.locateCurrent')}
-            </button>
-            <button
-              type="button"
-              className="now-playing-command"
+            />
+            <CommandBarButton
+              icon="plus"
+              label={t('context.addToPlaylist')}
+              canOverflow={false}
               onClick={(event) => {
                 const rect = event.currentTarget.getBoundingClientRect()
                 setAddToMenu({
@@ -460,30 +454,22 @@ export function NowPlayingPage({
                   defaultPlaylistName: defaultNewPlaylistName,
                 })
               }}
-            >
-              <Icon name="plus" />
-              {t('context.addToPlaylist')}
-            </button>
-            <button
-              type="button"
-              className="now-playing-command"
+            />
+            <CommandBarButton
+              icon="close"
+              label={t('nowPlaying.clearQueue')}
               onClick={onClearQueue}
-            >
-              <Icon name="close" />
-              {t('nowPlaying.clearQueue')}
-            </button>
-            <button
-              type="button"
-              className="now-playing-command"
+            />
+            <CommandBarButton
+              icon="albums"
+              label={t('nowPlaying.playMode')}
               disabled={!currentSong}
               onClick={onOpenImmersiveMode}
-            >
-              <Icon name="albums" />
-              {t('nowPlaying.playMode')}
-            </button>
-            <button
-              type="button"
-              className={clsx('now-playing-command', { 'is-active': multiSelect })}
+            />
+            <CommandBarButton
+              active={multiSelect}
+              icon="menu"
+              label={t('albums.multiSelect')}
               onClick={() => {
                 setMultiSelect((current) => {
                   if (current) {
@@ -492,13 +478,10 @@ export function NowPlayingPage({
                   return !current
                 })
               }}
-            >
-              <Icon name="menu" />
-              {t('albums.multiSelect')}
-            </button>
+            />
           </>
         ) : null}
-      </header>
+      </CommandBar>
 
       {error ? <div className="error-banner">{error}</div> : null}
 
@@ -549,10 +532,9 @@ export function NowPlayingPage({
                     onToggleFavorite(songId, favorite)
                   }}
                   onRemoveFromListClick={(contextSong) => {
-                    const previousQueueSongIds = queueSongIds
                     onReplaceQueue(queueSongIds.filter((_, index) => index !== queueIndex))
                     showUndo(t('notification.removedFrom', { title: contextSong.title, target: t('common.nowPlaying') }), () =>
-                      onReplaceQueue(previousQueueSongIds),
+                      onReplaceQueue(insertQueueSongs(useLibraryStore.getState().snapshot.nowPlaying.songIds, queueIndex, [contextSong.id])),
                     )
                   }}
                   onAddToPlaylistClick={(contextSong, x, y) => {
@@ -639,10 +621,11 @@ export function NowPlayingPage({
           })
         }}
         onRemove={() => {
-          const previousQueueSongIds = queueSongIds
+          const removedSongIds = selectedVisibleQueueIndexes.map((queueIndex) => queueSongIds[queueIndex]!)
+          const insertIndex = selectedVisibleQueueIndexes[0]!
           onReplaceQueue(queueSongIds.filter((_, index) => !selectedVisibleQueueIndexes.includes(index)))
           showUndo(t('notification.songsRemovedFrom', { count: selectedVisibleSongIds.length, target: t('common.nowPlaying') }), () =>
-            onReplaceQueue(previousQueueSongIds),
+            onReplaceQueue(insertQueueSongs(useLibraryStore.getState().snapshot.nowPlaying.songIds, insertIndex, removedSongIds)),
           )
           clearSelection()
         }}
@@ -687,10 +670,10 @@ export function NowPlayingPage({
               onPlayNext(songMenu.song.id, songMenu.queueIndex)
             },
             onAddToNowPlaying: () => {
-              const previousQueueSongIds = queueSongIds
+              const insertedIndex = queueSongIds.length
               onReplaceQueue([...queueSongIds, songMenu.song.id])
               showUndo(t('notification.songAddedTo', { title: songMenu.song.title, target: t('common.nowPlaying') }), () =>
-                onReplaceQueue(previousQueueSongIds),
+                onReplaceQueue(removeQueueRange(useLibraryStore.getState().snapshot.nowPlaying.songIds, insertedIndex, 1)),
               )
             },
             onCreatePlaylist: (name) => {
@@ -704,10 +687,9 @@ export function NowPlayingPage({
               )
             },
             onRemove: () => {
-              const previousQueueSongIds = queueSongIds
               onReplaceQueue(queueSongIds.filter((_, index) => index !== songMenu.queueIndex))
               showUndo(t('notification.removedFrom', { title: songMenu.song.title, target: t('common.nowPlaying') }), () =>
-                onReplaceQueue(previousQueueSongIds),
+                onReplaceQueue(insertQueueSongs(useLibraryStore.getState().snapshot.nowPlaying.songIds, songMenu.queueIndex, [songMenu.song.id])),
               )
             },
             onSelect: () => {
@@ -747,12 +729,14 @@ export function NowPlayingPage({
               }
             },
             onHide: async () => {
-              const previousQueueSongIds = queueSongIds
+              const removedQueueEntries = queueSongIds
+                .map((songId, index) => ({ index, songId }))
+                .filter((entry) => entry.songId === songMenu.song.id)
               await window.smplayer?.hideSong(songMenu.song.id)
               onRemoveSongs([songMenu.song.id])
               showUndo(t('notification.hiddenStorageItem', { name: songMenu.song.title }), async () => {
                 await resumeHiddenStorageItemByPath(songMenu.song.path)
-                onReplaceQueue(previousQueueSongIds)
+                onReplaceQueue(insertQueueEntries(useLibraryStore.getState().snapshot.nowPlaying.songIds, removedQueueEntries))
               })
             },
             onSeeArtist: (artist) => {

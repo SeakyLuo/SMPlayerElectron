@@ -116,6 +116,7 @@ export function MusicLibraryPage({
   const [scrollTop, setScrollTop] = useState(0)
   const [viewportSize, setViewportSize] = useState({ height: 640, width: 1160 })
   const [isCompactLayout, setIsCompactLayout] = useState(() => window.innerWidth < COMPACT_LIBRARY_BREAKPOINT)
+  const [quickJumpPanelOpen, setQuickJumpPanelOpen] = useState(false)
   const viewportHeight = viewportSize.height
   const viewportWidth = viewportSize.width
   const virtualRowHeight = isCompactLayout ? COMPACT_VIRTUAL_ROW_HEIGHT : WIDE_VIRTUAL_ROW_HEIGHT
@@ -140,6 +141,7 @@ export function MusicLibraryPage({
         viewportWidth,
       )
   const customPlaylists = snapshot.playlists.filter((playlist) => !playlist.isBuiltIn)
+  const favoriteSongIdSet = useMemo(() => new Set(snapshot.favorites.songIds), [snapshot.favorites.songIds])
   const quickJumpMap = useMemo(
     () => buildQuickJumpMap(visibleSongs, quickJumpColumn),
     [quickJumpColumn, visibleSongs],
@@ -206,6 +208,11 @@ export function MusicLibraryPage({
     })
   }
 
+  const jumpToKeyAndClose = (key: string) => {
+    jumpToKey(key)
+    setQuickJumpPanelOpen(false)
+  }
+
   const selectSong = (songId: number, extendSelection: boolean, rangeSelection: boolean) => {
     if (!extendSelection && !rangeSelection) {
       setSelectedSongIds(new Set([songId]))
@@ -261,6 +268,40 @@ export function MusicLibraryPage({
     }
   }, [hasSongs])
 
+  useEffect(() => {
+    const toggleQuickJumpPanel = () => {
+      setQuickJumpPanelOpen((current) => !current)
+    }
+    const closeQuickJumpPanel = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setQuickJumpPanelOpen(false)
+      }
+    }
+
+    window.addEventListener('smplayer:library-quick-jump-toggle', toggleQuickJumpPanel)
+    window.addEventListener('keydown', closeQuickJumpPanel)
+    return () => {
+      window.removeEventListener('smplayer:library-quick-jump-toggle', toggleQuickJumpPanel)
+      window.removeEventListener('keydown', closeQuickJumpPanel)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isCompactLayout) {
+      setQuickJumpPanelOpen(false)
+    }
+  }, [isCompactLayout])
+
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('smplayer:library-quick-jump-open-change', {
+      detail: isCompactLayout && quickJumpPanelOpen,
+    }))
+
+    return () => {
+      window.dispatchEvent(new CustomEvent('smplayer:library-quick-jump-open-change', { detail: false }))
+    }
+  }, [isCompactLayout, quickJumpPanelOpen])
+
   return (
     <section className="page-panel library-page">
       {error ? <div className="error-banner">{error}</div> : null}
@@ -283,6 +324,44 @@ export function MusicLibraryPage({
         </div>
         )
       ) : (
+        <>
+          {isCompactLayout && quickJumpPanelOpen ? (
+            <div className="library-quick-jump-panel" role="dialog" aria-label="#-Z">
+              <div className="library-quick-jump-panel-header">
+                <strong>#-Z</strong>
+                <button
+                  type="button"
+                  aria-label={t('common.close')}
+                  title={t('common.close')}
+                  onClick={() => {
+                    setQuickJumpPanelOpen(false)
+                  }}
+                >
+                  <Icon name="close" />
+                </button>
+              </div>
+              <div className="library-quick-jump-grid">
+                {quickJumpKeys.map((key) => {
+                  const enabled = quickJumpMap.has(key)
+
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      className={clsx({ 'is-active': activeQuickJumpKey === key })}
+                      disabled={!enabled}
+                      title={getQuickJumpTooltip(key, enabled, t('common.songs'), quickJumpBasisName, t)}
+                      onClick={() => {
+                        jumpToKeyAndClose(key)
+                      }}
+                    >
+                      {key}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ) : null}
         <div className={clsx('library-content-shell', { 'is-compact': isCompactLayout })}>
           <nav className="library-quick-jump" aria-label={t('common.search')}>
             {quickJumpKeys.map((key) => {
@@ -521,6 +600,7 @@ export function MusicLibraryPage({
           </table>
           </div>
         </div>
+        </>
       )}
 
       {contextMenu ? (
@@ -568,13 +648,13 @@ export function MusicLibraryPage({
               songIds: effectiveSelectedSongIds,
               t,
               includeNowPlaying: true,
-              includeFavorites: true,
+              includeFavorites: effectiveSelectedSongIds.some((songId) => !favoriteSongIdSet.has(songId)),
               defaultPlaylistName: t('common.songs'),
               onAddToNowPlaying: () => {
                 onAddSongsToNowPlaying(effectiveSelectedSongIds)
               },
               onToggleFavorite: () => {
-                addSongsToFavorites(effectiveSelectedSongIds)
+                addSongsToFavorites(effectiveSelectedSongIds.filter((songId) => !favoriteSongIdSet.has(songId)))
               },
               onCreatePlaylist: (name) => {
                 onCreatePlaylistWithSongs(name, effectiveSelectedSongIds)

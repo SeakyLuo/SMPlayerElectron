@@ -10,12 +10,14 @@ import { MenuFlyout } from '../components/MenuFlyout'
 import { getAddToPlaylistMenuFlyoutItem, getPreferenceMenuFlyoutItem, type MenuFlyoutItem, type MenuFlyoutPosition } from '../components/MenuFlyoutHelper'
 import { MusicMenuFlyout, type MusicMenuFlyoutState } from '../components/MusicMenuFlyout'
 import { MultiSelectCommandBar } from '../components/MultiSelectCommandBar'
+import { RenameDialog } from '../components/RenameDialog'
 import { PlaylistControlItem } from '../components/PlaylistControlItem'
 import { getSongArtists } from '../shared/artists'
 import type { LibraryPlaylist, LibrarySong, PreferenceItemSnapshot, PreferenceSettingsSnapshot } from '../shared/contracts'
 import { formatDuration } from '../shared/formatters'
 import type { Translator } from '../shared/i18n'
 import { getQuickJumpTooltip } from '../shared/quickJumpTooltip'
+import { removeQueueRange } from '../shared/queueUndo'
 import { useLibraryStore } from '../state/useLibraryStore'
 import { usePreferenceStore } from '../state/usePreferenceStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
@@ -128,6 +130,7 @@ export function ArtistsPage({
   const [multiSelect, setMultiSelect] = useState(false)
   const [selectedSongIds, setSelectedSongIds] = useState<Set<number>>(new Set())
   const [addToMenu, setAddToMenu] = useState<(MenuFlyoutPosition & { songIds: number[]; defaultPlaylistName: string }) | null>(null)
+  const [playlistNameDialog, setPlaylistNameDialog] = useState<{ defaultName: string; songIds: number[] } | null>(null)
   const [songContextMenu, setSongContextMenu] = useState<MusicMenuFlyoutState | null>(null)
   const [groupMenu, setGroupMenu] = useState<GroupContextMenuState | null>(null)
   const artistListRef = useRef<HTMLDivElement | null>(null)
@@ -143,6 +146,7 @@ export function ArtistsPage({
   const refresh = useLibraryStore((state) => state.refresh)
   const showNotification = useUndoableNotificationStore((state) => state.show)
   const artistGroups = useMemo(() => buildArtistGroups(songs, t), [songs, t])
+  const favoriteSongIdSet = useMemo(() => new Set(songs.filter((song) => song.favorite).map((song) => song.id)), [songs])
   const visibleArtists = artistGroups
   const artistSearchSuggestions = useMemo(
     () => searchArtists(artistGroups, artistSearch || searchQuery),
@@ -704,6 +708,9 @@ export function ArtistsPage({
             addSongsToFavorites(songIds)
           }}
           onCreatePlaylistWithSongs={onCreatePlaylistWithSongs}
+          onRequestCreatePlaylist={(defaultName, songIds) => {
+            setPlaylistNameDialog({ defaultName, songIds })
+          }}
           onClose={() => {
             setGroupMenu(null)
           }}
@@ -759,12 +766,18 @@ export function ArtistsPage({
               t,
               defaultPlaylistName: addToMenu.defaultPlaylistName,
               includeNowPlaying: true,
-              includeFavorites: true,
+              includeFavorites: addToMenu.songIds.some((songId) => !favoriteSongIdSet.has(songId)),
               onAddToNowPlaying: () => {
                 onAddSongsToNowPlaying(addToMenu.songIds)
               },
               onToggleFavorite: () => {
-                addSongsToFavorites(addToMenu.songIds)
+                addSongsToFavorites(addToMenu.songIds.filter((songId) => !favoriteSongIdSet.has(songId)))
+              },
+              onRequestCreatePlaylist: () => {
+                setPlaylistNameDialog({
+                  defaultName: addToMenu.defaultPlaylistName,
+                  songIds: addToMenu.songIds,
+                })
               },
               onCreatePlaylist: (name) => {
                 onCreatePlaylistWithSongs(name, addToMenu.songIds)
@@ -774,6 +787,20 @@ export function ArtistsPage({
               },
             }),
           ].filter((item) => item != null)}
+        />
+      ) : null}
+      {playlistNameDialog ? (
+        <RenameDialog
+          t={t}
+          playlists={customPlaylists}
+          defaultName={playlistNameDialog.defaultName}
+          onCancel={() => {
+            setPlaylistNameDialog(null)
+          }}
+          onConfirm={(name) => {
+            onCreatePlaylistWithSongs(name, playlistNameDialog.songIds)
+            setPlaylistNameDialog(null)
+          }}
         />
       ) : null}
     </section>
@@ -796,6 +823,7 @@ function ArtistGroupContextMenu({
   onAddSongsToNowPlaying,
   onAddSongsToFavorites,
   onCreatePlaylistWithSongs,
+  onRequestCreatePlaylist,
   onClose,
   onPlaySongs,
   onSelectSongs,
@@ -810,6 +838,7 @@ function ArtistGroupContextMenu({
   onAddSongsToNowPlaying: (songIds: number[]) => void
   onAddSongsToFavorites: (songIds: number[]) => void
   onCreatePlaylistWithSongs: (name: string, songIds: number[]) => void
+  onRequestCreatePlaylist: (defaultName: string, songIds: number[]) => void
   onClose: () => void
   onPlaySongs: (songIds: number[]) => void
   onSelectSongs: (songIds: number[]) => void
@@ -818,8 +847,15 @@ function ArtistGroupContextMenu({
   onSeeAlbum: (albumName: string) => void
 }) {
   const songIds = useMemo(() => menu.songs.map((song) => song.id), [menu.songs])
+  const favoriteSongIds = useMemo(() => menu.songs.filter((song) => !song.favorite).map((song) => song.id), [menu.songs])
   const [preferenceItem, setPreferenceItem] = useState<PreferenceItemSnapshot | null>(null)
   const refreshPreferences = usePreferenceStore((state) => state.refresh)
+  const replaceNowPlaying = useLibraryStore((state) => state.replaceNowPlaying)
+  const removeSongsFromPlaylist = useLibraryStore((state) => state.removeSongsFromPlaylist)
+  const showUndoableNotification = useUndoableNotificationStore((state) => state.show)
+  const showUndo = (message: string, action: () => void | Promise<void>) => {
+    showUndoableNotification(message, t('common.undo'), action)
+  }
   const refreshPreferenceItem = async (snapshot?: PreferenceSettingsSnapshot | null) => {
     const settings = snapshot ?? await refreshPreferences()
     if (!settings) {
@@ -834,18 +870,33 @@ function ArtistGroupContextMenu({
     t,
     defaultPlaylistName: menu.label,
     includeNowPlaying: true,
-    includeFavorites: true,
+    includeFavorites: favoriteSongIds.length > 0,
     onAddToNowPlaying: () => {
+      const insertedIndex = useLibraryStore.getState().snapshot.nowPlaying.songIds.length
       onAddSongsToNowPlaying(songIds)
+      showUndo(getSongsAddedMessage(menu.songs, t('common.nowPlaying'), t), () =>
+        replaceNowPlaying(removeQueueRange(useLibraryStore.getState().snapshot.nowPlaying.songIds, insertedIndex, songIds.length)),
+      )
     },
     onToggleFavorite: () => {
-      onAddSongsToFavorites(songIds)
+      const favoritePlaylistId = useLibraryStore.getState().snapshot.favorites.playlistId
+      onAddSongsToFavorites(favoriteSongIds)
+      showUndo(getSongsAddedMessage(getSongsByIds(menu.songs, favoriteSongIds), t('common.myFavorites'), t), () =>
+        removeSongsFromPlaylist(favoritePlaylistId, favoriteSongIds),
+      )
+    },
+    onRequestCreatePlaylist: () => {
+      onRequestCreatePlaylist(menu.label, songIds)
     },
     onCreatePlaylist: (name) => {
       onCreatePlaylistWithSongs(name, songIds)
     },
     onAddToPlaylist: (playlistId) => {
+      const playlist = playlists.find((item) => item.id === playlistId)!
       onAddSongsToPlaylist(playlistId, songIds)
+      showUndo(getSongsAddedMessage(menu.songs, playlist.name, t), () =>
+        removeSongsFromPlaylist(playlistId, songIds),
+      )
     },
   })
 
@@ -926,6 +977,17 @@ function shuffleSongIds(songIds: number[]) {
   }
 
   return shuffledSongIds
+}
+
+function getSongsAddedMessage(songs: LibrarySong[], target: string, t: Translator) {
+  return songs.length === 1
+    ? t('notification.songAddedTo', { title: songs[0]!.title, target })
+    : t('notification.songsAddedTo', { count: songs.length, target })
+}
+
+function getSongsByIds(songs: LibrarySong[], songIds: number[]) {
+  const songIdSet = new Set(songIds)
+  return songs.filter((song) => songIdSet.has(song.id))
 }
 
 function searchArtists(artists: ArtistGroup[], query: string) {

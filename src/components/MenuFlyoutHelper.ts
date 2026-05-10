@@ -1,8 +1,9 @@
 import type { LibraryFolder, LibraryPlaylist, LibrarySong, PreferenceEntityType, PreferenceItemSnapshot, PreferenceLevel, PreferenceSettingsSnapshot } from '../shared/contracts'
-import { getSongArtists } from '../shared/artists'
 import type { Translator } from '../shared/i18n'
 import { usePreferenceStore } from '../state/usePreferenceStore'
 import {
+  getParentPath,
+  isSongDirectlyInFolder,
   randomAlbum,
   randomArtist,
   randomFolder,
@@ -12,7 +13,7 @@ import {
   randomPlaylist,
   randomRecentAdded,
   randomRecentPlayed,
-} from '../shared/mediaHelper'
+} from '../shared/RandomPlayHelper'
 import type { IconName } from './icons'
 
 export interface MenuFlyoutOption {
@@ -24,6 +25,7 @@ export interface MenuFlyoutOption {
   showHideFile?: boolean
   showPreference?: boolean
   showMoveToFolder?: boolean
+  showAlbumArt?: boolean
 }
 
 export interface MenuFlyoutItem {
@@ -43,7 +45,7 @@ export interface MenuFlyoutPosition {
   y: number
 }
 
-const preferenceLevels: PreferenceLevel[] = ['very-high', 'higher', 'high', 'normal', 'dislike', 'do-not-appear']
+const preferenceLevels: PreferenceLevel[] = ['do-not-appear', 'dislike', 'normal', 'high', 'higher', 'very-high']
 
 export function getPreferenceMenuFlyoutItem({
   key = 'preference',
@@ -112,6 +114,7 @@ export function getAddToPlaylistMenuFlyoutItem({
   includeFavorites,
   onAddToNowPlaying,
   onToggleFavorite,
+  onRequestCreatePlaylist,
   onCreatePlaylist,
   onAddToPlaylist,
   key = 'add-to',
@@ -126,23 +129,22 @@ export function getAddToPlaylistMenuFlyoutItem({
   includeFavorites?: boolean
   onAddToNowPlaying?: () => void
   onToggleFavorite?: () => void
+  onRequestCreatePlaylist?: () => void
   onCreatePlaylist?: (name: string) => void
   onAddToPlaylist: (playlistId: number) => void
   key?: string
 }) {
-  const songIdSet = new Set(songIds)
   const addablePlaylists = playlists.filter((playlist) => {
     if (playlist.isBuiltIn || playlist.name === (excludePlaylistName ?? currentPlaylistName)) {
       return false
     }
 
-    const playlistSongIds = new Set(playlist.songIds)
-    for (const songId of songIdSet) {
-      if (!playlistSongIds.has(songId)) {
-        return true
-      }
+    if (songIds.length !== 1) {
+      return true
     }
-    return false
+
+    const playlistSongIds = new Set(playlist.songIds)
+    return !playlistSongIds.has(songIds[0]!)
   })
   const submenu: MenuFlyoutItem[] = []
 
@@ -174,6 +176,11 @@ export function getAddToPlaylistMenuFlyoutItem({
       text: t('playlists.newPlaylist'),
       icon: 'plus',
       onClick: () => {
+        if (onRequestCreatePlaylist) {
+          onRequestCreatePlaylist()
+          return
+        }
+
         const name = window.prompt(t('playlists.newName'), defaultPlaylistName ?? t('playlists.newName'))
         const nextName = name?.trim()
         if (nextName) {
@@ -284,6 +291,7 @@ export function getMusicMenuFlyoutItems({
     showHideFile: option?.showHideFile ?? false,
     showPreference: option?.showPreference ?? true,
     showMoveToFolder: option?.showMoveToFolder ?? false,
+    showAlbumArt: option?.showAlbumArt ?? true,
   }
   const playbackQueueSongIds = playbackSongIds ?? queueSongIds
   const songIndex = targetSongIndex ?? queueSongIds.indexOf(song.id)
@@ -347,7 +355,7 @@ export function getMusicMenuFlyoutItems({
       )
     }
 
-    for (const level of ['very-high', 'higher', 'high', 'normal', 'dislike', 'do-not-appear'] as const) {
+    for (const level of preferenceLevels) {
       preferenceItems.push({
         key: `preference-${level}`,
         text: t(`preferences.level.${level}`),
@@ -396,27 +404,14 @@ export function getMusicMenuFlyoutItems({
 
   if (normalizedOption.showMusicProperties) {
     if (normalizedOption.showSeeArtistsAndSeeAlbum) {
-      const artists = getSongArtists(song)
-      items.push(
-        artists.length === 1
-          ? { key: 'see-artist', text: t('context.seeArtist'), icon: 'users', onClick: () => onSeeArtist(artists[0]) }
-          : {
-              key: 'see-artist',
-              text: t('context.seeArtist'),
-              icon: 'users',
-              submenu: artists.map((artist) => ({
-                key: `see-artist-${artist}`,
-                text: artist,
-                icon: 'users' as const,
-                onClick: () => onSeeArtist(artist),
-              })),
-            },
-      )
+      items.push({ key: 'see-artist', text: t('context.seeArtist'), icon: 'users', onClick: () => onSeeArtist(song.artist) })
       items.push({ key: 'see-album', text: t('context.seeAlbum'), icon: 'albums', onClick: onSeeAlbum })
     }
     items.push({ key: 'see-music-info', text: t('context.seeMusicInfo'), icon: 'info', keepOpen: true, onClick: onSeeMusicInfo })
     items.push({ key: 'see-lyrics', text: t('context.seeLyrics'), icon: 'songs', keepOpen: true, onClick: onSeeLyrics })
-    items.push({ key: 'see-album-art', text: t('context.seeAlbumArt'), icon: 'albums', keepOpen: true, onClick: onSeeAlbumArt })
+    if (normalizedOption.showAlbumArt) {
+      items.push({ key: 'see-album-art', text: t('context.seeAlbumArt'), icon: 'albums', keepOpen: true, onClick: onSeeAlbumArt })
+    }
   }
 
   return items
@@ -542,7 +537,7 @@ export function getShuffleMenuItems({
   if (playablePlaylists.length > 0) {
     items.push({
       key: 'playlist',
-      text: t('common.playlists'),
+      text: t('common.playlist'),
       onClick: () => {
         onPlaySongs(randomPlaylist(librarySongs, playablePlaylists, randomLimit))
       },
@@ -580,13 +575,4 @@ export function getShuffleMenuItems({
   }
 
   return items
-}
-
-function getParentPath(path: string) {
-  const separatorIndex = Math.max(path.lastIndexOf('\\'), path.lastIndexOf('/'))
-  return separatorIndex > -1 ? path.slice(0, separatorIndex) : ''
-}
-
-function isSongDirectlyInFolder(song: LibrarySong, folderPath: string) {
-  return getParentPath(song.path) === folderPath
 }

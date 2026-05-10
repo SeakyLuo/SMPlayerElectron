@@ -96,6 +96,12 @@ const paths = {
     <path key="base" d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4" />,
     <path key="dot" d="M7 17h.01" />,
   ],
+  musicLibrary: [
+    <path key="book1" d="M5 5v14" />,
+    <path key="book2" d="M10 5v14" />,
+    <path key="book3" d="M15 5v14" />,
+    <path key="book4" d="m19 6 2 12" />,
+  ],
   menu: [
     <path key="a" d="M4 7h16" />,
     <path key="b" d="M4 12h16" />,
@@ -176,6 +182,11 @@ const paths = {
     <circle key="circle" cx="11" cy="11" r="7" />,
     <path key="handle" d="m20 20-4-4" />,
   ],
+  save: [
+    <path key="body" d="M5 4h12l2 2v14H5z" />,
+    <path key="slot" d="M8 4v6h8V4" />,
+    <path key="label" d="M8 15h8v5H8z" />,
+  ],
   settings: [
     <circle key="center" cx="12" cy="12" r="3" />,
     <path
@@ -211,6 +222,15 @@ const paths = {
     <path key="handle" d="M9 7V4h6v3" />,
     <path key="left" d="M10 11v6" />,
     <path key="right" d="M14 11v6" />,
+  ],
+  undo: [
+    <path key="arrow" d="M9 7H4v5" />,
+    <path key="curve" d="M4 12a8 8 0 1 0 3-6" />,
+  ],
+  import: [
+    <path key="box" d="M5 15v4h14v-4" />,
+    <path key="line" d="M12 3v12" />,
+    <path key="arrow" d="m7 10 5 5 5-5" />,
   ],
   voice: [
     <path key="body" d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z" />,

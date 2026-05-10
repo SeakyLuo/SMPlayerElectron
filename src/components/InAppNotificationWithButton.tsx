@@ -1,6 +1,7 @@
+import { Icon } from './icons'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
 
-export function UndoableNotificationHost() {
+export function InAppNotificationWithButton() {
   const notification = useUndoableNotificationStore((state) => state.notification)
   const dismiss = useUndoableNotificationStore((state) => state.dismiss)
   const run = useUndoableNotificationStore((state) => state.run)
@@ -16,7 +17,7 @@ export function UndoableNotificationHost() {
         {notification.buttonText}
       </button>
       <button type="button" aria-label="Close" onClick={dismiss}>
-        ×
+        <Icon name="close" />
       </button>
     </div>
   )

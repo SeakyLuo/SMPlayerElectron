@@ -7,9 +7,11 @@ export interface AppInfo {
 
 export type PlaybackMode = 'once' | 'repeat' | 'repeat-one' | 'shuffle'
 export type GlobalMediaCommand = 'play-pause' | 'next' | 'previous' | 'stop'
+export type TrayCommand = 'scan-library'
 export type NotificationSendMode = 'music-changed' | 'never'
 export type NotificationDisplayMode = 'reminder' | 'normal' | 'quick'
 export type NightMode = 'auto' | 'on' | 'never'
+export type LocalViewMode = 'grid' | 'list'
 export type MusicLibrarySortCriterion =
   | 'title'
   | 'artist'
@@ -78,6 +80,62 @@ export interface HiddenStorageItem {
   id: number
   type: 'folder' | 'file'
   path: string
+}
+
+export interface RemoteShareSettings {
+  deviceId: string
+  deviceName: string
+  shareEnabled: boolean
+  port: number
+  password: string
+}
+
+export interface RemoteShareStatus extends RemoteShareSettings {
+  running: boolean
+  addresses: string[]
+}
+
+export interface RemoteShareSettingsUpdate {
+  deviceName?: string
+  shareEnabled?: boolean
+  port?: number
+  password?: string
+}
+
+export type AuthorizedDeviceAuth = 'allowed' | 'blocked'
+
+export interface AuthorizedDevice {
+  id: number
+  deviceId: string
+  deviceName: string
+  platform: string
+  browser: string
+  ip: string
+  auth: AuthorizedDeviceAuth
+  createdAt: string
+  updatedAt: string
+  lastSeenAt: string
+}
+
+export interface RemoteHost {
+  id: number
+  hostId: string
+  name: string
+  baseUrl: string
+  platform: string
+  createdAt: string
+  updatedAt: string
+  lastConnectedAt: string
+}
+
+export interface RemoteHostConnectRequest {
+  baseUrl: string
+  password: string
+}
+
+export interface RemoteHostConnectResult {
+  host: RemoteHost
+  songCount: number
 }
 
 export interface NowPlayingSnapshot {
@@ -234,9 +292,11 @@ export interface SettingsSnapshot {
   autoPlay: boolean
   saveMusicProgress: boolean
   hideMultiSelectCommandBarAfterOperation: boolean
+  localViewMode: LocalViewMode
   quitOnClose: boolean
   lastPage: string
   lastPlaylistId: number
+  lastReleaseNotesVersion: string
 }
 
 export interface LibrarySnapshot {
@@ -346,7 +406,9 @@ export interface AppSettingsUpdate {
   autoPlay?: boolean
   saveMusicProgress?: boolean
   hideMultiSelectCommandBarAfterOperation?: boolean
+  localViewMode?: LocalViewMode
   quitOnClose?: boolean
+  lastReleaseNotesVersion?: string
 }
 
 export interface ViewStateUpdate {
@@ -396,6 +458,16 @@ export interface SmplayerApi {
   hideLocalFolder: (path: string) => Promise<void>
   getHiddenStorageItems: () => Promise<HiddenStorageItem[]>
   resumeHiddenStorageItem: (item: HiddenStorageItem) => Promise<void>
+  getRemoteShareStatus: () => Promise<RemoteShareStatus>
+  updateRemoteShareSettings: (update: RemoteShareSettingsUpdate) => Promise<RemoteShareStatus>
+  startRemoteShare: () => Promise<RemoteShareStatus>
+  stopRemoteShare: () => Promise<RemoteShareStatus>
+  getAuthorizedDevices: () => Promise<AuthorizedDevice[]>
+  updateAuthorizedDevice: (deviceId: number, update: { deviceName?: string; auth?: AuthorizedDeviceAuth }) => Promise<void>
+  deleteAuthorizedDevice: (deviceId: number) => Promise<void>
+  getRemoteHosts: () => Promise<RemoteHost[]>
+  connectRemoteHost: (request: RemoteHostConnectRequest) => Promise<RemoteHostConnectResult>
+  deleteRemoteHost: (hostId: number) => Promise<void>
   pickLibraryRoot: () => Promise<ChooseLibraryRootResult>
   scanLibrary: (rootPath?: string) => Promise<ScanLibraryResult>
   scanLocalFolder: (folderPath: string) => Promise<ScanLibraryResult>
@@ -409,6 +481,7 @@ export interface SmplayerApi {
   setSongsFavorite: (songIds: number[], favorite: boolean) => Promise<void>
   createPlaylist: (name: string, songIds?: number[]) => Promise<LibraryPlaylist>
   deletePlaylist: (playlistId: number) => Promise<void>
+  restorePlaylist: (playlist: LibraryPlaylist) => Promise<void>
   renamePlaylist: (playlistId: number, name: string) => Promise<void>
   reorderPlaylists: (playlistIds: number[]) => Promise<void>
   addSongToPlaylist: (playlistId: number, songId: number) => Promise<void>
@@ -423,6 +496,7 @@ export interface SmplayerApi {
   addRecentSearch: (query: string) => Promise<SearchHistoryEntry | null>
   removeRecentSearch: (entryId: number) => Promise<void>
   removeRecentSearches: (entryIds: number[]) => Promise<void>
+  restoreRecentSearch: (entry: SearchHistoryEntry) => Promise<void>
   clearRecentSearches: () => Promise<void>
   removeRecentPlayed: (songIds: number[]) => Promise<void>
   restoreRecentPlayed: (songIds: number[]) => Promise<void>
@@ -438,5 +512,6 @@ export interface SmplayerApi {
   markSongPlayed: (songId: number) => Promise<void>
   updateSongDuration: (songId: number, duration: number) => Promise<void>
   onGlobalMediaCommand: (callback: (command: GlobalMediaCommand) => void) => () => void
+  onTrayCommand: (callback: (command: TrayCommand) => void) => () => void
   onOpenFiles: (callback: (songIds: number[]) => void) => () => void
 }

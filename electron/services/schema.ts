@@ -182,6 +182,43 @@ export function initializeSchema(db: DatabaseSync) {
       State INTEGER DEFAULT 1
     );
 
+    CREATE TABLE IF NOT EXISTS RemoteSetting (
+      Id INTEGER PRIMARY KEY CHECK (Id = 1),
+      DeviceId TEXT NOT NULL,
+      DeviceName TEXT DEFAULT '',
+      ShareEnabled INTEGER DEFAULT 0,
+      Port INTEGER DEFAULT 8023,
+      Password TEXT DEFAULT ''
+    );
+
+    CREATE TABLE IF NOT EXISTS AuthorizedDevice (
+      Id INTEGER PRIMARY KEY AUTOINCREMENT,
+      DeviceId TEXT DEFAULT '',
+      DeviceName TEXT DEFAULT '',
+      Platform TEXT DEFAULT '',
+      Browser TEXT DEFAULT '',
+      Ip TEXT NOT NULL,
+      TokenHash TEXT DEFAULT '',
+      Auth INTEGER DEFAULT 1,
+      State INTEGER DEFAULT 1,
+      CreateTime TEXT DEFAULT '',
+      UpdateTime TEXT DEFAULT '',
+      LastSeenTime TEXT DEFAULT ''
+    );
+
+    CREATE TABLE IF NOT EXISTS RemoteHost (
+      Id INTEGER PRIMARY KEY AUTOINCREMENT,
+      HostId TEXT NOT NULL,
+      Name TEXT DEFAULT '',
+      BaseUrl TEXT NOT NULL,
+      Platform TEXT DEFAULT '',
+      Token TEXT DEFAULT '',
+      State INTEGER DEFAULT 1,
+      CreateTime TEXT DEFAULT '',
+      UpdateTime TEXT DEFAULT '',
+      LastConnectedTime TEXT DEFAULT ''
+    );
+
     INSERT OR IGNORE INTO SearchState (Id, LastQuery)
     VALUES (1, '');
 
@@ -209,6 +246,31 @@ export function initializeSchema(db: DatabaseSync) {
 
   renameColumnIfPresent(db, 'Music', 'ArtworkPath', 'ThumbnailPath')
   addColumnIfMissing(db, 'Music', 'ThumbnailPath', `ThumbnailPath TEXT DEFAULT ''`)
+  addColumnIfMissing(db, 'RemoteSetting', 'DeviceId', `DeviceId TEXT DEFAULT ''`)
+  addColumnIfMissing(db, 'RemoteSetting', 'DeviceName', `DeviceName TEXT DEFAULT ''`)
+  addColumnIfMissing(db, 'RemoteSetting', 'ShareEnabled', `ShareEnabled INTEGER DEFAULT 0`)
+  addColumnIfMissing(db, 'RemoteSetting', 'Port', `Port INTEGER DEFAULT 8023`)
+  addColumnIfMissing(db, 'RemoteSetting', 'Password', `Password TEXT DEFAULT ''`)
+  addColumnIfMissing(db, 'AuthorizedDevice', 'DeviceId', `DeviceId TEXT DEFAULT ''`)
+  addColumnIfMissing(db, 'AuthorizedDevice', 'DeviceName', `DeviceName TEXT DEFAULT ''`)
+  addColumnIfMissing(db, 'AuthorizedDevice', 'Platform', `Platform TEXT DEFAULT ''`)
+  addColumnIfMissing(db, 'AuthorizedDevice', 'Browser', `Browser TEXT DEFAULT ''`)
+  addColumnIfMissing(db, 'AuthorizedDevice', 'Ip', `Ip TEXT DEFAULT ''`)
+  addColumnIfMissing(db, 'AuthorizedDevice', 'TokenHash', `TokenHash TEXT DEFAULT ''`)
+  addColumnIfMissing(db, 'AuthorizedDevice', 'Auth', `Auth INTEGER DEFAULT 1`)
+  addColumnIfMissing(db, 'AuthorizedDevice', 'State', `State INTEGER DEFAULT 1`)
+  addColumnIfMissing(db, 'AuthorizedDevice', 'CreateTime', `CreateTime TEXT DEFAULT ''`)
+  addColumnIfMissing(db, 'AuthorizedDevice', 'UpdateTime', `UpdateTime TEXT DEFAULT ''`)
+  addColumnIfMissing(db, 'AuthorizedDevice', 'LastSeenTime', `LastSeenTime TEXT DEFAULT ''`)
+  addColumnIfMissing(db, 'RemoteHost', 'HostId', `HostId TEXT DEFAULT ''`)
+  addColumnIfMissing(db, 'RemoteHost', 'Name', `Name TEXT DEFAULT ''`)
+  addColumnIfMissing(db, 'RemoteHost', 'BaseUrl', `BaseUrl TEXT DEFAULT ''`)
+  addColumnIfMissing(db, 'RemoteHost', 'Platform', `Platform TEXT DEFAULT ''`)
+  addColumnIfMissing(db, 'RemoteHost', 'Token', `Token TEXT DEFAULT ''`)
+  addColumnIfMissing(db, 'RemoteHost', 'State', `State INTEGER DEFAULT 1`)
+  addColumnIfMissing(db, 'RemoteHost', 'CreateTime', `CreateTime TEXT DEFAULT ''`)
+  addColumnIfMissing(db, 'RemoteHost', 'UpdateTime', `UpdateTime TEXT DEFAULT ''`)
+  addColumnIfMissing(db, 'RemoteHost', 'LastConnectedTime', `LastConnectedTime TEXT DEFAULT ''`)
 
   for (const [columnName, columnDefinition] of [
     ['LastReleaseNotesVersion', `LastReleaseNotesVersion TEXT DEFAULT ''`],
@@ -233,6 +295,15 @@ export function initializeSchema(db: DatabaseSync) {
   }
 
   db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_authorized_device_device
+      ON AuthorizedDevice(DeviceId)
+      WHERE DeviceId <> '';
+    CREATE INDEX IF NOT EXISTS idx_authorized_device_token
+      ON AuthorizedDevice(TokenHash);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_remote_host_host
+      ON RemoteHost(HostId)
+      WHERE HostId <> '';
+
     INSERT OR IGNORE INTO MusicArtist (MusicId, Name, Priority, State)
     SELECT Id, Artist, 0, State
     FROM Music

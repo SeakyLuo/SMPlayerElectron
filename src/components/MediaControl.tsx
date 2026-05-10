@@ -3,10 +3,10 @@ import type { CSSProperties, MouseEvent, PointerEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import type { LibraryPlaylist, LibrarySong, LyricsSnapshot, PlaybackMode, PreferenceItemSnapshot, PreferenceSettingsSnapshot } from '../shared/contracts'
-import { getSongArtists } from '../shared/artists'
 import { extractArtworkColorRgb, getDefaultArtworkColorRgb } from '../shared/artworkColor'
 import type { Translator } from '../shared/i18n'
 import { getCurrentLyricsLine } from '../shared/lyrics'
+import { removeQueueRange } from '../shared/queueUndo'
 import { useLibraryStore } from '../state/useLibraryStore'
 import { usePlaybackProgress } from '../state/playbackProgressStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
@@ -908,10 +908,10 @@ export function MediaControl({
             onQuickPlay,
             onAddToNowPlaying: () => {
               if (currentSong) {
-                const previousQueueSongIds = snapshotQueueSongIds
+                const insertedIndex = snapshotQueueSongIds.length
                 void replaceNowPlaying([...snapshotQueueSongIds, currentSong.id])
                 showUndo(t('notification.songAddedTo', { title: currentSong.title, target: t('common.nowPlaying') }), () =>
-                  replaceNowPlaying(previousQueueSongIds),
+                  replaceNowPlaying(removeQueueRange(useLibraryStore.getState().snapshot.nowPlaying.songIds, insertedIndex, 1)),
                 )
               }
             },
@@ -1037,7 +1037,6 @@ function getPlayerMoreMenuItems({
     items.push(addToItem)
   }
 
-  const artists = getSongArtists(song)
   items.push(
     getPreferenceMenuFlyoutItem({
       type: 'song',
@@ -1047,19 +1046,7 @@ function getPlayerMoreMenuItems({
       t,
       onUpdated: onPreferenceChanged,
     }),
-    artists.length === 1
-      ? { key: 'see-artist', text: t('context.seeArtist'), icon: 'users', onClick: () => onSeeArtist(artists[0]) }
-      : {
-          key: 'see-artist',
-          text: t('context.seeArtist'),
-          icon: 'users',
-          submenu: artists.map((artist) => ({
-            key: `see-artist-${artist}`,
-            text: artist,
-            icon: 'users' as const,
-            onClick: () => onSeeArtist(artist),
-          })),
-        },
+    { key: 'see-artist', text: t('context.seeArtist'), icon: 'users', onClick: () => onSeeArtist(song.artist) },
     { key: 'see-album', text: t('context.seeAlbum'), icon: 'albums', onClick: onSeeAlbum },
     { key: 'see-music-info', text: t('context.seeMusicInfo'), icon: 'info', keepOpen: true, onClick: onSeeMusicInfo },
     { key: 'see-lyrics', text: t('context.seeLyrics'), icon: 'songs', keepOpen: true, onClick: onSeeLyrics },

@@ -6,14 +6,18 @@ import { AlbumsPage } from './pages/AlbumsPage'
 import { ArtistsPage } from './pages/ArtistsPage'
 import { LoadingState } from './components/LoadingState'
 import { MediaControl } from './components/MediaControl'
+import { RenameDialog } from './components/RenameDialog'
+import { ReleaseNotesDialog } from './components/ReleaseNotesDialog'
 import { Sidebar } from './components/Sidebar'
-import { UndoableNotificationHost } from './components/UndoableNotificationHost'
+import { Icon } from './components/icons'
+import { InAppNotificationWithButton } from './components/InAppNotificationWithButton'
 import { useOpenFilesPlayback } from './hooks/useOpenFilesPlayback'
 import { usePlaybackController } from './hooks/usePlaybackController'
 import { useRevealItem } from './hooks/useRevealItem'
 import { useScrollbarHoverClass } from './hooks/useScrollbarHoverClass'
 import { useSearchController } from './hooks/useSearchController'
 import { useTrackNotification } from './hooks/useTrackNotification'
+import { useUndoableNotificationStore } from './state/useUndoableNotificationStore'
 import { CollectionPage } from './pages/CollectionPage'
 import { HiddenFoldersPage } from './pages/HiddenFoldersPage'
 import { MusicLibraryPage } from './pages/MusicLibraryPage'
@@ -25,12 +29,14 @@ import { PlaylistsPage } from './pages/PlaylistsPage'
 import { RecentPage } from './pages/RecentPage'
 import { SearchPage } from './pages/SearchPage'
 import { SettingsPage } from './pages/SettingsPage'
-import type { LibraryCounts, LibraryFolder, LibraryPlaylist, LibrarySong, LocalFolderSortCriterion, PreferenceLevel, ScanLibraryResult } from './shared/contracts'
+import type { LibraryCounts, LibraryFolder, LibraryPlaylist, LibrarySong, LocalFolderSortCriterion, LocalViewMode, PreferenceLevel, ScanLibraryResult } from './shared/contracts'
 import { getDisplayArtists, getSongArtists } from './shared/artists'
 import { createTranslator, resolveLocale, type Translator } from './shared/i18n'
+import { getNextPlaylistName } from './shared/playlistNames'
 import { sortLibrarySongs } from './shared/sorting'
 import { compareLocalText } from './shared/textCompare'
-import { addNextAndPlay as setQueueAddNextAndPlay, moveToMusicOrPlay as setQueueMoveToMusicOrPlay, playNext as setQueuePlayNext, quickPlay, setMusicAndPlayFromPlaylist } from './shared/mediaHelper'
+import { addNextAndPlay as setQueueAddNextAndPlay, moveToMusicOrPlay as setQueueMoveToMusicOrPlay, playNext as setQueuePlayNext, setMusicAndPlayFromPlaylist } from './shared/mediaHelper'
+import { quickPlay } from './shared/QuickPlayHelper'
 import { ByArtistRequest, MatchType, VoiceAssistantHelper, type VolumeRequest } from './shared/VoiceAssistantHelper'
 import { useLibraryStore } from './state/useLibraryStore'
 import { usePreferenceStore } from './state/usePreferenceStore'
@@ -188,6 +194,24 @@ function applyThemeColor(themeColor: string) {
   root.style.setProperty('--focus', `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.82)`)
 }
 
+function getClockMinute() {
+  const now = new Date()
+  return now.getHours() * 60 + now.getMinutes()
+}
+
+function settingsTimeToMinute(value: string) {
+  const [hour, minute] = value.split(':').map(Number)
+  return hour * 60 + minute
+}
+
+function isClockMinuteInRange(current: number, start: number, end: number) {
+  if (start < end) {
+    return current >= start && current < end
+  }
+
+  return current >= start || current < end
+}
+
 function getSearchScore(query: string, candidate: string) {
   const trimmedQuery = query.trim()
   const trimmedCandidate = candidate.trim()
@@ -301,11 +325,13 @@ function App() {
   const navigationType = useNavigationType()
   const [navigationDepth, setNavigationDepth] = useState(0)
   const [showNowPlayingFullPage, setShowNowPlayingFullPage] = useState(false)
+  const [windowControlClockMinute, setWindowControlClockMinute] = useState(getClockMinute)
+  const [isCreatePlaylistDialogOpen, setIsCreatePlaylistDialogOpen] = useState(false)
+  const [pendingCreatedPlaylistName, setPendingCreatedPlaylistName] = useState('')
+  const [releaseNotesDialogVersion, setReleaseNotesDialogVersion] = useState('')
+  const [isLibraryQuickJumpOpen, setIsLibraryQuickJumpOpen] = useState(false)
+  const releaseNotesCheckedRef = useRef(false)
   const revealItem = useRevealItem()
-
-  useEffect(() => {
-    void window.smplayer?.setWindowControlsLight(showNowPlayingFullPage)
-  }, [showNowPlayingFullPage])
 
   const snapshot = useLibraryStore((state) => state.snapshot)
   const loading = useLibraryStore((state) => state.loading)
@@ -319,6 +345,7 @@ function App() {
   const setSongFavorite = useLibraryStore((state) => state.setSongFavorite)
   const createPlaylist = useLibraryStore((state) => state.createPlaylist)
   const deletePlaylist = useLibraryStore((state) => state.deletePlaylist)
+  const restorePlaylist = useLibraryStore((state) => state.restorePlaylist)
   const renamePlaylist = useLibraryStore((state) => state.renamePlaylist)
   const addSongToPlaylist = useLibraryStore((state) => state.addSongToPlaylist)
   const addSongsToPlaylist = useLibraryStore((state) => state.addSongsToPlaylist)
@@ -342,13 +369,77 @@ function App() {
   const addRecentSearch = useLibraryStore((state) => state.addRecentSearch)
   const removeRecentSearch = useLibraryStore((state) => state.removeRecentSearch)
   const removeRecentSearches = useLibraryStore((state) => state.removeRecentSearches)
+  const restoreRecentSearch = useLibraryStore((state) => state.restoreRecentSearch)
   const clearRecentSearches = useLibraryStore((state) => state.clearRecentSearches)
   const removeRecentPlayed = useLibraryStore((state) => state.removeRecentPlayed)
   const restoreRecentPlayed = useLibraryStore((state) => state.restoreRecentPlayed)
   const clearRecentPlayed = useLibraryStore((state) => state.clearRecentPlayed)
   const updateSettings = useLibraryStore((state) => state.updateSettings)
   const saveViewState = useLibraryStore((state) => state.saveViewState)
+  const showUndoableNotification = useUndoableNotificationStore((state) => state.show)
   const [localRelativePath, setLocalRelativePath] = useState('')
+  const nowPlayingFullUsesLightWindowControls = showNowPlayingFullPage && (
+    snapshot.settings.nightMode === 'on' ||
+    (
+      snapshot.settings.nightMode === 'auto' &&
+      isClockMinuteInRange(
+        windowControlClockMinute,
+        settingsTimeToMinute(snapshot.settings.nightModeStartTime),
+        settingsTimeToMinute(snapshot.settings.nightModeEndTime),
+      )
+    )
+  )
+
+  useEffect(() => {
+    void window.smplayer?.setWindowControlsLight(nowPlayingFullUsesLightWindowControls)
+  }, [nowPlayingFullUsesLightWindowControls])
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setWindowControlClockMinute(getClockMinute())
+    }, 60_000)
+
+    return () => {
+      window.clearInterval(interval)
+    }
+  }, [])
+
+  useEffect(() => {
+    return window.smplayer?.onTrayCommand((command) => {
+      if (command === 'scan-library') {
+        void scanLibrary()
+      }
+    })
+  }, [scanLibrary])
+
+  useEffect(() => {
+    if (!pendingCreatedPlaylistName) {
+      return
+    }
+
+    const playlist = snapshot.playlists.find((item) => item.name === pendingCreatedPlaylistName)
+    if (playlist) {
+      navigate(`/playlists/${playlist.id}`)
+      void saveViewState({ lastPlaylistId: playlist.id })
+      setPendingCreatedPlaylistName('')
+    }
+  }, [navigate, pendingCreatedPlaylistName, saveViewState, snapshot.playlists])
+
+  useEffect(() => {
+    if (!initialLoadComplete || releaseNotesCheckedRef.current) {
+      return
+    }
+
+    releaseNotesCheckedRef.current = true
+    void window.smplayer?.getAppInfo().then((appInfo) => {
+      if (
+        snapshot.settings.lastReleaseNotesVersion &&
+        snapshot.settings.lastReleaseNotesVersion !== appInfo.version
+      ) {
+        setReleaseNotesDialogVersion(appInfo.version)
+      }
+    })
+  }, [initialLoadComplete, snapshot.settings.lastReleaseNotesVersion])
 
   const playback = usePlaybackController(snapshot)
   const {
@@ -585,6 +676,23 @@ function App() {
       window.removeEventListener('resize', updateNavigationMode)
     }
   }, [])
+
+  useEffect(() => {
+    const updateLibraryQuickJumpOpen = (event: Event) => {
+      setIsLibraryQuickJumpOpen(Boolean((event as CustomEvent<boolean>).detail))
+    }
+
+    window.addEventListener('smplayer:library-quick-jump-open-change', updateLibraryQuickJumpOpen)
+    return () => {
+      window.removeEventListener('smplayer:library-quick-jump-open-change', updateLibraryQuickJumpOpen)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (location.pathname !== '/songs') {
+      setIsLibraryQuickJumpOpen(false)
+    }
+  }, [location.pathname])
 
   useTrackNotification(playback.currentTrack)
 
@@ -1004,11 +1112,31 @@ function App() {
   }
 
   const isLocalRoute = location.pathname === '/local'
+  const canNavigateBack = navigationDepth > 0 || isInAlbumDetail
   const isNavigationRail = isNavigationMinimal ? !isMinimalNavigationOpen : isNavigationCollapsed
   const currentLocalRelativePath = isLocalRoute ? localRelativePath : ''
   const searchFolderRelativePath = new URLSearchParams(location.search).get('folder') ?? ''
   const searchFolderPath = getSearchFolderPath(snapshot.settings.rootPath, searchFolderRelativePath)
   const searchFolderName = getSearchFolderName(snapshot.settings.rootPath, searchFolderRelativePath)
+  const currentPageTitle = location.pathname === '/' && !initialLoadComplete
+    ? ''
+    : getPageTitle(
+      location.pathname,
+      snapshot.counts,
+      t,
+      showCount,
+      submittedSearchQuery,
+      searchFolderName,
+      snapshot.nowPlaying.songIds.length,
+    )
+  const toggleNavigation = () => {
+    if (isNavigationMinimal) {
+      setIsMinimalNavigationOpen((current) => !current)
+      return
+    }
+
+    setIsNavigationCollapsed((current) => !current)
+  }
   const playerControlBindings = {
     isPlaying: playback.isPlaying,
     volume: playback.volume,
@@ -1039,12 +1167,30 @@ function App() {
 
   return (
     <div className={`app-shell${isNavigationRail ? ' nav-collapsed' : ''}${isNavigationMinimal ? ' nav-minimal' : ''}${isNavigationMinimal && isMinimalNavigationOpen ? ' nav-minimal-open' : ''}`}>
+      {isNavigationMinimal ? (
+        <div className="minimal-titlebar">
+          {canNavigateBack ? (
+            <button
+              className="minimal-titlebar-back-button"
+              type="button"
+              aria-label={t('sidebar.back')}
+              title={t('sidebar.back')}
+              onClick={goBackFromSidebar}
+            >
+              <Icon name="arrowLeft" />
+            </button>
+          ) : null}
+          <span className={canNavigateBack ? 'minimal-titlebar-title has-back-button' : 'minimal-titlebar-title'}>
+            {t('app.shell')}
+          </span>
+        </div>
+      ) : null}
       <Sidebar
         t={t}
         collapsed={isNavigationRail}
         appName={t('app.shell')}
         playlists={snapshot.playlists}
-        canGoBack={navigationDepth > 0 || isInAlbumDetail}
+        canGoBack={canNavigateBack}
         searchQuery={searchInput}
         recentSearches={snapshot.search.recentSearches}
         getRestoredNavTarget={getRestoredNavTarget}
@@ -1052,6 +1198,9 @@ function App() {
         onNavigate={() => {
           setShowNowPlayingFullPage(false)
           setIsMinimalNavigationOpen(false)
+        }}
+        onCreatePlaylist={() => {
+          setIsCreatePlaylistDialogOpen(true)
         }}
         onReorderPlaylists={(playlistIds) => {
           void reorderPlaylists(playlistIds)
@@ -1068,20 +1217,29 @@ function App() {
           void saveSearchQuery('')
         }}
         onRecentSearchRemove={(entryId) => {
+          const entry = snapshot.search.recentSearches.find((recentSearch) => recentSearch.id === entryId)!
           void removeRecentSearch(entryId)
+          showUndoableNotification(t('notification.itemRemoved', { name: entry.query }), t('common.undo'), () =>
+            restoreRecentSearch(entry),
+          )
         }}
         onRecentSearchesClear={() => {
           void clearRecentSearches()
         }}
         onToggleCollapsed={() => {
-          if (isNavigationMinimal) {
-            setIsMinimalNavigationOpen((current) => !current)
-            return
-          }
-
-          setIsNavigationCollapsed((current) => !current)
+          toggleNavigation()
         }}
       />
+      {isNavigationMinimal && isMinimalNavigationOpen ? (
+        <button
+          className="minimal-sidebar-dismiss"
+          type="button"
+          aria-label={t('common.close')}
+          onClick={() => {
+            setIsMinimalNavigationOpen(false)
+          }}
+        />
+      ) : null}
       <div className={
         location.pathname === '/recent'
           ? 'workspace is-headerless-route'
@@ -1094,7 +1252,20 @@ function App() {
             : 'workspace'
       }>
         <header className="workspace-header">
-          {isLocalRoute && snapshot.settings.rootPath ? (
+          {isNavigationMinimal ? (
+            <div className="appbar-title-group">
+              <button
+                className="appbar-icon-button"
+                type="button"
+                aria-label={isNavigationRail ? t('sidebar.expandNavigation') : t('sidebar.collapseNavigation')}
+                title={isNavigationRail ? t('sidebar.expandNavigation') : t('sidebar.collapseNavigation')}
+                onClick={toggleNavigation}
+              >
+                <Icon name="menu" />
+              </button>
+              <h1>{currentPageTitle}</h1>
+            </div>
+          ) : isLocalRoute && snapshot.settings.rootPath ? (
             <LocalTitleGrid
               songs={snapshot.songs}
               folders={snapshot.folders}
@@ -1135,24 +1306,28 @@ function App() {
             />
           ) : (
             <div>
-              <h1>
-                {location.pathname === '/' && !initialLoadComplete
-                  ? ''
-                  : getPageTitle(
-                    location.pathname,
-                    snapshot.counts,
-                    t,
-                    showCount,
-                    submittedSearchQuery,
-                    searchFolderName,
-                    snapshot.nowPlaying.songIds.length,
-                  )}
-              </h1>
+              <h1>{currentPageTitle}</h1>
             </div>
           )}
-          <div className="status-pills">
-            <span>{t('app.songsCached', { count: snapshot.counts.songs })}</span>
-          </div>
+          {!isNavigationMinimal ? (
+            <div className="status-pills">
+              <span>{t('app.songsCached', { count: snapshot.counts.songs })}</span>
+            </div>
+          ) : location.pathname === '/songs' ? (
+            <div className="appbar-actions">
+              <button
+                className={`appbar-icon-button appbar-quick-jump-button${isLibraryQuickJumpOpen ? ' is-open' : ''}`}
+                type="button"
+                aria-label="#-Z"
+                title="#-Z"
+                onClick={() => {
+                  window.dispatchEvent(new Event('smplayer:library-quick-jump-toggle'))
+                }}
+              >
+                <span>#-Z</span>
+              </button>
+            </div>
+          ) : null}
         </header>
 
         <main
@@ -1565,6 +1740,7 @@ function App() {
                   favoritePlaylistId={snapshot.favorites.playlistId}
                   t={t}
                   rootPath={snapshot.settings.rootPath}
+                  viewMode={snapshot.settings.localViewMode}
                   currentRelativePath={localRelativePath}
                   selectedTrackId={playback.currentTrackId}
                   isPlaying={playback.isPlaying}
@@ -1633,6 +1809,9 @@ function App() {
                   onUpdateFolderSort={async (folderPath, sortCriterion) => {
                     await updateLocalFolderSort(folderPath, sortCriterion)
                   }}
+                  onUpdateViewMode={(localViewMode) => {
+                    void updateSettings({ localViewMode })
+                  }}
                   onSearchDirectory={(query, folderRelativePath) => {
                     commitDirectorySearchQuery(query, folderRelativePath)
                   }}
@@ -1679,7 +1858,11 @@ function App() {
                     void saveViewState({ lastPlaylistId: playlistId })
                   }}
                   onDeletePlaylist={(playlistId) => {
+                    const playlist = snapshot.playlists.find((item) => item.id === playlistId)!
                     void deletePlaylist(playlistId)
+                    showUndoableNotification(t('notification.playlistRemoved', { name: playlist.name }), t('common.undo'), () =>
+                      restorePlaylist(playlist),
+                    )
                   }}
                   onRenamePlaylist={(playlistId, name) => {
                     void renamePlaylist(playlistId, name)
@@ -1939,7 +2122,33 @@ function App() {
           }}
         />
       </div>
-      <UndoableNotificationHost />
+      {isCreatePlaylistDialogOpen ? (
+        <RenameDialog
+          t={t}
+          playlists={snapshot.playlists}
+          defaultName={getNextPlaylistName(t('common.playlist'), snapshot.playlists, t)}
+          onCancel={() => {
+            setIsCreatePlaylistDialogOpen(false)
+          }}
+          onConfirm={(name) => {
+            setIsCreatePlaylistDialogOpen(false)
+            setPendingCreatedPlaylistName(name)
+            void createPlaylist(name, [])
+          }}
+        />
+      ) : null}
+      {releaseNotesDialogVersion ? (
+        <ReleaseNotesDialog
+          t={t}
+          preferredLanguage={snapshot.settings.preferredLanguage}
+          onClose={() => {
+            const version = releaseNotesDialogVersion
+            setReleaseNotesDialogVersion('')
+            void updateSettings({ lastReleaseNotesVersion: version })
+          }}
+        />
+      ) : null}
+      <InAppNotificationWithButton />
     </div>
   )
 }
@@ -2048,6 +2257,7 @@ function LocalPageRoute({
   favoritePlaylistId,
   t,
   rootPath,
+  viewMode,
   currentRelativePath,
   selectedTrackId,
   isPlaying,
@@ -2078,6 +2288,7 @@ function LocalPageRoute({
   onMoveFolderToFolder,
   onDeleteLocalItems,
   onUpdateFolderSort,
+  onUpdateViewMode,
   onSearchDirectory,
 }: {
   songs: LibrarySong[]
@@ -2086,6 +2297,7 @@ function LocalPageRoute({
   favoritePlaylistId: number
   t: Translator
   rootPath: string
+  viewMode: LocalViewMode
   currentRelativePath: string
   selectedTrackId: number | null
   isPlaying: boolean
@@ -2116,6 +2328,7 @@ function LocalPageRoute({
   onMoveFolderToFolder: (sourceFolderPath: string, targetFolderPath: string) => void | Promise<void>
   onDeleteLocalItems: (songIds: number[], folderPaths: string[]) => void | Promise<void>
   onUpdateFolderSort: (folderPath: string, sortCriterion: LocalFolderSortCriterion) => void | Promise<void>
+  onUpdateViewMode: (viewMode: LocalViewMode) => void
   onSearchDirectory: (query: string, folderRelativePath: string) => void
 }) {
   return (
@@ -2126,6 +2339,7 @@ function LocalPageRoute({
       favoritePlaylistId={favoritePlaylistId}
       t={t}
       rootPath={rootPath}
+      viewMode={viewMode}
       currentRelativePath={currentRelativePath}
       selectedTrackId={selectedTrackId}
       isPlaying={isPlaying}
@@ -2156,6 +2370,7 @@ function LocalPageRoute({
       onMoveFolderToFolder={onMoveFolderToFolder}
       onDeleteLocalItems={onDeleteLocalItems}
       onUpdateFolderSort={onUpdateFolderSort}
+      onUpdateViewMode={onUpdateViewMode}
       onSearchDirectory={onSearchDirectory}
     />
   )

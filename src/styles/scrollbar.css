@@ -1,0 +1,121 @@
+.preference-page {
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.sidebar:hover,
+.workspace-content:hover,
+.table-shell:hover,
+.albums-grid:hover,
+.artists-list:hover,
+.artists-detail:hover,
+.now-playing-list-shell:hover,
+.lyrics-scroll-shell:hover,
+.preference-page:hover {
+  scrollbar-color: rgba(91, 105, 122, 0.5) transparent;
+}
+
+.sidebar::-webkit-scrollbar,
+.workspace-content::-webkit-scrollbar,
+.table-shell::-webkit-scrollbar,
+.albums-grid::-webkit-scrollbar,
+.artists-list::-webkit-scrollbar,
+.artists-detail::-webkit-scrollbar,
+.now-playing-list-shell::-webkit-scrollbar,
+.lyrics-scroll-shell::-webkit-scrollbar,
+.preference-page::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+.sidebar:hover::-webkit-scrollbar,
+.workspace-content:hover::-webkit-scrollbar,
+.table-shell:hover::-webkit-scrollbar,
+.albums-grid:hover::-webkit-scrollbar,
+.artists-list:hover::-webkit-scrollbar,
+.artists-detail:hover::-webkit-scrollbar,
+.now-playing-list-shell:hover::-webkit-scrollbar,
+.lyrics-scroll-shell:hover::-webkit-scrollbar,
+.preference-page:hover::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+.sidebar::-webkit-scrollbar:hover,
+.workspace-content::-webkit-scrollbar:hover,
+.table-shell::-webkit-scrollbar:hover,
+.albums-grid::-webkit-scrollbar:hover,
+.artists-list::-webkit-scrollbar:hover,
+.artists-detail::-webkit-scrollbar:hover,
+.now-playing-list-shell::-webkit-scrollbar:hover,
+.lyrics-scroll-shell::-webkit-scrollbar:hover,
+.preference-page::-webkit-scrollbar:hover {
+  width: 9px;
+  height: 9px;
+}
+
+.sidebar::-webkit-scrollbar-track,
+.workspace-content::-webkit-scrollbar-track,
+.table-shell::-webkit-scrollbar-track,
+.albums-grid::-webkit-scrollbar-track,
+.artists-list::-webkit-scrollbar-track,
+.artists-detail::-webkit-scrollbar-track,
+.now-playing-list-shell::-webkit-scrollbar-track,
+.lyrics-scroll-shell::-webkit-scrollbar-track,
+.preference-page::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar::-webkit-scrollbar-thumb,
+.workspace-content::-webkit-scrollbar-thumb,
+.table-shell::-webkit-scrollbar-thumb,
+.albums-grid::-webkit-scrollbar-thumb,
+.artists-list::-webkit-scrollbar-thumb,
+.artists-detail::-webkit-scrollbar-thumb,
+.now-playing-list-shell::-webkit-scrollbar-thumb,
+.lyrics-scroll-shell::-webkit-scrollbar-thumb,
+.preference-page::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background: transparent;
+  background-clip: content-box;
+}
+
+.sidebar:hover::-webkit-scrollbar-thumb,
+.workspace-content:hover::-webkit-scrollbar-thumb,
+.table-shell:hover::-webkit-scrollbar-thumb,
+.albums-grid:hover::-webkit-scrollbar-thumb,
+.artists-list:hover::-webkit-scrollbar-thumb,
+.artists-detail:hover::-webkit-scrollbar-thumb,
+.now-playing-list-shell:hover::-webkit-scrollbar-thumb,
+.lyrics-scroll-shell:hover::-webkit-scrollbar-thumb,
+.preference-page:hover::-webkit-scrollbar-thumb {
+  border-width: 4px;
+  background: rgba(91, 105, 122, 0.5);
+}
+
+.sidebar.is-scrollbar-hovered::-webkit-scrollbar-thumb,
+.workspace-content.is-scrollbar-hovered::-webkit-scrollbar-thumb,
+.table-shell.is-scrollbar-hovered::-webkit-scrollbar-thumb,
+.albums-grid.is-scrollbar-hovered::-webkit-scrollbar-thumb,
+.artists-list.is-scrollbar-hovered::-webkit-scrollbar-thumb,
+.artists-detail.is-scrollbar-hovered::-webkit-scrollbar-thumb,
+.now-playing-list-shell.is-scrollbar-hovered::-webkit-scrollbar-thumb,
+.lyrics-scroll-shell.is-scrollbar-hovered::-webkit-scrollbar-thumb,
+.preference-page.is-scrollbar-hovered::-webkit-scrollbar-thumb {
+  border-width: 0;
+  background: rgba(67, 80, 96, 0.68);
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover,
+.workspace-content::-webkit-scrollbar-thumb:hover,
+.table-shell::-webkit-scrollbar-thumb:hover,
+.albums-grid::-webkit-scrollbar-thumb:hover,
+.artists-list::-webkit-scrollbar-thumb:hover,
+.artists-detail::-webkit-scrollbar-thumb:hover,
+.now-playing-list-shell::-webkit-scrollbar-thumb:hover,
+.lyrics-scroll-shell::-webkit-scrollbar-thumb:hover,
+.preference-page::-webkit-scrollbar-thumb:hover {
+  border-width: 1px;
+}

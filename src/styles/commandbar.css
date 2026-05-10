@@ -1,0 +1,151 @@
+.uwp-commandbar {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  min-height: 48px;
+  width: 100%;
+  min-width: 0;
+  color: var(--text-strong);
+  background: transparent;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.uwp-commandbar.now-playing-commandbar,
+.uwp-commandbar.local-commandbar,
+.uwp-commandbar.recent-commandbar,
+.uwp-commandbar.playlists-commandbar,
+.uwp-commandbar.headered-playlist-commandbar,
+.uwp-commandbar.albums-commandbar,
+.uwp-commandbar.albums-command-row {
+  gap: 0;
+}
+
+.uwp-commandbar-content {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 0 12px;
+}
+
+.uwp-commandbar-primary {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  justify-content: flex-end;
+  min-width: 0;
+  margin-left: auto;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.uwp-commandbar.headered-playlist-commandbar .uwp-commandbar-primary {
+  justify-content: flex-start;
+  margin-left: 0;
+}
+
+.uwp-commandbar-primary::-webkit-scrollbar {
+  display: none;
+}
+
+.uwp-commandbar-item,
+.uwp-commandbar-more {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+}
+
+.uwp-commandbar-item.is-overflowed {
+  position: absolute;
+  right: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.uwp-commandbar .uwp-commandbar-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 44px;
+  min-height: 40px;
+  margin: 4px 3px;
+  padding: 0 14px;
+  border: 1px solid rgba(83, 99, 121, 0.14);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.56);
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 720;
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42);
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.uwp-commandbar .uwp-commandbar-button:hover,
+.uwp-commandbar .uwp-commandbar-button:focus-visible,
+.uwp-commandbar .uwp-commandbar-button[aria-expanded='true'] {
+  background: rgba(255, 255, 255, 0.74);
+  outline: none;
+}
+
+.uwp-commandbar .uwp-commandbar-button:active {
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.uwp-commandbar .uwp-commandbar-button.is-active {
+  background: rgba(var(--accent-rgb), 0.15);
+  border-color: rgba(var(--accent-rgb), 0.34);
+  color: var(--accent-strong);
+}
+
+.uwp-commandbar .uwp-commandbar-button:disabled {
+  cursor: default;
+  opacity: 0.45;
+  box-shadow: none;
+}
+
+.uwp-commandbar .uwp-commandbar-button svg {
+  width: 18px;
+  height: 18px;
+}
+
+.uwp-commandbar .albums-sort-trigger {
+  min-width: 156px;
+  min-height: 42px;
+  margin: 4px 3px;
+  border: 1px solid rgba(83, 99, 121, 0.14);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.56);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42);
+  color: inherit;
+  font-size: 14px;
+  font-weight: 720;
+}
+
+.uwp-commandbar .albums-sort-trigger:hover,
+.uwp-commandbar .albums-sort-trigger[aria-expanded='true'] {
+  background: rgba(255, 255, 255, 0.74);
+}
+
+@media (max-width: 720px) {
+  .uwp-commandbar {
+    min-height: 44px;
+    background: transparent;
+  }
+
+  .uwp-commandbar-content {
+    padding: 0 8px;
+  }
+
+  .uwp-commandbar .uwp-commandbar-button,
+  .uwp-commandbar .albums-sort-trigger {
+    min-height: 38px;
+    padding: 0 10px;
+  }
+}

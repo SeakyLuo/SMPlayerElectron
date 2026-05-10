@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 
 import type { LibraryPlaylist, LibrarySong, PreferenceItemSnapshot, PreferenceSettingsSnapshot } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
+import { removeQueueRange } from '../shared/queueUndo'
 import { useLibraryStore } from '../state/useLibraryStore'
 import { usePreferenceStore } from '../state/usePreferenceStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
@@ -126,10 +127,10 @@ export function MusicMenuFlyout({
               onPlayNext(menu.song.id)
             },
             onAddToNowPlaying: () => {
-              const previousQueueSongIds = nowPlayingSongIds
+              const insertedIndex = nowPlayingSongIds.length
               void replaceNowPlaying([...nowPlayingSongIds, menu.song.id])
               showUndo(t('notification.songAddedTo', { title: menu.song.title, target: t('common.nowPlaying') }), () =>
-                replaceNowPlaying(previousQueueSongIds),
+                replaceNowPlaying(removeQueueRange(useLibraryStore.getState().snapshot.nowPlaying.songIds, insertedIndex, 1)),
               )
             },
             onCreatePlaylist: (name) => {

@@ -15,22 +15,6 @@
   overflow: hidden;
 }
 
-.workspace-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  min-height: 92px;
-  padding: 24px 142px 16px 24px;
-  -webkit-app-region: drag;
-  position: relative;
-  z-index: 5;
-}
-
-.workspace.is-local-route .workspace-header {
-  padding: 48px 24px 18px 24px;
-}
-
 .workspace.is-immersive-route .workspace-header,
 .workspace.is-headerless-route .workspace-header {
   display: none;
@@ -56,41 +40,11 @@
   scrollbar-gutter: auto;
 }
 
-.workspace-header * {
-  -webkit-app-region: no-drag;
-}
-
-.eyebrow {
-  margin: 0 0 6px;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--text-subtle);
-}
-
-.workspace-header h1 {
-  margin: 0;
-  font-size: clamp(1.9rem, 3vw, 2.7rem);
-  font-weight: 760;
-  letter-spacing: -0.02em;
-}
-
-.status-pills {
-  display: none;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.status-pills span {
-  padding: 10px 14px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.48);
-  border: 1px solid var(--panel-border);
-  color: var(--text-muted);
-  font-size: 13px;
-  font-weight: 600;
+.app-shell.nav-minimal .workspace {
+  border-top-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
 }
 
 .workspace-content {
@@ -128,39 +82,4 @@
 
 .workspace-content:hover::-webkit-scrollbar-thumb {
   background: rgba(91, 105, 122, 0.48);
-}
-.undoable-notification {
-  position: fixed;
-  left: 50%;
-  bottom: 104px;
-  z-index: 90;
-  width: min(520px, calc(100vw - 32px));
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
-  border: 1px solid rgba(92, 113, 137, 0.28);
-  border-radius: 8px;
-  background: rgba(250, 252, 255, 0.98);
-  box-shadow: 0 18px 46px rgba(35, 45, 60, 0.22);
-  transform: translateX(-50%);
-}
-
-.undoable-notification span {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--text-primary);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.undoable-notification button {
-  min-height: 32px;
-  border: 1px solid rgba(120, 130, 145, 0.24);
-  border-radius: 7px;
-  padding: 0 12px;
-  background: rgba(255, 255, 255, 0.9);
-  color: var(--text-primary);
-  font-weight: 650;
 }

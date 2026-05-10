@@ -9,17 +9,18 @@
 }
 
 .albums-toolbar {
-  display: grid;
-  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
-  align-items: center;
-  gap: 14px;
+  display: block;
   min-height: 44px;
   margin-bottom: 14px;
   padding-right: 0;
 }
 
 .albums-search-shell {
-  width: 100%;
+  width: min(360px, 100%);
+}
+
+.albums-commandbar .uwp-commandbar-content {
+  flex: 1 1 auto;
 }
 
 .albums-command-row {
