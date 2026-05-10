@@ -132,7 +132,7 @@ export function MultiSelectCommandBar({
             <span>{t('albums.playSelected')}</span>
           </button>
         ) : null}
-        {showAddTo && playlists.length > 0 && onAddToPlaylistMenuClick ? (
+        {showAddTo && onAddToPlaylistMenuClick ? (
           <button type="button" disabled={!hasSelection} onClick={onAddToPlaylistMenuClick}>
             <Icon name="plus" />
             <span>{t('albums.addSelectedTo')}</span>

@@ -7,10 +7,11 @@ import { HeaderedPlaylistControl } from '../components/HeaderedPlaylistControl'
 import { Icon } from '../components/icons'
 import { LoadingState } from '../components/LoadingState'
 import { MenuFlyout } from '../components/MenuFlyout'
-import { getAddToPlaylistMenuFlyoutItem, getPreferenceMenuFlyoutItem, type MenuFlyoutItem } from '../components/MenuFlyoutHelper'
-import type { LibraryPlaylist, LibrarySnapshot, PlaylistSortCriterion, PreferenceItemSnapshot, PreferenceLevel, PreferenceSettingsSnapshot } from '../shared/contracts'
+import type { MenuFlyoutItem } from '../components/MenuFlyoutHelper'
+import { RenameDialog } from '../components/RenameDialog'
+import type { LibraryPlaylist, LibrarySnapshot, PlaylistSortCriterion, PreferenceLevel } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
-import { usePreferenceStore } from '../state/usePreferenceStore'
+import { getNextPlaylistName } from '../shared/playlistNames'
 
 interface PlaylistsPageProps {
   snapshot: LibrarySnapshot
@@ -35,13 +36,6 @@ interface PlaylistsPageProps {
   onAddSongsToPlaylist: (playlistId: number, songIds: number[]) => void
   onRemoveSongsFromPlaylist: (playlistId: number, songIds: number[]) => void
   onReorderPlaylistSongs: (playlistId: number, songIds: number[], sortCriterion?: PlaylistSortCriterion) => void
-}
-
-function reorderPlaylistByDrop(playlistIds: number[], draggedPlaylistId: number, targetPlaylistId: number, insertAfter: boolean) {
-  const nextPlaylistIds = playlistIds.filter((playlistId) => playlistId !== draggedPlaylistId)
-  const targetIndex = nextPlaylistIds.indexOf(targetPlaylistId)
-  nextPlaylistIds.splice(targetIndex + (insertAfter ? 1 : 0), 0, draggedPlaylistId)
-  return nextPlaylistIds
 }
 
 function playlistIdsEqual(left: number[], right: number[]) {
@@ -75,7 +69,6 @@ export function PlaylistsPage({
   onDeletePlaylist,
   onRenamePlaylist,
   onCreatePlaylistWithSongs,
-  onAddSongsToNowPlaying,
   onReorderPlaylists,
   onSetPlaylistPreferred,
   onAddSongToPlaylist,
@@ -88,6 +81,7 @@ export function PlaylistsPage({
   const draggedPlaylistIdRef = useRef<number | null>(null)
   const previewPlaylistIdsRef = useRef<number[] | null>(null)
   const playlistCardElementsRef = useRef(new Map<number, HTMLDivElement>())
+  const playlistDragRectsRef = useRef(new Map<number, DOMRect>())
   const playlistDragStateRef = useRef<PlaylistDragState | null>(null)
   const dragFrameRef = useRef<number | null>(null)
   const latestDragPointRef = useRef<{ x: number; y: number } | null>(null)
@@ -97,10 +91,9 @@ export function PlaylistsPage({
   const [draggingPlaylistId, setDraggingPlaylistId] = useState<number | null>(null)
   const [previewPlaylistIds, setPreviewPlaylistIds] = useState<number[] | null>(null)
   const [playlistDragState, setPlaylistDragState] = useState<PlaylistDragState | null>(null)
-  const [playlistPreferenceItems, setPlaylistPreferenceItems] = useState<Map<string, PreferenceItemSnapshot>>(new Map())
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+  const [renamePlaylistDialog, setRenamePlaylistDialog] = useState<LibraryPlaylist | null>(null)
   const [pendingCreatedPlaylistName, setPendingCreatedPlaylistName] = useState('')
-  const refreshPreferences = usePreferenceStore((state) => state.refresh)
   const routePlaylistId = params.playlistId ? Number(params.playlistId) : null
   const songsById = useMemo(
     () => new Map(snapshot.songs.map((song) => [song.id, song])),
@@ -145,49 +138,9 @@ export function PlaylistsPage({
         .filter((song) => song !== undefined),
     [selectedPlaylist?.songIds, songsById],
   )
-  const refreshPlaylistPreferenceItems = async (snapshot?: PreferenceSettingsSnapshot | null) => {
-    const settings = snapshot ?? await refreshPreferences()
-    if (!settings) {
-      return
-    }
-    setPlaylistPreferenceItems(new Map([...settings.playlists, ...settings.others].map((item) => [`${item.type}:${item.itemId}`, item])))
-  }
   const updatePreviewPlaylistIds = (playlistIds: number[] | null) => {
     previewPlaylistIdsRef.current = playlistIds
     setPreviewPlaylistIds(playlistIds)
-  }
-  const animatePlaylistCardsFrom = (previousRects: Map<number, DOMRect>) => {
-    window.requestAnimationFrame(() => {
-      for (const [playlistId, element] of playlistCardElementsRef.current) {
-        const previousRect = previousRects.get(playlistId)
-        if (!previousRect) {
-          continue
-        }
-
-        const nextRect = element.getBoundingClientRect()
-        const deltaX = previousRect.left - nextRect.left
-        const deltaY = previousRect.top - nextRect.top
-        if (deltaX === 0 && deltaY === 0) {
-          continue
-        }
-
-        element.style.transition = 'none'
-        element.style.transform = `translate(${deltaX}px, ${deltaY}px)`
-        window.requestAnimationFrame(() => {
-          element.style.transition = ''
-          element.style.transform = ''
-        })
-      }
-    })
-  }
-  const updateAnimatedPreviewPlaylistIds = (playlistIds: number[]) => {
-    const previousRects = new Map<number, DOMRect>()
-    for (const [playlistId, element] of playlistCardElementsRef.current) {
-      previousRects.set(playlistId, element.getBoundingClientRect())
-    }
-
-    updatePreviewPlaylistIds(playlistIds)
-    animatePlaylistCardsFrom(previousRects)
   }
   const setPlaylistCardElement = (playlistId: number, element: HTMLDivElement | null) => {
     if (element) {
@@ -215,46 +168,39 @@ export function PlaylistsPage({
       return
     }
 
-    const orderedPlaylistIds = previewPlaylistIdsRef.current ?? customPlaylistIds
-    let closestTarget: { playlistId: number; distance: number; insertAfter: boolean } | null = null
-    for (const playlistId of orderedPlaylistIds) {
-      if (playlistId === draggedPlaylistId) {
-        continue
-      }
+    const orderedPlaylistIds = customPlaylistIds
+    const currentPreviewPlaylistIds = previewPlaylistIdsRef.current ?? customPlaylistIds
+    const visiblePlaylistIdSet = new Set(visiblePlaylists.map((playlist) => playlist.id))
+    const orderedVisibleIds = orderedPlaylistIds.filter((playlistId) => visiblePlaylistIdSet.has(playlistId))
+    const targetRects = orderedVisibleIds
+      .filter((playlistId) => playlistId !== draggedPlaylistId)
+      .map((playlistId) => {
+        const element = playlistCardElementsRef.current.get(playlistId)
+        const rect = playlistDragRectsRef.current.get(playlistId) ?? element?.getBoundingClientRect()
+        return rect ? { playlistId, rect } : null
+      })
+      .filter((target) => target !== null)
 
-      const element = playlistCardElementsRef.current.get(playlistId)
-      if (!element) {
-        continue
-      }
+    const nextVisibleIds = orderedVisibleIds.filter((playlistId) => playlistId !== draggedPlaylistId)
+    const insertIndex = targetRects.findIndex(({ rect }) =>
+      clientY < rect.top + rect.height / 2 ||
+      (clientY < rect.bottom && clientX < rect.left + rect.width / 2),
+    )
+    nextVisibleIds.splice(insertIndex === -1 ? nextVisibleIds.length : insertIndex, 0, draggedPlaylistId)
 
-      const rect = element.getBoundingClientRect()
-      const centerX = rect.left + rect.width / 2
-      const centerY = rect.top + rect.height / 2
-      const distance = (clientX - centerX) ** 2 + (clientY - centerY) ** 2
-      const insertAfter = Math.abs(clientY - centerY) > rect.height / 3
-        ? clientY > centerY
-        : clientX > centerX
+    let visibleIndex = 0
+    const nextPlaylistIds = orderedPlaylistIds.map((playlistId) =>
+      visiblePlaylistIdSet.has(playlistId) ? nextVisibleIds[visibleIndex++]! : playlistId,
+    )
 
-      if (!closestTarget || distance < closestTarget.distance) {
-        closestTarget = { playlistId, distance, insertAfter }
-      }
-    }
-
-    if (closestTarget) {
-      const nextPlaylistIds = reorderPlaylistByDrop(
-        orderedPlaylistIds,
-        draggedPlaylistId,
-        closestTarget.playlistId,
-        closestTarget.insertAfter,
-      )
-      if (!playlistIdsEqual(orderedPlaylistIds, nextPlaylistIds)) {
-        updateAnimatedPreviewPlaylistIds(nextPlaylistIds)
-      }
+    if (!playlistIdsEqual(currentPreviewPlaylistIds, nextPlaylistIds)) {
+      updatePreviewPlaylistIds(nextPlaylistIds)
     }
   }
   const finishPlaylistDrag = (commit: boolean) => {
     const nextPlaylistIds = previewPlaylistIdsRef.current ?? customPlaylistIds
     draggedPlaylistIdRef.current = null
+    playlistDragRectsRef.current.clear()
     setDraggingPlaylistId(null)
     updatePreviewPlaylistIds(null)
     updatePlaylistDragState(null)
@@ -268,6 +214,10 @@ export function PlaylistsPage({
     const pointerId = event.pointerId
     dragSourceElement.setPointerCapture(pointerId)
     const rect = event.currentTarget.getBoundingClientRect()
+    playlistDragRectsRef.current = new Map([...playlistCardElementsRef.current].map(([playlistId, element]) => [
+      playlistId,
+      element.getBoundingClientRect(),
+    ]))
     latestDragPointRef.current = { x: event.clientX, y: event.clientY }
     updatePlaylistDragState({
       playlist,
@@ -352,10 +302,6 @@ export function PlaylistsPage({
     window.addEventListener('pointerup', completePlaylistDrag)
     window.addEventListener('pointercancel', cancelPlaylistDrag)
   }
-
-  useEffect(() => {
-    void refreshPlaylistPreferenceItems()
-  }, [])
 
   useEffect(() => {
     if (playlistDragState?.active) {
@@ -542,21 +488,18 @@ export function PlaylistsPage({
           items={getPlaylistCardMenuItems({
             playlist: playlistMenu.playlist,
             playlists: snapshot.playlists,
-            favoritePlaylistId: snapshot.favorites.playlistId,
             t,
-            onPlayTrack,
-            onAddSongsToNowPlaying,
             onCreatePlaylistWithSongs,
-            onAddSongsToPlaylist,
-            preferenceItem: playlistPreferenceItems.get(`${playlistMenu.playlist.isBuiltIn ? 'my-favorites' : 'playlist'}:${playlistMenu.playlist.isBuiltIn ? '6' : String(playlistMenu.playlist.id)}`) ?? null,
-            onPreferenceChanged: refreshPlaylistPreferenceItems,
-            onRenamePlaylist,
+            onRequestRenamePlaylist: (playlist) => {
+              setRenamePlaylistDialog(playlist)
+              setPlaylistMenu(null)
+            },
             onDeletePlaylist,
           })}
         />
       ) : null}
       {isCreateDialogOpen ? (
-        <PlaylistNameDialog
+        <RenameDialog
           t={t}
           playlists={snapshot.playlists}
           defaultName={getNextPlaylistName(t('common.playlist'), snapshot.playlists, t)}
@@ -570,232 +513,64 @@ export function PlaylistsPage({
           }}
         />
       ) : null}
-    </section>
-  )
-}
-
-function PlaylistNameDialog({
-  t,
-  playlists,
-  defaultName,
-  onCancel,
-  onConfirm,
-}: {
-  t: Translator
-  playlists: LibraryPlaylist[]
-  defaultName: string
-  onCancel: () => void
-  onConfirm: (name: string) => void
-}) {
-  const inputRef = useRef<HTMLInputElement | null>(null)
-  const [name, setName] = useState(defaultName)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    inputRef.current?.focus()
-    inputRef.current?.select()
-  }, [])
-
-  const confirm = () => {
-    const nextName = name.trim()
-    const validationError = validatePlaylistName(nextName, playlists, t)
-    if (validationError) {
-      setError(validationError)
-      return
-    }
-
-    onConfirm(nextName)
-  }
-
-  return (
-    <div className="playlist-name-dialog-overlay" role="presentation">
-      <section className="playlist-name-dialog" role="dialog" aria-modal="true" aria-labelledby="playlist-name-dialog-title">
-        <h3 id="playlist-name-dialog-title">{t('playlists.createNew')}</h3>
-        <input
-          ref={inputRef}
-          type="text"
-          value={name}
-          placeholder={t('playlists.namePlaceholder')}
-          onChange={(event) => {
-            setName(event.currentTarget.value)
-            setError('')
+      {renamePlaylistDialog ? (
+        <RenameDialog
+          t={t}
+          title={t('playlists.rename')}
+          playlists={snapshot.playlists.filter((playlist) => playlist.id !== renamePlaylistDialog.id)}
+          defaultName={renamePlaylistDialog.name}
+          onCancel={() => {
+            setRenamePlaylistDialog(null)
           }}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              confirm()
-            } else if (event.key === 'Escape') {
-              onCancel()
-            }
+          onConfirm={(name) => {
+            onRenamePlaylist(renamePlaylistDialog.id, name)
+            setRenamePlaylistDialog(null)
           }}
         />
-        {error ? <p className="playlist-name-dialog-error">{error}</p> : null}
-        <div className="playlist-name-dialog-actions">
-          <button type="button" className="playlist-name-dialog-primary" onClick={confirm}>
-            {t('common.confirm')}
-          </button>
-          <button type="button" onClick={onCancel}>
-            {t('common.cancel')}
-          </button>
-        </div>
-      </section>
-    </div>
+      ) : null}
+    </section>
   )
 }
 
 function getPlaylistCardMenuItems({
   playlist,
   playlists,
-  favoritePlaylistId,
   t,
-  onPlayTrack,
-  onAddSongsToNowPlaying,
   onCreatePlaylistWithSongs,
-  onAddSongsToPlaylist,
-  preferenceItem,
-  onPreferenceChanged,
-  onRenamePlaylist,
+  onRequestRenamePlaylist,
   onDeletePlaylist,
 }: {
   playlist: LibraryPlaylist
   playlists: LibraryPlaylist[]
-  favoritePlaylistId: number
   t: Translator
-  onPlayTrack: (trackId: number, queueSongIds: number[]) => void
-  onAddSongsToNowPlaying: (songIds: number[]) => void
   onCreatePlaylistWithSongs: (name: string, songIds: number[]) => void
-  onAddSongsToPlaylist: (playlistId: number, songIds: number[]) => void
-  preferenceItem: PreferenceItemSnapshot | null
-  onPreferenceChanged: (snapshot?: PreferenceSettingsSnapshot | null) => void | Promise<void>
-  onRenamePlaylist: (playlistId: number, name: string) => void
+  onRequestRenamePlaylist: (playlist: LibraryPlaylist) => void
   onDeletePlaylist: (playlistId: number) => void
 }) {
-  const items: MenuFlyoutItem[] = [
+  return [
     {
-      key: 'shuffle',
-      text: t('nowPlaying.randomPlay'),
-      icon: 'shuffle',
+      key: 'rename-playlist',
+      text: t('playlists.rename'),
+      icon: 'settings',
       onClick: () => {
-        const shuffledSongIds = shuffleSongIds(playlist.songIds)
-        if (shuffledSongIds.length > 0) {
-          onPlayTrack(shuffledSongIds[0]!, shuffledSongIds)
-        }
+        onRequestRenamePlaylist(playlist)
       },
     },
-  ]
-  const addToItem = getAddToPlaylistMenuFlyoutItem({
-    playlists,
-    songIds: playlist.songIds,
-    t,
-    defaultPlaylistName: playlist.name,
-    currentPlaylistName: playlist.name,
-    includeNowPlaying: true,
-    includeFavorites: playlist.name !== t('common.myFavorites'),
-    onAddToNowPlaying: () => {
-      onAddSongsToNowPlaying(playlist.songIds)
-    },
-    onToggleFavorite: () => {
-      onAddSongsToPlaylist(favoritePlaylistId, playlist.songIds)
-    },
-    onCreatePlaylist: (name) => {
-      onCreatePlaylistWithSongs(name, playlist.songIds)
-    },
-    onAddToPlaylist: (playlistId) => {
-      onAddSongsToPlaylist(playlistId, playlist.songIds)
-    },
-  })
-
-  if (addToItem) {
-    items.push(addToItem)
-  }
-
-  items.push(getPreferenceMenuFlyoutItem({
-    type: playlist.isBuiltIn ? 'my-favorites' : 'playlist',
-    itemId: playlist.isBuiltIn ? '6' : String(playlist.id),
-    name: playlist.name,
-    preferenceItem,
-    t,
-    onUpdated: onPreferenceChanged,
-  }))
-
-  if (!playlist.isBuiltIn) {
-    items.push(
-      {
-        key: 'rename-playlist',
-        text: t('playlists.rename'),
-        icon: 'info',
-        onClick: () => {
-          const name = window.prompt(t('playlists.rename'), playlist.name)
-          const nextName = name?.trim()
-          if (nextName) {
-            onRenamePlaylist(playlist.id, nextName)
-          }
-        },
+    {
+      key: 'duplicate-playlist',
+      text: t('playlists.duplicate'),
+      icon: 'copy',
+      onClick: () => {
+        onCreatePlaylistWithSongs(getNextPlaylistName(playlist.name, playlists, t), playlist.songIds)
       },
-      {
-        key: 'duplicate-playlist',
-        text: t('playlists.duplicate'),
-        icon: 'copy',
-        onClick: () => {
-          onCreatePlaylistWithSongs(getNextPlaylistName(playlist.name, playlists, t), playlist.songIds)
-        },
+    },
+    {
+      key: 'delete-playlist',
+      text: t('playlists.delete'),
+      icon: 'trash',
+      onClick: () => {
+        onDeletePlaylist(playlist.id)
       },
-      {
-        key: 'delete-playlist',
-        text: t('playlists.delete'),
-        icon: 'trash',
-        onClick: () => {
-          onDeletePlaylist(playlist.id)
-        },
-      },
-    )
-  }
-
-  return items
-}
-
-function shuffleSongIds(songIds: number[]) {
-  const shuffledSongIds = songIds.slice()
-
-  for (let index = shuffledSongIds.length - 1; index > 0; index -= 1) {
-    const randomIndex = Math.floor(Math.random() * (index + 1))
-    const current = shuffledSongIds[index]
-    shuffledSongIds[index] = shuffledSongIds[randomIndex]
-    shuffledSongIds[randomIndex] = current
-  }
-
-  return shuffledSongIds
-}
-
-function getNextPlaylistName(name: string, playlists: LibraryPlaylist[], t: Translator) {
-  const existingNames = new Set(playlists.map((playlist) => playlist.name))
-  if (!existingNames.has(name)) {
-    return name
-  }
-
-  for (let index = 1; ; index += 1) {
-    const nextName = t('playlists.nameTemplate', { name, index })
-    if (!existingNames.has(nextName)) {
-      return nextName
-    }
-  }
-}
-
-function validatePlaylistName(name: string, playlists: LibraryPlaylist[], t: Translator) {
-  if (!name) {
-    return t('playlists.nameEmpty')
-  }
-
-  if (name.length > 50) {
-    return t('playlists.nameTooLong')
-  }
-
-  if (playlists.some((playlist) => playlist.name === name)) {
-    return t('playlists.nameUsed')
-  }
-
-  if (name.includes('+++++') || name.includes('{0}') || name.includes('{1}')) {
-    return t('playlists.nameSpecial')
-  }
-
-  return ''
+    },
+  ] satisfies MenuFlyoutItem[]
 }

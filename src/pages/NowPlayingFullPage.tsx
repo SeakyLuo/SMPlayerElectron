@@ -29,7 +29,9 @@ import type {
 } from '../shared/contracts'
 import { formatDuration } from '../shared/formatters'
 import type { Translator } from '../shared/i18n'
-import { quickPlay, randomLibrary } from '../shared/mediaHelper'
+import { randomLibrary } from '../shared/RandomPlayHelper'
+import { quickPlay } from '../shared/QuickPlayHelper'
+import { insertQueueEntries, insertQueueSongs, removeQueueRange } from '../shared/queueUndo'
 import { useLibraryStore } from '../state/useLibraryStore'
 import { usePlaybackProgress } from '../state/playbackProgressStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
@@ -163,8 +165,12 @@ export function NowPlayingFullPage({
   const createPlaylist = useLibraryStore((state) => state.createPlaylist)
   const removeSongFromPlaylist = useLibraryStore((state) => state.removeSongFromPlaylist)
   const folders = useLibraryStore((state) => state.snapshot.folders)
+  const nightMode = useLibraryStore((state) => state.snapshot.settings.nightMode)
+  const nightModeStartTime = useLibraryStore((state) => state.snapshot.settings.nightModeStartTime)
+  const nightModeEndTime = useLibraryStore((state) => state.snapshot.settings.nightModeEndTime)
   const showUndoableNotification = useUndoableNotificationStore((state) => state.show)
   const { progressSeconds, durationSeconds } = usePlaybackProgress()
+  const [currentClockMinute, setCurrentClockMinute] = useState(getCurrentClockMinute)
   const queueSongIds = useMemo(() => songs.map((song) => song.id), [songs])
   const currentSongId = currentSong?.id
   const effectiveDuration = durationSeconds || currentSong?.duration || 0
@@ -191,6 +197,10 @@ export function NowPlayingFullPage({
     [displayLyricsLines],
   )
   const previewLyricIndex = isLyricPreviewing ? lyricPreviewIndex : null
+  const immersiveNightActive = nightMode === 'on' || (
+    nightMode === 'auto' &&
+    isMinuteInNightRange(currentClockMinute, timeToMinute(nightModeStartTime), timeToMinute(nightModeEndTime))
+  )
 
   const refreshPreferenceItem = async () => {
     if (currentSong) {
@@ -218,6 +228,16 @@ export function NowPlayingFullPage({
       canceled = true
     }
   }, [artworkUrl])
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setCurrentClockMinute(getCurrentClockMinute())
+    }, 60_000)
+
+    return () => {
+      window.clearInterval(interval)
+    }
+  }, [])
 
   useEffect(() => {
     if (currentSongId === undefined) {
@@ -540,10 +560,10 @@ export function NowPlayingFullPage({
       onPlayArtist: playCurrentArtist,
       onAddToNowPlaying: () => {
         if (currentSong) {
-          const previousQueueSongIds = queueSongIds
+          const insertedIndex = queueSongIds.length
           onReplaceQueue([...queueSongIds, currentSong.id])
           showUndo(t('notification.songAddedTo', { title: currentSong.title, target: t('common.nowPlaying') }), () =>
-            onReplaceQueue(previousQueueSongIds),
+            onReplaceQueue(removeQueueRange(useLibraryStore.getState().snapshot.nowPlaying.songIds, insertedIndex, 1)),
           )
         }
       },
@@ -587,8 +607,11 @@ export function NowPlayingFullPage({
 
   return (
     <section
-      className="now-playing-full-page"
-      style={{ '--now-playing-full-artwork': `url("${displayArtworkUrl}")` } as CSSProperties}
+      className={clsx('now-playing-full-page', immersiveNightActive ? 'is-night' : 'is-day')}
+      style={{
+        '--now-playing-full-artwork': `url("${displayArtworkUrl}")`,
+        '--now-playing-full-cover-rgb': coverColorRgb,
+      } as CSSProperties}
     >
       <div className="now-playing-full-backdrop" aria-hidden="true" />
       <div className="now-playing-full-titlebar" aria-hidden="true" />
@@ -929,6 +952,7 @@ function NowPlayingFullPlaylist({
   const selectedSongIds = useMemo(() => selectedEntries.map((entry) => entry.song.id), [selectedEntries])
   const selectedQueueIndexList = useMemo(() => selectedEntries.map((entry) => entry.queueIndex), [selectedEntries])
   const customPlaylists = useMemo(() => playlists.filter((playlist) => !playlist.isBuiltIn), [playlists])
+  const favoriteSongIdSet = useMemo(() => new Set(songs.filter((song) => song.favorite).map((song) => song.id)), [songs])
   const defaultNewPlaylistName = useMemo(() => getDefaultNewPlaylistName(t, playlists), [playlists, t])
   const showUndo = (message: string, action: () => void | Promise<void>) => {
     showUndoableNotification(message, t('common.undo'), action)
@@ -972,17 +996,18 @@ function NowPlayingFullPlaylist({
         t,
         defaultPlaylistName: addToMenu.defaultPlaylistName,
         currentPlaylistName: t('common.nowPlaying'),
-        includeFavorites: true,
+        includeFavorites: addToMenu.songIds.some((songId) => !favoriteSongIdSet.has(songId)),
         onToggleFavorite: () => {
-          onAddSongsToPlaylist(favoritePlaylistId, addToMenu.songIds)
+          const nextFavoriteSongIds = addToMenu.songIds.filter((songId) => !favoriteSongIdSet.has(songId))
+          onAddSongsToPlaylist(favoritePlaylistId, nextFavoriteSongIds)
           showUndo(
-            addToMenu.songIds.length === 1
+            nextFavoriteSongIds.length === 1
               ? t('notification.songAddedTo', {
-                  title: songs.find((song) => song.id === addToMenu.songIds[0])!.title,
+                  title: songs.find((song) => song.id === nextFavoriteSongIds[0])!.title,
                   target: t('common.myFavorites'),
                 })
-              : t('notification.songsAddedTo', { count: addToMenu.songIds.length, target: t('common.myFavorites') }),
-            () => removeSongsFromPlaylist(favoritePlaylistId, addToMenu.songIds),
+              : t('notification.songsAddedTo', { count: nextFavoriteSongIds.length, target: t('common.myFavorites') }),
+            () => removeSongsFromPlaylist(favoritePlaylistId, nextFavoriteSongIds),
           )
           if (hideMultiSelectCommandBarAfterOperation) {
             setMultiSelect(false)
@@ -1122,10 +1147,9 @@ function NowPlayingFullPlaylist({
                 onToggleSelection={() => toggleSelection(queueIndex)}
                 onToggleFavorite={onToggleFavorite}
                 onRemoveFromListClick={(contextSong) => {
-                  const previousQueueSongIds = queueSongIds
                   onReplaceQueue(queueSongIds.filter((_, index) => index !== queueIndex))
                   showUndo(t('notification.removedFrom', { title: contextSong.title, target: t('common.nowPlaying') }), () =>
-                    onReplaceQueue(previousQueueSongIds),
+                    onReplaceQueue(insertQueueSongs(useLibraryStore.getState().snapshot.nowPlaying.songIds, queueIndex, [contextSong.id])),
                   )
                 }}
                 onAddToPlaylistClick={(contextSong, x, y) => {
@@ -1211,10 +1235,11 @@ function NowPlayingFullPlaylist({
           })
         }}
         onRemove={() => {
-          const previousQueueSongIds = queueSongIds
+          const removedSongIds = selectedQueueIndexList.map((queueIndex) => queueSongIds[queueIndex]!)
+          const insertIndex = selectedQueueIndexList[0]!
           onReplaceQueue(queueSongIds.filter((_, index) => !selectedQueueIndexList.includes(index)))
           showUndo(t('notification.songsRemovedFrom', { count: selectedSongIds.length, target: t('common.nowPlaying') }), () =>
-            onReplaceQueue(previousQueueSongIds),
+            onReplaceQueue(insertQueueSongs(useLibraryStore.getState().snapshot.nowPlaying.songIds, insertIndex, removedSongIds)),
           )
           clearSelection()
         }}
@@ -1240,6 +1265,7 @@ function NowPlayingFullPlaylist({
               showRemove: true,
               showSelect: true,
               showDelete: true,
+              showAlbumArt: false,
             },
             playlists,
             folders,
@@ -1258,10 +1284,10 @@ function NowPlayingFullPlaylist({
               onPlayNext(songMenu.song.id, songMenu.queueIndex)
             },
             onAddToNowPlaying: () => {
-              const previousQueueSongIds = queueSongIds
+              const insertedIndex = queueSongIds.length
               onReplaceQueue([...queueSongIds, songMenu.song.id])
               showUndo(t('notification.songAddedTo', { title: songMenu.song.title, target: t('common.nowPlaying') }), () =>
-                onReplaceQueue(previousQueueSongIds),
+                onReplaceQueue(removeQueueRange(useLibraryStore.getState().snapshot.nowPlaying.songIds, insertedIndex, 1)),
               )
             },
             onCreatePlaylist: (name) => {
@@ -1275,10 +1301,9 @@ function NowPlayingFullPlaylist({
               )
             },
             onRemove: () => {
-              const previousQueueSongIds = queueSongIds
               onReplaceQueue(queueSongIds.filter((_, index) => index !== songMenu.queueIndex))
               showUndo(t('notification.removedFrom', { title: songMenu.song.title, target: t('common.nowPlaying') }), () =>
-                onReplaceQueue(previousQueueSongIds),
+                onReplaceQueue(insertQueueSongs(useLibraryStore.getState().snapshot.nowPlaying.songIds, songMenu.queueIndex, [songMenu.song.id])),
               )
             },
             onSelect: () => {
@@ -1318,14 +1343,16 @@ function NowPlayingFullPlaylist({
               }
             },
             onHide: async () => {
-              const previousQueueSongIds = queueSongIds
+              const removedQueueEntries = queueSongIds
+                .map((songId, index) => ({ index, songId }))
+                .filter((entry) => entry.songId === songMenu.song.id)
               await window.smplayer?.hideSong(songMenu.song.id)
               onRemoveSongs([songMenu.song.id])
               showUndo(t('notification.hiddenStorageItem', { name: songMenu.song.title }), async () => {
                 const hiddenItems = await window.smplayer!.getHiddenStorageItems()
                 const hiddenItem = hiddenItems.find((item) => item.path === songMenu.song.path)
                 await window.smplayer!.resumeHiddenStorageItem(hiddenItem!)
-                onReplaceQueue(previousQueueSongIds)
+                onReplaceQueue(insertQueueEntries(useLibraryStore.getState().snapshot.nowPlaying.songIds, removedQueueEntries))
                 await refresh()
               })
             },
@@ -1503,6 +1530,24 @@ function getNextPlaylistName(name: string, playlists: LibraryPlaylist[]) {
 function getParentFolderPath(filePath: string) {
   const index = Math.max(filePath.lastIndexOf('\\'), filePath.lastIndexOf('/'))
   return filePath.slice(0, index)
+}
+
+function getCurrentClockMinute() {
+  const now = new Date()
+  return now.getHours() * 60 + now.getMinutes()
+}
+
+function timeToMinute(value: string) {
+  const [hour, minute] = value.split(':').map(Number)
+  return hour * 60 + minute
+}
+
+function isMinuteInNightRange(current: number, start: number, end: number) {
+  if (start < end) {
+    return current >= start && current < end
+  }
+
+  return current >= start || current < end
 }
 
 interface NowPlayingSongMenuState {

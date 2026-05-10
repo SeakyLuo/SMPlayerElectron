@@ -17,7 +17,7 @@
   padding: 4px 6px 120px;
 }
 
-.playlist-name-dialog-overlay {
+.input-dialog-overlay {
   position: fixed;
   inset: 0;
   z-index: 300;
@@ -28,7 +28,7 @@
   backdrop-filter: blur(12px);
 }
 
-.playlist-name-dialog {
+.input-dialog {
   width: min(480px, calc(100vw - 48px));
   border: 1px solid rgba(126, 139, 154, 0.18);
   border-radius: 12px;
@@ -37,7 +37,7 @@
   padding: 24px;
 }
 
-.playlist-name-dialog h3 {
+.input-dialog h3 {
   margin: 0 0 18px;
   color: var(--text-strong);
   font-size: 22px;
@@ -45,7 +45,7 @@
   text-align: center;
 }
 
-.playlist-name-dialog input {
+.input-dialog input {
   width: 100%;
   height: 42px;
   box-sizing: border-box;
@@ -58,25 +58,25 @@
   outline: none;
 }
 
-.playlist-name-dialog input:focus {
+.input-dialog input:focus {
   box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.14);
 }
 
-.playlist-name-dialog-error {
+.input-dialog-error {
   margin: 10px 0 0;
   color: #d13438;
   font-size: 13px;
   line-height: 1.45;
 }
 
-.playlist-name-dialog-actions {
+.input-dialog-actions {
   display: flex;
   justify-content: center;
   gap: 18px;
   margin-top: 20px;
 }
 
-.playlist-name-dialog-actions button {
+.input-dialog-actions button {
   min-width: 88px;
   min-height: 36px;
   border: 0;
@@ -88,17 +88,33 @@
   cursor: pointer;
 }
 
-.playlist-name-dialog-actions button:hover {
+.input-dialog-actions button:hover {
   background: rgba(var(--accent-rgb), 0.1);
 }
 
-.playlist-name-dialog-actions .playlist-name-dialog-primary {
+.input-dialog-actions .input-dialog-primary {
   background: var(--accent);
   color: #fff;
 }
 
-.playlist-name-dialog-actions .playlist-name-dialog-primary:hover {
+.input-dialog-actions .input-dialog-primary:hover {
   background: var(--accent-strong);
+}
+
+.remove-dialog-message {
+  margin: 0;
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.55;
+  text-align: center;
+}
+
+.input-dialog-actions .remove-dialog-primary {
+  background: #d13438;
+}
+
+.input-dialog-actions .remove-dialog-primary:hover {
+  background: #a4262c;
 }
 
 .grid-view-holder {

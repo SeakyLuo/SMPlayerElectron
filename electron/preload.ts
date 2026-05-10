@@ -47,6 +47,16 @@ const api: SmplayerApi = {
   hideLocalFolder: (path) => ipcRenderer.invoke('library:hide-local-folder', path),
   getHiddenStorageItems: () => ipcRenderer.invoke('library:get-hidden-storage-items'),
   resumeHiddenStorageItem: (item) => ipcRenderer.invoke('library:resume-hidden-storage-item', item),
+  getRemoteShareStatus: () => ipcRenderer.invoke('remote-share:get-status'),
+  updateRemoteShareSettings: (update) => ipcRenderer.invoke('remote-share:update-settings', update),
+  startRemoteShare: () => ipcRenderer.invoke('remote-share:start'),
+  stopRemoteShare: () => ipcRenderer.invoke('remote-share:stop'),
+  getAuthorizedDevices: () => ipcRenderer.invoke('authorized-devices:list'),
+  updateAuthorizedDevice: (deviceId, update) => ipcRenderer.invoke('authorized-devices:update', deviceId, update),
+  deleteAuthorizedDevice: (deviceId) => ipcRenderer.invoke('authorized-devices:delete', deviceId),
+  getRemoteHosts: () => ipcRenderer.invoke('remote-hosts:list'),
+  connectRemoteHost: (request) => ipcRenderer.invoke('remote-hosts:connect', request),
+  deleteRemoteHost: (hostId) => ipcRenderer.invoke('remote-hosts:delete', hostId),
   pickLibraryRoot: () => ipcRenderer.invoke('library:pick-root'),
   scanLibrary: (rootPath?: string) => ipcRenderer.invoke('library:scan', rootPath),
   scanLocalFolder: (folderPath) => ipcRenderer.invoke('library:scan-folder', folderPath),
@@ -62,6 +72,7 @@ const api: SmplayerApi = {
     ipcRenderer.invoke('library:set-favorites', songIds, favorite),
   createPlaylist: (name, songIds) => ipcRenderer.invoke('playlist:create', name, songIds),
   deletePlaylist: (playlistId) => ipcRenderer.invoke('playlist:delete', playlistId),
+  restorePlaylist: (playlist) => ipcRenderer.invoke('playlist:restore', playlist),
   renamePlaylist: (playlistId, name) => ipcRenderer.invoke('playlist:rename', playlistId, name),
   reorderPlaylists: (playlistIds) => ipcRenderer.invoke('playlist:reorder', playlistIds),
   addSongToPlaylist: (playlistId, songId) =>
@@ -81,6 +92,7 @@ const api: SmplayerApi = {
   addRecentSearch: (query) => ipcRenderer.invoke('search:add-recent', query),
   removeRecentSearch: (entryId) => ipcRenderer.invoke('search:remove-recent', entryId),
   removeRecentSearches: (entryIds) => ipcRenderer.invoke('search:remove-recents', entryIds),
+  restoreRecentSearch: (entry) => ipcRenderer.invoke('search:restore-recent', entry),
   clearRecentSearches: () => ipcRenderer.invoke('search:clear-recent'),
   removeRecentPlayed: (songIds) => ipcRenderer.invoke('recent-played:remove', songIds),
   restoreRecentPlayed: (songIds) => ipcRenderer.invoke('recent-played:restore', songIds),
@@ -105,6 +117,17 @@ const api: SmplayerApi = {
 
     return () => {
       ipcRenderer.removeListener('playback:global-media-command', listener)
+    }
+  },
+  onTrayCommand: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, command: Parameters<typeof callback>[0]) => {
+      callback(command)
+    }
+
+    ipcRenderer.on('app:tray-command', listener)
+
+    return () => {
+      ipcRenderer.removeListener('app:tray-command', listener)
     }
   },
   onOpenFiles: (callback) => {

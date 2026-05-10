@@ -5,12 +5,13 @@ import { extractArtworkColorRgb, getDefaultArtworkColorRgb } from '../shared/art
 import type { LibraryPlaylist, LibrarySong, MusicLibrarySortCriterion, PlaylistSortCriterion, PreferenceEntityType, PreferenceItemSnapshot, PreferenceLevel, PreferenceSettingsSnapshot } from '../shared/contracts'
 import { formatDuration } from '../shared/formatters'
 import type { Translator } from '../shared/i18n'
+import { removeQueueRange } from '../shared/queueUndo'
 import { useLibraryStore } from '../state/useLibraryStore'
 import { usePreferenceStore } from '../state/usePreferenceStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
 import { ArtworkImage } from './ArtworkImage'
+import { CommandBar, CommandBarButton } from './CommandBar'
 import { DefaultAlbumArtwork } from './DefaultAlbumArtwork'
-import { Icon } from './icons'
 import { MenuFlyout } from './MenuFlyout'
 import { getAddToPlaylistMenuFlyoutItem, getMusicMenuFlyoutItems, getPreferenceMenuFlyoutItem, type MenuFlyoutPosition } from './MenuFlyoutHelper'
 import { MultiSelectCommandBar } from './MultiSelectCommandBar'
@@ -398,25 +399,26 @@ export function HeaderedPlaylistControl({
               <h2 title={title}>{title}</h2>
             )}
             <p>{headerInfo}</p>
-            <div className="headered-playlist-commandbar">
-              <button type="button" disabled={songs.length === 0} onClick={shuffle} title={captionFor('shuffle')}>
-                <Icon name="shuffle" />
-                <span>{captionFor('shuffle')}</span>
-              </button>
-              <button
-                type="button"
+            <CommandBar className="headered-playlist-commandbar" dynamicOverflow>
+              <CommandBarButton
+                icon="shuffle"
+                label={captionFor('shuffle')}
+                disabled={songs.length === 0}
+                onClick={shuffle}
+              />
+              <CommandBarButton
+                icon="menu"
+                label={captionFor('multiSelect')}
                 disabled={songs.length === 0}
                 onClick={() => {
                   setSelectionMode(true)
                 }}
-                title={captionFor('multiSelect')}
-              >
-                <Icon name="menu" />
-                <span>{captionFor('multiSelect')}</span>
-              </button>
+              />
               {canSetPreferred && onSetPreferred ? (
-                <button
-                  type="button"
+                <CommandBarButton
+                  icon="star"
+                  label={captionFor('preferenceSettings')}
+                  canOverflow={false}
                   onPointerDown={(event) => {
                     event.preventDefault()
                     event.stopPropagation()
@@ -426,14 +428,12 @@ export function HeaderedPlaylistControl({
                     event.preventDefault()
                     event.stopPropagation()
                   }}
-                  title={captionFor('preferenceSettings')}
-                >
-                  <Icon name="star" />
-                  <span>{captionFor('preferenceSettings')}</span>
-                </button>
+                />
               ) : null}
-              <button
-                type="button"
+              <CommandBarButton
+                icon="sort"
+                label={captionFor('sort')}
+                canOverflow={false}
                 disabled={songs.length === 0}
                 onPointerDown={(event) => {
                   event.preventDefault()
@@ -445,43 +445,27 @@ export function HeaderedPlaylistControl({
                   event.preventDefault()
                   event.stopPropagation()
                 }}
-                title={captionFor('sort')}
-              >
-                <Icon name="sort" />
-                <span>{captionFor('sort')}</span>
-              </button>
+              />
               {canRename ? (
-                <button
-                  type="button"
+                <CommandBarButton
+                  icon="settings"
+                  label={captionFor('rename')}
                   onClick={() => {
                     setRenameDraft(title)
                     setEditingName(true)
                   }}
-                  title={captionFor('rename')}
-                >
-                  <Icon name="settings" />
-                  <span>{captionFor('rename')}</span>
-                </button>
+                />
               ) : null}
               {canClear ? (
-                <button type="button" disabled={songs.length === 0} onClick={onClear} title={captionFor('clear')}>
-                  <Icon name="clearSelection" />
-                  <span>{captionFor('clear')}</span>
-                </button>
+                <CommandBarButton icon="clearSelection" label={captionFor('clear')} disabled={songs.length === 0} onClick={onClear} />
               ) : null}
               {canDelete ? (
-                <button type="button" onClick={onDelete} title={captionFor('delete')}>
-                  <Icon name="trash" />
-                  <span>{captionFor('delete')}</span>
-                </button>
+                <CommandBarButton icon="trash" label={captionFor('delete')} onClick={onDelete} />
               ) : null}
               {canEditArtwork && onEditArtwork ? (
-                <button type="button" onClick={onEditArtwork} title={captionFor('editArtwork')}>
-                  <Icon name="albums" />
-                  <span>{captionFor('editArtwork')}</span>
-                </button>
+                <CommandBarButton icon="albums" label={captionFor('editArtwork')} onClick={onEditArtwork} />
               ) : null}
-            </div>
+            </CommandBar>
           </div>
         </div>
       </header>
@@ -581,7 +565,7 @@ export function HeaderedPlaylistControl({
               includeNowPlaying: currentPlaylistName !== translateCaption('common.nowPlaying'),
               includeFavorites: currentPlaylistName !== translateCaption('common.myFavorites'),
               onAddToNowPlaying: () => {
-                const previousQueueSongIds = nowPlayingSongIds
+                const insertedIndex = nowPlayingSongIds.length
                 void replaceNowPlaying([...nowPlayingSongIds, ...addToMenu.songIds])
                 showUndo(
                   addToMenu.songIds.length === 1
@@ -590,7 +574,7 @@ export function HeaderedPlaylistControl({
                         target: translateCaption('common.nowPlaying'),
                       })
                     : translateCaption('notification.songsAddedTo', { count: addToMenu.songIds.length, target: translateCaption('common.nowPlaying') }),
-                  () => replaceNowPlaying(previousQueueSongIds),
+                  () => replaceNowPlaying(removeQueueRange(useLibraryStore.getState().snapshot.nowPlaying.songIds, insertedIndex, addToMenu.songIds.length)),
                 )
                 hideSelectionAfterOperation()
               },
@@ -718,10 +702,10 @@ export function HeaderedPlaylistControl({
               onPlayTrack(selectedTrackId ?? songMenu.song.id, nextQueue)
             },
             onAddToNowPlaying: () => {
-              const previousQueueSongIds = nowPlayingSongIds
+              const insertedIndex = nowPlayingSongIds.length
               void replaceNowPlaying([...nowPlayingSongIds, songMenu.song.id])
               showUndo(translateCaption('notification.songAddedTo', { title: songMenu.song.title, target: translateCaption('common.nowPlaying') }), () =>
-                replaceNowPlaying(previousQueueSongIds),
+                replaceNowPlaying(removeQueueRange(useLibraryStore.getState().snapshot.nowPlaying.songIds, insertedIndex, 1)),
               )
             },
             onCreatePlaylist: (name) => {

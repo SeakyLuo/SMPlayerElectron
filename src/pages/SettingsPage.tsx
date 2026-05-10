@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 
 import { Icon } from '../components/icons'
-import { getReleaseNotes } from '../shared/releaseNotes'
+import { ReleaseNotesDialog } from '../components/ReleaseNotesDialog'
+import { RemoveDialog } from '../components/RemoveDialog'
 import type {
   AppSettingsUpdate,
   LibrarySnapshot,
@@ -369,6 +370,7 @@ export function SettingsPage({
   const [showReleaseNotes, setShowReleaseNotes] = useState(false)
   const [showPreferenceSettings, setShowPreferenceSettings] = useState(false)
   const [showFeedbackOptions, setShowFeedbackOptions] = useState(false)
+  const [showImportDataDialog, setShowImportDataDialog] = useState(false)
   const feedbackMenuRef = useRef<HTMLDivElement | null>(null)
   const [lyricsJob, setLyricsJob] = useState({
     status: 'idle' as 'idle' | 'running' | 'stopping' | 'done',
@@ -386,13 +388,6 @@ export function SettingsPage({
   const mountedRef = useRef(true)
   const lyricsJobActive = lyricsJob.status === 'running' || lyricsJob.status === 'stopping'
   const lyricsProgressRatio = lyricsJob.total > 0 ? lyricsJob.currentIndex / lyricsJob.total : 0
-  const releaseNoteLanguage =
-    snapshot.settings.preferredLanguage === 'zh-CN' ||
-    (snapshot.settings.preferredLanguage === 'system' && navigator.language.toLowerCase().startsWith('zh'))
-      ? 'zh'
-      : 'en'
-  const releaseNotes = getReleaseNotes(releaseNoteLanguage)
-
   useEffect(() => {
     return () => {
       mountedRef.current = false
@@ -563,13 +558,7 @@ export function SettingsPage({
   }
 
   const importData = async () => {
-    const confirmed = window.confirm(
-      t('settings.importDataConfirm'),
-    )
-    if (!confirmed) {
-      return
-    }
-
+    setShowImportDataDialog(false)
     setDataTransferState('importing')
     setActionMessage(t('settings.importingData'))
 
@@ -838,7 +827,7 @@ export function SettingsPage({
                 disabled={dataTransferState !== 'idle'}
                 title={t('settings.importDataHint')}
                 onClick={() => {
-                  void importData()
+                  setShowImportDataDialog(true)
                 }}
               >
                 {t('settings.importData')}
@@ -893,36 +882,27 @@ export function SettingsPage({
       </div>
 
       {showReleaseNotes ? (
-        <div className="settings-modal-backdrop" role="presentation">
-          <section className="settings-modal" role="dialog" aria-modal="true" aria-labelledby="release-notes-title">
-            <header>
-              <h2 id="release-notes-title">{t('settings.releaseNotes')}</h2>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowReleaseNotes(false)
-                }}
-                aria-label={t('common.close')}
-              >
-                <Icon name="close" />
-              </button>
-            </header>
-            <div className="release-notes-list">
-              {releaseNotes.map((entry) => (
-                <section className="release-note-version" key={entry.version}>
-                  <h3>
-                    {entry.version === 'History Updates' ? t('settings.releaseNotesIntro') : `${t('settings.releaseNotesVersion')} ${entry.version}`}
-                  </h3>
-                  <ol>
-                    {entry.items.map((item) => (
-                      <li key={item}>{item}</li>
-                    ))}
-                  </ol>
-                </section>
-              ))}
-            </div>
-          </section>
-        </div>
+        <ReleaseNotesDialog
+          t={t}
+          preferredLanguage={snapshot.settings.preferredLanguage}
+          onClose={() => {
+            setShowReleaseNotes(false)
+          }}
+        />
+      ) : null}
+
+      {showImportDataDialog ? (
+        <RemoveDialog
+          t={t}
+          title={t('settings.importData')}
+          message={t('settings.importDataConfirm')}
+          onCancel={() => {
+            setShowImportDataDialog(false)
+          }}
+          onConfirm={() => {
+            void importData()
+          }}
+        />
       ) : null}
 
       {showPreferenceSettings ? (

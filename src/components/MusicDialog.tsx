@@ -1,38 +1,19 @@
-import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
 import { normalizeArtists } from '../shared/artists'
 import type { LibrarySong, LyricsSnapshot, SongPropertiesSnapshot } from '../shared/contracts'
-import { formatBytes, formatDuration } from '../shared/formatters'
 import type { Translator } from '../shared/i18n'
 import { hasLyricsTimestamps, mergePlainLyricsWithTimedRaw, stripLyricsTimestamps } from '../shared/lyrics'
 import { useLibraryStore } from '../state/useLibraryStore'
 import { useMusicDialogShortcuts } from '../hooks/useMusicDialogShortcuts'
-import { AlbumArtControl } from './AlbumArtControl'
 import { Icon } from './icons'
+import { MusicAlbumArtControl } from './MusicAlbumArtControl'
+import { MAX_ARTIST_CELLS, MusicInfoControl } from './MusicInfoControl'
+import { MusicLyricsControl } from './MusicLyricsControl'
 
 type SongDialogMode = 'properties' | 'lyrics' | 'album-art'
 type PendingLyricsSnapshot = { songId: number; title: string; lyrics: string }
-const MAX_ARTIST_CELLS = 6
-
-function PropertyRow({
-  label,
-  children,
-  className,
-  labelClassName,
-}: {
-  label: string
-  children: ReactNode
-  className?: string
-  labelClassName?: string
-}) {
-  return (
-    <div className={`song-dialog-property-row music-property-row${className ? ` ${className}` : ''}`}>
-      <span className={`song-dialog-property-label music-property-label${labelClassName ? ` ${labelClassName}` : ''}`}>{label}</span>
-      <div className="song-dialog-property-control music-property-control">{children}</div>
-    </div>
-  )
-}
 
 interface MusicDialogProps {
   song: LibrarySong
@@ -288,8 +269,6 @@ export function MusicDialog({
     const digits = value.replace(/\D/g, '')
     setProperties((current) => current ? { ...current, [key]: Number(digits) || 0 } : current)
   }
-
-  const formatTagList = (value: string) => value.split(', ').join(t('common.comma'))
 
   const scrollLyricsToTop = () => {
     lyricsTextAreaRef.current?.scrollTo({ top: 0, left: 0 })
@@ -667,230 +646,70 @@ export function MusicDialog({
         </nav>
         {statusMessage ? <p className="song-dialog-status">{statusMessage}</p> : null}
         {activeMode === 'properties' ? (
-          <div className="song-dialog-commandbar music-info-control-commandbar MusicInfoControllerCommandBar" role="toolbar">
-            <button type="button" className={canPause ? 'PauseButton' : 'PlayButton'} onClick={play}>
-              <Icon name={canPause ? 'pause' : 'play'} />
-              {canPause ? t('context.pause') : t('context.play')}
-            </button>
-            <button type="button" className="song-dialog-primary-button save-music-properties-button SaveMusicPropertiesButton" disabled={controlsDisabled} onClick={() => void saveProperties()}>
-              {t('settings.save')}
-            </button>
-            <button type="button" className="reset-music-properties-button ResetMusicPropertiesButton" disabled={controlsDisabled} onClick={resetActivePage}>
-              {t('common.reset')}
-            </button>
-            {showBusy ? <div className="music-info-save-progress SaveProgress" /> : null}
-          </div>
+          <MusicInfoControl
+            song={song}
+            t={t}
+            loading={loading}
+            saving={saving}
+            showBusy={showBusy}
+            controlsDisabled={controlsDisabled}
+            canPause={canPause}
+            properties={properties}
+            onPlay={play}
+            onSave={() => void saveProperties()}
+            onReset={resetActivePage}
+            onClearPlayCount={() => void clearPlayCount()}
+            onUpdateProperty={updateProperty}
+            onUpdateArtistCell={updateArtistCell}
+            onAddArtistCell={addArtistCell}
+            onRemoveArtistCell={removeArtistCell}
+            onUpdateNumericProperty={updateNumericProperty}
+          />
         ) : null}
         {activeMode === 'lyrics' ? (
-          <div className="song-dialog-commandbar music-info-control-commandbar MusicLyricsControllerCommandBar" role="toolbar">
-            <button type="button" className="SearchLyricsButton" disabled={saving} onClick={() => void searchLyrics()}>
-              <Icon name="search" />
-              {t('common.search')}
-            </button>
-            <button type="button" className="ImportLyricsButton" disabled={saving} onClick={() => void importLyrics()}>{t('common.import')}</button>
-            <button type="button" className="song-dialog-primary-button save-lyrics-button SaveLyricsButton" disabled={saving} onClick={() => void saveLyrics()}>{t('settings.save')}</button>
-            <button type="button" className="reset-lyrics-button ResetLyricsButton" disabled={saving} onClick={resetActivePage}>{t('common.reset')}</button>
-            {lyricsCanToggleTimestamps ? (
-              <label className="song-dialog-lyrics-timestamp-toggle">
-                <input
-                  type="checkbox"
-                  checked={showLyricsTimestamps}
-                  onChange={(event) => toggleLyricsTimestamps(event.currentTarget.checked)}
-                />
-                {t('song.showLyricsTimestamps')}
-              </label>
-            ) : null}
-            {showBusy ? <div className="music-info-save-progress SaveProgress" /> : null}
-          </div>
+          <MusicLyricsControl
+            t={t}
+            saving={saving}
+            showBusy={showBusy}
+            lyrics={lyrics}
+            lyricsText={lyricsText}
+            lyricsTextAreaRef={lyricsTextAreaRef}
+            lyricsCanToggleTimestamps={lyricsCanToggleTimestamps}
+            showLyricsTimestamps={showLyricsTimestamps}
+            pendingLyricsSave={pendingLyricsSave}
+            pendingSwitchLyrics={pendingSwitchLyrics}
+            onSearch={() => void searchLyrics()}
+            onImport={() => void importLyrics()}
+            onSave={() => void saveLyrics()}
+            onReset={resetActivePage}
+            onToggleTimestamps={toggleLyricsTimestamps}
+            onLyricsTextChange={(nextText) => {
+              setLyricsText(nextText)
+              if (showLyricsTimestamps) {
+                setLyricsRawText(nextText)
+              }
+              setPendingLyricsSave(null)
+              setStatusMessage('')
+            }}
+            onSavePending={(pending) => void saveLyricsImmediately(pending)}
+            onSavePendingSwitch={(pending) => void saveLyricsImmediately(pending, true)}
+            onDiscardPendingSwitch={discardPendingSwitchLyrics}
+          />
         ) : null}
         {activeMode === 'album-art' ? (
-          <div className="song-dialog-commandbar music-info-control-commandbar AlbumArtControllerCommandBar" role="toolbar">
-            <button type="button" className="change-album-art-button ChangeAlbumArtButton" disabled={saving} onClick={() => void changeArtwork()}>{t('song.changeArtwork')}</button>
-            <button type="button" className="song-dialog-primary-button save-album-art-button SaveAlbumArtButton" disabled={saving} onClick={() => void saveArtwork()}>{t('settings.save')}</button>
-            <button type="button" className="delete-album-art-button DeleteAlbumArtButton" disabled={saving} onClick={() => setShowArtworkDeleteConfirm(true)}>{t('playlists.delete')}</button>
-            {showBusy ? <div className="music-info-save-progress SaveProgress" /> : null}
-          </div>
-        ) : null}
-        {activeMode === 'properties' ? (
-          <div className="song-dialog-body music-info-control-scroll-viewer MusicInfoController">
-            {loading || !properties ? (
-              <div className="song-dialog-loading-placeholder" aria-label={t('nowPlaying.loading')} />
-            ) : (
-              <div className="song-dialog-property-list music-info-control-properties-grid MusicInfoControlPropertiesGrid">
-                <PropertyRow label={t('table.title')} className="TitlePropertyRow" labelClassName="TitleTextBlock">
-                  <input className="title-text-box TitleTextBox" value={properties.title} disabled={saving} onChange={(event) => updateProperty('title', event.currentTarget.value)} />
-                </PropertyRow>
-                <PropertyRow label={t('song.subtitle')} className="SubtitlePropertyRow" labelClassName="SubtitleTextBlock">
-                  <input className="subtitle-text-box SubtitleTextBox" value={properties.subtitle} disabled={saving} onChange={(event) => updateProperty('subtitle', event.currentTarget.value)} />
-                </PropertyRow>
-                <PropertyRow label={t('common.artist')} className="song-dialog-artist-row ArtistPropertyRow" labelClassName="ArtistTextBlock">
-                  <span className="song-dialog-artist-editor ArtistTextBoxPanel">
-                    <span
-                      className="song-dialog-artist-grid ArtistTextBoxGrid"
-                      style={{
-                        gridTemplateColumns: `repeat(${Math.min(properties.artists.length || 1, 2)}, minmax(0, 1fr))`,
-                      }}
-                    >
-                      {(properties.artists.length > 0 ? properties.artists : ['']).slice(0, MAX_ARTIST_CELLS).map((artist, index) => (
-                        <span key={index} className="song-dialog-artist-cell ArtistTextBoxCell">
-                          <input
-                            className="artist-text-box ArtistTextBox"
-                            value={artist}
-                            disabled={saving}
-                            onChange={(event) => updateArtistCell(index, event.currentTarget.value)}
-                          />
-                          {properties.artists.length > 1 ? (
-                            <button
-                              type="button"
-                              className="song-dialog-artist-remove-button RemoveArtistButton"
-                              disabled={saving}
-                              onClick={() => removeArtistCell(index)}
-                              aria-label={t('playlists.removeSelected')}
-                            >
-                              <Icon name="close" />
-                            </button>
-                          ) : null}
-                        </span>
-                      ))}
-                    </span>
-                    <button
-                      type="button"
-                      className="song-dialog-icon-button song-dialog-add-artist-button AddArtistButton"
-                      disabled={saving || properties.artists.length >= MAX_ARTIST_CELLS}
-                      onClick={addArtistCell}
-                      aria-label={t('common.add')}
-                    >
-                      <Icon name="plus" />
-                    </button>
-                  </span>
-                </PropertyRow>
-                <PropertyRow label={t('common.album')} className="AlbumPropertyRow" labelClassName="AlbumTextBlock">
-                  <input className="album-text-box AlbumTextBox" value={properties.album} disabled={saving} onChange={(event) => updateProperty('album', event.currentTarget.value)} />
-                </PropertyRow>
-                <PropertyRow label={t('song.albumArtist')} className="AlbumArtistPropertyRow" labelClassName="AlbumArtistTextBlock">
-                  <input className="album-artist-text-box AlbumArtistTextBox" value={properties.albumArtist} disabled={saving} onChange={(event) => updateProperty('albumArtist', event.currentTarget.value)} />
-                </PropertyRow>
-                <PropertyRow label={t('common.playCount')} labelClassName="PlayCountTextBlock">
-                  <span className="song-dialog-inline-field music-property-inline-field">
-                    <input
-                      className="play-count-text-block PlayCountTextBlock"
-                      value={properties.playCount || ''}
-                      disabled
-                      title={
-                        properties.playCount === 0
-                          ? t('song.notPlayedYet', { title: song.title })
-                          : t('song.hasBeenPlayed', { title: song.title, count: properties.playCount })
-                      }
-                    />
-                    {properties.playCount > 0 ? (
-                      <button type="button" className="clear-play-count-button ClearPlayCountButton" onClick={() => void clearPlayCount()}>{t('song.clearPlayCount')}</button>
-                    ) : null}
-                  </span>
-                </PropertyRow>
-                <PropertyRow label={t('song.publisher')} labelClassName="PublisherTextBlock">
-                  <input className="publisher-text-box PublisherTextBox" value={properties.publisher} disabled={saving} onChange={(event) => updateProperty('publisher', event.currentTarget.value)} />
-                </PropertyRow>
-                <PropertyRow label={t('song.trackNumber')} labelClassName="TrackNumberTextBlock">
-                  <input className="track-number-text-box TrackNumberTextBox" inputMode="numeric" value={properties.trackNumber || ''} disabled={saving} onChange={(event) => updateNumericProperty('trackNumber', event.currentTarget.value)} />
-                </PropertyRow>
-                <PropertyRow label={t('song.year')} labelClassName="YearTextBlock">
-                  <input className="year-text-box YearTextBox" inputMode="numeric" value={properties.year || ''} disabled={saving} onChange={(event) => updateNumericProperty('year', event.currentTarget.value)} />
-                </PropertyRow>
-                <PropertyRow label={t('song.bitrate')} labelClassName="BitrateTextBlock">
-                  <input className="bitrate-text-box BitRateTextBox" value={properties.bitrate || ''} disabled />
-                </PropertyRow>
-                <PropertyRow label={t('song.composers')} labelClassName="ComposersTextBlock">
-                  <input className="composers-text-box ComposersTextBox" value={formatTagList(properties.composers)} disabled />
-                </PropertyRow>
-                <PropertyRow label={t('song.dateCreated')} labelClassName="DateCreatedTextBlock">
-                  <input className="date-created-text-box DateCreatedTextBox" value={new Date(properties.dateCreated).toLocaleString()} disabled />
-                </PropertyRow>
-                <PropertyRow label={t('song.dateModified')} labelClassName="DateModifiedTextBlock">
-                  <input className="date-modified-text-box DateModifiedTextBox" value={new Date(properties.dateModified).toLocaleString()} disabled />
-                </PropertyRow>
-                <PropertyRow label={t('common.duration')} labelClassName="DurationTextBlock">
-                  <input className="duration-text-box DurationTextBox" value={formatDuration(properties.duration)} disabled />
-                </PropertyRow>
-                <PropertyRow label={t('song.fileSize')} labelClassName="FileSizeTextBlock">
-                  <input className="file-size-text-box FileSizeTextBox" value={formatBytes(properties.fileSize)} disabled />
-                </PropertyRow>
-                <PropertyRow label={t('song.fileType')} labelClassName="FileTypeTextBlock">
-                  <input className="file-type-text-box FileTypeTextBox" value={properties.fileType} disabled />
-                </PropertyRow>
-                <PropertyRow label={t('song.genre')} labelClassName="GenreTextBlock">
-                  <input className="genre-text-box GenreTextBox" value={formatTagList(properties.genre)} disabled />
-                </PropertyRow>
-                <PropertyRow label={t('local.path')} labelClassName="PathTextBlock">
-                  <span className="song-dialog-inline-field music-property-inline-field">
-                    <input className="path-text-box PathTextBox" value={properties.path} disabled />
-                    <button type="button" className="show-in-explorer-button ShowInExplorerButton" onClick={() => window.smplayer?.revealItemInFolder(properties.path)}>
-                      {t('song.showInExplorer')}
-                    </button>
-                  </span>
-                </PropertyRow>
-              </div>
-            )}
-          </div>
-        ) : null}
-        {activeMode === 'lyrics' ? (
-          <div className="song-dialog-body song-dialog-lyrics MusicLyricsControl MusicLyricsController">
-            {pendingSwitchLyrics ? (
-              <div className="song-dialog-warning save-lyrics-later-panel pending-switch-lyrics-panel">
-                <p>{t('song.pendingSaveLyrics', { title: pendingSwitchLyrics.title })}</p>
-                <button
-                  type="button"
-                  className="SaveLyricsButton"
-                  disabled={saving}
-                  onClick={() => void saveLyricsImmediately(pendingSwitchLyrics, true)}
-                >
-                  {t('song.saveImmediately')}
-                </button>
-                <button type="button" className="DiscardLyricsButton" disabled={saving} onClick={discardPendingSwitchLyrics}>
-                  {t('song.discardChanges')}
-                </button>
-              </div>
-            ) : null}
-            {pendingLyricsSave ? (
-              <div className="song-dialog-warning save-lyrics-later-panel">
-                <p>{t('song.saveLyricsLater', { title: pendingLyricsSave.title })}</p>
-                <button type="button" className="SaveLyricsButton" disabled={saving} onClick={() => void saveLyricsImmediately(pendingLyricsSave)}>{t('song.saveImmediately')}</button>
-              </div>
-            ) : null}
-            <textarea
-              className="LyricsTextBox"
-              ref={lyricsTextAreaRef}
-              value={lyricsText}
-              disabled={saving}
-              placeholder={lyrics?.source === 'none' ? t('nowPlaying.noLyrics') : ''}
-              onChange={(event) => {
-                const nextText = event.currentTarget.value
-                setLyricsText(nextText)
-                if (showLyricsTimestamps) {
-                  setLyricsRawText(nextText)
-                }
-                setPendingLyricsSave(null)
-                setStatusMessage('')
-              }}
-            />
-          </div>
-        ) : null}
-        {activeMode === 'album-art' ? (
-          <div className="song-dialog-body song-dialog-artwork AlbumArtControl AlbumArtController AlbumArtControlPanel">
-            <AlbumArtControl
-              title={song.title}
-              artworkUrl={artworkUrl}
-              className="AlbumArt"
-              fallbackClassName="NoAlbumArtTextBlock"
-              fallbackText={t('song.noAlbumArt')}
-            />
-            {showArtworkDeleteConfirm ? (
-              <div className="song-dialog-warning RemoveAlbumArtWarningPanel">
-                <p className="RemoveAlbumArtWarningTextBlock">{t('song.removeAlbumArt', { title: song.title })}</p>
-                <button type="button" className="ConfirmButton" disabled={saving} onClick={() => void deleteArtwork()}>{t('common.yes')}</button>
-                <button type="button" className="CancelButton" disabled={saving} onClick={() => setShowArtworkDeleteConfirm(false)}>{t('common.cancel')}</button>
-              </div>
-            ) : null}
-          </div>
+          <MusicAlbumArtControl
+            song={song}
+            t={t}
+            saving={saving}
+            showBusy={showBusy}
+            artworkUrl={artworkUrl}
+            showDeleteConfirm={showArtworkDeleteConfirm}
+            onChangeArtwork={() => void changeArtwork()}
+            onSaveArtwork={() => void saveArtwork()}
+            onRequestDelete={() => setShowArtworkDeleteConfirm(true)}
+            onConfirmDelete={() => void deleteArtwork()}
+            onCancelDelete={() => setShowArtworkDeleteConfirm(false)}
+          />
         ) : null}
       </section>
     </div>,

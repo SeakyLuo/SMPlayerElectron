@@ -91,6 +91,10 @@
     flex-direction: column;
   }
 
+  .app-shell.nav-minimal .workspace-header {
+    flex-direction: row;
+  }
+
   .page-actions {
     justify-content: flex-start;
   }

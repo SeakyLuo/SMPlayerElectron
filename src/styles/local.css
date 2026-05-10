@@ -7,10 +7,7 @@
 }
 
 .local-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
+  display: block;
   flex: 0 0 auto;
   min-height: 50px;
   padding: 0;
@@ -235,12 +232,21 @@
 }
 
 .local-commandbar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 14px;
-  flex-wrap: wrap;
   -webkit-app-region: no-drag;
+}
+
+.local-commandbar .uwp-commandbar-content {
+  flex: 1 1 auto;
+  min-width: max-content;
+  padding-left: 0;
+}
+
+.local-commandbar .uwp-commandbar-content p {
+  white-space: nowrap;
+}
+
+.local-commandbar .uwp-commandbar-primary {
+  flex: 0 1 auto;
 }
 
 .local-command {
@@ -279,6 +285,134 @@
 .local-command svg {
   width: 18px;
   height: 18px;
+}
+
+.remote-share-dialog {
+  width: min(680px, calc(100vw - 48px));
+  max-height: min(760px, calc(100vh - 48px));
+  overflow: auto;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(112, 128, 144, 0.22);
+  border-radius: 18px;
+  box-shadow: 0 24px 70px rgba(34, 45, 57, 0.24);
+  padding: 22px;
+}
+
+.remote-share-header,
+.remote-share-status-row,
+.remote-share-address,
+.remote-share-device {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.remote-share-header {
+  margin-bottom: 20px;
+}
+
+.remote-share-header h3,
+.remote-share-section h4 {
+  margin: 0;
+}
+
+.remote-share-header p,
+.remote-share-muted,
+.remote-share-message {
+  color: var(--muted);
+  margin: 6px 0 0;
+}
+
+.remote-share-section {
+  border-top: 1px solid rgba(112, 128, 144, 0.18);
+  padding: 18px 0;
+}
+
+.remote-share-status-row strong,
+.remote-share-status-row span,
+.remote-share-device strong,
+.remote-share-device span,
+.remote-share-field span {
+  display: block;
+}
+
+.remote-share-status-row span,
+.remote-share-device span,
+.remote-share-field span {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin-top: 4px;
+}
+
+.remote-share-address {
+  background: rgba(238, 244, 250, 0.9);
+  border: 1px solid rgba(112, 128, 144, 0.18);
+  border-radius: 12px;
+  margin-top: 14px;
+  padding: 10px 12px;
+}
+
+.remote-share-address span {
+  font-family: Consolas, 'SFMono-Regular', monospace;
+}
+
+.remote-share-dialog button {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(112, 128, 144, 0.22);
+  border-radius: 10px;
+  color: var(--text);
+  display: inline-flex;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 12px;
+}
+
+.remote-share-dialog button:disabled {
+  cursor: default;
+  opacity: 0.52;
+}
+
+.remote-share-dialog .input-dialog-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.remote-share-field input {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(112, 128, 144, 0.28);
+  border-radius: 10px;
+  color: var(--text);
+  height: 38px;
+  margin-top: 8px;
+  padding: 0 12px;
+  width: min(320px, 100%);
+}
+
+.remote-share-connect-grid {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, 220px) auto;
+  margin-top: 12px;
+}
+
+.remote-share-device-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.remote-share-device {
+  background: rgba(248, 250, 252, 0.86);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.remote-share-device.is-blocked {
+  opacity: 0.62;
 }
 
 .local-select-command {

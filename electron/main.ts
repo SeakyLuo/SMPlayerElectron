@@ -16,27 +16,32 @@ import {
 import { copyFile, mkdir, readdir, stat } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { basename, dirname, extname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import type { OpenDialogOptions, SaveDialogOptions } from 'electron'
 import type {
   AppInfo,
   GlobalMediaCommand,
   HiddenStorageItem,
+  LibraryPlaylist,
   PlaylistSortCriterion,
   LocalFolderSortCriterion,
   PreferenceEntityType,
   PreferenceLevel,
+  RemoteHostConnectRequest,
+  SearchHistoryEntry,
   TrackNotificationPayload,
 } from '../src/shared/contracts'
 import { SmplayerDataStore } from './services/data-store'
 import { AUDIO_EXTENSIONS, SMPLAYER_DB_NAME } from './services/constants'
 import { OpenFileCoordinator } from './services/open-file-coordinator'
+import { RemotePlayServer } from './services/remote-play-server'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 let mainWindow: BrowserWindow | null = null
 let dataStore: SmplayerDataStore | null = null
+let remotePlayServer: RemotePlayServer | null = null
 let appTray: Tray | null = null
 let isQuitting = false
 let windowDragInterval: NodeJS.Timeout | null = null
@@ -119,6 +124,63 @@ const restorableRoutes = new Set([
   '/playlists',
   '/favorites',
 ])
+
+function normalizeRemoteBaseUrl(baseUrl: string) {
+  const trimmedBaseUrl = baseUrl.trim().replace(/\/+$/, '')
+  const url = new URL(/^https?:\/\//i.test(trimmedBaseUrl) ? trimmedBaseUrl : `http://${trimmedBaseUrl}`)
+  return url.toString().replace(/\/$/, '')
+}
+
+async function readRemoteJson<T>(url: string, init?: RequestInit) {
+  const response = await fetch(url, init)
+  if (!response.ok) {
+    throw new Error(`Remote request failed: ${response.status}`)
+  }
+
+  return await response.json() as T
+}
+
+async function connectRemoteHost(request: RemoteHostConnectRequest) {
+  const baseUrl = normalizeRemoteBaseUrl(request.baseUrl)
+  const info = await readRemoteJson<{
+    deviceId: string
+    deviceName: string
+    platform?: string
+  }>(`${baseUrl}/api/server/info`)
+  const localDevice = dataStore!.getRemoteShareSettings()
+  const login = await readRemoteJson<{
+    token: string
+    hostId: string
+    hostName: string
+  }>(`${baseUrl}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      password: request.password,
+      deviceId: localDevice.deviceId,
+      deviceName: localDevice.deviceName,
+      platform: process.platform,
+      browser: 'SMPlayer',
+    }),
+  })
+  const snapshot = await readRemoteJson<{
+    songs: unknown[]
+  }>(`${baseUrl}/api/library/snapshot`, {
+    headers: { Authorization: `Bearer ${login.token}` },
+  })
+  const host = dataStore!.saveRemoteHost({
+    hostId: login.hostId || info.deviceId,
+    name: login.hostName || info.deviceName,
+    baseUrl,
+    platform: info.platform ?? '',
+    token: login.token,
+  })
+
+  return {
+    host,
+    songCount: snapshot.songs.length,
+  }
+}
 
 if (!gotSingleInstanceLock) {
   app.quit()
@@ -264,7 +326,7 @@ async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1460,
     height: 940,
-    minWidth: 320,
+    minWidth: 506,
     minHeight: 520,
     show: false,
     autoHideMenuBar: true,
@@ -275,7 +337,7 @@ async function createWindow() {
         ? {
             color: titleBarOverlayColor,
             symbolColor: defaultTitleBarSymbolColor,
-            height: 44,
+            height: 32,
           }
         : undefined,
     backgroundMaterial: process.platform === 'win32' ? 'mica' : undefined,
@@ -340,7 +402,9 @@ async function createWindow() {
     devServerUrl.hash = startupRoute
     await mainWindow.loadURL(devServerUrl.toString())
   } else {
-    await mainWindow.loadFile(join(__dirname, '../dist/index.html'), { hash: startupRoute })
+    const indexUrl = pathToFileURL(join(__dirname, '../dist/index.html'))
+    indexUrl.hash = startupRoute
+    await mainWindow.loadURL(indexUrl.toString())
   }
 }
 
@@ -376,15 +440,26 @@ function hideMainWindow() {
   mainWindow.hide()
 }
 
+function openAppRoute(route: string) {
+  showMainWindow()
+  void mainWindow!.webContents.executeJavaScript(`window.location.hash = ${JSON.stringify(route)}`)
+}
+
+function sendTrayCommand(command: 'scan-library') {
+  showMainWindow()
+  mainWindow!.webContents.send('app:tray-command', command)
+}
+
 function updateTrayMenu() {
   if (!appTray) {
     return
   }
 
   const isWindowVisible = Boolean(mainWindow?.isVisible())
+  const rootPath = dataStore!.getSettingsSnapshot().rootPath
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: isWindowVisible ? 'Hide SMPlayer' : 'Show SMPlayer',
+      label: isWindowVisible ? '隐藏简音播放器' : '显示简音播放器',
       click: () => {
         if (isWindowVisible) {
           hideMainWindow()
@@ -395,7 +470,53 @@ function updateTrayMenu() {
     },
     { type: 'separator' },
     {
-      label: 'Quit',
+      label: '播放/暂停',
+      click: () => {
+        sendGlobalMediaCommand('play-pause')
+      },
+    },
+    {
+      label: '上一首',
+      click: () => {
+        sendGlobalMediaCommand('previous')
+      },
+    },
+    {
+      label: '下一首',
+      click: () => {
+        sendGlobalMediaCommand('next')
+      },
+    },
+    {
+      label: '停止',
+      click: () => {
+        sendGlobalMediaCommand('stop')
+      },
+    },
+    { type: 'separator' },
+    {
+      label: '打开音乐文件夹',
+      enabled: Boolean(rootPath),
+      click: () => {
+        void shell.openPath(rootPath)
+      },
+    },
+    {
+      label: '扫描音乐库',
+      enabled: Boolean(rootPath),
+      click: () => {
+        sendTrayCommand('scan-library')
+      },
+    },
+    {
+      label: '设置',
+      click: () => {
+        openAppRoute('/settings')
+      },
+    },
+    { type: 'separator' },
+    {
+      label: '退出',
       click: () => {
         isQuitting = true
         app.quit()
@@ -404,7 +525,7 @@ function updateTrayMenu() {
   ])
 
   appTray.setContextMenu(contextMenu)
-  appTray.setToolTip('SMPlayer')
+  appTray.setToolTip('简音播放器')
 }
 
 function createTray() {
@@ -568,6 +689,10 @@ app.whenReady().then(async () => {
   app.setAppUserModelId('com.seaky.smplayer')
   app.setPath('userData', await resolveUserDataPath())
   dataStore = new SmplayerDataStore(app.getPath('userData'))
+  remotePlayServer = new RemotePlayServer(dataStore)
+  if (dataStore.getRemoteShareSettings().shareEnabled) {
+    await remotePlayServer.start()
+  }
   registerMediaProtocols()
 
   ipcMain.handle('app:get-info', () => getAppInfo())
@@ -758,6 +883,34 @@ app.whenReady().then(async () => {
   ipcMain.handle('library:resume-hidden-storage-item', (_event, item: HiddenStorageItem) => {
     dataStore!.resumeHiddenStorageItem(item)
   })
+  ipcMain.handle('remote-share:get-status', () => remotePlayServer!.getStatus())
+  ipcMain.handle('remote-share:update-settings', async (_event, update) => {
+    const wasRunning = remotePlayServer!.getStatus().running
+    if (wasRunning) {
+      await remotePlayServer!.stop()
+    }
+    dataStore!.updateRemoteShareSettings(update)
+    if (update.shareEnabled || (wasRunning && update.shareEnabled !== false)) {
+      await remotePlayServer!.start()
+    }
+    return remotePlayServer!.getStatus()
+  })
+  ipcMain.handle('remote-share:start', () => remotePlayServer!.start())
+  ipcMain.handle('remote-share:stop', () => remotePlayServer!.stop())
+  ipcMain.handle('authorized-devices:list', () => dataStore!.getAuthorizedDevices())
+  ipcMain.handle('authorized-devices:update', (_event, deviceId: number, update) =>
+    dataStore!.updateAuthorizedDevice(deviceId, update),
+  )
+  ipcMain.handle('authorized-devices:delete', (_event, deviceId: number) =>
+    dataStore!.deleteAuthorizedDevice(deviceId),
+  )
+  ipcMain.handle('remote-hosts:list', () => dataStore!.getRemoteHosts())
+  ipcMain.handle('remote-hosts:connect', (_event, request: RemoteHostConnectRequest) =>
+    connectRemoteHost(request),
+  )
+  ipcMain.handle('remote-hosts:delete', (_event, hostId: number) =>
+    dataStore!.deleteRemoteHost(hostId),
+  )
   ipcMain.handle('preferences:get-settings', () => dataStore!.getPreferenceSettings())
   ipcMain.handle('lyrics:get', (_event, songId: number, mode) => dataStore!.getLyrics(songId, mode))
   ipcMain.handle('lyrics:import', async () => {
@@ -807,7 +960,7 @@ app.whenReady().then(async () => {
       mainWindow!.setTitleBarOverlay({
         color: titleBarOverlayColor,
         symbolColor: light ? immersiveTitleBarSymbolColor : defaultTitleBarSymbolColor,
-        height: 44,
+        height: 32,
       })
     }
   })
@@ -935,6 +1088,9 @@ app.whenReady().then(async () => {
   ipcMain.handle('playlist:delete', (_event, playlistId: number) =>
     dataStore!.deletePlaylist(playlistId),
   )
+  ipcMain.handle('playlist:restore', (_event, playlist: LibraryPlaylist) =>
+    dataStore!.restorePlaylist(playlist),
+  )
   ipcMain.handle('playlist:rename', (_event, playlistId: number, name: string) =>
     dataStore!.renamePlaylist(playlistId, name),
   )
@@ -968,6 +1124,9 @@ app.whenReady().then(async () => {
   )
   ipcMain.handle('search:remove-recents', (_event, entryIds: number[]) =>
     dataStore!.removeRecentSearches(entryIds),
+  )
+  ipcMain.handle('search:restore-recent', (_event, entry: SearchHistoryEntry) =>
+    dataStore!.restoreRecentSearch(entry),
   )
   ipcMain.handle('search:clear-recent', () => dataStore!.clearRecentSearches())
   ipcMain.handle('recent-played:remove', (_event, songIds: number[]) =>
@@ -1019,6 +1178,7 @@ app.whenReady().then(async () => {
 
 app.on('before-quit', () => {
   isQuitting = true
+  void remotePlayServer?.stop()
 })
 
 app.on('will-quit', () => {

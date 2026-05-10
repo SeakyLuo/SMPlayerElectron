@@ -8,6 +8,7 @@ import type {
   LocalFolderSortCriterion,
   PlaylistSortCriterion,
   ScanLibraryResult,
+  SearchHistoryEntry,
   ViewStateUpdate,
 } from '../shared/contracts'
 
@@ -24,6 +25,7 @@ interface LibraryStoreState {
   setSongsFavorite: (songIds: number[], favorite: boolean) => Promise<void>
   createPlaylist: (name: string, songIds?: number[]) => Promise<void>
   deletePlaylist: (playlistId: number) => Promise<void>
+  restorePlaylist: (playlist: LibraryPlaylist) => Promise<void>
   renamePlaylist: (playlistId: number, name: string) => Promise<void>
   reorderPlaylists: (playlistIds: number[]) => Promise<void>
   addSongToPlaylist: (playlistId: number, songId: number) => Promise<void>
@@ -52,6 +54,7 @@ interface LibraryStoreState {
   addRecentSearch: (query: string) => Promise<void>
   removeRecentSearch: (entryId: number) => Promise<void>
   removeRecentSearches: (entryIds: number[]) => Promise<void>
+  restoreRecentSearch: (entry: SearchHistoryEntry) => Promise<void>
   clearRecentSearches: () => Promise<void>
   removeRecentPlayed: (songIds: number[]) => Promise<void>
   restoreRecentPlayed: (songIds: number[]) => Promise<void>
@@ -94,9 +97,11 @@ const emptySnapshot: LibrarySnapshot = {
     autoPlay: false,
     saveMusicProgress: false,
     hideMultiSelectCommandBarAfterOperation: true,
+    localViewMode: 'grid',
     quitOnClose: true,
     lastPage: '/songs',
     lastPlaylistId: 0,
+    lastReleaseNotesVersion: '',
   },
   counts: {
     songs: 0,
@@ -350,6 +355,25 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
         snapshot: {
           ...state.snapshot,
           playlists: state.snapshot.playlists.filter((playlist) => playlist.id !== playlistId),
+        },
+      }))
+    } catch (error) {
+      set({ error: getErrorMessage(error) })
+    }
+  },
+  restorePlaylist: async (playlist) => {
+    if (!window.smplayer) {
+      return
+    }
+
+    set({ error: null })
+
+    try {
+      await window.smplayer.restorePlaylist(playlist)
+      set((state) => ({
+        snapshot: {
+          ...state.snapshot,
+          playlists: [...state.snapshot.playlists, playlist],
         },
       }))
     } catch (error) {
@@ -872,6 +896,29 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
           search: {
             ...state.snapshot.search,
             recentSearches: state.snapshot.search.recentSearches.filter((entry) => !entryIdSet.has(entry.id)),
+          },
+        },
+      }))
+    } catch (error) {
+      set({ error: getErrorMessage(error) })
+    }
+  },
+  restoreRecentSearch: async (entry) => {
+    if (!window.smplayer) {
+      return
+    }
+
+    set({ error: null })
+
+    try {
+      await window.smplayer.restoreRecentSearch(entry)
+      set((state) => ({
+        snapshot: {
+          ...state.snapshot,
+          search: {
+            ...state.snapshot.search,
+            recentSearches: [entry, ...state.snapshot.search.recentSearches.filter((item) => item.id !== entry.id)]
+              .sort((left, right) => right.searchedAt.localeCompare(left.searchedAt)),
           },
         },
       }))

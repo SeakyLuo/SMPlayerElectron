@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { AlbumArtControl } from '../components/AlbumArtControl'
+import { CommandBar, CommandBarButton } from '../components/CommandBar'
 import { Icon } from '../components/icons'
 import { LoadingState } from '../components/LoadingState'
 import { MenuFlyout } from '../components/MenuFlyout'
@@ -64,7 +65,7 @@ export function AlbumsPage({
   const albumsSort = useLibraryStore((state) => state.snapshot.settings.albumsSort)
   const [sortCriterion, setSortCriterion] = useState<AlbumSortCriterion>(albumsSort)
   const [reverseDisplayOrder, setReverseDisplayOrder] = useState(false)
-  const [sortMenuOpen, setSortMenuOpen] = useState(false)
+  const [sortMenu, setSortMenu] = useState<MenuFlyoutPosition | null>(null)
   const [processing, setProcessing] = useState(false)
   const [multiSelect, setMultiSelect] = useState(false)
   const [selectedAlbumNames, setSelectedAlbumNames] = useState<Set<string>>(new Set())
@@ -100,6 +101,7 @@ export function AlbumsPage({
     [selectedAlbumNames, visibleAlbums],
   )
   const selectedSongIds = selectedAlbums.flatMap((album) => album.songs.map((song) => song.id))
+  const favoriteSongIdSet = useMemo(() => new Set(songs.filter((song) => song.favorite).map((song) => song.id)), [songs])
   const customPlaylists = playlists.filter((playlist) => !playlist.isBuiltIn)
   const albumColumns = Math.max(1, Math.floor((albumGridWidth + ALBUM_COLUMN_GAP) / (ALBUM_TILE_TRACK_WIDTH + ALBUM_COLUMN_GAP)))
   const albumRowCount = Math.ceil(visibleAlbums.length / albumColumns)
@@ -243,117 +245,141 @@ export function AlbumsPage({
     })
   }
 
+  const changeAlbumSort = (criterion: AlbumSortCriterion) => {
+    showProcessing()
+    if (criterion === 'reverse') {
+      setReverseDisplayOrder((current) => !current)
+      scrollAlbumsToTop()
+      return
+    }
+    setReverseDisplayOrder(false)
+    setSortCriterion(criterion)
+    onUpdateSettings({ albumsSort: criterion })
+    scrollAlbumsToTop()
+  }
+
+  const albumSortOptions: AlbumSortCriterion[] = ['reverse', 'default', 'name', 'artist']
+  const albumSortMenuItems: MenuFlyoutItem[] = albumSortOptions.map((criterion) => ({
+    key: `albums-sort-${criterion}`,
+    text: criterion === 'reverse' ? t('local.sortReverseList') : t(`albums.sort.${criterion}`),
+    icon: criterion !== 'reverse' && criterion === sortCriterion ? 'check' : undefined,
+    onClick: () => {
+      changeAlbumSort(criterion)
+    },
+  }))
+
   return (
     <section className="albums-page page-panel">
       <header className="albums-toolbar">
-        <div className="page-search-shell albums-search-shell">
-          <div className={`page-search-form${searchHasText ? ' has-query' : ''}`}>
-            <button
-              className="page-search-submit-button"
-              type="button"
-              aria-label={t('common.search')}
-              onMouseDown={(event) => {
-                event.preventDefault()
-              }}
-              onClick={submitSearch}
-            >
-              <Icon name="search" />
-            </button>
-            <input
-              type="search"
-              value={searchDraft}
-              onFocus={() => {
-                setSearchFocused(true)
-              }}
-              onBlur={() => {
-                setSearchFocused(false)
-              }}
-              onChange={(event) => {
-                setSearchDraft(event.currentTarget.value)
-              }}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault()
-                  submitSearch()
-                }
-              }}
-              placeholder={t('albums.searchAlbumPlaceholder')}
-            />
-            {searchHasText ? (
-              <button
-                className="page-search-clear-button"
-                type="button"
-                aria-label={t('common.clear')}
-                onMouseDown={(event) => {
-                  event.preventDefault()
-                }}
-                onClick={() => {
-                  setSearchDraft('')
-                  setSearchQuery('')
-                  scrollAlbumsToTop()
-                }}
-              >
-                <Icon name="close" />
-              </button>
-            ) : null}
-          </div>
-          {showAlbumSearchSuggestions ? (
-            <>
-              <div className="dropdown-dismiss-layer" onPointerDown={() => setSearchFocused(false)} />
-              <div className="page-search-suggestions">
-                {albumSearchSuggestions.map((album) => (
+        <CommandBar
+          className="albums-commandbar"
+          content={(
+            <div className="page-search-shell albums-search-shell">
+              <div className={`page-search-form${searchHasText ? ' has-query' : ''}`}>
+                <button
+                  className="page-search-submit-button"
+                  type="button"
+                  aria-label={t('common.search')}
+                  onMouseDown={(event) => {
+                    event.preventDefault()
+                  }}
+                  onClick={submitSearch}
+                >
+                  <Icon name="search" />
+                </button>
+                <input
+                  type="search"
+                  value={searchDraft}
+                  onFocus={() => {
+                    setSearchFocused(true)
+                  }}
+                  onBlur={() => {
+                    setSearchFocused(false)
+                  }}
+                  onChange={(event) => {
+                    setSearchDraft(event.currentTarget.value)
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault()
+                      submitSearch()
+                    }
+                  }}
+                  placeholder={t('albums.searchAlbumPlaceholder')}
+                />
+                {searchHasText ? (
                   <button
-                    className="page-search-suggestion"
+                    className="page-search-clear-button"
                     type="button"
-                    key={album.name}
+                    aria-label={t('common.clear')}
                     onMouseDown={(event) => {
                       event.preventDefault()
                     }}
                     onClick={() => {
-                      setSearchDraft(album.name)
-                      setSearchQuery(album.name)
-                      setSearchFocused(false)
+                      setSearchDraft('')
+                      setSearchQuery('')
                       scrollAlbumsToTop()
                     }}
                   >
-                    <span>{album.name}</span>
+                    <Icon name="close" />
                   </button>
-                ))}
+                ) : null}
               </div>
-            </>
-          ) : null}
-        </div>
-        <div className="albums-command-row">
-          <button
-            type="button"
-            className={multiSelect ? 'albums-command is-active' : 'albums-command'}
+              {showAlbumSearchSuggestions ? (
+                <>
+                  <div className="dropdown-dismiss-layer" onPointerDown={() => setSearchFocused(false)} />
+                  <div className="page-search-suggestions">
+                    {albumSearchSuggestions.map((album) => (
+                      <button
+                        className="page-search-suggestion"
+                        type="button"
+                        key={album.name}
+                        onMouseDown={(event) => {
+                          event.preventDefault()
+                        }}
+                        onClick={() => {
+                          setSearchDraft(album.name)
+                          setSearchQuery(album.name)
+                          setSearchFocused(false)
+                          scrollAlbumsToTop()
+                        }}
+                      >
+                        <span>{album.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              ) : null}
+            </div>
+          )}
+        >
+          <CommandBarButton
+            icon="menu"
+            label={t('common.multiSelect')}
+            active={multiSelect}
             onClick={() => {
               setMultiSelect(true)
             }}
-          >
-            <Icon name="menu" />
-            {t('common.multiSelect')}
-          </button>
-          <AlbumSortMenu
-            value={sortCriterion}
-            open={sortMenuOpen}
-            t={t}
-            onOpenChange={setSortMenuOpen}
-            onChange={(criterion) => {
-              showProcessing()
-              if (criterion === 'reverse') {
-                setReverseDisplayOrder((current) => !current)
-                scrollAlbumsToTop()
-                return
-              }
-              setReverseDisplayOrder(false)
-              setSortCriterion(criterion)
-              onUpdateSettings({ albumsSort: criterion })
-              scrollAlbumsToTop()
+          />
+          <CommandBarButton
+            icon="sort"
+            label={t(`albums.sort.${sortCriterion}`)}
+            ariaHasPopup="menu"
+            ariaExpanded={sortMenu != null}
+            onClick={(event) => {
+              const rect = event.currentTarget.getBoundingClientRect()
+              setSortMenu({ x: rect.left, y: rect.bottom + 4 })
             }}
           />
-        </div>
+        </CommandBar>
       </header>
+      {sortMenu ? (
+        <MenuFlyout
+          position={sortMenu}
+          onClose={() => setSortMenu(null)}
+          items={albumSortMenuItems}
+        />
+      ) : null}
 
       {loading || scanning || processing ? <div className="albums-progress" aria-label={t('nowPlaying.loading')} /> : null}
 
@@ -474,7 +500,7 @@ export function AlbumsPage({
               onAddSongsToNowPlaying(albumContextMenu.album.songs.map((song) => song.id))
             },
             onAddToFavorites: () => {
-              addSongsToFavorites(albumContextMenu.album.songs.map((song) => song.id))
+              addSongsToFavorites(albumContextMenu.album.songs.filter((song) => !song.favorite).map((song) => song.id))
             },
             onCreatePlaylist: (name) => {
               onCreatePlaylistWithSongs(name, albumContextMenu.album.songs.map((song) => song.id))
@@ -497,28 +523,32 @@ export function AlbumsPage({
           onClose={() => {
             setAddToMenu(null)
           }}
-          items={getAddToPlaylistsMenuItems({
-            playlists: customPlaylists,
-            songIds: addToMenu.songIds,
-            defaultPlaylistName: addToMenu.defaultPlaylistName,
-            t,
-            onAddToNowPlaying: () => {
-              onAddSongsToNowPlaying(addToMenu.songIds)
-              hideSelectionAfterOperation()
-            },
-            onAddToFavorites: () => {
-              addSongsToFavorites(addToMenu.songIds)
-              hideSelectionAfterOperation()
-            },
-            onCreatePlaylist: (name) => {
-              onCreatePlaylistWithSongs(name, addToMenu.songIds)
-              hideSelectionAfterOperation()
-            },
-            onAddToPlaylist: (playlistId) => {
-              onAddSongsToPlaylist(playlistId, addToMenu.songIds)
-              hideSelectionAfterOperation()
-            },
-          })}
+          items={[
+            getAddToPlaylistMenuFlyoutItem({
+              playlists: customPlaylists,
+              songIds: addToMenu.songIds,
+              t,
+              defaultPlaylistName: addToMenu.defaultPlaylistName,
+              includeNowPlaying: true,
+              includeFavorites: addToMenu.songIds.some((songId) => !favoriteSongIdSet.has(songId)),
+              onAddToNowPlaying: () => {
+                onAddSongsToNowPlaying(addToMenu.songIds)
+                hideSelectionAfterOperation()
+              },
+              onToggleFavorite: () => {
+                addSongsToFavorites(addToMenu.songIds.filter((songId) => !favoriteSongIdSet.has(songId)))
+                hideSelectionAfterOperation()
+              },
+              onCreatePlaylist: (name) => {
+                onCreatePlaylistWithSongs(name, addToMenu.songIds)
+                hideSelectionAfterOperation()
+              },
+              onAddToPlaylist: (playlistId) => {
+                onAddSongsToPlaylist(playlistId, addToMenu.songIds)
+                hideSelectionAfterOperation()
+              },
+            }),
+          ].filter((item) => item != null)}
         />
       ) : null}
 
@@ -555,188 +585,6 @@ export function AlbumsPage({
         </div>
       ) : null}
     </section>
-  )
-}
-
-function getAddToPlaylistsMenuItems({
-  playlists,
-  songIds,
-  defaultPlaylistName,
-  t,
-  onAddToNowPlaying,
-  onAddToFavorites,
-  onCreatePlaylist,
-  onAddToPlaylist,
-}: {
-  playlists: LibraryPlaylist[]
-  songIds: number[]
-  defaultPlaylistName: string
-  t: Translator
-  onAddToNowPlaying: () => void
-  onAddToFavorites: () => void
-  onCreatePlaylist: (name: string) => void
-  onAddToPlaylist: (playlistId: number) => void
-}) {
-  const items: MenuFlyoutItem[] = [
-    {
-      key: 'now-playing',
-      text: t('common.nowPlaying'),
-      icon: 'next',
-      onClick: onAddToNowPlaying,
-    },
-    {
-      key: 'favorites',
-      text: t('common.myFavorites'),
-      icon: 'heart',
-      onClick: onAddToFavorites,
-    },
-    { key: 'built-in-separator', text: '', separator: true },
-    {
-      key: 'new-playlist',
-      text: t('playlists.newPlaylist'),
-      icon: 'plus',
-      onClick: () => {
-        const name = window.prompt(t('playlists.newName'), defaultPlaylistName)
-        const nextName = name?.trim()
-        if (nextName) {
-          onCreatePlaylist(nextName)
-        }
-      },
-    },
-  ]
-  const songIdSet = new Set(songIds)
-  const addablePlaylists = playlists.filter((playlist) => {
-    const playlistSongIds = new Set(playlist.songIds)
-    for (const songId of songIdSet) {
-      if (!playlistSongIds.has(songId)) {
-        return true
-      }
-    }
-    return false
-  })
-  if (addablePlaylists.length > 0) {
-    items.push({ key: 'separator-playlists', text: '', separator: true })
-  }
-  for (const playlist of addablePlaylists) {
-    items.push({
-      key: `playlist-${playlist.id}`,
-      text: playlist.name,
-      icon: 'playlists',
-      onClick: () => {
-        onAddToPlaylist(playlist.id)
-      },
-    })
-  }
-  return items
-}
-
-function AlbumSortMenu({
-  value,
-  open,
-  t,
-  onOpenChange,
-  onChange,
-}: {
-  value: AlbumSortCriterion
-  open: boolean
-  t: Translator
-  onOpenChange: (open: boolean) => void
-  onChange: (criterion: AlbumSortCriterion) => void
-}) {
-  const options: AlbumSortCriterion[] = ['reverse', 'default', 'name', 'artist']
-  const menuRef = useRef<HTMLDivElement | null>(null)
-
-  useEffect(() => {
-    if (!open) {
-      return
-    }
-
-    const closeSortMenu = (event: PointerEvent) => {
-      const target = event.target
-      if (target instanceof Node && menuRef.current?.contains(target)) {
-        return
-      }
-
-      onOpenChange(false)
-    }
-
-    document.addEventListener('pointerdown', closeSortMenu, true)
-    return () => {
-      document.removeEventListener('pointerdown', closeSortMenu, true)
-    }
-  }, [onOpenChange, open])
-
-  return (
-    <div
-      className="albums-sort-menu"
-      ref={menuRef}
-      onBlur={(event) => {
-        const nextFocus = event.relatedTarget
-        if (!(nextFocus instanceof Node) || !event.currentTarget.contains(nextFocus)) {
-          onOpenChange(false)
-        }
-      }}
-    >
-      <button
-        type="button"
-        className="albums-sort-trigger"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        onPointerDown={(event) => {
-          event.stopPropagation()
-        }}
-        onClick={() => {
-          onOpenChange(!open)
-        }}
-      >
-        <Icon name="sort" />
-        <span>{t(`albums.sort.${value}`)}</span>
-        <Icon name={open ? 'chevronUp' : 'chevronDown'} />
-      </button>
-      {open ? (
-        <>
-          <div className="albums-sort-dismiss-layer" onPointerDown={() => onOpenChange(false)} />
-          <div
-            className="albums-sort-options"
-            role="listbox"
-            onPointerDown={(event) => {
-              event.stopPropagation()
-            }}
-          >
-            {options.map((option) => (
-              option === 'reverse' ? (
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={false}
-                  key={option}
-                  onClick={() => {
-                    onChange(option)
-                    onOpenChange(false)
-                  }}
-                >
-                  {t('local.sortReverseList')}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={option === value}
-                  className={option === value ? 'is-selected' : ''}
-                  key={option}
-                  onClick={() => {
-                    onChange(option)
-                    onOpenChange(false)
-                  }}
-                >
-                  {t(`albums.sort.${option}`)}
-                </button>
-              )
-            ))}
-          </div>
-        </>
-      ) : null}
-    </div>
   )
 }
 
@@ -852,7 +700,7 @@ function getAlbumContextMenuItems({
     t,
     defaultPlaylistName: album.name,
     includeNowPlaying: true,
-    includeFavorites: onAddToFavorites != null,
+    includeFavorites: onAddToFavorites != null && album.songs.some((song) => !song.favorite),
     onAddToNowPlaying,
     onToggleFavorite: onAddToFavorites,
     onCreatePlaylist,

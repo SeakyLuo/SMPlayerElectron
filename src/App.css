@@ -3,7 +3,9 @@
 @import './styles/sidebar-search.css';
 @import './styles/sidebar-nav.css';
 @import './styles/workspace.css';
+@import './styles/appbar.css';
 @import './styles/common.css';
+@import './styles/commandbar.css';
 @import './styles/library.css';
 @import './styles/artists.css';
 @import './styles/albums.css';
@@ -25,4 +27,6 @@
 @import './styles/preferences.css';
 @import './styles/lyrics-settings.css';
 @import './styles/player.css';
+@import './styles/scrollbar.css';
+@import './styles/undoable-notification.css';
 @import './styles/responsive.css';

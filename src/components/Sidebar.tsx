@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FocusEvent, type KeyboardEvent, type PointerEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { flushSync } from 'react-dom'
 import { useLocation, useNavigate } from 'react-router-dom'
 
@@ -14,7 +15,7 @@ interface NavLinkItem {
 }
 
 const primaryLinks: NavLinkItem[] = [
-  { to: '/songs', labelKey: 'library.title', label: 'Music Library', icon: 'songs' },
+  { to: '/songs', labelKey: 'library.title', label: 'Music Library', icon: 'musicLibrary' },
   { to: '/artists', labelKey: 'common.artists', label: 'Artists', icon: 'users' },
   { to: '/albums', labelKey: 'common.albums', label: 'Albums', icon: 'albums' },
 ]
@@ -22,7 +23,7 @@ const primaryLinks: NavLinkItem[] = [
 const secondaryLinks: NavLinkItem[] = [
   { to: '/local', labelKey: 'common.local', label: 'Local', icon: 'local' },
   { to: '/recent', labelKey: 'common.recent', label: 'Recent', icon: 'recent' },
-  { to: '/now-playing', labelKey: 'common.nowPlaying', label: 'Now Playing', icon: 'nowPlaying' },
+  { to: '/now-playing', labelKey: 'common.nowPlaying', label: 'Now Playing', icon: 'songs' },
   { to: '/favorites', labelKey: 'common.myFavorites', label: 'My Favorites', icon: 'heart' },
 ]
 
@@ -49,6 +50,7 @@ interface SidebarProps {
   onToggleCollapsed: () => void
   onGoBack: () => void
   onNavigate: () => void
+  onCreatePlaylist: () => void
   onReorderPlaylists: (playlistIds: number[]) => void
   onQuickPlayPlaylist: (playlistId: number) => void
   getRestoredNavTarget: (target: string) => string
@@ -70,6 +72,7 @@ export function Sidebar({
   onToggleCollapsed,
   onGoBack,
   onNavigate,
+  onCreatePlaylist,
   onReorderPlaylists,
   onQuickPlayPlaylist,
   getRestoredNavTarget,
@@ -78,6 +81,7 @@ export function Sidebar({
   const [isPlaylistNavExpanded, setIsPlaylistNavExpanded] = useState(false)
   const [draggingPlaylistId, setDraggingPlaylistId] = useState<number | null>(null)
   const [dropIndicator, setDropIndicator] = useState<{ playlistId: number; position: 'before' | 'after' } | null>(null)
+  const [collapsedTooltip, setCollapsedTooltip] = useState<{ text: string; left: number; top: number } | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const focusSearchAfterExpandRef = useRef(false)
   const draggedPlaylistIdRef = useRef<number | null>(null)
@@ -107,6 +111,12 @@ export function Sidebar({
       setIsPlaylistNavExpanded(true)
     }
   }, [collapsed, isPlaylistRoute])
+
+  useEffect(() => {
+    if (!collapsed) {
+      setCollapsedTooltip(null)
+    }
+  }, [collapsed])
 
   const expandAndFocusSearch = () => {
     focusSearchAfterExpandRef.current = true
@@ -151,8 +161,56 @@ export function Sidebar({
     }
   }
 
+  const showCollapsedTooltip = (target: EventTarget | null) => {
+    if (!collapsed || !(target instanceof Element)) {
+      return
+    }
+
+    const tooltipTarget = target.closest<HTMLElement>('[data-tooltip]')
+    if (!tooltipTarget) {
+      setCollapsedTooltip(null)
+      return
+    }
+
+    const text = tooltipTarget.dataset.tooltip
+    if (!text) {
+      return
+    }
+
+    const rect = tooltipTarget.getBoundingClientRect()
+    setCollapsedTooltip({
+      text,
+      left: rect.right + 10,
+      top: rect.top + rect.height / 2,
+    })
+  }
+
+  const hideCollapsedTooltip = () => {
+    setCollapsedTooltip(null)
+  }
+
   return (
-    <aside className={`sidebar${collapsed ? ' is-collapsed' : ''}`}>
+    <>
+    <aside
+      className={`sidebar${collapsed ? ' is-collapsed' : ''}`}
+      onPointerOver={(event: PointerEvent<HTMLElement>) => {
+        showCollapsedTooltip(event.target)
+      }}
+      onPointerOut={(event: PointerEvent<HTMLElement>) => {
+        if (!(event.currentTarget as HTMLElement).contains(event.relatedTarget as Node | null)) {
+          hideCollapsedTooltip()
+        }
+      }}
+      onFocus={(event: FocusEvent<HTMLElement>) => {
+        showCollapsedTooltip(event.target)
+      }}
+      onBlur={(event: FocusEvent<HTMLElement>) => {
+        if (!(event.currentTarget as HTMLElement).contains(event.relatedTarget as Node | null)) {
+          hideCollapsedTooltip()
+        }
+      }}
+      onScroll={hideCollapsedTooltip}
+    >
       <div className="sidebar-titlebar">
         {canGoBack ? (
           <button
@@ -326,6 +384,18 @@ export function Sidebar({
               <NavItem to="/playlists" icon="playlists" label={t('common.playlists')} onNavigate={onNavigate} exactActive />
               <button
                 type="button"
+                className="playlist-nav-create"
+                title={t('playlists.createNew')}
+                aria-label={t('playlists.createNew')}
+                onClick={() => {
+                  onCreatePlaylist()
+                  setIsPlaylistNavExpanded(true)
+                }}
+              >
+                <Icon name="plus" />
+              </button>
+              <button
+                type="button"
                 className="playlist-nav-toggle"
                 aria-label={isPlaylistNavExpanded ? t('sidebar.collapseNavigation') : t('sidebar.expandNavigation')}
                 aria-expanded={isPlaylistNavExpanded}
@@ -406,6 +476,21 @@ export function Sidebar({
         <NavItem {...settingsLink} label={t(settingsLink.labelKey)} targetTo={getRestoredNavTarget(settingsLink.to)} onNavigate={onNavigate} />
       </div>
     </aside>
+    {collapsed && collapsedTooltip
+      ? createPortal(
+          <div
+            className="sidebar-floating-tooltip"
+            style={{
+              left: collapsedTooltip.left,
+              top: collapsedTooltip.top,
+            }}
+          >
+            {collapsedTooltip.text}
+          </div>,
+          document.body,
+        )
+      : null}
+    </>
   )
 }
 
