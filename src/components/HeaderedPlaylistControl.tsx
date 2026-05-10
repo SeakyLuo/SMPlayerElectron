@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent, type RefObject } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type PointerEvent, type RefObject, type SetStateAction } from 'react'
 
 import { getDisplayArtists } from '../shared/artists'
 import { extractArtworkColorRgb, getDefaultArtworkColorRgb } from '../shared/artworkColor'
@@ -10,11 +10,12 @@ import { useLibraryStore } from '../state/useLibraryStore'
 import { usePreferenceStore } from '../state/usePreferenceStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
 import { ArtworkImage } from './ArtworkImage'
+import { AppBarPortal } from './AppBarPortal'
 import { CommandBar, CommandBarButton } from './CommandBar'
 import { DefaultAlbumArtwork } from './DefaultAlbumArtwork'
 import { requestConfirmDialog, requestTextDialog } from './dialogService'
 import { MenuFlyout } from './MenuFlyout'
-import { getAddToPlaylistMenuFlyoutItem, getMusicMenuFlyoutItems, getPreferenceMenuFlyoutItem, type MenuFlyoutPosition } from './MenuFlyoutHelper'
+import { getAddToPlaylistMenuFlyoutItem, getMusicMenuFlyoutItems, getPreferenceMenuFlyoutItem, type MenuFlyoutItem, type MenuFlyoutPosition } from './MenuFlyoutHelper'
 import { MultiSelectCommandBar } from './MultiSelectCommandBar'
 import { PlaylistControlItem } from './PlaylistControlItem'
 import { MusicDialog } from './MusicDialog'
@@ -106,7 +107,8 @@ export function HeaderedPlaylistControl({
   onPlayNext,
 }: HeaderedPlaylistControlProps) {
   const controlRef = useRef<HTMLElement | null>(null)
-  const onScrollbarPointerDown = useHeaderedPlaylistScroll(controlRef, title)
+  const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false)
+  const onScrollbarPointerDown = useHeaderedPlaylistScroll(controlRef, title, setIsHeaderCollapsed)
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedSongIds, setSelectedSongIds] = useState<Set<number>>(new Set())
   const [addToMenu, setAddToMenu] = useState<(MenuFlyoutPosition & { songIds: number[] }) | null>(null)
@@ -319,6 +321,12 @@ export function HeaderedPlaylistControl({
     setSortMenu({ x: rect.left, y: rect.bottom + 4 })
   }
 
+  const getToolbarOverflowMenuPosition = () => {
+    const menu = document.querySelector('.library-context-menu') as HTMLElement
+    const menuRect = menu.getBoundingClientRect()
+    return { x: menuRect.left, y: menuRect.top }
+  }
+
   const openRenameDialog = () => {
     void requestTextDialog({
       title: translateCaption('playlists.rename'),
@@ -454,6 +462,96 @@ export function HeaderedPlaylistControl({
     </CommandBar>
   )
 
+  const renderShyCommandBar = () => {
+    const overflowItems: MenuFlyoutItem[] = [
+      {
+        key: 'multi-select',
+        text: captionFor('multiSelect'),
+        icon: 'menu',
+        disabled: songs.length === 0,
+        onClick: () => {
+          setSelectionMode(true)
+        },
+      },
+    ]
+
+    if (canSetPreferred && onSetPreferred) {
+      overflowItems.push({
+        key: 'preference-settings',
+        text: captionFor('preferenceSettings'),
+        icon: 'star',
+        onClick: () => {
+          const position = getToolbarOverflowMenuPosition()
+          openPreferenceMenu(position.x, position.y)
+        },
+      })
+    }
+
+    overflowItems.push({
+      key: 'sort',
+      text: captionFor('sort'),
+      icon: 'sort',
+      disabled: songs.length === 0,
+      onClick: () => {
+        setPreferenceMenu(null)
+        setSortMenu(getToolbarOverflowMenuPosition())
+      },
+    })
+
+    if (canRename) {
+      overflowItems.push({
+        key: 'rename',
+        text: captionFor('rename'),
+        icon: 'rename',
+        onClick: openRenameDialog,
+      })
+    }
+
+    if (canClear) {
+      overflowItems.push({
+        key: 'clear',
+        text: captionFor('clear'),
+        icon: 'clear',
+        disabled: songs.length === 0,
+        onClick: requestClear,
+      })
+    }
+
+    if (canDelete) {
+      overflowItems.push({
+        key: 'delete',
+        text: captionFor('delete'),
+        icon: 'trash',
+        onClick: requestDelete,
+      })
+    }
+
+    if (canEditArtwork && onEditArtwork) {
+      overflowItems.push({
+        key: 'edit-artwork',
+        text: captionFor('editArtwork'),
+        icon: 'pictures',
+        onClick: onEditArtwork,
+      })
+    }
+
+    return (
+      <CommandBar
+        className="appbar-commandbar headered-playlist-appbar-commandbar"
+        dynamicOverflow={false}
+        overflowItems={overflowItems}
+        overflowLabel={t('player.more')}
+      >
+        <CommandBarButton
+          icon="shuffle"
+          label={captionFor('shuffle')}
+          disabled={songs.length === 0}
+          onClick={shuffle}
+        />
+      </CommandBar>
+    )
+  }
+
   return (
     <section
       ref={controlRef}
@@ -468,12 +566,11 @@ export function HeaderedPlaylistControl({
         <div className="headered-playlist-scrollbar-thumb" onPointerDown={onScrollbarPointerDown} />
       </div>
       <div className="headered-playlist-backdrop" aria-hidden="true" />
-      <div className="headered-playlist-shy-bar">
-        <div className="headered-playlist-shy-header">
-          <strong title={title}>{title}</strong>
-        </div>
-        {renderCommandBar()}
-      </div>
+      {isHeaderCollapsed ? (
+        <AppBarPortal>
+          {renderShyCommandBar()}
+        </AppBarPortal>
+      ) : null}
       <header
         className="headered-playlist-hero"
         onPointerDownCapture={startHeaderDrag}
@@ -857,7 +954,11 @@ export function HeaderedPlaylistControl({
   }
 }
 
-function useHeaderedPlaylistScroll(controlRef: RefObject<HTMLElement | null>, title: string) {
+function useHeaderedPlaylistScroll(
+  controlRef: RefObject<HTMLElement | null>,
+  title: string,
+  setIsHeaderCollapsed: Dispatch<SetStateAction<boolean>>,
+) {
   const scrollContainerRef = useRef<HTMLElement | null>(null)
   const headerCollapsedRef = useRef(false)
   const appBarTitleRef = useRef('')
@@ -879,6 +980,7 @@ function useHeaderedPlaylistScroll(controlRef: RefObject<HTMLElement | null>, ti
         ? scrollTop > (isNarrow ? 76 : 186)
         : scrollTop >= (isNarrow ? 112 : 224)
       headerCollapsedRef.current = isCollapsed
+      setIsHeaderCollapsed((current) => current === isCollapsed ? current : isCollapsed)
       const nextAppBarTitle = isNarrow && isCollapsed ? title : ''
       if (appBarTitleRef.current !== nextAppBarTitle) {
         appBarTitleRef.current = nextAppBarTitle
@@ -901,15 +1003,19 @@ function useHeaderedPlaylistScroll(controlRef: RefObject<HTMLElement | null>, ti
       const commandMargin = isNarrow
         ? Math.round(8 - collapseProgress * 4)
         : Math.round(30 - collapseProgress * 22)
-      const scrollbarTop = Math.round(heroHeight + 4)
       const scrollContainerRect = scrollContainer.getBoundingClientRect()
-      const fixedHeaderLeft = Math.round(scrollContainerRect.left)
-      const fixedHeaderRight = Math.max(0, Math.round(window.innerWidth - scrollContainerRect.right))
+      const fixedContainer = scrollContainer.closest('.workspace') as HTMLElement
+      const fixedContainerRect = fixedContainer.getBoundingClientRect()
+      const fixedHeaderViewportTop = Math.round(scrollContainerRect.top)
+      const fixedHeaderTop = Math.round(scrollContainerRect.top - fixedContainerRect.top)
+      const fixedHeaderLeft = Math.round(scrollContainerRect.left - fixedContainerRect.left)
+      const fixedHeaderRight = Math.max(0, Math.round(fixedContainerRect.right - scrollContainerRect.right))
+      const scrollbarTop = Math.round(fixedHeaderTop + heroHeight + 4)
       const playerRect = document.querySelector('.player-bar')?.getBoundingClientRect()
-      const scrollbarBottom = Math.max(10, Math.round(window.innerHeight - (playerRect?.top ?? scrollContainerRect.bottom) + 10))
+      const scrollbarBottom = Math.max(10, Math.round(fixedContainerRect.bottom - (playerRect?.top ?? scrollContainerRect.bottom) + 10))
       const scrollbarHeight = Math.max(48, window.innerHeight - scrollbarTop - scrollbarBottom)
       const visibleViewportHeight = Math.max(48, scrollbarHeight)
-      const scrollbarRight = Math.max(2, Math.round(window.innerWidth - scrollContainerRect.right + 2))
+      const scrollbarRight = Math.max(2, Math.round(fixedContainerRect.right - scrollContainerRect.right + 2))
       const thumbHeight = maxScrollTop > 0
         ? Math.max(38, Math.round((visibleViewportHeight / scrollContainer.scrollHeight) * scrollbarHeight))
         : scrollbarHeight
@@ -923,6 +1029,8 @@ function useHeaderedPlaylistScroll(controlRef: RefObject<HTMLElement | null>, ti
       control.style.setProperty('--header-cover-size', `${coverSize}px`)
       control.style.setProperty('--header-title-size', `${titleSize}px`)
       control.style.setProperty('--header-command-margin', `${commandMargin}px`)
+      control.style.setProperty('--header-viewport-top', `${fixedHeaderViewportTop}px`)
+      control.style.setProperty('--header-fixed-top', `${fixedHeaderTop}px`)
       control.style.setProperty('--header-fixed-left', `${fixedHeaderLeft}px`)
       control.style.setProperty('--header-fixed-right', `${fixedHeaderRight}px`)
       control.style.setProperty('--header-scrollbar-top', `${scrollbarTop}px`)
@@ -952,6 +1060,7 @@ function useHeaderedPlaylistScroll(controlRef: RefObject<HTMLElement | null>, ti
         window.cancelAnimationFrame(animationFrame)
       }
       control.classList.remove('is-header-collapsed')
+      setIsHeaderCollapsed(false)
       if (appBarTitleRef.current) {
         appBarTitleRef.current = ''
         window.dispatchEvent(new CustomEvent('smplayer:immersive-title-change', {

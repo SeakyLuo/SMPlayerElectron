@@ -6,7 +6,7 @@
 }
 
 .app-shell.nav-minimal .library-page {
-  padding: 8px 12px 0;
+  padding: 8px 12px 12px;
 }
 
 .workspace-content:has(.library-page) {
@@ -578,7 +578,7 @@
   flex-direction: column;
   padding: 4px;
   border-radius: 10px;
-  margin-bottom: calc(var(--player-height) + 8px);
+  margin-bottom: 0;
 }
 
 .library-content-shell.is-compact .library-quick-jump {
@@ -874,20 +874,13 @@
 .library-content-shell.is-compact .library-row-artwork-play {
   width: 30px;
   height: 30px;
-  opacity: 1;
-  pointer-events: auto;
-  transform: translate(-50%, -50%) scale(1);
-}
-
-.library-content-shell.is-compact .music-table tbody tr.is-current .library-row-artwork-play {
-  opacity: 0;
-  pointer-events: none;
 }
 
 .library-content-shell.is-compact .music-table tbody tr.is-current:hover .library-row-artwork-play,
 .library-content-shell.is-compact .music-table tbody tr.is-current:focus-within .library-row-artwork-play {
   opacity: 1;
   pointer-events: auto;
+  transform: translate(-50%, -50%) scale(1);
 }
 
 .library-content-shell.is-compact .library-row-playing-wave,

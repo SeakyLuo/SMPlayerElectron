@@ -148,6 +148,20 @@
 .app-shell.nav-minimal .appbar-title-group {
   flex: 1 1 auto;
   gap: 10px;
+  -webkit-app-region: drag;
+  app-region: drag;
+  user-select: none;
+}
+
+.app-shell.nav-minimal .appbar-title-group h1 {
+  -webkit-app-region: drag;
+  app-region: drag;
+  user-select: none;
+}
+
+.app-shell.nav-minimal .appbar-title-group .appbar-icon-button {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 .app-shell.nav-minimal .workspace.is-local-route .workspace-header {

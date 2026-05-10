@@ -156,14 +156,6 @@
   content: none;
 }
 
-.headered-playlist-shy-header {
-  display: none;
-}
-
-.headered-playlist-shy-bar {
-  display: none;
-}
-
 .headered-playlist-hero {
   position: sticky;
   top: 0;
@@ -216,7 +208,7 @@
 
 .headered-playlist-control.is-header-collapsed .headered-playlist-hero {
   position: fixed;
-  top: 0;
+  top: var(--header-fixed-top, 0px);
   right: var(--header-fixed-right, 0px);
   left: var(--header-fixed-left, var(--sidebar-width));
   width: auto;
@@ -238,8 +230,8 @@
   left: var(--header-fixed-left, var(--sidebar-width));
 }
 
-.app-shell.nav-minimal-open .headered-playlist-drag-region,
-.app-shell.nav-minimal-open .headered-playlist-control.is-header-collapsed .headered-playlist-hero {
+.app-shell.nav-minimal.nav-minimal-open .headered-playlist-drag-region,
+.app-shell.nav-minimal.nav-minimal-open .headered-playlist-control.is-header-collapsed .headered-playlist-hero {
   pointer-events: none;
   -webkit-app-region: no-drag;
   app-region: no-drag;
@@ -509,6 +501,43 @@
   border: 1px solid rgba(255, 255, 255, 0.56);
 }
 
+.headered-playlist-appbar-commandbar {
+  display: none;
+}
+
+.app-shell.nav-minimal .headered-playlist-appbar-commandbar {
+  display: flex;
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 0;
+  height: 40px;
+}
+
+.app-shell.nav-minimal .headered-playlist-appbar-commandbar .uwp-commandbar-primary {
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.app-shell.nav-minimal .headered-playlist-appbar-commandbar .uwp-commandbar-item .uwp-commandbar-button {
+  width: auto;
+  min-width: 40px;
+  max-width: 132px;
+  padding: 0 10px;
+  gap: 7px;
+}
+
+.app-shell.nav-minimal .headered-playlist-appbar-commandbar .uwp-commandbar-button-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell.nav-minimal .headered-playlist-appbar-commandbar .uwp-commandbar-more .uwp-commandbar-button {
+  width: 40px;
+  padding: 0;
+}
+
 @media (max-width: 720px) {
   .app-shell.nav-minimal .immersive-detail-page {
     background: transparent;
@@ -535,49 +564,6 @@
 
   .headered-playlist-backdrop::before {
     content: none;
-  }
-
-  .headered-playlist-shy-bar {
-    position: sticky;
-    top: 0;
-    z-index: 72;
-    display: none;
-    padding: 0 2px 4px;
-    box-sizing: border-box;
-    background: rgba(248, 251, 254, 0.78);
-    backdrop-filter: blur(22px) saturate(126%);
-    -webkit-backdrop-filter: blur(22px) saturate(126%);
-    -webkit-app-region: no-drag;
-    app-region: no-drag;
-    pointer-events: auto;
-  }
-
-  .headered-playlist-control.is-header-collapsed .headered-playlist-shy-bar {
-    display: block;
-  }
-
-  .headered-playlist-shy-header {
-    display: flex;
-    align-items: center;
-    min-height: 36px;
-    padding: 0 4px 0 44px;
-    box-sizing: border-box;
-    color: var(--text-strong);
-    pointer-events: none;
-    opacity: 1;
-    transform: none;
-    -webkit-app-region: no-drag;
-    app-region: no-drag;
-  }
-
-  .headered-playlist-shy-header strong {
-    min-width: 0;
-    overflow: hidden;
-    font-size: 16px;
-    font-weight: 800;
-    line-height: 36px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   .headered-playlist-hero {
@@ -701,20 +687,6 @@
   .headered-playlist-commandbar button:hover,
   .headered-playlist-commandbar button:focus-visible {
     background: rgba(255, 255, 255, 0.18);
-  }
-
-  .headered-playlist-control.is-header-collapsed .headered-playlist-shy-bar .headered-playlist-commandbar {
-    position: relative;
-    z-index: 2;
-    justify-content: flex-start;
-    width: 100%;
-    min-height: 42px;
-    margin: 0;
-    padding: 0;
-    overflow: hidden;
-    pointer-events: auto;
-    -webkit-app-region: no-drag;
-    app-region: no-drag;
   }
 
   .headered-playlist-control.is-header-collapsed .headered-playlist-list {
