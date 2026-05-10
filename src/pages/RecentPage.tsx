@@ -1,7 +1,9 @@
 import clsx from 'clsx'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 
+import { APPBAR_PAGE_ACTIONS_ID } from '../components/AppBar'
 import { CommandBar, CommandBarButton } from '../components/CommandBar'
 import { requestConfirmDialog } from '../components/dialogService'
 import { GridViewMusicItemControl } from '../components/GridViewMusicItemControl'
@@ -121,6 +123,7 @@ export function RecentPage({
   const [songDialog, setSongDialog] = useState<{ song: LibrarySong; mode: 'properties' | 'lyrics' | 'album-art' } | null>(null)
   const [songPreferenceItem, setSongPreferenceItem] = useState<PreferenceItemSnapshot | null>(null)
   const [recentAddedTimelineLabel, setRecentAddedTimelineLabel] = useState('')
+  const [appBarActionsHost, setAppBarActionsHost] = useState<HTMLElement | null>(null)
   const navigate = useNavigate()
   const folders = useLibraryStore((state) => state.snapshot.folders)
   const nowPlayingSongIds = useLibraryStore((state) => state.snapshot.nowPlaying.songIds)
@@ -161,6 +164,19 @@ export function RecentPage({
   const selectedVisibleSearchIds = recentSearches.filter((entry) => selectedSearchIds.has(entry.id)).map((entry) => entry.id)
   const selectedCount = activeTab === 'searches' ? selectedVisibleSearchIds.length : selectedVisibleSongIds.length
   const canClearHistory = activeTab === 'played' ? recentSongs.length > 0 : recentSearches.length > 0
+
+  useEffect(() => {
+    const updateAppBarActionsHost = () => {
+      setAppBarActionsHost(document.getElementById(APPBAR_PAGE_ACTIONS_ID))
+    }
+
+    updateAppBarActionsHost()
+    window.addEventListener('resize', updateAppBarActionsHost)
+
+    return () => {
+      window.removeEventListener('resize', updateAppBarActionsHost)
+    }
+  }, [])
 
   useEffect(() => {
     if (songMenu) {
@@ -248,36 +264,50 @@ export function RecentPage({
     })
   }
 
+  const renderRecentTabs = () => (
+    <>
+      <RecentTabButton
+        active={activeTab === 'added'}
+        count={recentAddedSongs.length}
+        label={t('recent.added')}
+        showCount={showCount}
+        onClick={() => {
+          switchTab('added')
+        }}
+      />
+      <RecentTabButton
+        active={activeTab === 'played'}
+        count={recentSongs.length}
+        label={t('recent.played')}
+        showCount={showCount}
+        onClick={() => {
+          switchTab('played')
+        }}
+      />
+      <RecentTabButton
+        active={activeTab === 'searches'}
+        count={recentSearches.length}
+        label={t('recent.searches')}
+        showCount={showCount}
+        onClick={() => {
+          switchTab('searches')
+        }}
+      />
+    </>
+  )
+
   return (
     <section className="recent-page page-panel">
+      {appBarActionsHost
+        ? createPortal(
+            <div className="recent-appbar-tabs search-result-tabs" role="tablist">
+              {renderRecentTabs()}
+            </div>,
+            appBarActionsHost,
+          )
+        : null}
       <div className="recent-tabs search-result-tabs">
-        <RecentTabButton
-          active={activeTab === 'added'}
-          count={recentAddedSongs.length}
-          label={t('recent.added')}
-          showCount={showCount}
-          onClick={() => {
-            switchTab('added')
-          }}
-        />
-        <RecentTabButton
-          active={activeTab === 'played'}
-          count={recentSongs.length}
-          label={t('recent.played')}
-          showCount={showCount}
-          onClick={() => {
-            switchTab('played')
-          }}
-        />
-        <RecentTabButton
-          active={activeTab === 'searches'}
-          count={recentSearches.length}
-          label={t('recent.searches')}
-          showCount={showCount}
-          onClick={() => {
-            switchTab('searches')
-          }}
-        />
+        {renderRecentTabs()}
       </div>
 
       <CommandBar
@@ -475,10 +505,10 @@ export function RecentPage({
               })
             },
             onSeeArtist: (artist) => {
-              navigate(`/artists/${encodeURIComponent(artist)}`)
+              navigate(`/artists?artist=${encodeURIComponent(artist)}`)
             },
             onSeeAlbum: () => {
-              navigate(`/albums/${encodeURIComponent(songMenu.song.album || t('common.albumUnknown'))}`)
+              navigate(`/albums?album=${encodeURIComponent(songMenu.song.album || t('common.albumUnknown'))}`)
             },
             onSeeMusicInfo: () => {
               setSongDialog({ song: songMenu.song, mode: 'properties' })

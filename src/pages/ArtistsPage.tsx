@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import clsx from 'clsx'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 
 import { ArtworkImage } from '../components/ArtworkImage'
+import { AppBarSearchPortal } from '../components/AppBarSearchPortal'
 import { DefaultAlbumArtwork } from '../components/DefaultAlbumArtwork'
 import { Icon } from '../components/icons'
 import { LoadingState } from '../components/LoadingState'
@@ -46,6 +47,7 @@ interface ArtistsPageProps {
   onAddSongsToPlaylist: (playlistId: number, songIds: number[]) => void
   onRevealSong: (songPath: string) => void | Promise<void>
   onDeleteSongFromDisk: (songId: number) => void
+  onCompactTitleChange?: (title: string) => void
 }
 
 interface ArtistGroup {
@@ -69,6 +71,7 @@ const ARTIST_ALBUM_CARD_HEADER_HEIGHT = 112
 const ARTIST_ALBUM_SONG_ROW_HEIGHT = 48
 const ARTIST_ALBUM_CARD_GAP = 22
 const ARTIST_ALBUM_OVERSCAN_ROWS = 2
+const ARTIST_COMPACT_QUERY = '(max-width: 720px)'
 const ARTIST_QUICK_JUMP_KEYS = '#ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
 const artistTextCollator = new Intl.Collator('zh-Hans-CN-u-co-pinyin', {
   numeric: true,
@@ -123,9 +126,11 @@ export function ArtistsPage({
   onAddSongsToPlaylist,
   onRevealSong,
   onDeleteSongFromDisk,
+  onCompactTitleChange,
 }: ArtistsPageProps) {
   const [artistSearch, setArtistSearch] = useState('')
   const [artistSearchFocused, setArtistSearchFocused] = useState(false)
+  const [appBarSearchOpen, setAppBarSearchOpen] = useState(false)
   const [selectedArtistName, setSelectedArtistName] = useState('')
   const [multiSelect, setMultiSelect] = useState(false)
   const [selectedSongIds, setSelectedSongIds] = useState<Set<number>>(new Set())
@@ -142,6 +147,8 @@ export function ArtistsPage({
   const [artistDetailViewportHeight, setArtistDetailViewportHeight] = useState(640)
   const [artistAlbumListOffsetTop, setArtistAlbumListOffsetTop] = useState(0)
   const [loadingArtistName, setLoadingArtistName] = useState('')
+  const [isCompactArtistLayout, setIsCompactArtistLayout] = useState(() => window.matchMedia(ARTIST_COMPACT_QUERY).matches)
+  const location = useLocation()
   const navigate = useNavigate()
   const refresh = useLibraryStore((state) => state.refresh)
   const showNotification = useUndoableNotificationStore((state) => state.show)
@@ -169,8 +176,8 @@ export function ArtistsPage({
   )
   const selectedAlbums = useMemo(() => buildAlbumGroups(selectedArtistSongs, t), [selectedArtistSongs, t])
   const artistAlbumHeights = useMemo(
-    () => selectedAlbums.map((album) => getEstimatedArtistAlbumHeight(album)),
-    [selectedAlbums],
+    () => selectedAlbums.map((album) => getEstimatedArtistAlbumHeight(album, isCompactArtistLayout)),
+    [isCompactArtistLayout, selectedAlbums],
   )
   const artistAlbumVirtualWindow = useMemo(
     () => getArtistAlbumVirtualWindow(
@@ -297,7 +304,36 @@ export function ArtistsPage({
     setArtistSearch(artistName)
     setMultiSelect(false)
     clearSelection()
+    if (isCompactArtistLayout) {
+      const artistDetailSearch = `?artist=${encodeURIComponent(artistName)}`
+      if (location.pathname !== '/artists' || location.search !== artistDetailSearch) {
+        navigate(`/artists${artistDetailSearch}`)
+      }
+    }
     scrollToArtist(artistName)
+  }
+
+  const openArtistDetail = (artistName: string) => {
+    setSelectedArtistName(artistName)
+    setMultiSelect(false)
+    clearSelection()
+    if (isCompactArtistLayout) {
+      const artistDetailSearch = `?artist=${encodeURIComponent(artistName)}`
+      if (location.pathname !== '/artists' || location.search !== artistDetailSearch) {
+        navigate(`/artists${artistDetailSearch}`)
+      }
+      artistDetailRef.current?.scrollTo({ top: 0 })
+      setArtistDetailScrollTop(0)
+    }
+  }
+
+  const returnToArtistList = () => {
+    setSelectedArtistName('')
+    setMultiSelect(false)
+    clearSelection()
+    if (location.pathname !== '/artists' || location.search) {
+      navigate('/artists', { replace: true })
+    }
   }
 
   const chooseFirstArtistSuggestion = () => {
@@ -307,6 +343,110 @@ export function ArtistsPage({
       chooseArtist(targetArtist.name)
     }
   }
+
+  const submitArtistSearch = (placement: 'page' | 'appbar') => {
+    if (artistSearch.trim().length > 0) {
+      chooseFirstArtistSuggestion()
+    }
+    if (placement === 'appbar') {
+      setAppBarSearchOpen(false)
+    }
+  }
+
+  const renderArtistSearch = (placement: 'page' | 'appbar') => (
+    <div className={clsx('page-search-shell artists-search-shell', placement === 'appbar' && 'appbar-page-search-shell')}>
+      <div className={`page-search-form${artistSearch ? ' has-query' : ''}`}>
+        <button
+          className="page-search-submit-button"
+          type="button"
+          aria-label={t('common.search')}
+          onMouseDown={(event) => {
+            event.preventDefault()
+          }}
+          onClick={() => {
+            submitArtistSearch(placement)
+          }}
+        >
+          <Icon name="search" />
+        </button>
+        <input
+          type="search"
+          value={artistSearch}
+          placeholder={t('artists.searchArtistsPlaceholder')}
+          autoFocus={placement === 'appbar'}
+          onFocus={() => {
+            setArtistSearchFocused(true)
+          }}
+          onBlur={() => {
+            setArtistSearchFocused(false)
+          }}
+          onChange={(event) => {
+            setArtistSearch(event.currentTarget.value)
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              submitArtistSearch(placement)
+            } else if (event.key === 'Escape' && placement === 'appbar') {
+              setAppBarSearchOpen(false)
+            }
+          }}
+        />
+        {artistSearch ? (
+          <button
+            className="page-search-clear-button"
+            type="button"
+            aria-label={t('common.clear')}
+            onMouseDown={(event) => {
+              event.preventDefault()
+            }}
+            onClick={() => {
+              setArtistSearch('')
+            }}
+          >
+            <Icon name="close" />
+          </button>
+        ) : null}
+      </div>
+      {showArtistSearchSuggestions ? (
+        <>
+          <div className="dropdown-dismiss-layer" onPointerDown={() => setArtistSearchFocused(false)} />
+          <div className="page-search-suggestions">
+            {visibleArtistSearchSuggestions.map((artist) => (
+              <button
+                className="page-search-suggestion"
+                type="button"
+                key={artist.name}
+                onMouseDown={(event) => {
+                  event.preventDefault()
+                }}
+                onClick={() => {
+                  setArtistSearchFocused(false)
+                  setAppBarSearchOpen(false)
+                  chooseArtist(artist.name)
+                }}
+              >
+                <span>{artist.name}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      ) : null}
+    </div>
+  )
+
+  useEffect(() => {
+    const compactQuery = window.matchMedia(ARTIST_COMPACT_QUERY)
+    const updateCompactLayout = () => {
+      setIsCompactArtistLayout(compactQuery.matches)
+    }
+
+    updateCompactLayout()
+    compactQuery.addEventListener('change', updateCompactLayout)
+
+    return () => {
+      compactQuery.removeEventListener('change', updateCompactLayout)
+    }
+  }, [])
 
   useEffect(() => {
     const artistList = artistListRef.current
@@ -351,6 +491,14 @@ export function ArtistsPage({
   }, [selectedArtistName])
 
   useEffect(() => {
+    onCompactTitleChange?.(isCompactArtistLayout && selectedArtist ? selectedArtist.name : '')
+
+    return () => {
+      onCompactTitleChange?.('')
+    }
+  }, [isCompactArtistLayout, onCompactTitleChange, selectedArtist])
+
+  useEffect(() => {
     if (loading || scanning) {
       return
     }
@@ -381,79 +529,34 @@ export function ArtistsPage({
     }
 
     if (!visibleArtists.some((artist) => artist.name === selectedArtistName)) {
+      if (isCompactArtistLayout) {
+        setSelectedArtistName('')
+        setMultiSelect(false)
+        clearSelection()
+        return
+      }
       setSelectedArtistName(visibleArtists[0]!.name)
       setMultiSelect(false)
       clearSelection()
     }
-  }, [artistGroups, loading, scanning, selectedArtistName, targetArtistName, visibleArtists])
+  }, [artistGroups, isCompactArtistLayout, loading, scanning, selectedArtistName, targetArtistName, visibleArtists])
 
   return (
-    <section className="page-panel artists-page">
+    <section className={clsx('page-panel artists-page', {
+      'is-compact-detail-open': isCompactArtistLayout && selectedArtist,
+    })}>
       {error ? <div className="error-banner">{error}</div> : null}
+      <AppBarSearchPortal
+        t={t}
+        active={Boolean(artistSearch)}
+        open={appBarSearchOpen}
+        onOpenChange={setAppBarSearchOpen}
+      >
+        {renderArtistSearch('appbar')}
+      </AppBarSearchPortal>
 
       <aside className="artists-master">
-        <div className="page-search-shell artists-search-shell">
-          <div className={`page-search-form${artistSearch ? ' has-query' : ''}`}>
-            <Icon name="search" />
-            <input
-              type="search"
-              value={artistSearch}
-              placeholder={t('artists.searchArtistsPlaceholder')}
-              onFocus={() => {
-                setArtistSearchFocused(true)
-              }}
-              onBlur={() => {
-                setArtistSearchFocused(false)
-              }}
-              onChange={(event) => {
-                setArtistSearch(event.currentTarget.value)
-              }}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  chooseFirstArtistSuggestion()
-                }
-              }}
-            />
-            {artistSearch ? (
-              <button
-                className="page-search-clear-button"
-                type="button"
-                aria-label={t('common.clear')}
-                onMouseDown={(event) => {
-                  event.preventDefault()
-                }}
-                onClick={() => {
-                  setArtistSearch('')
-                }}
-              >
-                <Icon name="close" />
-              </button>
-            ) : null}
-          </div>
-          {showArtistSearchSuggestions ? (
-            <>
-              <div className="dropdown-dismiss-layer" onPointerDown={() => setArtistSearchFocused(false)} />
-              <div className="page-search-suggestions">
-                {visibleArtistSearchSuggestions.map((artist) => (
-                  <button
-                    className="page-search-suggestion"
-                    type="button"
-                    key={artist.name}
-                    onMouseDown={(event) => {
-                      event.preventDefault()
-                    }}
-                    onClick={() => {
-                      setArtistSearchFocused(false)
-                      chooseArtist(artist.name)
-                    }}
-                  >
-                    <span>{artist.name}</span>
-                  </button>
-                ))}
-              </div>
-            </>
-          ) : null}
-        </div>
+        {renderArtistSearch('page')}
         {loading || scanning ? <div className="artists-progress" aria-label={t('nowPlaying.loading')} /> : null}
 
         <div className="artists-list-shell">
@@ -497,9 +600,7 @@ export function ArtistsPage({
                   type="button"
                   title={artist.name}
                   onClick={() => {
-                    setSelectedArtistName(artist.name)
-                    setMultiSelect(false)
-                    clearSelection()
+                    openArtistDetail(artist.name)
                   }}
                   onContextMenu={(event) => {
                     setSelectedArtistName(artist.name)
@@ -530,6 +631,24 @@ export function ArtistsPage({
         {selectedArtist ? (
           <>
             <header className="artist-detail-header">
+              <div className="artist-detail-compact-command-row">
+                <button
+                  className="artist-detail-back-button"
+                  type="button"
+                  aria-label={t('sidebar.back')}
+                  title={t('sidebar.back')}
+                  onClick={returnToArtistList}
+                >
+                  <Icon name="arrowLeft" />
+                </button>
+                <p className="artist-detail-compact-summary">
+                  {t('artists.artistSummary', {
+                    albums: selectedArtist.albumCount,
+                    songs: selectedArtist.songs.length,
+                  })}
+                </p>
+                <div className="artist-detail-compact-command-spacer" />
+              </div>
               <div>
                 <h2>{selectedArtist.name}</h2>
                 <p>
@@ -579,7 +698,7 @@ export function ArtistsPage({
                     <header className="artist-album-header">
                       <AlbumArtwork title={album.name} artworkUrl={album.artworkUrl} songId={album.songs[0]!.id} />
                       <div className="artist-album-copy">
-                        <Link to={`/albums/${encodeURIComponent(album.name)}`}>{album.name}</Link>
+                        <Link to={`/albums?album=${encodeURIComponent(album.name)}`}>{album.name}</Link>
                         <p>
                           {t('artists.albumSummary', {
                             songs: album.songs.length,
@@ -726,7 +845,7 @@ export function ArtistsPage({
             reloadArtist(groupMenu.label)
           }}
           onSeeAlbum={(albumName) => {
-            navigate(`/albums/${encodeURIComponent(albumName)}`)
+            navigate(`/albums?album=${encodeURIComponent(albumName)}`)
           }}
         />
       ) : null}
@@ -1181,8 +1300,11 @@ function buildAlbumGroups(songs: LibrarySong[], t: Translator): AlbumGroup[] {
   return [...groups.values()].sort((left, right) => compareArtistText(left.name, right.name))
 }
 
-function getEstimatedArtistAlbumHeight(album: AlbumGroup) {
-  return ARTIST_ALBUM_CARD_HEADER_HEIGHT + album.songs.length * ARTIST_ALBUM_SONG_ROW_HEIGHT + ARTIST_ALBUM_CARD_GAP
+function getEstimatedArtistAlbumHeight(album: AlbumGroup, compact: boolean) {
+  const headerHeight = compact ? 88 : ARTIST_ALBUM_CARD_HEADER_HEIGHT
+  const songRowHeight = compact ? 42 : ARTIST_ALBUM_SONG_ROW_HEIGHT
+  const cardGap = compact ? 12 : ARTIST_ALBUM_CARD_GAP
+  return headerHeight + album.songs.length * songRowHeight + cardGap
 }
 
 function getArtistAlbumVirtualWindow(heights: number[], scrollTop: number, viewportHeight: number) {

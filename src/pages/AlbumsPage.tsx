@@ -20,7 +20,9 @@ const ALBUM_TILE_TRACK_WIDTH = 180
 const ALBUM_COLUMN_GAP = 30
 const ALBUM_GRID_RIGHT_PADDING = 0
 const ALBUM_ROW_HEIGHT = 250
+const ALBUM_COMPACT_ROW_HEIGHT = 234
 const ALBUM_OVERSCAN_ROWS = 2
+const ALBUM_COMPACT_QUERY = '(max-width: 720px)'
 
 interface AlbumView {
   name: string
@@ -62,6 +64,7 @@ export function AlbumsPage({
   const [searchDraft, setSearchDraft] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
+  const [isCompactAlbumLayout, setIsCompactAlbumLayout] = useState(false)
   const albumsSort = useLibraryStore((state) => state.snapshot.settings.albumsSort)
   const [sortCriterion, setSortCriterion] = useState<AlbumSortCriterion>(albumsSort)
   const [reverseDisplayOrder, setReverseDisplayOrder] = useState(false)
@@ -104,22 +107,23 @@ export function AlbumsPage({
   const favoriteSongIdSet = useMemo(() => new Set(songs.filter((song) => song.favorite).map((song) => song.id)), [songs])
   const customPlaylists = playlists.filter((playlist) => !playlist.isBuiltIn)
   const albumColumns = Math.max(1, Math.floor((albumGridWidth + ALBUM_COLUMN_GAP) / (ALBUM_TILE_TRACK_WIDTH + ALBUM_COLUMN_GAP)))
+  const albumRowHeight = isCompactAlbumLayout ? ALBUM_COMPACT_ROW_HEIGHT : ALBUM_ROW_HEIGHT
   const albumRowCount = Math.ceil(visibleAlbums.length / albumColumns)
-  const albumListHeight = albumRowCount * ALBUM_ROW_HEIGHT
+  const albumListHeight = albumRowCount * albumRowHeight
   const effectiveAlbumScrollTop = Math.min(
     albumScrollTop,
     Math.max(0, albumListHeight - albumViewportHeight),
   )
   const albumStartRow = Math.max(
     0,
-    Math.floor(effectiveAlbumScrollTop / ALBUM_ROW_HEIGHT) - ALBUM_OVERSCAN_ROWS,
+    Math.floor(effectiveAlbumScrollTop / albumRowHeight) - ALBUM_OVERSCAN_ROWS,
   )
   const albumEndRow = Math.min(
     albumRowCount,
-    Math.ceil((effectiveAlbumScrollTop + albumViewportHeight) / ALBUM_ROW_HEIGHT) + ALBUM_OVERSCAN_ROWS,
+    Math.ceil((effectiveAlbumScrollTop + albumViewportHeight) / albumRowHeight) + ALBUM_OVERSCAN_ROWS,
   )
   const renderedAlbums = visibleAlbums.slice(albumStartRow * albumColumns, albumEndRow * albumColumns)
-  const albumWindowTop = albumStartRow * ALBUM_ROW_HEIGHT
+  const albumWindowTop = albumStartRow * albumRowHeight
   const albumQuickJumpMap = useMemo(
     () => buildAlbumQuickJumpMap(visibleAlbums),
     [visibleAlbums],
@@ -211,6 +215,20 @@ export function AlbumsPage({
   }, [])
 
   useEffect(() => {
+    const compactQuery = window.matchMedia(ALBUM_COMPACT_QUERY)
+    const updateCompactLayout = () => {
+      setIsCompactAlbumLayout(compactQuery.matches)
+    }
+
+    updateCompactLayout()
+    compactQuery.addEventListener('change', updateCompactLayout)
+
+    return () => {
+      compactQuery.removeEventListener('change', updateCompactLayout)
+    }
+  }, [])
+
+  useEffect(() => {
     setSortCriterion(albumsSort)
     setReverseDisplayOrder(false)
   }, [albumsSort])
@@ -241,7 +259,7 @@ export function AlbumsPage({
     }
 
     albumGridRef.current?.scrollTo({
-      top: Math.floor(targetIndex / albumColumns) * ALBUM_ROW_HEIGHT,
+      top: Math.floor(targetIndex / albumColumns) * albumRowHeight,
     })
   }
 
@@ -268,90 +286,94 @@ export function AlbumsPage({
     },
   }))
 
+  const renderAlbumSearch = () => (
+    <div className="page-search-shell albums-search-shell">
+      <div className={`page-search-form${searchHasText ? ' has-query' : ''}`}>
+        <button
+          className="page-search-submit-button"
+          type="button"
+          aria-label={t('common.search')}
+          onMouseDown={(event) => {
+            event.preventDefault()
+          }}
+          onClick={() => {
+            submitSearch()
+          }}
+        >
+          <Icon name="search" />
+        </button>
+        <input
+          type="search"
+          value={searchDraft}
+          onFocus={() => {
+            setSearchFocused(true)
+          }}
+          onBlur={() => {
+            setSearchFocused(false)
+          }}
+          onChange={(event) => {
+            setSearchDraft(event.currentTarget.value)
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              submitSearch()
+            }
+          }}
+          placeholder={t('albums.searchAlbumPlaceholder')}
+        />
+        {searchHasText ? (
+          <button
+            className="page-search-clear-button"
+            type="button"
+            aria-label={t('common.clear')}
+            onMouseDown={(event) => {
+              event.preventDefault()
+            }}
+            onClick={() => {
+              setSearchDraft('')
+              setSearchQuery('')
+              scrollAlbumsToTop()
+            }}
+          >
+            <Icon name="close" />
+          </button>
+        ) : null}
+      </div>
+      {showAlbumSearchSuggestions ? (
+        <>
+          <div className="dropdown-dismiss-layer" onPointerDown={() => setSearchFocused(false)} />
+          <div className="page-search-suggestions">
+            {albumSearchSuggestions.map((album) => (
+              <button
+                className="page-search-suggestion"
+                type="button"
+                key={album.name}
+                onMouseDown={(event) => {
+                  event.preventDefault()
+                }}
+                onClick={() => {
+                  setSearchDraft(album.name)
+                  setSearchQuery(album.name)
+                  setSearchFocused(false)
+                  scrollAlbumsToTop()
+                }}
+              >
+                <span>{album.name}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      ) : null}
+    </div>
+  )
+
   return (
     <section className="albums-page page-panel">
       <header className="albums-toolbar">
         <CommandBar
           className="albums-commandbar"
-          content={(
-            <div className="page-search-shell albums-search-shell">
-              <div className={`page-search-form${searchHasText ? ' has-query' : ''}`}>
-                <button
-                  className="page-search-submit-button"
-                  type="button"
-                  aria-label={t('common.search')}
-                  onMouseDown={(event) => {
-                    event.preventDefault()
-                  }}
-                  onClick={submitSearch}
-                >
-                  <Icon name="search" />
-                </button>
-                <input
-                  type="search"
-                  value={searchDraft}
-                  onFocus={() => {
-                    setSearchFocused(true)
-                  }}
-                  onBlur={() => {
-                    setSearchFocused(false)
-                  }}
-                  onChange={(event) => {
-                    setSearchDraft(event.currentTarget.value)
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault()
-                      submitSearch()
-                    }
-                  }}
-                  placeholder={t('albums.searchAlbumPlaceholder')}
-                />
-                {searchHasText ? (
-                  <button
-                    className="page-search-clear-button"
-                    type="button"
-                    aria-label={t('common.clear')}
-                    onMouseDown={(event) => {
-                      event.preventDefault()
-                    }}
-                    onClick={() => {
-                      setSearchDraft('')
-                      setSearchQuery('')
-                      scrollAlbumsToTop()
-                    }}
-                  >
-                    <Icon name="close" />
-                  </button>
-                ) : null}
-              </div>
-              {showAlbumSearchSuggestions ? (
-                <>
-                  <div className="dropdown-dismiss-layer" onPointerDown={() => setSearchFocused(false)} />
-                  <div className="page-search-suggestions">
-                    {albumSearchSuggestions.map((album) => (
-                      <button
-                        className="page-search-suggestion"
-                        type="button"
-                        key={album.name}
-                        onMouseDown={(event) => {
-                          event.preventDefault()
-                        }}
-                        onClick={() => {
-                          setSearchDraft(album.name)
-                          setSearchQuery(album.name)
-                          setSearchFocused(false)
-                          scrollAlbumsToTop()
-                        }}
-                      >
-                        <span>{album.name}</span>
-                      </button>
-                    ))}
-                  </div>
-                </>
-              ) : null}
-            </div>
-          )}
+          content={renderAlbumSearch()}
         >
           <CommandBarButton
             icon="menu"
@@ -438,7 +460,7 @@ export function AlbumsPage({
                     selected={selectedAlbumNames.has(album.name)}
                     t={t}
                     onOpenAlbum={() => {
-                      navigate(`/albums/${encodeURIComponent(album.name)}`)
+                      navigate(`/albums?album=${encodeURIComponent(album.name)}`)
                     }}
                     onPlayAlbum={() => {
                       onPlayTrack(album.songs[0].id, album.songs.map((song) => song.id))
@@ -501,6 +523,10 @@ export function AlbumsPage({
             },
             onAddToFavorites: () => {
               addSongsToFavorites(albumContextMenu.album.songs.filter((song) => !song.favorite).map((song) => song.id))
+            },
+            onSelect: () => {
+              setSelectedAlbumNames(new Set([albumContextMenu.album.name]))
+              setMultiSelect(true)
             },
             onCreatePlaylist: (name) => {
               onCreatePlaylistWithSongs(name, albumContextMenu.album.songs.map((song) => song.id))
@@ -672,6 +698,7 @@ function getAlbumContextMenuItems({
   onPlay,
   onAddToNowPlaying,
   onAddToFavorites,
+  onSelect,
   onCreatePlaylist,
   onAddToPlaylist,
   preferenceItem,
@@ -684,6 +711,7 @@ function getAlbumContextMenuItems({
   onPlay: () => void
   onAddToNowPlaying: () => void
   onAddToFavorites: () => void
+  onSelect: () => void
   onCreatePlaylist: (name: string) => void
   onAddToPlaylist: (playlistId: number) => void
   preferenceItem: PreferenceItemSnapshot | null
@@ -709,6 +737,7 @@ function getAlbumContextMenuItems({
   if (addToItem) {
     items.push(addToItem)
   }
+  items.push({ key: 'select', text: t('context.select'), icon: 'menu', onClick: onSelect })
   items.push(getPreferenceMenuFlyoutItem({
     type: 'album',
     itemId: album.name,

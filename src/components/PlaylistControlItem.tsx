@@ -78,6 +78,10 @@ export function PlaylistControlItem({
   const artists = getSongArtists(song)
   const artistLabel = artists.join(', ')
   const albumLabel = song.album || t('common.albumUnknown')
+  const compactMeta = [
+    showArtist ? artistLabel : '',
+    showAlbum ? albumLabel : '',
+  ].filter(Boolean).join(' • ')
   const canSwipeFavorite = !selectionMode && Boolean(onToggleFavorite)
   const canSwipeRemove = !selectionMode && removable && Boolean(onRemoveFromListClick)
   const activate = () => {
@@ -270,7 +274,10 @@ export function PlaylistControlItem({
             ) : null}
           </span>
         ) : null}
-        <span className="playlist-control-item-title-text">{song.title}</span>
+        <span className="playlist-control-item-title-text">
+          <span className="playlist-control-item-title-primary">{song.title}</span>
+          {compactMeta ? <span className="playlist-control-item-compact-meta">{compactMeta}</span> : null}
+        </span>
         <span className="playlist-control-item-hover-actions">
           {!showArtwork ? (
             <button

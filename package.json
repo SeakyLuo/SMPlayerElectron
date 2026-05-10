@@ -1,7 +1,7 @@
 {
   "name": "smplayer",
   "private": true,
-  "version": "2.11.0",
+  "version": "3.0.0",
   "description": "Local music player",
   "type": "module",
   "main": "dist-electron/main.js",

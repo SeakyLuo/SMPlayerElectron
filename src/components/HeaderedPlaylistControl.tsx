@@ -844,16 +844,27 @@ function useHeaderedPlaylistScroll(controlRef: RefObject<HTMLElement | null>) {
       animationFrame = 0
       const scrollTop = scrollContainer.scrollTop
       const maxScrollTop = scrollContainer.scrollHeight - scrollContainer.clientHeight
+      const isNarrow = window.matchMedia('(max-width: 720px)').matches
       const collapseProgress = Math.min(scrollTop / 210, 1)
       const isCollapsed = headerCollapsedRef.current
         ? scrollTop > 186
         : scrollTop >= 224
       headerCollapsedRef.current = isCollapsed
-      const heroHeight = Math.round(326 - collapseProgress * 200)
-      const heroPaddingTop = Math.round(50 - collapseProgress * 26)
-      const coverSize = Math.round(240 - collapseProgress * 154)
-      const titleSize = Math.round(48 - collapseProgress * 22)
-      const commandMargin = Math.round(30 - collapseProgress * 22)
+      const heroHeight = isNarrow
+        ? Math.round(326 - collapseProgress * 170)
+        : Math.round(326 - collapseProgress * 200)
+      const heroPaddingTop = isNarrow
+        ? Math.round(38 - collapseProgress * 16)
+        : Math.round(50 - collapseProgress * 26)
+      const coverSize = isNarrow
+        ? Math.round(180 - collapseProgress * 112)
+        : Math.round(240 - collapseProgress * 154)
+      const titleSize = isNarrow
+        ? Math.round(24 - collapseProgress * 4)
+        : Math.round(48 - collapseProgress * 22)
+      const commandMargin = isNarrow
+        ? Math.round(14 - collapseProgress * 8)
+        : Math.round(30 - collapseProgress * 22)
       const scrollbarTop = Math.round(heroHeight + 4)
       const scrollContainerRect = scrollContainer.getBoundingClientRect()
       const playerRect = document.querySelector('.player-bar')?.getBoundingClientRect()

@@ -4,6 +4,7 @@ import { Route, Routes, useLocation, useNavigate, useNavigationType } from 'reac
 import { AlbumDetailPage } from './pages/AlbumDetailPage'
 import { AlbumsPage } from './pages/AlbumsPage'
 import { ArtistsPage } from './pages/ArtistsPage'
+import { AppBar, APPBAR_PAGE_ACTIONS_ID } from './components/AppBar'
 import { DialogHost } from './components/DialogHost'
 import { LoadingState } from './components/LoadingState'
 import { MediaControl } from './components/MediaControl'
@@ -92,7 +93,9 @@ const RESTORABLE_SCROLL_SELECTORS = [
   '.recent-page',
   '.settings-page',
 ]
+// Matches the original UWP MinimalNavigationViewWindowWidth resource.
 const NAVIGATION_MINIMAL_BREAKPOINT = 720
+const NAVIGATION_OVERLAY_BREAKPOINT = 1200
 
 function resolveRestoredPage(lastPage: string) {
   const normalizedPath = lastPage.trim()
@@ -114,6 +117,22 @@ function StartupRedirect({ ready, lastPage }: { ready: boolean; lastPage: string
   }, [lastPage, navigate, ready])
 
   return null
+}
+
+function compareAppVersions(left: string, right: string) {
+  const leftParts = left.split('.').map((part) => Number(part))
+  const rightParts = right.split('.').map((part) => Number(part))
+  const length = Math.max(leftParts.length, rightParts.length)
+
+  for (let index = 0; index < length; index += 1) {
+    const leftPart = leftParts[index] ?? 0
+    const rightPart = rightParts[index] ?? 0
+    if (leftPart !== rightPart) {
+      return leftPart - rightPart
+    }
+  }
+
+  return 0
 }
 
 function getRouteSection(pathname: string) {
@@ -142,6 +161,18 @@ function getRouteSection(pathname: string) {
 
 function isAlbumDetailRoute(pathname: string) {
   return pathname.startsWith('/albums/')
+}
+
+function LegacyArtistRouteRedirect() {
+  const location = useLocation()
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    const artistRouteValue = location.pathname.slice('/artists/'.length)
+    navigate(artistRouteValue ? `/artists?artist=${artistRouteValue}` : '/artists', { replace: true })
+  }, [location.pathname, navigate])
+
+  return null
 }
 
 function getScrollElementKey(root: HTMLElement, element: HTMLElement) {
@@ -316,6 +347,9 @@ function App() {
     }
   })
   const [isNavigationMinimal, setIsNavigationMinimal] = useState(() => window.innerWidth < NAVIGATION_MINIMAL_BREAKPOINT)
+  const [isNavigationOverlay, setIsNavigationOverlay] = useState(() =>
+    window.innerWidth >= NAVIGATION_MINIMAL_BREAKPOINT && window.innerWidth < NAVIGATION_OVERLAY_BREAKPOINT,
+  )
   const [isMinimalNavigationOpen, setIsMinimalNavigationOpen] = useState(false)
   const hasSeenNavigationRef = useRef(false)
   const workspaceContentRef = useRef<HTMLElement | null>(null)
@@ -331,6 +365,7 @@ function App() {
   const [isCreatePlaylistDialogOpen, setIsCreatePlaylistDialogOpen] = useState(false)
   const [pendingCreatedPlaylistName, setPendingCreatedPlaylistName] = useState('')
   const [releaseNotesDialogVersion, setReleaseNotesDialogVersion] = useState('')
+  const [compactArtistTitle, setCompactArtistTitle] = useState('')
   const [isLibraryQuickJumpOpen, setIsLibraryQuickJumpOpen] = useState(false)
   const releaseNotesCheckedRef = useRef(false)
   const revealItem = useRevealItem()
@@ -436,13 +471,12 @@ function App() {
     void window.smplayer?.getAppInfo().then((appInfo) => {
       if (
         snapshot.settings.lastReleaseNotesVersion &&
-        snapshot.settings.lastReleaseNotesVersion !== appInfo.version
+        compareAppVersions(appInfo.version, snapshot.settings.lastReleaseNotesVersion) > 0
       ) {
         setReleaseNotesDialogVersion(appInfo.version)
-        void updateSettings({ lastReleaseNotesVersion: appInfo.version })
       }
     })
-  }, [initialLoadComplete, snapshot.settings.lastReleaseNotesVersion, updateSettings])
+  }, [initialLoadComplete, snapshot.settings.lastReleaseNotesVersion])
 
   const playback = usePlaybackController(snapshot)
   const {
@@ -466,7 +500,7 @@ function App() {
   const isInAlbumDetail = isAlbumDetailRoute(location.pathname) || (location.pathname === '/albums' && targetAlbumQuery != null)
 
   if (currentRouteSection && currentRouteSection !== '/albums') {
-    routeMemoryRef.current.set(currentRouteSection, location.pathname)
+    routeMemoryRef.current.set(currentRouteSection, currentRouteSection === '/artists' ? `${location.pathname}${location.search}` : location.pathname)
   }
 
   const getRestoredNavTarget = (target: string) => {
@@ -666,7 +700,9 @@ function App() {
 
   useEffect(() => {
     const updateNavigationMode = () => {
-      const nextIsMinimal = window.innerWidth < NAVIGATION_MINIMAL_BREAKPOINT
+      const width = window.innerWidth
+      const nextIsMinimal = width < NAVIGATION_MINIMAL_BREAKPOINT
+      setIsNavigationOverlay(width >= NAVIGATION_MINIMAL_BREAKPOINT && width < NAVIGATION_OVERLAY_BREAKPOINT)
       setIsNavigationMinimal(nextIsMinimal)
       if (!nextIsMinimal) {
         setIsMinimalNavigationOpen(false)
@@ -1117,11 +1153,15 @@ function App() {
   const isLocalRoute = location.pathname === '/local'
   const canNavigateBack = navigationDepth > 0 || isInAlbumDetail
   const isNavigationRail = isNavigationMinimal ? !isMinimalNavigationOpen : isNavigationCollapsed
+  const isNavigationOverlayOpen = isNavigationMinimal
+    ? isMinimalNavigationOpen
+    : isNavigationOverlay && !isNavigationCollapsed
   const currentLocalRelativePath = isLocalRoute ? localRelativePath : ''
   const searchFolderRelativePath = new URLSearchParams(location.search).get('folder') ?? ''
   const searchFolderPath = getSearchFolderPath(snapshot.settings.rootPath, searchFolderRelativePath)
   const searchFolderName = getSearchFolderName(snapshot.settings.rootPath, searchFolderRelativePath)
-  const currentPageTitle = location.pathname === '/' && !initialLoadComplete
+  const currentPageTitle = compactArtistTitle ||
+    (location.pathname === '/' && !initialLoadComplete
     ? ''
     : getPageTitle(
       location.pathname,
@@ -1131,7 +1171,7 @@ function App() {
       submittedSearchQuery,
       searchFolderName,
       snapshot.nowPlaying.songIds.length,
-    )
+    ))
   const toggleNavigation = () => {
     if (isNavigationMinimal) {
       setIsMinimalNavigationOpen((current) => !current)
@@ -1140,6 +1180,31 @@ function App() {
 
     setIsNavigationCollapsed((current) => !current)
   }
+
+  useEffect(() => {
+    if (!isNavigationOverlayOpen) {
+      return
+    }
+
+    const closeNavigationOnOutsidePointerDown = (event: PointerEvent) => {
+      const target = event.target
+      if (target instanceof Element && target.closest('.sidebar')) {
+        return
+      }
+
+      if (isNavigationMinimal) {
+        setIsMinimalNavigationOpen(false)
+      } else {
+        setIsNavigationCollapsed(true)
+      }
+    }
+
+    document.addEventListener('pointerdown', closeNavigationOnOutsidePointerDown, true)
+    return () => {
+      document.removeEventListener('pointerdown', closeNavigationOnOutsidePointerDown, true)
+    }
+  }, [isNavigationMinimal, isNavigationOverlayOpen])
+
   const playerControlBindings = {
     isPlaying: playback.isPlaying,
     volume: playback.volume,
@@ -1170,21 +1235,7 @@ function App() {
 
   return (
     <div
-      className={`app-shell${isNavigationRail ? ' nav-collapsed' : ''}${isNavigationMinimal ? ' nav-minimal' : ''}${isNavigationMinimal && isMinimalNavigationOpen ? ' nav-minimal-open' : ''}`}
-      onPointerDownCapture={(event) => {
-        if (!isNavigationMinimal || !isMinimalNavigationOpen) {
-          return
-        }
-
-        const target = event.target as Element
-        if (target.closest('.sidebar')) {
-          return
-        }
-
-        setIsMinimalNavigationOpen(false)
-        event.stopPropagation()
-        event.preventDefault()
-      }}
+      className={`app-shell${isNavigationRail ? ' nav-collapsed' : ''}${isNavigationOverlay ? ' nav-overlay' : ''}${isNavigationOverlayOpen && !isNavigationMinimal ? ' nav-overlay-open' : ''}${isNavigationMinimal ? ' nav-minimal' : ''}${isNavigationMinimal && isMinimalNavigationOpen ? ' nav-minimal-open' : ''}`}
     >
       {isNavigationMinimal ? (
         <div className="minimal-titlebar">
@@ -1251,7 +1302,7 @@ function App() {
       />
       <div
         className={
-          location.pathname === '/recent'
+          location.pathname === '/recent' && !isNavigationMinimal
             ? 'workspace is-headerless-route'
             : isInAlbumDetail ||
               location.pathname.startsWith('/playlists/') ||
@@ -1262,84 +1313,86 @@ function App() {
               : 'workspace'
         }
       >
-        <header className="workspace-header">
-          {isNavigationMinimal ? (
-            <div className="appbar-title-group">
-              <button
-                className="appbar-icon-button"
-                type="button"
-                aria-label={isNavigationRail ? t('sidebar.expandNavigation') : t('sidebar.collapseNavigation')}
-                title={isNavigationRail ? t('sidebar.expandNavigation') : t('sidebar.collapseNavigation')}
-                onClick={toggleNavigation}
-              >
-                <Icon name="menu" />
-              </button>
+        {isNavigationMinimal ? (
+          <AppBar
+            menuLabel={isNavigationRail ? t('sidebar.expandNavigation') : t('sidebar.collapseNavigation')}
+            onMenuClick={toggleNavigation}
+            actions={location.pathname !== '/recent' ? (
+              <>
+                {location.pathname === '/songs' ? (
+                  <button
+                    className={`appbar-icon-button appbar-quick-jump-button${isLibraryQuickJumpOpen ? ' is-open' : ''}`}
+                    type="button"
+                    aria-label="#-Z"
+                    title="#-Z"
+                    onClick={() => {
+                      window.dispatchEvent(new Event('smplayer:library-quick-jump-toggle'))
+                    }}
+                  >
+                    <span>#-Z</span>
+                  </button>
+                ) : null}
+                <div className="appbar-page-actions" id={APPBAR_PAGE_ACTIONS_ID} />
+              </>
+            ) : undefined}
+          >
+            {location.pathname === '/recent' ? (
+              <div className="appbar-page-actions appbar-title-page-actions" id={APPBAR_PAGE_ACTIONS_ID} />
+            ) : (
               <h1>{currentPageTitle}</h1>
-            </div>
-          ) : isLocalRoute && snapshot.settings.rootPath ? (
-            <LocalTitleGrid
-              songs={snapshot.songs}
-              folders={snapshot.folders}
-              playlists={snapshot.playlists}
-              favoritePlaylistId={snapshot.favorites.playlistId}
-              t={t}
-              rootPath={snapshot.settings.rootPath}
-              currentRelativePath={currentLocalRelativePath}
-              onHiddenFoldersListButtonClick={() => {
-                navigate('/hidden-folders')
-              }}
-              onOpenFolder={(targetRelativePath) => {
-                setLocalRelativePath(targetRelativePath)
-                navigate('/local', { replace: true })
-              }}
-              onRevealFolder={revealItem}
-              onSearchDirectory={(query, folderRelativePath) => {
-                commitDirectorySearchQuery(query, folderRelativePath)
-              }}
-              onPlayTrack={(trackId, queueSongIds) => {
-                void playTrackInQueue(trackId, queueSongIds)
-              }}
-              onAddSongsToNowPlaying={(songIds) => {
-                void replaceNowPlaying([...snapshot.nowPlaying.songIds, ...songIds])
-              }}
-              onCreatePlaylistWithSongs={(name, songIds) => {
-                void createPlaylist(name, songIds)
-              }}
-              onAddSongsToPlaylist={(playlistId, songIds) => {
-                void addSongsToPlaylist(playlistId, songIds)
-              }}
-              onDropLocalItems={async (payload, targetRelativePath) => {
-                const targetFolderPath = targetRelativePath
-                  ? getSearchFolderPath(snapshot.settings.rootPath, targetRelativePath)
-                  : snapshot.settings.rootPath
-                await moveLocalItemsToFolder(payload.songIds, payload.folderPaths, targetFolderPath)
-              }}
-            />
-          ) : (
-            <div>
-              <h1>{currentPageTitle}</h1>
-            </div>
-          )}
-          {!isNavigationMinimal ? (
+            )}
+          </AppBar>
+        ) : (
+          <header className="workspace-header">
+            {isLocalRoute && snapshot.settings.rootPath ? (
+              <LocalTitleGrid
+                songs={snapshot.songs}
+                folders={snapshot.folders}
+                playlists={snapshot.playlists}
+                favoritePlaylistId={snapshot.favorites.playlistId}
+                t={t}
+                rootPath={snapshot.settings.rootPath}
+                currentRelativePath={currentLocalRelativePath}
+                onHiddenFoldersListButtonClick={() => {
+                  navigate('/hidden-folders')
+                }}
+                onOpenFolder={(targetRelativePath) => {
+                  setLocalRelativePath(targetRelativePath)
+                  navigate('/local', { replace: true })
+                }}
+                onRevealFolder={revealItem}
+                onSearchDirectory={(query, folderRelativePath) => {
+                  commitDirectorySearchQuery(query, folderRelativePath)
+                }}
+                onPlayTrack={(trackId, queueSongIds) => {
+                  void playTrackInQueue(trackId, queueSongIds)
+                }}
+                onAddSongsToNowPlaying={(songIds) => {
+                  void replaceNowPlaying([...snapshot.nowPlaying.songIds, ...songIds])
+                }}
+                onCreatePlaylistWithSongs={(name, songIds) => {
+                  void createPlaylist(name, songIds)
+                }}
+                onAddSongsToPlaylist={(playlistId, songIds) => {
+                  void addSongsToPlaylist(playlistId, songIds)
+                }}
+                onDropLocalItems={async (payload, targetRelativePath) => {
+                  const targetFolderPath = targetRelativePath
+                    ? getSearchFolderPath(snapshot.settings.rootPath, targetRelativePath)
+                    : snapshot.settings.rootPath
+                  await moveLocalItemsToFolder(payload.songIds, payload.folderPaths, targetFolderPath)
+                }}
+              />
+            ) : (
+              <div>
+                <h1>{currentPageTitle}</h1>
+              </div>
+            )}
             <div className="status-pills">
               <span>{t('app.songsCached', { count: snapshot.counts.songs })}</span>
             </div>
-          ) : location.pathname === '/songs' ? (
-            <div className="appbar-actions">
-              <button
-                className={`appbar-icon-button appbar-quick-jump-button${isLibraryQuickJumpOpen ? ' is-open' : ''}`}
-                type="button"
-                aria-label="#-Z"
-                title="#-Z"
-                onClick={() => {
-                  window.dispatchEvent(new Event('smplayer:library-quick-jump-toggle'))
-                }}
-              >
-                <span>#-Z</span>
-              </button>
-            </div>
-          ) : null}
-        </header>
+          </header>
+        )}
 
         <main
           ref={workspaceContentRef}
@@ -1458,6 +1511,7 @@ function App() {
                   onDeleteSongFromDisk={(songId) => {
                     void deleteSongFromDisk(songId)
                   }}
+                  onCompactTitleChange={setCompactArtistTitle}
                 />
               }
             />
@@ -1531,52 +1585,7 @@ function App() {
             />
             <Route
               path="/artists/:artistName"
-              element={
-                <ArtistsPage
-                  t={t}
-                  songs={visibleSongs}
-                  selectedTrackId={playback.currentTrackId}
-                  isPlaying={playback.isPlaying}
-                  searchQuery=""
-                  error={error}
-                  playlists={snapshot.playlists}
-                  favoritePlaylistId={snapshot.favorites.playlistId}
-                    loading={pageLoading}
-                  scanning={scanning}
-                  targetArtistName={targetArtistQuery ?? decodeURIComponent(location.pathname.slice('/artists/'.length))}
-                  onPlayTrack={(trackId, queueSongIds) => {
-                    void playTrackInQueue(trackId, queueSongIds)
-                  }}
-                  onMoveToMusicOrPlay={(songId) => {
-                    void moveToMusicOrPlayInQueue(songId)
-                  }}
-                  onAddSongsToNowPlaying={(songIds) => {
-                    void replaceNowPlaying([...snapshot.nowPlaying.songIds, ...songIds])
-                  }}
-                  onCreatePlaylistWithSongs={(name, songIds) => {
-                    void createPlaylist(name, songIds)
-                  }}
-                  onTogglePlayPause={() => {
-                    void playback.togglePlayPause()
-                  }}
-                  onPlayNext={(songId) => {
-                    void playNextInQueue(songId)
-                  }}
-                  onToggleFavorite={(songId, favorite) => {
-                    void setSongFavorite(songId, favorite)
-                  }}
-                  onAddSongToPlaylist={(playlistId, songId) => {
-                    void addSongToPlaylist(playlistId, songId)
-                  }}
-                  onAddSongsToPlaylist={(playlistId, songIds) => {
-                    void addSongsToPlaylist(playlistId, songIds)
-                  }}
-                  onRevealSong={revealItem}
-                  onDeleteSongFromDisk={(songId) => {
-                    void deleteSongFromDisk(songId)
-                  }}
-                />
-              }
+              element={<LegacyArtistRouteRedirect />}
             />
             <Route
               path="/albums/*"
@@ -2152,7 +2161,8 @@ function App() {
         <ReleaseNotesDialog
           t={t}
           preferredLanguage={snapshot.settings.preferredLanguage}
-          onClose={() => {
+          onClose={async () => {
+            await updateSettings({ lastReleaseNotesVersion: releaseNotesDialogVersion })
             setReleaseNotesDialogVersion('')
           }}
         />

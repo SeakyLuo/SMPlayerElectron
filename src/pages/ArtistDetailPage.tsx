@@ -89,7 +89,7 @@ export function ArtistDetailPage({
               <Link
                 key={album}
                 className="detail-chip"
-                to={`/albums/${encodeURIComponent(album)}`}
+                to={`/albums?album=${encodeURIComponent(album)}`}
               >
                 {album}
               </Link>
@@ -122,7 +122,7 @@ export function ArtistDetailPage({
                 <td>
                   <Link
                     className="table-link"
-                    to={`/albums/${encodeURIComponent(song.album || 'Unknown album')}`}
+                    to={`/albums?album=${encodeURIComponent(song.album || 'Unknown album')}`}
                     onClick={(event) => {
                       event.stopPropagation()
                     }}

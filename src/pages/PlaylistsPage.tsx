@@ -374,10 +374,10 @@ export function PlaylistsPage({
             onReorderPlaylistSongs(selectedPlaylist.id, songIds, sortCriterion)
           }}
           onArtistClick={(artist) => {
-            navigate(`/artists/${encodeURIComponent(artist)}`)
+            navigate(`/artists?artist=${encodeURIComponent(artist)}`)
           }}
           onAlbumClick={(album) => {
-            navigate(`/albums/${encodeURIComponent(album)}`)
+            navigate(`/albums?album=${encodeURIComponent(album)}`)
           }}
         />
       </section>

@@ -933,12 +933,12 @@ export function MediaControl({
             onPreferenceChanged: refreshPreferenceItem,
             onSeeArtist: (artist) => {
               if (currentSong) {
-                navigate(`/artists/${encodeURIComponent(artist)}`)
+                navigate(`/artists?artist=${encodeURIComponent(artist)}`)
               }
             },
             onSeeAlbum: () => {
               if (currentSong) {
-                navigate(`/albums/${encodeURIComponent(currentSong.album || t('common.albumUnknown'))}`)
+                navigate(`/albums?album=${encodeURIComponent(currentSong.album || t('common.albumUnknown'))}`)
               }
             },
             onSeeMusicInfo: () => {
