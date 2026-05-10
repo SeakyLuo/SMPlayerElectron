@@ -138,6 +138,14 @@ export interface RemoteHostConnectResult {
   songCount: number
 }
 
+export interface RemoteLibrarySnapshot {
+  host: RemoteHost
+  songs: LibrarySong[]
+  playlists: LibraryPlaylist[]
+  favorites: MyFavoritesSnapshot
+  nowPlaying: NowPlayingSnapshot
+}
+
 export interface NowPlayingSnapshot {
   playlistId: number
   songIds: number[]
@@ -467,6 +475,7 @@ export interface SmplayerApi {
   deleteAuthorizedDevice: (deviceId: number) => Promise<void>
   getRemoteHosts: () => Promise<RemoteHost[]>
   connectRemoteHost: (request: RemoteHostConnectRequest) => Promise<RemoteHostConnectResult>
+  getRemoteHostLibrary: (hostId: number) => Promise<RemoteLibrarySnapshot>
   deleteRemoteHost: (hostId: number) => Promise<void>
   pickLibraryRoot: () => Promise<ChooseLibraryRootResult>
   scanLibrary: (rootPath?: string) => Promise<ScanLibraryResult>

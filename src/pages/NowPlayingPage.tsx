@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } fro
 import { useNavigate } from 'react-router-dom'
 
 import { CommandBar, CommandBarButton } from '../components/CommandBar'
+import { requestConfirmDialog } from '../components/dialogService'
 import { LoadingState } from '../components/LoadingState'
 import { MenuFlyout } from '../components/MenuFlyout'
 import { getAddToPlaylistMenuFlyoutItem, getMusicMenuFlyoutItems, getShuffleMenuItems } from '../components/MenuFlyoutHelper'
@@ -724,9 +725,15 @@ export function NowPlayingPage({
               onRevealSong(songMenu.song.path)
             },
             onDelete: () => {
-              if (window.confirm(t('context.deleteSongConfirm', { title: songMenu.song.title }))) {
-                onDeleteSongFromDisk(songMenu.song.id)
-              }
+              void requestConfirmDialog({
+                title: t('playlists.delete'),
+                message: t('context.deleteSongConfirm', { title: songMenu.song.title }),
+                confirmText: t('playlists.delete'),
+              }).then((confirmed) => {
+                if (confirmed) {
+                  onDeleteSongFromDisk(songMenu.song.id)
+                }
+              })
             },
             onHide: async () => {
               const removedQueueEntries = queueSongIds

@@ -241,39 +241,4 @@
   border: 1px solid rgba(255, 255, 255, 0.58);
   min-height: 320px;
   scrollbar-gutter: stable;
-  scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
-}
-
-.table-shell:hover {
-  scrollbar-color: rgba(91, 105, 122, 0.48) transparent;
-}
-
-.table-shell::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
-}
-
-.table-shell:hover::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
-}
-
-.table-shell::-webkit-scrollbar:hover,
-.table-shell:hover::-webkit-scrollbar:hover {
-  width: 10px;
-  height: 10px;
-}
-
-.table-shell::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.table-shell::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: transparent;
-}
-
-.table-shell:hover::-webkit-scrollbar-thumb {
-  background: rgba(91, 105, 122, 0.48);
 }

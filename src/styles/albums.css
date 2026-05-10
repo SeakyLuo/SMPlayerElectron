@@ -389,8 +389,6 @@
   overflow: auto;
   padding: 8px 8px calc(var(--player-height) + 18px) 14px;
   scrollbar-gutter: stable;
-  scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
 }
 
 .albums-grid-virtual {
@@ -408,39 +406,25 @@
   will-change: transform;
 }
 
-.albums-grid:hover {
-  scrollbar-color: rgba(91, 105, 122, 0.42) transparent;
-}
-
-.albums-grid::-webkit-scrollbar,
-.albums-quick-jump::-webkit-scrollbar,
-.artists-list::-webkit-scrollbar {
+.albums-quick-jump::-webkit-scrollbar {
   width: 4px;
   height: 4px;
 }
 
-.albums-grid::-webkit-scrollbar:hover,
-.albums-quick-jump::-webkit-scrollbar:hover,
-.artists-list::-webkit-scrollbar:hover {
+.albums-quick-jump::-webkit-scrollbar:hover {
   width: 10px;
   height: 10px;
 }
 
-.albums-grid::-webkit-scrollbar-track,
-.albums-quick-jump::-webkit-scrollbar-track,
-.artists-list::-webkit-scrollbar-track {
+.albums-quick-jump::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.albums-grid::-webkit-scrollbar-thumb,
-.albums-quick-jump::-webkit-scrollbar-thumb,
-.artists-list::-webkit-scrollbar-thumb {
+.albums-quick-jump::-webkit-scrollbar-thumb {
   border-radius: 999px;
   background: transparent;
 }
 
-.albums-grid:hover::-webkit-scrollbar-thumb,
-.albums-quick-jump:hover::-webkit-scrollbar-thumb,
-.artists-list:hover::-webkit-scrollbar-thumb {
+.albums-quick-jump:hover::-webkit-scrollbar-thumb {
   background: rgba(91, 105, 122, 0.42);
 }

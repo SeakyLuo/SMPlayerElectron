@@ -23,12 +23,14 @@ import type {
   AppInfo,
   GlobalMediaCommand,
   HiddenStorageItem,
+  LibrarySnapshot,
   LibraryPlaylist,
   PlaylistSortCriterion,
   LocalFolderSortCriterion,
   PreferenceEntityType,
   PreferenceLevel,
   RemoteHostConnectRequest,
+  RemoteLibrarySnapshot,
   SearchHistoryEntry,
   TrackNotificationPayload,
 } from '../src/shared/contracts'
@@ -106,7 +108,7 @@ protocol.registerSchemesAsPrivileged([
 
 const feedbackIssueUrl = 'https://github.com/SeakyLuo/SMPlayerEletron/issues'
 const feedbackEmailAddress = 'luokiss9@qq.com'
-const feedbackEmailSubject = 'Feedbacks about SMPlayer'
+const feedbackEmailSubject = 'Feedback about Simple Melody Player'
 const audioDialogExtensions = [...AUDIO_EXTENSIONS].map((extension) => extension.slice(1))
 const legacyUwpPackageIdentityName = '23778SeakyTheLoner.SMPlayer'
 const appWindowBackgroundColor = '#f6f8fb'
@@ -160,7 +162,7 @@ async function connectRemoteHost(request: RemoteHostConnectRequest) {
       deviceId: localDevice.deviceId,
       deviceName: localDevice.deviceName,
       platform: process.platform,
-      browser: 'SMPlayer',
+      browser: 'Simple Melody Player',
     }),
   })
   const snapshot = await readRemoteJson<{
@@ -179,6 +181,25 @@ async function connectRemoteHost(request: RemoteHostConnectRequest) {
   return {
     host,
     songCount: snapshot.songs.length,
+  }
+}
+
+async function getRemoteHostLibrary(hostId: number): Promise<RemoteLibrarySnapshot> {
+  const connection = dataStore!.getRemoteHostConnection(hostId)
+  const snapshot = await readRemoteJson<LibrarySnapshot>(`${connection.host.baseUrl}/api/library/snapshot`, {
+    headers: { Authorization: `Bearer ${connection.token}` },
+  })
+
+  return {
+    host: connection.host,
+    songs: snapshot.songs.map((song) => ({
+      ...song,
+      mediaUrl: `${connection.host.baseUrl}/api/stream/${song.id}?token=${encodeURIComponent(connection.token)}`,
+      artworkUrl: '',
+    })),
+    playlists: snapshot.playlists,
+    favorites: snapshot.favorites,
+    nowPlaying: snapshot.nowPlaying,
   }
 }
 
@@ -366,7 +387,7 @@ async function createWindow() {
     if (!hasShownTrayHint && Notification.isSupported()) {
       hasShownTrayHint = true
       new Notification({
-        title: 'SMPlayer is still running',
+        title: 'Simple Melody Player is still running',
         body: 'The window was hidden to the system tray. Use the tray icon to restore or quit.',
         silent: true,
       }).show()
@@ -908,6 +929,9 @@ app.whenReady().then(async () => {
   ipcMain.handle('remote-hosts:connect', (_event, request: RemoteHostConnectRequest) =>
     connectRemoteHost(request),
   )
+  ipcMain.handle('remote-hosts:get-library', (_event, hostId: number) =>
+    getRemoteHostLibrary(hostId),
+  )
   ipcMain.handle('remote-hosts:delete', (_event, hostId: number) =>
     dataStore!.deleteRemoteHost(hostId),
   )
@@ -981,7 +1005,7 @@ app.whenReady().then(async () => {
     }
 
     const lyricsPreview = await dataStore.getTrackNotificationBody(track.songId)
-    const defaultBody = [track.artist, track.album].filter(Boolean).join(' - ') || 'SMPlayer'
+    const defaultBody = [track.artist, track.album].filter(Boolean).join(' - ') || 'Simple Melody Player'
 
     const notification = new Notification({
       title: track.title,
@@ -1033,7 +1057,7 @@ app.whenReady().then(async () => {
     const dialogOptions: SaveDialogOptions = {
       title: 'Export Data',
       defaultPath: join(app.getPath('documents'), SMPLAYER_DB_NAME),
-      filters: [{ name: 'SMPlayer Database', extensions: ['db'] }],
+      filters: [{ name: 'Simple Melody Player Database', extensions: ['db'] }],
     }
     const result = mainWindow
       ? await dialog.showSaveDialog(mainWindow, dialogOptions)
@@ -1051,7 +1075,7 @@ app.whenReady().then(async () => {
     const dialogOptions: OpenDialogOptions = {
       title: 'Import Data',
       defaultPath: app.getPath('documents'),
-      filters: [{ name: 'SMPlayer Database', extensions: ['db'] }],
+      filters: [{ name: 'Simple Melody Player Database', extensions: ['db'] }],
       properties: ['openFile'],
     }
     const result = mainWindow

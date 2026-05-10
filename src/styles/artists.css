@@ -259,12 +259,6 @@
   min-height: 0;
   overflow: auto;
   scrollbar-gutter: stable;
-  scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
-}
-
-.artists-list:hover {
-  scrollbar-color: rgba(91, 105, 122, 0.42) transparent;
 }
 
 .artists-virtual-spacer,

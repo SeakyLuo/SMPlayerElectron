@@ -53,33 +53,4 @@
   overflow: auto;
   padding: 0;
   scrollbar-gutter: stable;
-  scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
-}
-
-.workspace-content::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
-}
-
-.workspace-content::-webkit-scrollbar:hover {
-  width: 10px;
-  height: 10px;
-}
-
-.workspace-content:hover {
-  scrollbar-color: rgba(91, 105, 122, 0.48) transparent;
-}
-
-.workspace-content::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.workspace-content::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: transparent;
-}
-
-.workspace-content:hover::-webkit-scrollbar-thumb {
-  background: rgba(91, 105, 122, 0.48);
 }

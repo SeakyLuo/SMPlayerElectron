@@ -7,6 +7,7 @@ import type { Translator } from '../shared/i18n'
 import { hasLyricsTimestamps, mergePlainLyricsWithTimedRaw, stripLyricsTimestamps } from '../shared/lyrics'
 import { useLibraryStore } from '../state/useLibraryStore'
 import { useMusicDialogShortcuts } from '../hooks/useMusicDialogShortcuts'
+import { requestConfirmDialog } from './dialogService'
 import { Icon } from './icons'
 import { MusicAlbumArtControl } from './MusicAlbumArtControl'
 import { MAX_ARTIST_CELLS, MusicInfoControl } from './MusicInfoControl'
@@ -300,7 +301,16 @@ export function MusicDialog({
   }
 
   const switchMode = (nextMode: SongDialogMode) => {
-    if (activeMode === 'lyrics' && lyricsDirty && !window.confirm(t('song.discardLyricsConfirm'))) {
+    if (activeMode === 'lyrics' && lyricsDirty) {
+      void requestConfirmDialog({
+        title: t('common.confirm'),
+        message: t('song.discardLyricsConfirm'),
+      }).then((confirmed) => {
+        if (confirmed) {
+          setActiveMode(nextMode)
+          setStatusMessage('')
+        }
+      })
       return
     }
 

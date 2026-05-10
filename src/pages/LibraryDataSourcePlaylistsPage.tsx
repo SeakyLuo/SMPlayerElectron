@@ -1,0 +1,121 @@
+import { useEffect, useState } from 'react'
+
+import { LoadingState } from '../components/LoadingState'
+import { getLibrarySnapshotFromDataSource, type LibraryDataSource } from '../data/libraryDataSource'
+import type { LibrarySnapshot, PlaylistSortCriterion, PreferenceLevel } from '../shared/contracts'
+import type { Translator } from '../shared/i18n'
+import { PlaylistsPage } from './PlaylistsPage'
+
+interface LibraryDataSourcePlaylistsPageProps {
+  dataSource: LibraryDataSource
+  t: Translator
+  selectedTrackId: number | null
+  isPlaying: boolean
+  searchQuery: string
+  error: string | null
+  onPlayTrack: (trackId: number, queueSongIds: number[]) => void
+  onMoveToMusicOrPlay: (songId: number) => void
+  onPlayNext: (songId: number) => void
+  onTogglePlayPause: () => void
+  onSelectPlaylist: (playlistId: number) => void
+  onDeletePlaylist: (playlistId: number) => void
+  onRenamePlaylist: (playlistId: number, name: string) => void
+  onCreatePlaylistWithSongs: (name: string, songIds: number[]) => void
+  onAddSongsToNowPlaying: (songIds: number[]) => void
+  onReorderPlaylists: (playlistIds: number[]) => void
+  onSetPlaylistPreferred: (playlistId: number, name: string, level: PreferenceLevel) => void
+  onAddSongToPlaylist: (playlistId: number, songId: number) => void
+  onAddSongsToPlaylist: (playlistId: number, songIds: number[]) => void
+  onRemoveSongsFromPlaylist: (playlistId: number, songIds: number[]) => void
+  onReorderPlaylistSongs: (playlistId: number, songIds: number[], sortCriterion?: PlaylistSortCriterion) => void
+}
+
+export function LibraryDataSourcePlaylistsPage({
+  dataSource,
+  t,
+  selectedTrackId,
+  isPlaying,
+  searchQuery,
+  error,
+  onPlayTrack,
+  onMoveToMusicOrPlay,
+  onPlayNext,
+  onTogglePlayPause,
+  onSelectPlaylist,
+  onDeletePlaylist,
+  onRenamePlaylist,
+  onCreatePlaylistWithSongs,
+  onAddSongsToNowPlaying,
+  onReorderPlaylists,
+  onSetPlaylistPreferred,
+  onAddSongToPlaylist,
+  onAddSongsToPlaylist,
+  onRemoveSongsFromPlaylist,
+  onReorderPlaylistSongs,
+}: LibraryDataSourcePlaylistsPageProps) {
+  const [snapshot, setSnapshot] = useState<LibrarySnapshot | null>(null)
+  const [sourceLoading, setSourceLoading] = useState(true)
+  const [sourceError, setSourceError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let disposed = false
+    setSourceLoading(true)
+    setSourceError(null)
+
+    getLibrarySnapshotFromDataSource(dataSource)
+      .then((nextSnapshot) => {
+        if (!disposed) {
+          setSnapshot(nextSnapshot)
+        }
+      })
+      .catch(() => {
+        if (!disposed) {
+          setSourceError(t('remoteShare.libraryLoadFailed'))
+        }
+      })
+      .finally(() => {
+        if (!disposed) {
+          setSourceLoading(false)
+        }
+      })
+
+    return () => {
+      disposed = true
+    }
+  }, [dataSource, t])
+
+  if (sourceLoading || !snapshot) {
+    return (
+      <section className="page-panel playlists-page">
+        {sourceError || error ? <div className="error-banner">{sourceError ?? error}</div> : <LoadingState t={t} />}
+      </section>
+    )
+  }
+
+  return (
+    <PlaylistsPage
+      snapshot={snapshot}
+      t={t}
+      loading={false}
+      selectedTrackId={selectedTrackId}
+      isPlaying={isPlaying}
+      searchQuery={searchQuery}
+      error={sourceError ?? error}
+      onPlayTrack={onPlayTrack}
+      onMoveToMusicOrPlay={onMoveToMusicOrPlay}
+      onPlayNext={onPlayNext}
+      onTogglePlayPause={onTogglePlayPause}
+      onSelectPlaylist={onSelectPlaylist}
+      onDeletePlaylist={onDeletePlaylist}
+      onRenamePlaylist={onRenamePlaylist}
+      onCreatePlaylistWithSongs={onCreatePlaylistWithSongs}
+      onAddSongsToNowPlaying={onAddSongsToNowPlaying}
+      onReorderPlaylists={onReorderPlaylists}
+      onSetPlaylistPreferred={onSetPlaylistPreferred}
+      onAddSongToPlaylist={onAddSongToPlaylist}
+      onAddSongsToPlaylist={onAddSongsToPlaylist}
+      onRemoveSongsFromPlaylist={onRemoveSongsFromPlaylist}
+      onReorderPlaylistSongs={onReorderPlaylistSongs}
+    />
+  )
+}

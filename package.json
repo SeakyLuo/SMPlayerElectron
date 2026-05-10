@@ -78,7 +78,7 @@
     "fileAssociations": [
       {
         "name": "music_player",
-        "description": "SMPlayer audio file",
+        "description": "Simple Melody Player audio file",
         "ext": [
           "mp3",
           "flac",
@@ -123,7 +123,7 @@
       "applicationId": "App",
       "publisher": "CN=CFBE922A-0341-4A7E-B15B-A6DEF6C9E3AF",
       "publisherDisplayName": "SeakyTheLoner",
-      "displayName": "SMPlayer",
+      "displayName": "Simple Melody Player",
       "backgroundColor": "#F8F8F8",
       "languages": [
         "en-US",

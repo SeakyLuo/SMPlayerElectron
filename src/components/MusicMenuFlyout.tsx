@@ -7,6 +7,7 @@ import { removeQueueRange } from '../shared/queueUndo'
 import { useLibraryStore } from '../state/useLibraryStore'
 import { usePreferenceStore } from '../state/usePreferenceStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
+import { requestConfirmDialog } from './dialogService'
 import { MenuFlyout } from './MenuFlyout'
 import { getMusicMenuFlyoutItems } from './MenuFlyoutHelper'
 import { MusicDialog } from './MusicDialog'
@@ -177,9 +178,15 @@ export function MusicMenuFlyout({
               onRevealSong(menu.song.path)
             },
             onDelete: () => {
-              if (window.confirm(t('context.deleteSongConfirm', { title: menu.song.title }))) {
-                onDeleteSongFromDisk(menu.song.id)
-              }
+              void requestConfirmDialog({
+                title: t('playlists.delete'),
+                message: t('context.deleteSongConfirm', { title: menu.song.title }),
+                confirmText: t('playlists.delete'),
+              }).then((confirmed) => {
+                if (confirmed) {
+                  onDeleteSongFromDisk(menu.song.id)
+                }
+              })
             },
             onHide: async () => {
               await hideSong(menu.song.id)

@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { AlbumArtControl } from '../components/AlbumArtControl'
 import { ArtworkImage } from '../components/ArtworkImage'
 import { DefaultAlbumArtwork } from '../components/DefaultAlbumArtwork'
+import { requestTextDialog } from '../components/dialogService'
 import { Icon } from '../components/icons'
 import { MenuFlyout } from '../components/MenuFlyout'
 import { getAddToPlaylistMenuFlyoutItem, getPreferenceMenuFlyoutItem, type MenuFlyoutItem } from '../components/MenuFlyoutHelper'
@@ -989,10 +990,14 @@ function getSearchResultMenuItems({
         text: t('local.searchDirectory'),
         icon: 'search',
         onClick: () => {
-          const query = window.prompt(t('local.searchDirectoryPrompt', { name: card.title }))
-          if (query?.trim()) {
-            onSearchDirectory(query, getRelativeFolderPath(card.sourcePath!, rootPath))
-          }
+          void requestTextDialog({
+            title: t('local.searchDirectoryPrompt', { name: card.title }),
+            defaultValue: '',
+          }).then((query) => {
+            if (query) {
+              onSearchDirectory(query, getRelativeFolderPath(card.sourcePath!, rootPath))
+            }
+          })
         },
       },
     )
