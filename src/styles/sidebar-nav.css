@@ -268,17 +268,15 @@ body.night-mode .sidebar-floating-tooltip::before {
 
 .sidebar-footer {
   z-index: 2;
-  margin-top: auto;
   padding: 4px 0 0;
   border-radius: 0;
   background: transparent;
   border: 0;
   width: 100%;
-  flex: 0 0 auto;
+  min-height: 0;
 }
 
 .playlist-nav-section {
-  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -356,11 +354,53 @@ body.night-mode .sidebar-floating-tooltip::before {
   pointer-events: auto;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.playlist-nav-children.is-expanded:hover,
+.playlist-nav-children.is-expanded:focus-within {
   scrollbar-color: rgba(91, 105, 122, 0.42) transparent;
 }
 
-body.night-mode .app-shell .playlist-nav-children.is-expanded {
+body.night-mode .app-shell .playlist-nav-children.is-expanded:hover,
+body.night-mode .app-shell .playlist-nav-children.is-expanded:focus-within {
   scrollbar-color: rgba(203, 213, 225, 0.38) transparent;
+}
+
+.playlist-nav-children::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+.playlist-nav-children::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.playlist-nav-children::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  background-clip: content-box;
+}
+
+.playlist-nav-children.is-expanded:hover::-webkit-scrollbar-thumb,
+.playlist-nav-children.is-expanded:focus-within::-webkit-scrollbar-thumb {
+  border-width: 4px;
+  background: rgba(91, 105, 122, 0.42);
+}
+
+body.night-mode .app-shell .playlist-nav-children.is-expanded:hover::-webkit-scrollbar-thumb,
+body.night-mode .app-shell .playlist-nav-children.is-expanded:focus-within::-webkit-scrollbar-thumb {
+  background: rgba(203, 213, 225, 0.38);
+}
+
+.playlist-nav-children::-webkit-scrollbar-thumb:hover {
+  border-width: 1px;
+  background: rgba(67, 80, 96, 0.68);
+}
+
+body.night-mode .app-shell .playlist-nav-children::-webkit-scrollbar-thumb:hover {
+  background: rgba(188, 202, 220, 0.62);
 }
 
 .playlist-nav-children > * {
@@ -517,8 +557,7 @@ body.night-mode .app-shell .playlist-nav-children.is-expanded {
 }
 
 .sidebar.is-collapsed .playlist-nav-section {
-  flex: 0 0 auto;
-  margin-top: 8px;
+  margin-top: 0;
 }
 
 .sidebar-footer .nav-link {
@@ -526,8 +565,9 @@ body.night-mode .app-shell .playlist-nav-children.is-expanded {
 }
 
 .sidebar.is-collapsed .sidebar-footer {
+  grid-row: 8;
+  align-self: end;
   width: var(--sidebar-collapsed-item-size);
-  margin-top: auto;
   display: block;
 }
 
@@ -552,6 +592,21 @@ body.night-mode .app-shell .sidebar.is-collapsed .nav-link.active:hover,
 body.night-mode .app-shell .sidebar.is-collapsed .nav-link.active:focus-visible {
   background: rgba(var(--accent-rgb), 0.2) !important;
   color: #fff !important;
+}
+
+body.night-mode .app-shell .sidebar.is-collapsed .search-form,
+body.night-mode .app-shell .sidebar.is-collapsed .search-form:focus-within {
+  background: transparent;
+  box-shadow: none;
+}
+
+body.night-mode .app-shell .sidebar.is-collapsed .search-commit-button:hover,
+body.night-mode .app-shell .sidebar.is-collapsed .search-commit-button:focus-visible,
+body.night-mode .app-shell .sidebar.is-collapsed .sidebar-footer .nav-link.active,
+body.night-mode .app-shell .sidebar.is-collapsed .sidebar-footer .nav-link.active:hover,
+body.night-mode .app-shell .sidebar.is-collapsed .sidebar-footer .nav-link.active:focus-visible {
+  background: transparent !important;
+  box-shadow: none !important;
 }
 
 .sidebar.is-collapsed .nav-link.active::before,

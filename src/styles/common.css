@@ -242,3 +242,61 @@
   min-height: 320px;
   scrollbar-gutter: stable;
 }
+
+body.night-mode .app-shell .playlist-create-form input,
+body.night-mode .app-shell .settings-toggle-row input[type='text'],
+body.night-mode .app-shell .inline-select-control select {
+  border-color: var(--night-border);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--night-text);
+}
+
+body.night-mode .app-shell .action-button.secondary {
+  border-color: var(--night-border);
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--night-text);
+}
+
+body.night-mode .app-shell .action-button.secondary.danger {
+  border-color: rgba(248, 113, 113, 0.28);
+  color: #fecaca;
+}
+
+body.night-mode .app-shell .root-banner,
+body.night-mode .app-shell .empty-state,
+body.night-mode .app-shell .loading-state,
+body.night-mode .app-shell .summary-card,
+body.night-mode .app-shell .collection-card,
+body.night-mode .app-shell .table-shell {
+  border-color: var(--night-border);
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--night-text);
+}
+
+body.night-mode .app-shell .error-banner {
+  border-color: rgba(248, 113, 113, 0.24);
+  background: rgba(127, 29, 29, 0.22);
+  color: #fecaca;
+}
+
+body.night-mode .app-shell .root-banner strong,
+body.night-mode .app-shell .empty-state h3,
+body.night-mode .app-shell .loading-state h3,
+body.night-mode .app-shell .summary-value {
+  color: var(--night-text);
+}
+
+body.night-mode .app-shell .banner-hint,
+body.night-mode .app-shell .empty-state p,
+body.night-mode .app-shell .summary-card p {
+  color: var(--night-muted);
+}
+
+body.night-mode .app-shell .summary-label {
+  color: var(--night-subtle);
+}
+
+body.night-mode .app-shell .loading-state-spinner {
+  border-color: rgba(var(--accent-rgb), 0.24);
+  border-top-color: color-mix(in srgb, var(--accent) 72%, #f5fbff 28%);
+}

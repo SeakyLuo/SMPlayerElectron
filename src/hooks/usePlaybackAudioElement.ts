@@ -15,6 +15,7 @@ interface PlaybackAudioElementOptions {
   pendingAutoplayRef: MutableRef<boolean>
   volumeRef: MutableRef<number>
   isMutedRef: MutableRef<boolean>
+  modeRef: MutableRef<PlaybackMode>
   isUserSeekingRef: MutableRef<boolean>
   pendingSeekSecondsRef: MutableRef<number | null>
   durationSecondsRef: MutableRef<number>
@@ -49,6 +50,7 @@ export function usePlaybackAudioElement({
   pendingAutoplayRef,
   volumeRef,
   isMutedRef,
+  modeRef,
   isUserSeekingRef,
   pendingSeekSecondsRef,
   durationSecondsRef,
@@ -213,6 +215,11 @@ export function usePlaybackAudioElement({
     }
 
     const handleBeforeUnload = () => {
+      window.smplayer?.savePlaybackSettingsImmediate({
+        volume: volumeRef.current,
+        isMuted: isMutedRef.current,
+        mode: modeRef.current,
+      })
       void persistPlaybackSettings({ musicProgress: audio.currentTime })
     }
 
@@ -265,6 +272,7 @@ export function usePlaybackAudioElement({
     finishCurrentTrack,
     isMutedRef,
     isUserSeekingRef,
+    modeRef,
     pendingAutoplayRef,
     pendingSeekSecondsRef,
     pendingStartSecondsRef,

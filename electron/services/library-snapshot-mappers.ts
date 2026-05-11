@@ -68,6 +68,7 @@ export function toLibraryPlaylist(
   return {
     id: Number(row.id),
     name: row.name,
+    priority: Number(row.priority),
     songCount: Number(row.songCount),
     songIds: playlistSongIds.get(row.id) ?? [],
     sortCriterion: mapPlaylistSort(row.criterion),

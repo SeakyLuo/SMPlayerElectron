@@ -111,6 +111,30 @@ const api: SmplayerApi = {
   sendFeedbackEmail: () => ipcRenderer.invoke('shell:send-feedback-email'),
   openFeedbackInBrowser: () => ipcRenderer.invoke('shell:open-feedback-browser'),
   openVoiceAssistantPrivacySettings: () => ipcRenderer.invoke('shell:open-voice-assistant-privacy-settings'),
+  recognizeSpeech: (language) => ipcRenderer.invoke('voice:recognize', language),
+  cancelSpeechRecognition: () => ipcRenderer.invoke('voice:cancel-recognition'),
+  onVoiceRecognitionHypothesis: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, hypothesis: Parameters<typeof callback>[0]) => {
+      callback(hypothesis)
+    }
+
+    ipcRenderer.on('voice:recognition-hypothesis', listener)
+
+    return () => {
+      ipcRenderer.removeListener('voice:recognition-hypothesis', listener)
+    }
+  },
+  onVoiceRecognitionStateChange: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, update: Parameters<typeof callback>[0]) => {
+      callback(update)
+    }
+
+    ipcRenderer.on('voice:recognition-state', listener)
+
+    return () => {
+      ipcRenderer.removeListener('voice:recognition-state', listener)
+    }
+  },
   setSongFavorite: (songId, favorite) =>
     ipcRenderer.invoke('library:set-favorite', songId, favorite),
   setSongsFavorite: (songIds, favorite) =>
@@ -150,6 +174,9 @@ const api: SmplayerApi = {
   clearInvalidPreferenceItems: (type) => ipcRenderer.invoke('preferences:clear-invalid', type),
   saveViewState: (update) => ipcRenderer.invoke('view-state:save', update),
   savePlaybackSettings: (update) => ipcRenderer.invoke('playback:save-settings', update),
+  savePlaybackSettingsImmediate: (update) => {
+    ipcRenderer.sendSync('playback:save-settings-immediate', update)
+  },
   markSongPlayed: (songId) => ipcRenderer.invoke('playback:mark-song-played', songId),
   updateSongDuration: (songId, duration) =>
     ipcRenderer.invoke('library:update-song-duration', songId, duration),

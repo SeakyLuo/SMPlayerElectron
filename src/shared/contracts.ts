@@ -63,6 +63,7 @@ export interface RecentLibrarySong extends LibrarySong {
 export interface LibraryPlaylist {
   id: number
   name: string
+  priority: number
   songCount: number
   songIds: number[]
   sortCriterion: PlaylistSortCriterion
@@ -258,6 +259,19 @@ export interface TrackNotificationPayload {
   title: string
   artist: string
   album: string
+}
+
+export interface VoiceRecognitionResult {
+  text: string
+  error?: 'unsupported-platform' | 'unavailable' | 'privacy-required' | 'no-speech' | 'audio-capture' | 'canceled' | 'failed'
+}
+
+export interface VoiceRecognitionHypothesis {
+  text: string
+}
+
+export interface VoiceRecognitionStateChange {
+  state: 'idle' | 'capturing' | 'processing'
 }
 
 export interface LibraryCounts {
@@ -490,6 +504,10 @@ export interface SmplayerApi {
   sendFeedbackEmail: () => Promise<void>
   openFeedbackInBrowser: () => Promise<void>
   openVoiceAssistantPrivacySettings: () => Promise<void>
+  recognizeSpeech: (language: string) => Promise<VoiceRecognitionResult>
+  cancelSpeechRecognition: () => Promise<void>
+  onVoiceRecognitionHypothesis: (callback: (hypothesis: VoiceRecognitionHypothesis) => void) => () => void
+  onVoiceRecognitionStateChange: (callback: (update: VoiceRecognitionStateChange) => void) => () => void
   setSongFavorite: (songId: number, favorite: boolean) => Promise<void>
   setSongsFavorite: (songIds: number[], favorite: boolean) => Promise<void>
   createPlaylist: (name: string, songIds?: number[]) => Promise<LibraryPlaylist>
@@ -522,6 +540,7 @@ export interface SmplayerApi {
   clearInvalidPreferenceItems: (type: PreferenceEntityType) => Promise<void>
   saveViewState: (update: ViewStateUpdate) => Promise<void>
   savePlaybackSettings: (update: PlaybackSettingsUpdate) => Promise<void>
+  savePlaybackSettingsImmediate: (update: PlaybackSettingsUpdate) => void
   markSongPlayed: (songId: number) => Promise<void>
   updateSongDuration: (songId: number, duration: number) => Promise<void>
   onGlobalMediaCommand: (callback: (command: GlobalMediaCommand) => void) => () => void

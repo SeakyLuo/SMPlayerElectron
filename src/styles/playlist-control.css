@@ -472,3 +472,25 @@
   height: 16px;
 }
 
+body.night-mode .app-shell .playlist-control-item {
+  color: var(--night-text);
+}
+
+body.night-mode .app-shell .playlist-control-item:hover::before {
+  background: rgba(var(--accent-rgb), 0.18);
+}
+
+body.night-mode .app-shell .playlist-control-item.is-current::before {
+  background: rgba(var(--accent-rgb), 0.24);
+}
+
+body.night-mode .app-shell .playlist-control-item-artwork-wrap,
+body.night-mode .app-shell .playlist-control-item-leading-artwork-wrap {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+body.night-mode .app-shell .playlist-control-item-hover-actions button:hover,
+body.night-mode .app-shell .playlist-control-item-hover-actions button:focus-visible {
+  background: rgba(255, 255, 255, 0.09);
+}
+

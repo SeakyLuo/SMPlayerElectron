@@ -1,6 +1,6 @@
 import { useCallback, useRef, type RefObject } from 'react'
 
-import type { LibrarySnapshot, PlaybackMode, PlaybackSettingsUpdate } from '../shared/contracts'
+import type { LibrarySnapshot, PlaybackSettingsUpdate } from '../shared/contracts'
 import { currentIndex } from '../shared/mediaHelper'
 
 interface PlaybackPersistenceOptions {
@@ -8,9 +8,6 @@ interface PlaybackPersistenceOptions {
   currentTrackIdRef: RefObject<number | null>
   currentQueueIndexRef: RefObject<number | null>
   progressSecondsRef: RefObject<number>
-  volumeRef: RefObject<number>
-  isMutedRef: RefObject<boolean>
-  modeRef: RefObject<PlaybackMode>
   getPlaybackSongIds: () => number[]
 }
 
@@ -19,9 +16,6 @@ export function usePlaybackPersistence({
   currentTrackIdRef,
   currentQueueIndexRef,
   progressSecondsRef,
-  volumeRef,
-  isMutedRef,
-  modeRef,
   getPlaybackSongIds,
 }: PlaybackPersistenceOptions) {
   const persistedDurationByTrackRef = useRef(new Map<number, number>())
@@ -33,19 +27,32 @@ export function usePlaybackPersistence({
         return
       }
 
-      const lastMusicIndex =
-        override.lastMusicIndex ?? currentIndex(getPlaybackSongIds(), currentTrackIdRef.current, currentQueueIndexRef.current ?? -1)
-      const shouldSaveProgress = snapshotRef.current.settings.saveMusicProgress
-      const nextMusicProgress = shouldSaveProgress
-        ? override.musicProgress ?? progressSecondsRef.current
-        : 0
-
       const update: PlaybackSettingsUpdate = {
-        lastMusicIndex,
-        volume: override.volume ?? volumeRef.current,
-        isMuted: override.isMuted ?? isMutedRef.current,
-        mode: override.mode ?? modeRef.current,
-        musicProgress: nextMusicProgress,
+      }
+      if ('musicProgress' in override || 'lastMusicIndex' in override) {
+        update.lastMusicIndex =
+          override.lastMusicIndex ?? currentIndex(getPlaybackSongIds(), currentTrackIdRef.current, currentQueueIndexRef.current ?? -1)
+      }
+      if ('musicProgress' in override) {
+        update.musicProgress = snapshotRef.current.settings.saveMusicProgress
+          ? override.musicProgress ?? progressSecondsRef.current
+          : 0
+      }
+      if ('volume' in override) {
+        update.volume = override.volume
+      }
+      if ('isMuted' in override) {
+        update.isMuted = override.isMuted
+      }
+      if ('mode' in override) {
+        update.mode = override.mode
+      }
+
+      const shouldPersistImmediately = 'volume' in update || 'isMuted' in update || 'mode' in update
+      const hasPlaybackPositionUpdate = 'lastMusicIndex' in update || 'musicProgress' in update
+      if (shouldPersistImmediately && !hasPlaybackPositionUpdate) {
+        window.smplayer.savePlaybackSettingsImmediate(update)
+        return
       }
 
       settingsWriteQueueRef.current = settingsWriteQueueRef.current
@@ -54,7 +61,7 @@ export function usePlaybackPersistence({
         .then(() => undefined)
       await settingsWriteQueueRef.current
     },
-    [currentQueueIndexRef, currentTrackIdRef, getPlaybackSongIds, isMutedRef, modeRef, progressSecondsRef, snapshotRef, volumeRef],
+    [currentQueueIndexRef, currentTrackIdRef, getPlaybackSongIds, progressSecondsRef, snapshotRef],
   )
 
   const persistResolvedDuration = useCallback((trackId: number | null, duration: number) => {

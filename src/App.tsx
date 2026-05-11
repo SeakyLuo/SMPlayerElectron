@@ -528,7 +528,7 @@ function App() {
     })
   }, [initialLoadComplete, snapshot.settings.lastReleaseNotesVersion])
 
-  const playback = usePlaybackController(snapshot)
+  const playback = usePlaybackController(snapshot, initialLoadComplete)
   const {
     searchInput,
     submittedSearchQuery,
@@ -1416,6 +1416,20 @@ function App() {
         onCreatePlaylist={() => {
           setIsCreatePlaylistDialogOpen(true)
         }}
+        onCreatePlaylistWithSongs={(name, songIds) => {
+          void createPlaylist(name, songIds)
+        }}
+        onDeletePlaylist={(playlistId) => {
+          const playlistIndex = snapshot.playlists.findIndex((item) => item.id === playlistId)
+          const playlist = snapshot.playlists[playlistIndex]!
+          void deletePlaylist(playlistId)
+          showUndoableNotification(t('notification.playlistRemoved', { name: playlist.name }), t('common.undo'), () =>
+            restorePlaylist(playlist, playlistIndex),
+          )
+        }}
+        onRenamePlaylist={(playlistId, name) => {
+          void renamePlaylist(playlistId, name)
+        }}
         onReorderPlaylists={(playlistIds) => {
           void reorderPlaylists(playlistIds)
         }}
@@ -2058,10 +2072,11 @@ function App() {
                     void saveViewState({ lastPlaylistId: playlistId })
                   }}
                   onDeletePlaylist={(playlistId) => {
-                    const playlist = snapshot.playlists.find((item) => item.id === playlistId)!
+                    const playlistIndex = snapshot.playlists.findIndex((item) => item.id === playlistId)
+                    const playlist = snapshot.playlists[playlistIndex]!
                     void deletePlaylist(playlistId)
                     showUndoableNotification(t('notification.playlistRemoved', { name: playlist.name }), t('common.undo'), () =>
-                      restorePlaylist(playlist),
+                      restorePlaylist(playlist, playlistIndex),
                     )
                   }}
                   onRenamePlaylist={(playlistId, name) => {

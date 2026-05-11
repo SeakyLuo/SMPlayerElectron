@@ -10,10 +10,12 @@ import { MenuFlyout } from '../components/MenuFlyout'
 import { MusicDialog } from '../components/MusicDialog'
 import { PlaylistControlItem } from '../components/PlaylistControlItem'
 import { MediaControlSurface, type VoiceAssistantResponse } from '../components/MediaControl'
+import { getVolumeIconName } from '../components/volumeIcon'
 import {
   getAddToPlaylistMenuFlyoutItem,
   getMusicMenuFlyoutItems,
   getPreferenceMenuFlyoutItem,
+  getShuffleMenuItems,
   type MenuFlyoutItem,
   type MenuFlyoutPosition,
 } from '../components/MenuFlyoutHelper'
@@ -22,6 +24,7 @@ import { getDisplayArtists } from '../shared/artists'
 import { extractArtworkColorRgb, getDefaultArtworkColorRgb } from '../shared/artworkColor'
 import type {
   LibraryPlaylist,
+  LibraryFolder,
   LibrarySong,
   LyricsSnapshot,
   PlaybackMode,
@@ -602,6 +605,8 @@ export function NowPlayingFullPage({
       currentSong,
       songs,
       librarySongs,
+      recentSongs,
+      folders,
       playlists,
       preferenceItem,
       t,
@@ -642,6 +647,15 @@ export function NowPlayingFullPage({
           onToggleFavorite(currentSong.id, !currentSong.favorite)
         }
       },
+      mode,
+      volume,
+      isMuted,
+      isCompact: isCompactImmersiveRef.current,
+      onVolumeChange,
+      onToggleMute,
+      onToggleShuffle,
+      onToggleRepeat,
+      onToggleRepeatOne,
       onPreferenceChanged: refreshPreferenceItem,
       onSeeMusicInfo: () => {
         setMoreMenu(null)
@@ -770,8 +784,8 @@ export function NowPlayingFullPage({
           <button
             type="button"
             className="player-track now-playing-full-player-exit"
-            aria-label={t('nowPlaying.exitFullScreen')}
-            title={t('nowPlaying.exitFullScreen')}
+            aria-label={t('nowPlaying.exitImmersiveMode')}
+            title={t('nowPlaying.exitImmersiveMode')}
             onClick={goBack}
           >
             <span className="player-artwork-shell">
@@ -1462,10 +1476,38 @@ function NowPlayingFullPlaylist({
   )
 }
 
+function getPlaybackModeName(t: Translator, mode: PlaybackMode) {
+  switch (mode) {
+    case 'shuffle':
+      return t('player.playbackModeShuffle')
+    case 'repeat':
+      return t('player.playbackModeRepeat')
+    case 'repeat-one':
+      return t('player.playbackModeRepeatOne')
+    default:
+      return t('player.playbackModeList')
+  }
+}
+
+function getPlaybackModeIcon(mode: PlaybackMode): NonNullable<MenuFlyoutItem['icon']> {
+  switch (mode) {
+    case 'shuffle':
+      return 'shuffle'
+    case 'repeat':
+      return 'repeat'
+    case 'repeat-one':
+      return 'repeatOne'
+    default:
+      return 'nowPlaying'
+  }
+}
+
 function getNowPlayingFullMoreItems({
   currentSong,
   songs,
   librarySongs,
+  recentSongs,
+  folders,
   playlists,
   preferenceItem,
   t,
@@ -1479,6 +1521,15 @@ function getNowPlayingFullMoreItems({
   onCreatePlaylist,
   onAddToPlaylist,
   onToggleFavorite,
+  mode,
+  volume,
+  isMuted,
+  isCompact,
+  onVolumeChange,
+  onToggleMute,
+  onToggleShuffle,
+  onToggleRepeat,
+  onToggleRepeatOne,
   onPreferenceChanged,
   onSeeMusicInfo,
   onSeeLyrics,
@@ -1487,6 +1538,8 @@ function getNowPlayingFullMoreItems({
   currentSong: LibrarySong | null
   songs: LibrarySong[]
   librarySongs: LibrarySong[]
+  recentSongs: LibrarySong[]
+  folders: LibraryFolder[]
   playlists: LibraryPlaylist[]
   preferenceItem: PreferenceItemSnapshot | null
   t: Translator
@@ -1500,11 +1553,42 @@ function getNowPlayingFullMoreItems({
   onCreatePlaylist: (name: string) => void
   onAddToPlaylist: (playlistId: number) => void
   onToggleFavorite: () => void
+  mode: PlaybackMode
+  volume: number
+  isMuted: boolean
+  isCompact: boolean
+  onVolumeChange: (volume: number) => void
+  onToggleMute: () => void
+  onToggleShuffle: () => void
+  onToggleRepeat: () => void
+  onToggleRepeatOne: () => void
   onPreferenceChanged: () => void | Promise<void>
   onSeeMusicInfo: () => void
   onSeeLyrics: () => void
   onSeeAlbumArt: () => void
 }) {
+  const volumeValue = Math.min(Math.max(volume, 0), 100)
+
+  const setPlaybackMode = (targetMode: PlaybackMode) => {
+    if (mode === targetMode) {
+      return
+    }
+
+    if (targetMode === 'shuffle') {
+      onToggleShuffle()
+    } else if (targetMode === 'repeat') {
+      onToggleRepeat()
+    } else if (targetMode === 'repeat-one') {
+      onToggleRepeatOne()
+    } else if (mode === 'shuffle') {
+      onToggleShuffle()
+    } else if (mode === 'repeat') {
+      onToggleRepeat()
+    } else if (mode === 'repeat-one') {
+      onToggleRepeatOne()
+    }
+  }
+
   const items: MenuFlyoutItem[] = [
     { key: 'quick-play', text: t('nowPlaying.quickPlay'), icon: 'play', onClick: onQuickPlay },
     {
@@ -1512,14 +1596,58 @@ function getNowPlayingFullMoreItems({
       text: t('nowPlaying.randomPlay'),
       icon: 'shuffle',
       disabled: songs.length === 0 && librarySongs.length === 0,
-      onClick: () => {
-        const sourceSongs = songs.length > 0 ? songs : librarySongs
-        onPlaySongs(randomLibrary(sourceSongs.map((song) => song.id), QUICK_PLAY_LIMIT))
-      },
+      submenu: getShuffleMenuItems({
+        songs,
+        librarySongs,
+        recentSongs,
+        playlists,
+        folders,
+        randomLimit: QUICK_PLAY_LIMIT,
+        t,
+        onPlaySongs,
+        onQuickPlay,
+      }),
     },
+  ]
+
+  if (isCompact) {
+    items.push(
+      {
+        key: 'playback-mode',
+        text: `${t('player.playbackMode')}: ${getPlaybackModeName(t, mode)}`,
+        icon: getPlaybackModeIcon(mode),
+        submenu: [
+          { key: 'playback-mode-list', text: getPlaybackModeName(t, 'once'), icon: 'nowPlaying', onClick: () => setPlaybackMode('once') },
+          { key: 'playback-mode-shuffle', text: getPlaybackModeName(t, 'shuffle'), icon: 'shuffle', onClick: () => setPlaybackMode('shuffle') },
+          { key: 'playback-mode-repeat', text: getPlaybackModeName(t, 'repeat'), icon: 'repeat', onClick: () => setPlaybackMode('repeat') },
+          { key: 'playback-mode-repeat-one', text: getPlaybackModeName(t, 'repeat-one'), icon: 'repeatOne', onClick: () => setPlaybackMode('repeat-one') },
+        ],
+      },
+      {
+        key: 'player-volume',
+        text: t('player.volume'),
+        icon: getVolumeIconName(volumeValue, isMuted),
+        kind: 'volume',
+        keepOpen: true,
+        volumeValue,
+        volumeMuted: isMuted,
+        onVolumeChange,
+        onToggleMute,
+      },
+      {
+        key: 'player-favorite',
+        text: currentSong?.favorite ? t('player.unlike') : t('player.like'),
+        icon: currentSong?.favorite ? 'heartFilled' : 'heart',
+        disabled: !currentSong,
+        onClick: onToggleFavorite,
+      },
+    )
+  }
+
+  items.push(
     { key: 'save-playlist', text: t('nowPlaying.savePlaylist'), icon: 'plus', onClick: onSavePlaylist },
     { key: 'clear-now-playing', text: t('nowPlaying.clearNowPlaying'), icon: 'close', onClick: onClearQueue },
-  ]
+  )
 
   if (!currentSong) {
     return items
@@ -1531,7 +1659,7 @@ function getNowPlayingFullMoreItems({
     t,
     defaultPlaylistName: currentSong.title,
     includeNowPlaying: true,
-    includeFavorites: !currentSong.favorite,
+    includeFavorites: !isCompact && !currentSong.favorite,
     onAddToNowPlaying,
     onToggleFavorite,
     onCreatePlaylist,
@@ -1541,6 +1669,12 @@ function getNowPlayingFullMoreItems({
   if (addToItem) {
     items.push({ key: 'current-song-separator', text: '', separator: true }, addToItem)
   }
+
+  const viewItems: MenuFlyoutItem[] = [
+    { key: 'see-music-info', text: t('context.seeMusicInfo'), icon: 'info', keepOpen: true, onClick: onSeeMusicInfo },
+    { key: 'see-lyrics', text: t('context.seeLyrics'), icon: 'lyrics', keepOpen: true, onClick: onSeeLyrics },
+    { key: 'see-album-art', text: t('context.seeAlbumArt'), icon: 'pictures', keepOpen: true, onClick: onSeeAlbumArt },
+  ]
 
   items.push(
     getPreferenceMenuFlyoutItem({
@@ -1553,9 +1687,14 @@ function getNowPlayingFullMoreItems({
     }),
     { key: 'play-artist', text: t('detail.playArtist'), icon: 'users', onClick: onPlayArtist },
     { key: 'play-album', text: t('detail.playAlbum'), icon: 'albums', onClick: onPlayAlbum },
-    { key: 'see-music-info', text: t('context.seeMusicInfo'), icon: 'info', keepOpen: true, onClick: onSeeMusicInfo },
-    { key: 'see-lyrics', text: t('context.seeLyrics'), icon: 'lyrics', keepOpen: true, onClick: onSeeLyrics },
-    { key: 'see-album-art', text: t('context.seeAlbumArt'), icon: 'pictures', keepOpen: true, onClick: onSeeAlbumArt },
+    ...(isCompact
+      ? [{
+        key: 'view',
+        text: t('context.view'),
+        icon: 'view',
+        submenu: viewItems,
+      } satisfies MenuFlyoutItem]
+      : viewItems),
   )
 
   return items

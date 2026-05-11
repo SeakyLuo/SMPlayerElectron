@@ -118,6 +118,11 @@ body.night-mode .app-shell {
   -webkit-backdrop-filter: blur(28px);
 }
 
+.app-shell.nav-overlay-open .sidebar.is-collapsed {
+  height: auto;
+  max-height: none;
+}
+
 body.night-mode .app-shell.nav-overlay-open .sidebar {
   background: rgba(16, 20, 25, 0.96);
   box-shadow: 18px 0 48px rgba(0, 0, 0, 0.36);
@@ -299,6 +304,11 @@ body.night-mode .app-shell .minimal-titlebar-back-button:focus-visible {
 .app-shell.nav-minimal:not(.nav-minimal-open) .sidebar {
   visibility: hidden;
   pointer-events: none;
+}
+
+.app-shell.nav-minimal .sidebar.is-collapsed {
+  height: auto;
+  max-height: none;
 }
 
 .app-shell.nav-minimal.nav-minimal-open .minimal-titlebar {
