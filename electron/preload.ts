@@ -2,6 +2,46 @@ import { contextBridge, ipcRenderer } from 'electron'
 
 import type { SmplayerApi } from '../src/shared/contracts'
 
+const startupNightModeActive = process.argv.includes('--smplayer-startup-night-mode=1')
+
+type StartupDocument = {
+  documentElement?: {
+    classList?: { add: (className: string) => void }
+    style?: { backgroundColor: string }
+  }
+  body?: {
+    classList?: { add: (className: string) => void }
+    style?: { backgroundColor: string }
+  }
+  getElementById?: (id: string) => { style?: { setProperty?: (name: string, value: string) => void } } | null
+  addEventListener?: (type: string, listener: () => void, options: { once: boolean }) => void
+}
+
+function applyStartupNightMode() {
+  const rendererDocument = (globalThis as unknown as { document?: StartupDocument }).document
+  rendererDocument?.documentElement?.classList?.add('night-mode')
+
+  if (rendererDocument?.documentElement?.style) {
+    rendererDocument.documentElement.style.backgroundColor = '#101419'
+  }
+
+  rendererDocument?.body?.classList?.add('night-mode')
+  if (rendererDocument?.body?.style) {
+    rendererDocument.body.style.backgroundColor = '#101419'
+  }
+
+  rendererDocument?.getElementById?.('root')?.style?.setProperty?.('background-color', '#101419')
+}
+
+if (startupNightModeActive) {
+  try {
+    applyStartupNightMode()
+    ;(globalThis as unknown as { document?: StartupDocument }).document?.addEventListener?.('DOMContentLoaded', applyStartupNightMode, { once: true })
+  } catch {
+    // Keep IPC injection available even if the preload document is not ready yet.
+  }
+}
+
 const api: SmplayerApi = {
   getAppInfo: () => ipcRenderer.invoke('app:get-info'),
   getLibrarySnapshot: () => ipcRenderer.invoke('library:get-snapshot'),

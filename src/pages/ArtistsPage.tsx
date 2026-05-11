@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import clsx from 'clsx'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 
@@ -140,6 +140,8 @@ export function ArtistsPage({
   const [playlistNameDialog, setPlaylistNameDialog] = useState<{ defaultName: string; songIds: number[] } | null>(null)
   const [songContextMenu, setSongContextMenu] = useState<MusicMenuFlyoutState | null>(null)
   const [groupMenu, setGroupMenu] = useState<GroupContextMenuState | null>(null)
+  const artistMasterScrollFrameRef = useRef<HTMLDivElement | null>(null)
+  const artistMasterScrollbarTrackRef = useRef<HTMLDivElement | null>(null)
   const artistListRef = useRef<HTMLDivElement | null>(null)
   const artistDetailRef = useRef<HTMLElement | null>(null)
   const artistAlbumListRef = useRef<HTMLDivElement | null>(null)
@@ -468,6 +470,75 @@ export function ArtistsPage({
     }
   }, [])
 
+  useLayoutEffect(() => {
+    const scrollFrame = artistMasterScrollFrameRef.current
+    const scrollContainer = artistListRef.current
+    if (!scrollFrame || !scrollContainer) {
+      return
+    }
+
+    let animationFrame = 0
+    const updateScrollbar = () => {
+      const maxScrollTop = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight)
+      const trackHeight = scrollContainer.clientHeight
+      const thumbHeight = maxScrollTop > 0
+        ? Math.max(38, Math.round((trackHeight / scrollContainer.scrollHeight) * trackHeight))
+        : trackHeight
+      const thumbTop = maxScrollTop > 0
+        ? Math.round((scrollContainer.scrollTop / maxScrollTop) * Math.max(0, trackHeight - thumbHeight))
+        : 0
+
+      scrollFrame.style.setProperty('--artists-master-scrollbar-thumb-height', `${thumbHeight}px`)
+      scrollFrame.style.setProperty('--artists-master-scrollbar-thumb-top', `${thumbTop}px`)
+      scrollFrame.classList.toggle('has-scrollbar', isCompactArtistLayout && maxScrollTop > 1)
+    }
+    const scheduleUpdate = () => {
+      window.cancelAnimationFrame(animationFrame)
+      animationFrame = window.requestAnimationFrame(updateScrollbar)
+    }
+
+    updateScrollbar()
+    scrollContainer.addEventListener('scroll', scheduleUpdate, { passive: true })
+    const resizeObserver = new ResizeObserver(scheduleUpdate)
+    resizeObserver.observe(scrollFrame)
+    resizeObserver.observe(scrollContainer)
+    window.addEventListener('resize', scheduleUpdate)
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame)
+      scrollContainer.removeEventListener('scroll', scheduleUpdate)
+      resizeObserver.disconnect()
+      window.removeEventListener('resize', scheduleUpdate)
+    }
+  }, [artistListHeight, isCompactArtistLayout])
+
+  const onArtistMasterScrollbarPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const scrollContainer = artistListRef.current
+    const scrollFrame = artistMasterScrollFrameRef.current
+    const scrollbarTrack = artistMasterScrollbarTrackRef.current
+    if (!scrollContainer || !scrollFrame || !scrollbarTrack) {
+      return
+    }
+
+    event.preventDefault()
+    const maxScrollTop = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight)
+    const thumbHeight = Number.parseFloat(getComputedStyle(scrollFrame).getPropertyValue('--artists-master-scrollbar-thumb-height'))
+    const trackRange = Math.max(1, scrollbarTrack.clientHeight - thumbHeight)
+    const scrollPerPixel = maxScrollTop / trackRange
+    const startY = event.clientY
+    const startScrollTop = scrollContainer.scrollTop
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      scrollContainer.scrollTop = startScrollTop + (moveEvent.clientY - startY) * scrollPerPixel
+    }
+    const onPointerUp = () => {
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', onPointerUp)
+    }
+
+    window.addEventListener('pointermove', onPointerMove)
+    window.addEventListener('pointerup', onPointerUp)
+  }
+
   useEffect(() => {
     const artistDetail = artistDetailRef.current
     if (!artistDetail) {
@@ -583,43 +654,47 @@ export function ArtistsPage({
               )
             })}
           </nav>
-          <div
-            className="artists-list"
-            ref={artistListRef}
-            aria-label={t('common.artists')}
-            onScroll={(event) => {
-              setArtistScrollTop(event.currentTarget.scrollTop)
-            }}
-          >
-            {artistTopSpacerHeight > 0 ? (
-              <div className="artists-virtual-spacer" style={{ height: artistTopSpacerHeight }} />
-            ) : null}
-            {renderedArtists.map((artist) => (
-              <div className="artist-virtual-row" key={artist.name}>
-                <button
-                  className={clsx('artist-list-item', {
-                    'is-active': artist.name === selectedArtist?.name,
-                  })}
-                  type="button"
-                  title={artist.name}
-                  onClick={() => {
-                    openArtistDetail(artist.name)
+          <div className="artists-master-scroll-frame" ref={artistMasterScrollFrameRef}>
+            <div
+              className="artists-list"
+              ref={artistListRef}
+              aria-label={t('common.artists')}
+              onScroll={(event) => {
+                setArtistScrollTop(event.currentTarget.scrollTop)
+              }}
+            >
+              {artistTopSpacerHeight > 0 ? (
+                <div className="artists-virtual-spacer" style={{ height: artistTopSpacerHeight }} />
+              ) : null}
+              {renderedArtists.map((artist) => (
+                <div className="artist-virtual-row" key={artist.name}>
+                  <button
+                    className={clsx('artist-list-item', {
+                      'is-active': artist.name === selectedArtist?.name,
+                    })}
+                    type="button"
+                    title={artist.name}
+                    onClick={() => {
+                      openArtistDetail(artist.name)
                   }}
                   onContextMenu={(event) => {
-                    setSelectedArtistName(artist.name)
                     openGroupMenu(event, 'artist', artist.name, artist.songs)
                   }}
                 >
-                  <ArtistListArtwork artist={artist} />
-                  <span className="artist-list-copy">
-                    <strong>{artist.name}</strong>
-                  </span>
-                </button>
-              </div>
-            ))}
-            {artistBottomSpacerHeight > 0 ? (
-              <div className="artists-virtual-spacer" style={{ height: artistBottomSpacerHeight }} />
-            ) : null}
+                    <ArtistListArtwork artist={artist} />
+                    <span className="artist-list-copy">
+                      <strong>{artist.name}</strong>
+                    </span>
+                  </button>
+                </div>
+              ))}
+              {artistBottomSpacerHeight > 0 ? (
+                <div className="artists-virtual-spacer" style={{ height: artistBottomSpacerHeight }} />
+              ) : null}
+            </div>
+            <div className="artists-master-scrollbar" ref={artistMasterScrollbarTrackRef} aria-hidden="true">
+              <div className="artists-master-scrollbar-thumb" onPointerDown={onArtistMasterScrollbarPointerDown} />
+            </div>
           </div>
         </div>
       </aside>
@@ -1256,7 +1331,7 @@ function buildArtistGroups(songs: LibrarySong[], t: Translator) {
   const groups = new Map<string, ArtistGroup>()
 
   for (const song of songs) {
-    for (const artistName of getSongArtists(song)) {
+    for (const artistName of getSongArtists(song, t('common.artistUnknown'))) {
       const group =
         groups.get(artistName) ?? {
           name: artistName,

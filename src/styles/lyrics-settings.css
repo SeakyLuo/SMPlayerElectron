@@ -396,3 +396,99 @@
 .settings-quick-actions > div:first-child {
   border-left: 0;
 }
+
+body.night-mode .app-shell .lyrics-progress-panel,
+body.night-mode .app-shell .settings-info-grid > div {
+  border-color: var(--night-border);
+  background: rgba(255, 255, 255, 0.055);
+}
+
+body.night-mode .app-shell .lyrics-progress-header,
+body.night-mode .app-shell .lyrics-progress-stats,
+body.night-mode .app-shell .settings-row-copy small,
+body.night-mode .app-shell .settings-hint-icon,
+body.night-mode .app-shell .settings-time-range label,
+body.night-mode .app-shell .settings-info-grid span,
+body.night-mode .app-shell .settings-quick-actions span {
+  color: var(--night-muted);
+}
+
+body.night-mode .app-shell .lyrics-progress-header strong,
+body.night-mode .app-shell .lyrics-progress-current,
+body.night-mode .app-shell .settings-row,
+body.night-mode .app-shell .settings-row-copy strong,
+body.night-mode .app-shell .settings-info-grid strong,
+body.night-mode .app-shell .settings-quick-actions strong {
+  color: var(--night-text);
+}
+
+body.night-mode .app-shell .lyrics-progress-bar {
+  background: rgba(222, 231, 242, 0.14);
+}
+
+body.night-mode .app-shell .settings-switch {
+  border-color: rgba(222, 231, 242, 0.28);
+  background: rgba(255, 255, 255, 0.075);
+}
+
+body.night-mode .app-shell .settings-switch::before {
+  background: rgba(222, 231, 242, 0.68);
+}
+
+body.night-mode .app-shell .settings-switch:checked {
+  border-color: transparent;
+  background: var(--accent);
+}
+
+body.night-mode .app-shell .settings-switch:checked::before {
+  background: #fff;
+}
+
+body.night-mode .app-shell .settings-time-trigger,
+body.night-mode .app-shell .settings-select-trigger {
+  border-color: var(--night-border);
+  background: rgba(255, 255, 255, 0.065);
+  color: var(--night-text);
+}
+
+body.night-mode .app-shell .settings-time-trigger svg,
+body.night-mode .app-shell .settings-select-trigger svg {
+  color: var(--night-muted);
+}
+
+body.night-mode .app-shell .settings-time-trigger:hover,
+body.night-mode .app-shell .settings-time-picker.is-open .settings-time-trigger,
+body.night-mode .app-shell .settings-select-trigger:hover,
+body.night-mode .app-shell .settings-select-trigger.is-open {
+  border-color: rgba(var(--accent-rgb), 0.34);
+  background: rgba(var(--accent-rgb), 0.16);
+  color: color-mix(in srgb, var(--accent) 72%, #f5fbff 28%);
+}
+
+body.night-mode .app-shell .settings-time-panel,
+body.night-mode .app-shell .settings-select-options {
+  border-color: var(--night-border);
+  background: rgba(24, 30, 38, 0.98);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.34);
+}
+
+body.night-mode .app-shell .settings-time-column button,
+body.night-mode .app-shell .settings-select-options button {
+  color: var(--night-text);
+}
+
+body.night-mode .app-shell .settings-time-column button:hover,
+body.night-mode .app-shell .settings-select-options button:hover,
+body.night-mode .app-shell .settings-select-options button.is-selected {
+  background: rgba(var(--accent-rgb), 0.18);
+  color: color-mix(in srgb, var(--accent) 72%, #f5fbff 28%);
+}
+
+body.night-mode .app-shell .settings-time-column button.is-selected {
+  background: var(--accent);
+  color: #fff;
+}
+
+body.night-mode .app-shell .settings-quick-actions > div {
+  border-left-color: var(--night-border);
+}

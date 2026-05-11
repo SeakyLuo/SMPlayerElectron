@@ -7,7 +7,7 @@
   max-height: 100%;
   gap: 0;
   padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.78);
+  border: 0;
   border-radius: 0;
   background: rgba(250, 252, 255, 0.74);
   box-shadow: 0 22px 56px rgba(47, 66, 92, 0.18);
@@ -58,6 +58,10 @@
 
 .app-shell.nav-minimal .workspace.is-immersive-route {
   border-color: transparent;
+  background: transparent;
+}
+
+body.night-mode .app-shell.nav-minimal .workspace.is-immersive-route {
   background: transparent;
 }
 

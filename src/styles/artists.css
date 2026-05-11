@@ -209,6 +209,18 @@
   margin-top: 14px;
 }
 
+.artists-master-scroll-frame {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.artists-master-scrollbar {
+  display: none;
+}
+
 .artists-quick-jump {
   display: grid;
   align-self: stretch;
@@ -560,218 +572,292 @@
   border-top: 1px solid rgba(126, 139, 154, 0.16);
 }
 
-.app-shell.night-mode .workspace:has(.artists-page) {
+.app-shell.nav-minimal .artists-master {
+  padding: 8px 14px 0 14px;
+  border-right: 0;
+}
+
+.app-shell.nav-minimal .artists-search-shell:not(.appbar-page-search-shell) {
+  display: none;
+}
+
+.app-shell.nav-minimal .artists-list-shell {
+  gap: 4px;
+  margin-top: 0;
+}
+
+.app-shell.nav-minimal .artists-master-scroll-frame {
+  overflow: visible;
+}
+
+.app-shell.nav-minimal .artists-master-scroll-frame .artists-list {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: auto;
+  scrollbar-width: none;
+}
+
+.app-shell.nav-minimal .artists-master-scroll-frame .artists-list::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.app-shell.nav-minimal .artists-master-scrollbar {
+  position: absolute;
+  top: 0;
+  right: -5px;
+  bottom: 4px;
+  z-index: 2;
+  display: block;
+  width: 9px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease;
+}
+
+.app-shell.nav-minimal .artists-master-scroll-frame.has-scrollbar:hover .artists-master-scrollbar,
+.app-shell.nav-minimal .artists-master-scroll-frame.has-scrollbar:focus-within .artists-master-scrollbar,
+.app-shell.nav-minimal .artists-master-scroll-frame.has-scrollbar .artists-master-scrollbar:hover {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.app-shell.nav-minimal .artists-master-scrollbar-thumb {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  top: var(--artists-master-scrollbar-thumb-top, 0);
+  height: var(--artists-master-scrollbar-thumb-height, 40px);
+  border-radius: 999px;
+  background: rgba(91, 105, 122, 0.5);
+  cursor: default;
+}
+
+.app-shell.nav-minimal .artists-master-scrollbar-thumb:hover {
+  left: 1px;
+  right: 1px;
+  background: rgba(67, 80, 96, 0.68);
+}
+
+body.night-mode .app-shell .workspace:has(.artists-page) {
   background: var(--night-shell-bg);
 }
 
-.app-shell.night-mode .artists-master {
+body.night-mode .app-shell .artists-master {
   border-right-color: var(--night-border);
   background: rgba(255, 255, 255, 0.025);
 }
 
-.app-shell.night-mode .albums-page .page-search-form,
-.app-shell.night-mode .artists-page .page-search-form {
+body.night-mode .app-shell.nav-minimal .artists-master {
+  border-right: 0;
+  background: transparent;
+}
+
+body.night-mode .app-shell .albums-page .page-search-form,
+body.night-mode .app-shell .artists-page .page-search-form {
   border-color: var(--night-border);
   background: rgba(255, 255, 255, 0.055);
   color: var(--night-muted);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055);
 }
 
-.app-shell.night-mode .albums-page .page-search-form input,
-.app-shell.night-mode .artists-page .page-search-form input {
+body.night-mode .app-shell .albums-page .page-search-form input,
+body.night-mode .app-shell .artists-page .page-search-form input {
   color: var(--night-text);
 }
 
-.app-shell.night-mode .albums-page .page-search-form:focus-within,
-.app-shell.night-mode .artists-page .page-search-form:focus-within,
-.app-shell.night-mode .artists-search-shell .page-search-form:focus-within,
-.app-shell.night-mode .albums-search-shell .page-search-form:focus-within {
+body.night-mode .app-shell .albums-page .page-search-form:focus-within,
+body.night-mode .app-shell .artists-page .page-search-form:focus-within,
+body.night-mode .app-shell .artists-search-shell .page-search-form:focus-within,
+body.night-mode .app-shell .albums-search-shell .page-search-form:focus-within {
   border-color: rgba(var(--accent-rgb), 0.5);
   background: rgba(var(--accent-rgb), 0.14);
   box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.14);
 }
 
-.app-shell.night-mode .artists-search-shell .page-search-form:focus-within input,
-.app-shell.night-mode .albums-search-shell .page-search-form:focus-within input {
+body.night-mode .app-shell .artists-search-shell .page-search-form:focus-within input,
+body.night-mode .app-shell .albums-search-shell .page-search-form:focus-within input {
   background: transparent;
 }
 
-.app-shell.night-mode .albums-page .page-search-form input::placeholder,
-.app-shell.night-mode .artists-page .page-search-form input::placeholder {
+body.night-mode .app-shell .albums-page .page-search-form input::placeholder,
+body.night-mode .app-shell .artists-page .page-search-form input::placeholder {
   color: rgba(222, 231, 242, 0.52);
 }
 
-.app-shell.night-mode .albums-page .page-search-submit-button,
-.app-shell.night-mode .albums-page .page-search-clear-button,
-.app-shell.night-mode .artists-page .page-search-submit-button,
-.app-shell.night-mode .artists-page .page-search-clear-button {
+body.night-mode .app-shell .albums-page .page-search-submit-button,
+body.night-mode .app-shell .albums-page .page-search-clear-button,
+body.night-mode .app-shell .artists-page .page-search-submit-button,
+body.night-mode .app-shell .artists-page .page-search-clear-button {
   color: var(--night-muted);
 }
 
-.app-shell.night-mode .albums-page .page-search-submit-button:hover,
-.app-shell.night-mode .albums-page .page-search-clear-button:hover,
-.app-shell.night-mode .artists-page .page-search-submit-button:hover,
-.app-shell.night-mode .artists-page .page-search-clear-button:hover {
+body.night-mode .app-shell .albums-page .page-search-submit-button:hover,
+body.night-mode .app-shell .albums-page .page-search-clear-button:hover,
+body.night-mode .app-shell .artists-page .page-search-submit-button:hover,
+body.night-mode .app-shell .artists-page .page-search-clear-button:hover {
   background: rgba(var(--accent-rgb), 0.18);
   color: color-mix(in srgb, var(--accent) 72%, #f5fbff 28%);
 }
 
-.app-shell.night-mode .albums-page .page-search-suggestions,
-.app-shell.night-mode .artists-page .page-search-suggestions {
+body.night-mode .app-shell .albums-page .page-search-suggestions,
+body.night-mode .app-shell .artists-page .page-search-suggestions {
   border-color: var(--night-border);
   background: rgba(24, 30, 38, 0.98);
   box-shadow: 0 18px 36px rgba(0, 0, 0, 0.34);
 }
 
-.app-shell.night-mode .albums-page .page-search-suggestion,
-.app-shell.night-mode .artists-page .page-search-suggestion {
+body.night-mode .app-shell .albums-page .page-search-suggestion,
+body.night-mode .app-shell .artists-page .page-search-suggestion {
   color: var(--night-text);
 }
 
-.app-shell.night-mode .albums-page .page-search-suggestion:hover,
-.app-shell.night-mode .artists-page .page-search-suggestion:hover {
+body.night-mode .app-shell .albums-page .page-search-suggestion:hover,
+body.night-mode .app-shell .artists-page .page-search-suggestion:hover {
   background: rgba(var(--accent-rgb), 0.18);
 }
 
-.app-shell.night-mode .albums-page .page-search-suggestion small,
-.app-shell.night-mode .artists-page .page-search-suggestion small {
+body.night-mode .app-shell .albums-page .page-search-suggestion small,
+body.night-mode .app-shell .artists-page .page-search-suggestion small {
   color: var(--night-muted);
 }
 
-.app-shell.night-mode .artists-quick-jump button {
+body.night-mode .app-shell .artists-quick-jump button {
   color: var(--night-muted);
 }
 
-.app-shell.night-mode .artists-quick-jump button:hover,
-.app-shell.night-mode .artists-quick-jump button.is-active {
+body.night-mode .app-shell .artists-quick-jump button:hover,
+body.night-mode .app-shell .artists-quick-jump button.is-active {
   background: rgba(var(--accent-rgb), 0.18);
   color: color-mix(in srgb, var(--accent) 72%, #f5fbff 28%);
 }
 
-.app-shell.night-mode .artists-quick-jump button:disabled,
-.app-shell.night-mode .artists-quick-jump button:disabled:hover {
+body.night-mode .app-shell .artists-quick-jump button:disabled,
+body.night-mode .app-shell .artists-quick-jump button:disabled:hover {
   background: transparent;
   color: rgba(222, 231, 242, 0.25);
 }
 
-.app-shell.night-mode .artist-list-item {
+body.night-mode .app-shell .artist-list-item {
   color: var(--night-text);
 }
 
-.app-shell.night-mode .artist-list-item:hover {
+body.night-mode .app-shell .artist-list-item:hover {
   background: rgba(var(--accent-rgb), 0.13);
 }
 
-.app-shell.night-mode .artist-list-item.is-active {
+body.night-mode .app-shell .artist-list-item.is-active {
   background: rgba(var(--accent-rgb), 0.2);
   color: color-mix(in srgb, var(--accent) 72%, #f5fbff 28%);
 }
 
-.app-shell.night-mode .artist-list-avatar {
+body.night-mode .app-shell .artist-list-avatar {
   background: color-mix(in srgb, var(--accent) 32%, #2a3440 68%);
 }
 
-.app-shell.night-mode .artist-list-artwork,
-.app-shell.night-mode .artist-album-artwork {
+body.night-mode .app-shell .artist-list-artwork,
+body.night-mode .app-shell .artist-album-artwork {
   background: rgba(255, 255, 255, 0.08);
 }
 
-.app-shell.night-mode .artist-list-copy small {
+body.night-mode .app-shell .artist-list-copy small {
   color: var(--night-muted);
 }
 
-.app-shell.night-mode .artist-detail-header {
+body.night-mode .app-shell .artist-detail-header {
   background:
     linear-gradient(to bottom, rgba(15, 19, 25, 0.97), rgba(15, 19, 25, 0.88));
   box-shadow: 0 12px 24px rgba(0, 0, 0, 0.16);
 }
 
-.app-shell.night-mode .artist-detail-back-button,
-.app-shell.night-mode .artist-shuffle-button,
-.app-shell.night-mode .artist-more-button,
-.app-shell.night-mode .artist-album-shuffle,
-.app-shell.night-mode .artist-album-more {
+body.night-mode .app-shell .artist-detail-back-button,
+body.night-mode .app-shell .artist-shuffle-button,
+body.night-mode .app-shell .artist-more-button,
+body.night-mode .app-shell .artist-album-shuffle,
+body.night-mode .app-shell .artist-album-more {
   color: var(--night-text);
 }
 
-.app-shell.night-mode .artist-detail-back-button:hover,
-.app-shell.night-mode .artist-detail-back-button:focus-visible,
-.app-shell.night-mode .artist-shuffle-button:hover:not(:disabled),
-.app-shell.night-mode .artist-more-button:hover:not(:disabled),
-.app-shell.night-mode .artist-more-button:focus-visible:not(:disabled),
-.app-shell.night-mode .artist-album-shuffle:hover:not(:disabled),
-.app-shell.night-mode .artist-album-shuffle:focus-visible:not(:disabled),
-.app-shell.night-mode .artist-album-more:hover:not(:disabled),
-.app-shell.night-mode .artist-album-more:focus-visible:not(:disabled) {
+body.night-mode .app-shell .artist-detail-back-button:hover,
+body.night-mode .app-shell .artist-detail-back-button:focus-visible,
+body.night-mode .app-shell .artist-shuffle-button:hover:not(:disabled),
+body.night-mode .app-shell .artist-more-button:hover:not(:disabled),
+body.night-mode .app-shell .artist-more-button:focus-visible:not(:disabled),
+body.night-mode .app-shell .artist-album-shuffle:hover:not(:disabled),
+body.night-mode .app-shell .artist-album-shuffle:focus-visible:not(:disabled),
+body.night-mode .app-shell .artist-album-more:hover:not(:disabled),
+body.night-mode .app-shell .artist-album-more:focus-visible:not(:disabled) {
   background: rgba(var(--accent-rgb), 0.16);
   color: color-mix(in srgb, var(--accent) 72%, #f5fbff 28%);
 }
 
-.app-shell.night-mode .artist-detail-header h2,
-.app-shell.night-mode .artist-album-copy a {
+body.night-mode .app-shell .artist-detail-header h2,
+body.night-mode .app-shell .artist-album-copy a {
   color: var(--night-text);
 }
 
-.app-shell.night-mode .artist-detail-header p,
-.app-shell.night-mode .artist-detail-compact-summary,
-.app-shell.night-mode .artist-album-copy p {
+body.night-mode .app-shell .artist-detail-header p,
+body.night-mode .app-shell .artist-detail-compact-summary,
+body.night-mode .app-shell .artist-album-copy p {
   color: var(--night-muted);
 }
 
-.app-shell.night-mode .artist-album-copy a:hover {
+body.night-mode .app-shell .artist-album-copy a:hover {
   color: color-mix(in srgb, var(--accent) 72%, #f5fbff 28%);
 }
 
-.app-shell.night-mode .artist-album-section {
+body.night-mode .app-shell .artist-album-section {
   border-color: var(--night-border);
   background: rgba(255, 255, 255, 0.045);
   box-shadow: 0 16px 38px rgba(0, 0, 0, 0.2);
 }
 
-.app-shell.night-mode .artist-song-list {
+body.night-mode .app-shell .artist-song-list {
   border-top-color: var(--night-border);
 }
 
-.app-shell.night-mode .artists-page .empty-state,
-.app-shell.night-mode .albums-page .empty-state {
+body.night-mode .app-shell .artists-page .empty-state,
+body.night-mode .app-shell .albums-page .empty-state {
   border-color: var(--night-border);
   background: rgba(255, 255, 255, 0.045);
   color: var(--night-text);
 }
 
-.app-shell.night-mode .artists-page .empty-state p,
-.app-shell.night-mode .albums-page .empty-state p {
+body.night-mode .app-shell .artists-page .empty-state p,
+body.night-mode .app-shell .albums-page .empty-state p {
   color: var(--night-muted);
 }
 
-.app-shell.night-mode .artists-page .playlist-control-compact .now-playing-queue-item {
+body.night-mode .app-shell .artists-page .playlist-control-compact .now-playing-queue-item {
   border-bottom-color: transparent;
   color: var(--night-text);
 }
 
-.app-shell.night-mode .artists-page .playlist-control-compact .now-playing-queue-item:hover,
-.app-shell.night-mode .artists-page .playlist-control-compact .now-playing-queue-item:focus-visible,
-.app-shell.night-mode .artists-page .playlist-control-compact .now-playing-queue-item.is-selected {
+body.night-mode .app-shell .artists-page .playlist-control-compact .now-playing-queue-item:hover,
+body.night-mode .app-shell .artists-page .playlist-control-compact .now-playing-queue-item:focus-visible,
+body.night-mode .app-shell .artists-page .playlist-control-compact .now-playing-queue-item.is-selected {
   background: rgba(var(--accent-rgb), 0.14);
   box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.22);
 }
 
-.app-shell.night-mode .artists-page .playlist-control-compact .now-playing-queue-item.is-current {
+body.night-mode .app-shell .artists-page .playlist-control-compact .now-playing-queue-item.is-current {
   background: rgba(var(--accent-rgb), 0.2);
   color: color-mix(in srgb, var(--accent) 72%, #f5fbff 28%);
 }
 
-.app-shell.night-mode .artists-page .now-playing-queue-artwork-wrap {
+body.night-mode .app-shell .artists-page .now-playing-queue-artwork-wrap {
   background: rgba(255, 255, 255, 0.08);
 }
 
-.app-shell.night-mode .artists-page .now-playing-queue-artists,
-.app-shell.night-mode .artists-page .now-playing-queue-album,
-.app-shell.night-mode .artists-page .now-playing-queue-action {
+body.night-mode .app-shell .artists-page .now-playing-queue-artists,
+body.night-mode .app-shell .artists-page .now-playing-queue-album,
+body.night-mode .app-shell .artists-page .now-playing-queue-action {
   color: var(--night-muted);
 }
 
-.app-shell.night-mode .artists-page .now-playing-queue-action:hover {
+body.night-mode .app-shell .artists-page .now-playing-queue-action:hover {
   background: rgba(var(--accent-rgb), 0.18);
   color: color-mix(in srgb, var(--accent) 72%, #f5fbff 28%);
 }

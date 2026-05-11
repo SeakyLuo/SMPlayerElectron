@@ -21,7 +21,6 @@ import { useScrollbarHoverClass } from './hooks/useScrollbarHoverClass'
 import { useSearchController } from './hooks/useSearchController'
 import { useTrackNotification } from './hooks/useTrackNotification'
 import { useUndoableNotificationStore } from './state/useUndoableNotificationStore'
-import { CollectionPage } from './pages/CollectionPage'
 import { HiddenFoldersPage } from './pages/HiddenFoldersPage'
 import { LibraryDataSourceMusicPage } from './pages/LibraryDataSourceMusicPage'
 import { LocalPage, LocalTitleGrid } from './pages/LocalPage'
@@ -69,6 +68,8 @@ const SCROLLBAR_HOST_SELECTOR = [
   '.library-context-submenu-panel',
   '.local-scroll-shell',
   '.now-playing-list-shell',
+  '.release-notes-list',
+  '.remote-share-body',
   '.lyrics-scroll-shell',
   '.preference-page',
   '.playlists-page',
@@ -76,6 +77,8 @@ const SCROLLBAR_HOST_SELECTOR = [
   '.recent-search-list',
   '.recent-page',
   '.settings-page',
+  '.settings-time-column',
+  '.voice-assistant-help-body',
 ].join(',')
 const SCROLLBAR_HOVER_CLASS = 'is-scrollbar-hovered'
 const RESTORABLE_SCROLL_SELECTORS = [
@@ -369,6 +372,9 @@ function App() {
   const [showNowPlayingFullPage, setShowNowPlayingFullPage] = useState(false)
   const [isWindowFullScreen, setIsWindowFullScreen] = useState(false)
   const [isMiniMode, setIsMiniMode] = useState(false)
+  const [startupNightModeActive] = useState(() =>
+    document.body.classList.contains('night-mode') || document.documentElement.classList.contains('night-mode'),
+  )
   const [windowControlClockMinute, setWindowControlClockMinute] = useState(getClockMinute)
   const [isCreatePlaylistDialogOpen, setIsCreatePlaylistDialogOpen] = useState(false)
   const [pendingCreatedPlaylistName, setPendingCreatedPlaylistName] = useState('')
@@ -424,7 +430,7 @@ function App() {
   const saveViewState = useLibraryStore((state) => state.saveViewState)
   const showUndoableNotification = useUndoableNotificationStore((state) => state.show)
   const [localRelativePath, setLocalRelativePath] = useState('')
-  const nightModeActive = snapshot.settings.nightMode === 'on' || (
+  const settingsNightModeActive = snapshot.settings.nightMode === 'on' || (
     snapshot.settings.nightMode === 'auto' &&
     isClockMinuteInRange(
       windowControlClockMinute,
@@ -432,7 +438,24 @@ function App() {
       settingsTimeToMinute(snapshot.settings.nightModeEndTime),
     )
   )
-  const usesLightWindowControls = isMiniMode || nightModeActive
+  const nightModeActive = initialLoadComplete ? settingsNightModeActive : startupNightModeActive
+  const isRouteImmersiveForWindowControls = isAlbumDetailRoute(location.pathname) ||
+    isPlaylistDetailRoute(location.pathname) ||
+    (location.pathname === '/albums' && new URLSearchParams(location.search).has('album'))
+  const usesLightWindowControls = isMiniMode || nightModeActive || (isNavigationMinimal && isRouteImmersiveForWindowControls)
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('night-mode', nightModeActive)
+    document.body.classList.toggle('night-mode', nightModeActive)
+    document.documentElement.style.backgroundColor = ''
+    document.body.style.backgroundColor = ''
+    document.getElementById('root')?.style.removeProperty('background-color')
+
+    return () => {
+      document.documentElement.classList.remove('night-mode')
+      document.body.classList.remove('night-mode')
+    }
+  }, [nightModeActive])
 
   useEffect(() => {
     void window.smplayer?.setWindowControlsLight(usesLightWindowControls)
@@ -642,7 +665,7 @@ function App() {
         title: playback.currentTrack.title,
         artist:
           playback.currentTrack.artist ||
-          getDisplayArtists(playback.currentTrack) ||
+          getDisplayArtists(playback.currentTrack, t('common.artistUnknown')) ||
           playback.currentTrack.album ||
           t('common.artistUnknown'),
         artworkUrl:
@@ -784,7 +807,7 @@ function App() {
     setImmersiveHeaderTitle('')
   }, [location.pathname, location.search])
 
-  useTrackNotification(playback.currentTrack)
+  useTrackNotification(playback.currentTrack, t)
 
   async function playTrackInQueue(trackId: number, queueSongIds: number[], queueIndex = -1) {
     const nextQueue = setMusicAndPlayFromPlaylist(
@@ -874,7 +897,7 @@ function App() {
   function findVoiceArtist(query: string) {
     const artistGroups = new Map<string, LibrarySong[]>()
     for (const song of snapshot.songs) {
-      for (const artist of getSongArtists(song)) {
+      for (const artist of getSongArtists(song, t('common.artistUnknown'))) {
         artistGroups.set(artist, [...(artistGroups.get(artist) ?? []), song])
       }
     }
@@ -885,7 +908,7 @@ function App() {
   function findRandomArtist() {
     const artistGroups = new Map<string, LibrarySong[]>()
     for (const song of snapshot.songs) {
-      for (const artist of getSongArtists(song)) {
+      for (const artist of getSongArtists(song, t('common.artistUnknown'))) {
         artistGroups.set(artist, [...(artistGroups.get(artist) ?? []), song])
       }
     }
@@ -937,7 +960,7 @@ function App() {
       song.title,
       song.album,
       song.artist,
-      getDisplayArtists(song),
+      getDisplayArtists(song, t('common.artistUnknown')),
       ...song.artists,
     ])
   }
@@ -1177,13 +1200,23 @@ function App() {
 
   function getVoiceHint() {
     const songs = snapshot.songs
+    const hintType = Math.floor(Math.random() * 3)
     const song = songs[Math.floor(Math.random() * songs.length)]
-    if (song?.artist && song.artist.length <= 30) {
-      return t('voiceAssistant.hintArtist', { artist: song.artist })
-    }
 
-    if (song?.album && song.album.length <= 30) {
-      return t('voiceAssistant.hintAlbum', { album: song.album })
+    if (hintType === 0) {
+      const artist = song?.artist && song.artist.length <= 30
+        ? song.artist
+        : songs[Math.floor(Math.random() * songs.length)]?.artist
+      if (artist && artist.length <= 30) {
+        return t('voiceAssistant.hintArtist', { artist })
+      }
+    } else if (hintType === 1) {
+      const album = song?.album && song.album.length <= 30
+        ? song.album
+        : songs[Math.floor(Math.random() * songs.length)]?.album
+      if (album && album.length <= 30) {
+        return t('voiceAssistant.hintAlbum', { album })
+      }
     }
 
     return t('voiceAssistant.hintQuickPlay')
@@ -1202,6 +1235,9 @@ function App() {
   }
 
   const isLocalRoute = location.pathname === '/local'
+  const isHeaderedPlaylistRoute = isInAlbumDetail ||
+    location.pathname.startsWith('/playlists/') ||
+    location.pathname.startsWith('/favorites')
   const canNavigateBack = navigationDepth > 0 || isInAlbumDetail || isPlaylistDetailRoute(location.pathname)
   const isNavigationRail = isNavigationMinimal ? !isMinimalNavigationOpen : isNavigationCollapsed
   const isNavigationOverlayOpen = isNavigationMinimal
@@ -1337,7 +1373,7 @@ function App() {
 
   return (
     <div
-      className={`app-shell${isNavigationRail ? ' nav-collapsed' : ''}${isNavigationOverlay ? ' nav-overlay' : ''}${isNavigationOverlayOpen && !isNavigationMinimal ? ' nav-overlay-open' : ''}${isNavigationMinimal ? ' nav-minimal' : ''}${isNavigationMinimal && isMinimalNavigationOpen ? ' nav-minimal-open' : ''}${nightModeActive ? ' night-mode' : ''}`}
+      className={`app-shell${isNavigationRail ? ' nav-collapsed' : ''}${isNavigationOverlay ? ' nav-overlay' : ''}${isNavigationOverlayOpen && !isNavigationMinimal ? ' nav-overlay-open' : ''}${isNavigationMinimal ? ' nav-minimal' : ''}${isNavigationMinimal && isMinimalNavigationOpen ? ' nav-minimal-open' : ''}${isHeaderedPlaylistRoute ? ' is-headered-playlist-route' : ''}`}
     >
       {isNavigationMinimal ? (
         <div
@@ -1412,10 +1448,8 @@ function App() {
         className={
           location.pathname === '/recent' && !isNavigationMinimal
             ? 'workspace is-headerless-route'
-            : isInAlbumDetail ||
-              location.pathname.startsWith('/playlists/') ||
-              location.pathname.startsWith('/favorites')
-            ? 'workspace is-immersive-route'
+            : isHeaderedPlaylistRoute
+            ? 'workspace is-immersive-route is-headered-playlist-route'
             : isLocalRoute
               ? 'workspace is-local-route'
               : 'workspace'
@@ -2380,18 +2414,12 @@ function AlbumDetailRoute({
 
   if (!routeAlbumName || albumSongs.length === 0) {
     return (
-      <CollectionPage
-        title={t('collection.albumNotFound')}
-        description={t(
-          'collection.albumNotFoundDescription',
-        )}
-        items={[]}
-        t={t}
-        emptyTitle={t('collection.albumNotFound')}
-        emptyCopy={t(
-          'collection.albumNotFoundCopy',
-        )}
-      />
+      <section className="page-panel immersive-detail-page">
+        <div className="empty-state">
+          <h3>{t('collection.albumNotFound')}</h3>
+          <p>{t('collection.albumNotFoundCopy')}</p>
+        </div>
+      </section>
     )
   }
 

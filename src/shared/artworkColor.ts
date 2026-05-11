@@ -21,6 +21,7 @@ export async function extractArtworkColorRgb(artworkUrl: string) {
   }
 
   const image = new Image()
+  image.crossOrigin = 'anonymous'
   image.decoding = 'async'
 
   await new Promise<void>((resolve, reject) => {

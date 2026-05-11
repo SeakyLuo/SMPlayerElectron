@@ -179,7 +179,7 @@ export function FolderChainListView({
   onOpenFolder: (targetRelativePath: string) => void
   onOpenFolderMenu?: (targetRelativePath: string, x: number, y: number) => void
 }) {
-  const [openedFolderChainItemPath, setOpenedFolderChainItemPath] = useState<string | null>(null)
+  const [openedFolderChainItem, setOpenedFolderChainItem] = useState<{ path: string; left: number; top: number } | null>(null)
   const folderChainListRef = useRef<HTMLElement | null>(null)
   const { nodes } = useMemo(
     () => buildFolderIndex(songs, folders, rootPath),
@@ -217,18 +217,18 @@ export function FolderChainListView({
 
     event.preventDefault()
     void onDropLocalItems(JSON.parse(rawPayload) as FolderChainDropPayload, targetRelativePath)
-    setOpenedFolderChainItemPath(null)
+    setOpenedFolderChainItem(null)
   }
 
   return (
     <>
-      {openedFolderChainItemPath != null ? (
+      {openedFolderChainItem != null ? (
         <button
           aria-label={t('local.path')}
           className="folder-chain-flyout-overlay"
           type="button"
           onClick={() => {
-            setOpenedFolderChainItemPath(null)
+            setOpenedFolderChainItem(null)
           }}
         />
       ) : null}
@@ -247,7 +247,7 @@ export function FolderChainListView({
         }}
       >
         {folderChain.map((folderChainItem) => {
-          const isFlyoutOpen = openedFolderChainItemPath === folderChainItem.path
+          const isFlyoutOpen = openedFolderChainItem?.path === folderChainItem.path
           const hasChildFolders = folderChainItem.children.length > 0
           const segmentClassName = [
             'folder-chain-item',
@@ -270,7 +270,7 @@ export function FolderChainListView({
                   }}
                   onClick={() => {
                     scrollCurrentFolderToTop()
-                    setOpenedFolderChainItemPath(null)
+                    setOpenedFolderChainItem(null)
                   }}
                 >
                   {folderChainItem.name}
@@ -290,7 +290,7 @@ export function FolderChainListView({
                   }}
                   onClick={() => {
                     onOpenFolder(folderChainItem.path)
-                    setOpenedFolderChainItemPath(null)
+                    setOpenedFolderChainItem(null)
                   }}
                 >
                   {folderChainItem.name}
@@ -301,17 +301,30 @@ export function FolderChainListView({
                   aria-label={folderChainItem.name}
                   className="folder-chain-item-dropdown-button"
                   type="button"
-                  onClick={() => {
-                    setOpenedFolderChainItemPath((current) =>
-                      current === folderChainItem.path ? null : folderChainItem.path,
+                  onClick={(event) => {
+                    const segmentRect = event.currentTarget.parentElement!.getBoundingClientRect()
+                    setOpenedFolderChainItem((current) =>
+                      current?.path === folderChainItem.path
+                        ? null
+                        : {
+                          path: folderChainItem.path,
+                          left: Math.max(8, Math.min(segmentRect.left, window.innerWidth - 196)),
+                          top: segmentRect.bottom + 4,
+                        },
                     )
                   }}
                 >
                   <Icon name={isFlyoutOpen ? 'chevronDown' : 'chevronRight'} />
                 </button>
               ) : null}
-              {hasChildFolders && isFlyoutOpen ? (
-                <div className="folder-chain-item-flyout">
+              {hasChildFolders && isFlyoutOpen && openedFolderChainItem ? (
+                <div
+                  className="folder-chain-item-flyout"
+                  style={{
+                    left: openedFolderChainItem.left,
+                    top: openedFolderChainItem.top,
+                  }}
+                >
                   {folderChainItem.children.map((child) => (
                     <button
                       className={child.isHighlighted ? 'folder-chain-item-flyout-button is-highlighted' : 'folder-chain-item-flyout-button'}
@@ -329,7 +342,7 @@ export function FolderChainListView({
                       }}
                       onClick={() => {
                         onOpenFolder(child.path)
-                        setOpenedFolderChainItemPath(null)
+                        setOpenedFolderChainItem(null)
                       }}
                     >
                       {child.name}
@@ -1855,13 +1868,13 @@ export function LocalPage({
                             onPlayNext(song.id)
                           }}
                         >
-                          <Icon name="next" />
+                          <Icon name="playNext" />
                         </button>
                       </span>
                     ) : null}
                   </td>
                   <td className="local-table-artist-cell">
-                    {getSongArtists(song).map((artist, index) => (
+                    {getSongArtists(song, t('common.artistUnknown')).map((artist, index) => (
                       <span key={artist}>
                         {index > 0 ? ', ' : null}
                         <Link
@@ -2265,7 +2278,7 @@ function buildLocalSongQuickJumpMap(
 function getLocalSongQuickJumpValue(song: LibrarySong, sortMode: LocalSortMode, t: Translator) {
   switch (sortMode) {
     case 'artist':
-      return getSongArtists(song)[0] ?? ''
+      return getSongArtists(song, t('common.artistUnknown'))[0] ?? ''
     case 'album':
       return song.album || t('common.albumUnknown')
     case 'reverse':

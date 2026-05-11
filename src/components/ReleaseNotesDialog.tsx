@@ -25,8 +25,10 @@ export function ReleaseNotesDialog({
         <header>
           <h2 id="release-notes-title">{t('settings.releaseNotes')}</h2>
           <button type="button" onClick={onClose} aria-label={t('common.close')}>
-            <Icon name="close" />
+            <Icon name="arrowLeft" className="dialog-back-icon" />
+            <Icon name="close" className="dialog-close-icon" />
           </button>
+          <span className="dialog-titlebar-title">{t('app.shell')}</span>
         </header>
         <div className="release-notes-list">
           {releaseNotes.map((entry) => (

@@ -134,7 +134,7 @@ export function buildSearchResults(
 ) {
   const matchedSongs = normalizedQuery
     ? songs
-        .map((song) => ({ entity: song, score: matchSong(song, normalizedQuery) }))
+        .map((song) => ({ entity: song, score: matchSong(song, normalizedQuery, t) }))
         .filter((result) => result.score > 0)
         .sort(sortByScoreThenTitle)
         .map((result) => result.entity)
@@ -187,7 +187,7 @@ function buildArtistResults(
 ) {
   const groups = new Map<string, LibrarySong[]>()
   for (const song of allSongs) {
-    for (const artist of getSongArtists(song)) {
+    for (const artist of getSongArtists(song, t('common.artistUnknown'))) {
       if (artist.toLocaleLowerCase().includes(normalizedQuery)) {
         groups.set(artist, [...(groups.get(artist) ?? []), song])
       }
@@ -228,7 +228,7 @@ function buildAlbumResults(
   const groups = new Map<string, LibrarySong[]>()
   for (const song of allSongs) {
     const album = song.album || t('common.albumUnknown')
-    const artists = getSongArtists(song)
+    const artists = getSongArtists(song, t('common.artistUnknown'))
     if (
       album.toLocaleLowerCase().includes(normalizedQuery) ||
       artists.some((artist) => artist.toLocaleLowerCase().includes(normalizedQuery))
@@ -239,7 +239,7 @@ function buildAlbumResults(
 
   return [...groups.entries()]
     .map(([album, albumSongs]) => {
-      const artists = [...new Set(albumSongs.flatMap((song) => getSongArtists(song)))]
+      const artists = [...new Set(albumSongs.flatMap((song) => getSongArtists(song, t('common.artistUnknown'))))]
       const artistScore = Math.max(0, ...artists.map((artist) => evaluateString(artist, normalizedQuery) - 10))
       return {
         album,
@@ -332,8 +332,8 @@ function buildFolderResults(
     }))
 }
 
-function matchSong(song: LibrarySong, normalizedQuery: string) {
-  const artistScore = Math.max(...getSongArtists(song).map((artist) => evaluateString(artist, normalizedQuery)))
+function matchSong(song: LibrarySong, normalizedQuery: string, t: Translator) {
+  const artistScore = Math.max(...getSongArtists(song, t('common.artistUnknown')).map((artist) => evaluateString(artist, normalizedQuery)))
   const baseScore = Math.max(
     evaluateString(song.title, normalizedQuery),
     artistScore - 10,

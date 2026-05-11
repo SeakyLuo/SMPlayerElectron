@@ -1,4 +1,4 @@
-﻿.search-shell {
+.search-shell {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -29,7 +29,7 @@
     box-shadow 140ms ease;
 }
 
-.app-shell.night-mode .search-form {
+body.night-mode .app-shell .search-form {
   background: rgba(255, 255, 255, 0.045);
   box-shadow:
     inset 0 0 0 1px var(--night-border),
@@ -47,7 +47,7 @@
     0 0 0 3px rgba(var(--accent-rgb), 0.1);
 }
 
-.app-shell.night-mode .search-form:focus-within {
+body.night-mode .app-shell .search-form:focus-within {
   background: rgba(var(--accent-rgb), 0.14);
   box-shadow:
     inset 0 0 0 1px rgba(var(--accent-rgb), 0.5),
@@ -83,7 +83,7 @@
     transform 180ms cubic-bezier(0.2, 0, 0, 1);
 }
 
-.app-shell.night-mode .search-shell input {
+body.night-mode .app-shell .search-shell input {
   color: var(--night-text);
 }
 
@@ -91,7 +91,7 @@
   color: rgba(61, 73, 88, 0.62);
 }
 
-.app-shell.night-mode .search-shell input::placeholder {
+body.night-mode .app-shell .search-shell input::placeholder {
   color: var(--night-subtle);
 }
 
@@ -125,8 +125,8 @@
   border-radius: 0;
 }
 
-.app-shell.night-mode .search-commit-button,
-.app-shell.night-mode .search-clear-button {
+body.night-mode .app-shell .search-commit-button,
+body.night-mode .app-shell .search-clear-button {
   color: var(--night-muted);
 }
 
@@ -168,7 +168,7 @@
     color 120ms ease;
 }
 
-.app-shell.night-mode .search-clear-button {
+body.night-mode .app-shell .search-clear-button {
   background: rgba(var(--accent-rgb), 0.16);
   color: #fff;
 }
@@ -241,7 +241,7 @@
   backdrop-filter: blur(18px);
 }
 
-.app-shell.night-mode .search-history-panel {
+body.night-mode .app-shell .search-history-panel {
   border-color: var(--night-border);
   background: rgba(29, 35, 43, 0.98);
   box-shadow: 0 18px 36px rgba(0, 0, 0, 0.36);
@@ -261,9 +261,9 @@
   text-transform: none;
 }
 
-.app-shell.night-mode .search-history-header,
-.app-shell.night-mode .search-history-header button,
-.app-shell.night-mode .search-history-remove {
+body.night-mode .app-shell .search-history-header,
+body.night-mode .app-shell .search-history-header button,
+body.night-mode .app-shell .search-history-remove {
   color: var(--night-muted);
 }
 
@@ -300,7 +300,7 @@
   background: rgba(var(--accent-rgb), 0.08);
 }
 
-.app-shell.night-mode .search-history-item:hover {
+body.night-mode .app-shell .search-history-item:hover {
   background: rgba(var(--accent-rgb), 0.16);
 }
 
@@ -320,7 +320,7 @@
   cursor: pointer;
 }
 
-.app-shell.night-mode .search-history-select {
+body.night-mode .app-shell .search-history-select {
   color: var(--night-text);
 }
 

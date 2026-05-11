@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { createPortal } from 'react-dom'
 
 import { normalizeArtists } from '../shared/artists'
@@ -57,6 +57,9 @@ export function MusicDialog({
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [statusMessage, setStatusMessage] = useState('')
+  const dialogRef = useRef<HTMLElement | null>(null)
+  const dialogScrollbarTrackRef = useRef<HTMLDivElement | null>(null)
+  const lyricsScrollbarTrackRef = useRef<HTMLDivElement | null>(null)
   const lyricsTextAreaRef = useRef<HTMLTextAreaElement>(null)
   const latestLyricsRef = useRef<{
     activeMode: SongDialogMode
@@ -331,6 +334,7 @@ export function MusicDialog({
 
     onPlayTrack?.(song.id, playQueue)
   }
+  const getDialogTabLabel = (label: string) => label.replace(/^查看\s*/, '').replace(/^See\s+/i, '')
 
   const saveProperties = async () => {
     if (saving || loading || !properties || !originalProperties) {
@@ -626,9 +630,157 @@ export function MusicDialog({
     onSearchLyrics: searchLyrics,
   })
 
+  useLayoutEffect(() => {
+    const dialog = dialogRef.current
+    const scrollContainer = dialog?.querySelector('.song-dialog-body')
+    if (!dialog || !(scrollContainer instanceof HTMLElement)) {
+      return
+    }
+
+    let animationFrame = 0
+    const updateScrollbar = () => {
+      const maxScrollTop = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight)
+      const trackHeight = scrollContainer.clientHeight
+      const thumbHeight = maxScrollTop > 0
+        ? Math.max(38, Math.round((trackHeight / scrollContainer.scrollHeight) * trackHeight))
+        : trackHeight
+      const thumbTop = maxScrollTop > 0
+        ? Math.round((scrollContainer.scrollTop / maxScrollTop) * Math.max(0, trackHeight - thumbHeight))
+        : 0
+      const dialogRect = dialog.getBoundingClientRect()
+      const scrollRect = scrollContainer.getBoundingClientRect()
+
+      dialog.style.setProperty('--song-dialog-scrollbar-top', `${scrollRect.top - dialogRect.top}px`)
+      dialog.style.setProperty('--song-dialog-scrollbar-bottom', `${dialogRect.bottom - scrollRect.bottom}px`)
+      dialog.style.setProperty('--song-dialog-scrollbar-thumb-height', `${thumbHeight}px`)
+      dialog.style.setProperty('--song-dialog-scrollbar-thumb-top', `${thumbTop}px`)
+      dialog.classList.toggle('has-dialog-scrollbar', maxScrollTop > 1)
+    }
+    const scheduleUpdate = () => {
+      window.cancelAnimationFrame(animationFrame)
+      animationFrame = window.requestAnimationFrame(updateScrollbar)
+    }
+
+    updateScrollbar()
+    scrollContainer.addEventListener('scroll', scheduleUpdate, { passive: true })
+    const resizeObserver = new ResizeObserver(scheduleUpdate)
+    resizeObserver.observe(dialog)
+    resizeObserver.observe(scrollContainer)
+    window.addEventListener('resize', scheduleUpdate)
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame)
+      scrollContainer.removeEventListener('scroll', scheduleUpdate)
+      resizeObserver.disconnect()
+      window.removeEventListener('resize', scheduleUpdate)
+    }
+  }, [activeMode, loading, saving, properties, lyricsText, pendingLyricsSave, pendingSwitchLyrics, showArtworkDeleteConfirm])
+
+  const onDialogScrollbarPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const dialog = dialogRef.current
+    const scrollContainer = dialog?.querySelector('.song-dialog-body')
+    const scrollbarTrack = dialogScrollbarTrackRef.current
+    if (!(scrollContainer instanceof HTMLElement) || !dialog || !scrollbarTrack) {
+      return
+    }
+
+    event.preventDefault()
+    const maxScrollTop = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight)
+    const thumbHeight = Number.parseFloat(getComputedStyle(dialog).getPropertyValue('--song-dialog-scrollbar-thumb-height'))
+    const trackRange = Math.max(1, scrollbarTrack.clientHeight - thumbHeight)
+    const scrollPerPixel = maxScrollTop / trackRange
+    const startY = event.clientY
+    const startScrollTop = scrollContainer.scrollTop
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      scrollContainer.scrollTop = startScrollTop + (moveEvent.clientY - startY) * scrollPerPixel
+    }
+    const onPointerUp = () => {
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', onPointerUp)
+    }
+
+    window.addEventListener('pointermove', onPointerMove)
+    window.addEventListener('pointerup', onPointerUp)
+  }
+
+  useLayoutEffect(() => {
+    const dialog = dialogRef.current
+    const textArea = lyricsTextAreaRef.current
+    if (!dialog || !textArea || activeMode !== 'lyrics') {
+      dialog?.classList.remove('has-lyrics-scrollbar')
+      return
+    }
+
+    let animationFrame = 0
+    const updateScrollbar = () => {
+      const maxScrollTop = Math.max(0, textArea.scrollHeight - textArea.clientHeight)
+      const trackHeight = textArea.clientHeight
+      const thumbHeight = maxScrollTop > 0
+        ? Math.max(38, Math.round((trackHeight / textArea.scrollHeight) * trackHeight))
+        : trackHeight
+      const thumbTop = maxScrollTop > 0
+        ? Math.round((textArea.scrollTop / maxScrollTop) * Math.max(0, trackHeight - thumbHeight))
+        : 0
+      const dialogRect = dialog.getBoundingClientRect()
+      const textAreaRect = textArea.getBoundingClientRect()
+
+      dialog.style.setProperty('--song-dialog-lyrics-scrollbar-top', `${textAreaRect.top - dialogRect.top}px`)
+      dialog.style.setProperty('--song-dialog-lyrics-scrollbar-bottom', `${dialogRect.bottom - textAreaRect.bottom}px`)
+      dialog.style.setProperty('--song-dialog-lyrics-scrollbar-thumb-height', `${thumbHeight}px`)
+      dialog.style.setProperty('--song-dialog-lyrics-scrollbar-thumb-top', `${thumbTop}px`)
+      dialog.classList.toggle('has-lyrics-scrollbar', maxScrollTop > 1)
+    }
+    const scheduleUpdate = () => {
+      window.cancelAnimationFrame(animationFrame)
+      animationFrame = window.requestAnimationFrame(updateScrollbar)
+    }
+
+    updateScrollbar()
+    textArea.addEventListener('scroll', scheduleUpdate, { passive: true })
+    const resizeObserver = new ResizeObserver(scheduleUpdate)
+    resizeObserver.observe(dialog)
+    resizeObserver.observe(textArea)
+    window.addEventListener('resize', scheduleUpdate)
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame)
+      textArea.removeEventListener('scroll', scheduleUpdate)
+      resizeObserver.disconnect()
+      window.removeEventListener('resize', scheduleUpdate)
+    }
+  }, [activeMode, lyricsText, pendingLyricsSave, pendingSwitchLyrics, saving])
+
+  const onLyricsScrollbarPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const dialog = dialogRef.current
+    const textArea = lyricsTextAreaRef.current
+    const scrollbarTrack = lyricsScrollbarTrackRef.current
+    if (!dialog || !textArea || !scrollbarTrack) {
+      return
+    }
+
+    event.preventDefault()
+    const maxScrollTop = Math.max(0, textArea.scrollHeight - textArea.clientHeight)
+    const thumbHeight = Number.parseFloat(getComputedStyle(dialog).getPropertyValue('--song-dialog-lyrics-scrollbar-thumb-height'))
+    const trackRange = Math.max(1, scrollbarTrack.clientHeight - thumbHeight)
+    const scrollPerPixel = maxScrollTop / trackRange
+    const startY = event.clientY
+    const startScrollTop = textArea.scrollTop
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      textArea.scrollTop = startScrollTop + (moveEvent.clientY - startY) * scrollPerPixel
+    }
+    const onPointerUp = () => {
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', onPointerUp)
+    }
+
+    window.addEventListener('pointermove', onPointerMove)
+    window.addEventListener('pointerup', onPointerUp)
+  }
+
   return createPortal(
     <div className="song-dialog-overlay music-dialog-overlay MusicDialogOverlay">
       <section
+        ref={dialogRef}
         className="song-dialog music-dialog ContentDialog MusicDialog"
         role="dialog"
         aria-modal="true"
@@ -639,20 +791,22 @@ export function MusicDialog({
       >
         <nav className="song-dialog-tabs music-dialog-pivot MusicDialogPivot" aria-label={t('context.seeMusicInfo')}>
           <button type="button" className={`PropertiesItem PropertiesPivotItem${activeMode === 'properties' ? ' is-active' : ''}`} onClick={() => switchMode('properties')}>
-            <Icon name="songs" />
-            {t('context.seeMusicInfo')}
+            <Icon name="info" />
+            {getDialogTabLabel(t('context.seeMusicInfo'))}
           </button>
           <button type="button" className={`LyricsItem LyricsPivotItem${activeMode === 'lyrics' ? ' is-active' : ''}`} onClick={() => switchMode('lyrics')}>
-            <Icon name="voice" />
-            {t('context.seeLyrics')}
+            <Icon name="lyrics" />
+            {getDialogTabLabel(t('context.seeLyrics'))}
           </button>
           <button type="button" className={`AlbumArtItem AlbumArtPivotItem${activeMode === 'album-art' ? ' is-active' : ''}`} onClick={() => switchMode('album-art')}>
-            <Icon name="albums" />
-            {t('context.seeAlbumArt')}
+            <Icon name="pictures" />
+            {getDialogTabLabel(t('context.seeAlbumArt'))}
           </button>
           <button type="button" className="song-dialog-icon-button music-dialog-close-button CloseButton" onClick={onClose} aria-label={t('common.close')}>
-            <Icon name="close" />
+            <Icon name="arrowLeft" className="dialog-back-icon" />
+            <Icon name="close" className="dialog-close-icon" />
           </button>
+          <span className="dialog-titlebar-title">{t('app.shell')}</span>
         </nav>
         {statusMessage ? <p className="song-dialog-status">{statusMessage}</p> : null}
         {activeMode === 'properties' ? (
@@ -721,6 +875,12 @@ export function MusicDialog({
             onCancelDelete={() => setShowArtworkDeleteConfirm(false)}
           />
         ) : null}
+        <div className="song-dialog-scrollbar" ref={dialogScrollbarTrackRef} aria-hidden="true">
+          <div className="song-dialog-scrollbar-thumb" onPointerDown={onDialogScrollbarPointerDown} />
+        </div>
+        <div className="song-dialog-lyrics-scrollbar" ref={lyricsScrollbarTrackRef} aria-hidden="true">
+          <div className="song-dialog-lyrics-scrollbar-thumb" onPointerDown={onLyricsScrollbarPointerDown} />
+        </div>
       </section>
     </div>,
     document.body,

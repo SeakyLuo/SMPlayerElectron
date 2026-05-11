@@ -988,6 +988,87 @@
   text-align: center;
 }
 
+body.night-mode .now-playing-full-page {
+  color: rgba(246, 250, 255, 0.92);
+  background: #07111f;
+}
+
+body.night-mode .now-playing-full-page .now-playing-full-backdrop {
+  background:
+    linear-gradient(180deg, rgba(20, 16, 12, 0.24), rgba(16, 12, 8, 0.78)),
+    var(--now-playing-full-artwork) center / cover no-repeat;
+  filter: blur(34px) saturate(118%);
+  opacity: 1;
+}
+
+body.night-mode .now-playing-full-page .now-playing-full-backdrop::after {
+  background:
+    radial-gradient(circle at 18% 14%, rgba(255, 217, 156, 0.18), transparent 32%),
+    linear-gradient(90deg, rgba(18, 14, 10, 0.84), rgba(25, 18, 12, 0.58) 52%, rgba(13, 10, 8, 0.82));
+}
+
+body.night-mode .now-playing-full-page .now-playing-full-queue-button,
+body.night-mode .now-playing-full-page .now-playing-full-back-button {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.88);
+  box-shadow: none;
+}
+
+body.night-mode .now-playing-full-page .now-playing-full-queue-button:hover,
+body.night-mode .now-playing-full-page .now-playing-full-queue-button.is-active,
+body.night-mode .now-playing-full-page .now-playing-full-back-button:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+
+body.night-mode .now-playing-full-page .now-playing-full-copy h2,
+body.night-mode .now-playing-full-page .now-playing-full-playlist-title strong,
+body.night-mode .now-playing-full-page .now-playing-full-panel-header h3 {
+  color: #fff;
+}
+
+body.night-mode .now-playing-full-page .now-playing-full-copy p,
+body.night-mode .now-playing-full-page .now-playing-full-playlist-title span,
+body.night-mode .now-playing-full-page .now-playing-full-panel-header > span,
+body.night-mode .now-playing-full-page .now-playing-full-loading {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+body.night-mode .now-playing-full-page .now-playing-full-lyric-row {
+  color: rgba(255, 255, 255, 0.32);
+}
+
+body.night-mode .now-playing-full-page .now-playing-full-lyric-row.is-active,
+body.night-mode .now-playing-full-page .now-playing-full-lyric-row.is-preview,
+body.night-mode .now-playing-full-page .now-playing-full-lyric-seek {
+  color: rgba(255, 255, 255, 0.94);
+}
+
+body.night-mode .now-playing-full-page .now-playing-full-player-bar.player-bar,
+body.night-mode .app-shell.nav-collapsed .now-playing-full-page .now-playing-full-player-bar.player-bar {
+  border-color: rgba(255, 255, 255, 0.14);
+  background:
+    linear-gradient(135deg, rgba(119, 91, 32, 0.36), rgba(20, 18, 14, 0.22) 42%, transparent 72%),
+    rgba(18, 16, 14, 0.9);
+  box-shadow: 0 -18px 72px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+body.night-mode .now-playing-full-page .now-playing-full-panel {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(18, 16, 14, 0.78);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+body.night-mode .now-playing-full-page .now-playing-full-queue-popover {
+  border-color: rgba(255, 255, 255, 0.18);
+  background:
+    linear-gradient(135deg, rgba(119, 91, 32, 0.44), rgba(20, 18, 14, 0.18) 38%, transparent 64%),
+    rgba(18, 16, 14, 0.86);
+  box-shadow: 0 28px 76px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
 @media (max-width: 1100px) {
   .now-playing-full-content {
     padding: 72px 28px 128px;
@@ -1102,6 +1183,21 @@
       linear-gradient(180deg, rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.48)),
       rgba(255, 255, 255, 0.32);
     color: var(--accent-strong);
+  }
+
+  body.night-mode .now-playing-full-page .now-playing-full-queue-button,
+  body.night-mode .now-playing-full-page .now-playing-full-back-button {
+    border-color: rgba(255, 255, 255, 0.16);
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.88);
+    box-shadow: none;
+  }
+
+  body.night-mode .now-playing-full-page .now-playing-full-queue-button:hover,
+  body.night-mode .now-playing-full-page .now-playing-full-queue-button.is-active,
+  body.night-mode .now-playing-full-page .now-playing-full-back-button:hover {
+    background: rgba(255, 255, 255, 0.14);
+    color: #fff;
   }
 
   .now-playing-full-queue-button svg,

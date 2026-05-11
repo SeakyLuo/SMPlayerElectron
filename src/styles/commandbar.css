@@ -155,3 +155,33 @@
     padding: 0 10px;
   }
 }
+
+body.night-mode .app-shell .uwp-commandbar {
+  color: var(--night-text);
+}
+
+body.night-mode .app-shell .uwp-commandbar .uwp-commandbar-button,
+body.night-mode .app-shell .uwp-commandbar .albums-sort-trigger {
+  border-color: var(--night-border);
+  background: rgba(255, 255, 255, 0.055);
+  color: inherit;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055);
+}
+
+body.night-mode .app-shell .uwp-commandbar .uwp-commandbar-button:hover,
+body.night-mode .app-shell .uwp-commandbar .uwp-commandbar-button:focus-visible,
+body.night-mode .app-shell .uwp-commandbar .uwp-commandbar-button[aria-expanded='true'],
+body.night-mode .app-shell .uwp-commandbar .albums-sort-trigger:hover,
+body.night-mode .app-shell .uwp-commandbar .albums-sort-trigger[aria-expanded='true'] {
+  background: rgba(255, 255, 255, 0.09);
+}
+
+body.night-mode .app-shell .uwp-commandbar .uwp-commandbar-button:active {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+body.night-mode .app-shell .uwp-commandbar .uwp-commandbar-button.is-active {
+  border-color: rgba(var(--accent-rgb), 0.38);
+  background: rgba(var(--accent-rgb), 0.18);
+  color: color-mix(in srgb, var(--accent) 72%, #f5fbff 28%);
+}

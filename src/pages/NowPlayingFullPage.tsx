@@ -14,7 +14,6 @@ import {
   getAddToPlaylistMenuFlyoutItem,
   getMusicMenuFlyoutItems,
   getPreferenceMenuFlyoutItem,
-  getShuffleMenuItems,
   type MenuFlyoutItem,
   type MenuFlyoutPosition,
 } from '../components/MenuFlyoutHelper'
@@ -85,7 +84,6 @@ interface NowPlayingFullPageProps {
   onToggleRepeatOne: () => void
   onVoiceCommand: (text: string) => Promise<VoiceAssistantResponse>
   getVoiceHint: () => string
-  getVoiceHelpText: () => string
   voiceLanguage: string
   onPlayTrack: (trackId: number, queueSongIds: number[], queueIndex?: number) => void
   onReplaceQueue: (songIds: number[]) => void
@@ -132,7 +130,6 @@ export function NowPlayingFullPage({
   onToggleRepeatOne,
   onVoiceCommand,
   getVoiceHint,
-  getVoiceHelpText,
   voiceLanguage,
   onPlayTrack,
   onReplaceQueue,
@@ -187,7 +184,7 @@ export function NowPlayingFullPage({
     (songArtwork && songArtwork.trackId === currentSong?.id ? songArtwork.artworkUrl : '') ||
     resolvedArtworkUrl
   const displayArtworkUrl = artworkUrl || DEFAULT_ARTWORK_URL
-  const artistLabel = currentSong ? getDisplayArtists(currentSong) || t('common.artistUnknown') : t('common.artistUnknown')
+  const artistLabel = currentSong ? getDisplayArtists(currentSong, t('common.artistUnknown')) : t('common.artistUnknown')
   const albumLabel = currentSong?.album || t('common.albumUnknown')
   const disabled = !currentSong
   const currentLyrics = displayLyrics && displayLyrics.trackId === currentSongId ? displayLyrics.lyrics : null
@@ -605,9 +602,7 @@ export function NowPlayingFullPage({
       currentSong,
       songs,
       librarySongs,
-      recentSongs,
       playlists,
-      folders,
       preferenceItem,
       t,
       onQuickPlay: playQuick,
@@ -697,8 +692,8 @@ export function NowPlayingFullPage({
           setShowPlaylistPanel((current) => !current)
         }}
       >
-        <Icon name="nowPlaying" />
-        {t('nowPlaying.playlist')}
+        <Icon name="songs" />
+        {t('common.nowPlaying')}
       </button>
 
       <div className="now-playing-full-content">
@@ -814,7 +809,6 @@ export function NowPlayingFullPage({
             }}
             onVoiceCommand={onVoiceCommand}
             getVoiceHint={getVoiceHint}
-            getVoiceHelpText={getVoiceHelpText}
             voiceLanguage={voiceLanguage}
             isMuted={isMuted}
             onMoreClick={openMoreMenu}
@@ -1166,12 +1160,7 @@ function NowPlayingFullPlaylist({
       >
         {loading ? (
           <LoadingState t={t} compact />
-        ) : (
-          <>
-            <h3>{t('nowPlaying.queueEmpty')}</h3>
-            <p>{t('nowPlaying.queueEmptyHelp')}</p>
-          </>
-        )}
+        ) : null}
       </section>
     )
   }
@@ -1185,7 +1174,7 @@ function NowPlayingFullPlaylist({
     >
       <header className="now-playing-full-playlist-title">
         <div>
-          <strong>{t('nowPlaying.playlist')}</strong>
+          <strong>{t('common.nowPlaying')}</strong>
           <span>{t('playlists.songCount', { count: songs.length })}</span>
         </div>
         <button
@@ -1477,9 +1466,7 @@ function getNowPlayingFullMoreItems({
   currentSong,
   songs,
   librarySongs,
-  recentSongs,
   playlists,
-  folders,
   preferenceItem,
   t,
   onQuickPlay,
@@ -1500,9 +1487,7 @@ function getNowPlayingFullMoreItems({
   currentSong: LibrarySong | null
   songs: LibrarySong[]
   librarySongs: LibrarySong[]
-  recentSongs: LibrarySong[]
   playlists: LibraryPlaylist[]
-  folders: ReturnType<typeof useLibraryStore.getState>['snapshot']['folders']
   preferenceItem: PreferenceItemSnapshot | null
   t: Translator
   onQuickPlay: () => void | Promise<void>
@@ -1523,20 +1508,14 @@ function getNowPlayingFullMoreItems({
   const items: MenuFlyoutItem[] = [
     { key: 'quick-play', text: t('nowPlaying.quickPlay'), icon: 'play', onClick: onQuickPlay },
     {
-      key: 'shuffle-sources',
+      key: 'random-play',
       text: t('nowPlaying.randomPlay'),
       icon: 'shuffle',
-      submenu: getShuffleMenuItems({
-        songs,
-        librarySongs,
-        recentSongs,
-        playlists,
-        folders,
-        randomLimit: QUICK_PLAY_LIMIT,
-        t,
-        onPlaySongs,
-        onQuickPlay,
-      }),
+      disabled: songs.length === 0 && librarySongs.length === 0,
+      onClick: () => {
+        const sourceSongs = songs.length > 0 ? songs : librarySongs
+        onPlaySongs(randomLibrary(sourceSongs.map((song) => song.id), QUICK_PLAY_LIMIT))
+      },
     },
     { key: 'save-playlist', text: t('nowPlaying.savePlaylist'), icon: 'plus', onClick: onSavePlaylist },
     { key: 'clear-now-playing', text: t('nowPlaying.clearNowPlaying'), icon: 'close', onClick: onClearQueue },
