@@ -24,6 +24,18 @@
   backdrop-filter: blur(28px);
 }
 
+.app-shell.night-mode .player-bar {
+  border-color: var(--night-border);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.055), rgba(var(--accent-rgb), 0.12)),
+    linear-gradient(90deg, rgba(var(--player-cover-rgb, var(--accent-rgb)), 0.22), transparent 46%),
+    rgba(17, 22, 28, 0.9);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.045),
+    0 -18px 48px rgba(0, 0, 0, 0.34);
+  color: var(--night-text);
+}
+
 .media-control-host.is-hidden {
   visibility: hidden;
   pointer-events: none;
@@ -64,6 +76,12 @@
   background: rgba(33, 43, 58, 0.12);
   border-color: rgba(33, 43, 58, 0.08);
   outline: none;
+}
+
+.app-shell.night-mode .player-track:hover,
+.app-shell.night-mode .player-track:focus-visible {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: var(--night-border);
 }
 
 .player-track:disabled {
@@ -160,6 +178,11 @@
   text-overflow: ellipsis;
 }
 
+.app-shell.night-mode .player-track-copy span,
+.app-shell.night-mode .progress-row span {
+  color: var(--night-muted);
+}
+
 .player-track-copy .player-track-lyrics {
   display: block;
   width: 100%;
@@ -229,6 +252,11 @@
   color: var(--text-strong);
 }
 
+.app-shell.night-mode .transport-button,
+.app-shell.night-mode .player-utility button {
+  color: var(--night-text);
+}
+
 .transport-button.primary {
   width: 56px;
   height: 56px;
@@ -250,6 +278,12 @@
 .player-utility button:hover {
   transform: translateY(-1px);
   background: rgba(var(--accent-rgb), 0.12);
+}
+
+.app-shell.night-mode .transport-button:hover,
+.app-shell.night-mode .player-utility button:hover {
+  background: rgba(var(--accent-rgb), 0.18);
+  color: #fff;
 }
 
 .transport-button.primary:hover {
@@ -280,6 +314,11 @@
 .player-utility button.is-active {
   background: rgba(var(--accent-rgb), 0.14);
   color: var(--accent-strong);
+}
+
+.app-shell.night-mode .player-utility button.is-active {
+  background: rgba(var(--accent-rgb), 0.22);
+  color: #fff;
 }
 
 .player-utility .favorite-toggle.is-active {
@@ -347,6 +386,17 @@
     );
 }
 
+.app-shell.night-mode .media-slider::-webkit-slider-runnable-track {
+  background:
+    linear-gradient(
+      to right,
+      rgba(var(--accent-rgb), 0.95) 0,
+      rgba(var(--accent-rgb), 0.95) var(--range-progress, 0%),
+      rgba(203, 213, 225, 0.18) var(--range-progress, 0%),
+      rgba(203, 213, 225, 0.18) 100%
+    );
+}
+
 .media-slider::-webkit-slider-thumb {
   appearance: none;
   width: 18px;
@@ -372,6 +422,10 @@
   overflow: hidden;
   border-radius: 999px;
   background: rgba(50, 62, 78, 0.16);
+}
+
+.app-shell.night-mode .media-progress-loading {
+  background: rgba(203, 213, 225, 0.16);
 }
 
 .media-progress-loading::before {
@@ -452,6 +506,13 @@
   transition: opacity 0.12s ease, transform 0.12s ease;
 }
 
+.app-shell.night-mode .volume-slider-tooltip {
+  border-color: var(--night-border);
+  background: rgba(29, 35, 43, 0.98);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.34);
+  color: var(--night-text);
+}
+
 .volume-slider-tooltip::after {
   position: absolute;
   top: 100%;
@@ -463,6 +524,12 @@
   background: rgba(255, 255, 255, 0.96);
   content: '';
   transform: translate(-50%, -4px) rotate(45deg);
+}
+
+.app-shell.night-mode .volume-slider-tooltip::after {
+  border-right-color: var(--night-border);
+  border-bottom-color: var(--night-border);
+  background: rgba(29, 35, 43, 0.98);
 }
 
 .volume-slider-wrap.is-active .volume-slider-tooltip {
@@ -508,6 +575,17 @@
     0 -12px 36px rgba(42, 56, 78, 0.14);
   -webkit-backdrop-filter: blur(28px) saturate(145%);
   backdrop-filter: blur(28px) saturate(145%);
+}
+
+.app-shell.night-mode.nav-minimal .player-bar {
+  border-color: var(--night-border);
+  background:
+    linear-gradient(135deg, rgba(var(--player-cover-rgb, var(--accent-rgb)), 0.2), rgba(17, 22, 28, 0.78) 56%),
+    linear-gradient(180deg, rgba(29, 35, 43, 0.88), rgba(16, 20, 25, 0.88)),
+    rgba(16, 20, 25, 0.92);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.045),
+    0 -12px 36px rgba(0, 0, 0, 0.34);
 }
 
 .app-shell.nav-minimal .player-track {

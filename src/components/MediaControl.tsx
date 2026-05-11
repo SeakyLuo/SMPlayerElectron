@@ -18,7 +18,7 @@ import { getAddToPlaylistMenuFlyoutItem, getPreferenceMenuFlyoutItem, type MenuF
 import { MusicDialog } from './MusicDialog'
 import { usePreferenceStore } from '../state/usePreferenceStore'
 
-interface MediaControlTrack {
+export interface MediaControlTrack {
   id: number | null
   title: string
   artist: string
@@ -57,6 +57,9 @@ interface MediaControlProps {
   getVoiceHelpText: () => string
   voiceLanguage: string
   onOpenNowPlaying: () => void
+  isWindowFullScreen: boolean
+  onToggleWindowFullScreen: () => void
+  onEnterMiniMode: () => void
   onArtworkResolved: (trackId: number, artworkUrl: string) => void
   onSaved: () => void | Promise<void>
 }
@@ -130,19 +133,19 @@ interface MediaControlSurfaceProps {
   onMoreClick: (event: MouseEvent<HTMLButtonElement>) => void
 }
 
-function getShuffleTitle(t: Translator, mode: PlaybackMode) {
+export function getShuffleTitle(t: Translator, mode: PlaybackMode) {
   return mode === 'shuffle' ? t('player.shuffleEnabled') : t('player.shuffleDisabled')
 }
 
-function getRepeatTitle(t: Translator, mode: PlaybackMode) {
+export function getRepeatTitle(t: Translator, mode: PlaybackMode) {
   return mode === 'repeat' ? t('player.repeatEnabled') : t('player.repeatDisabled')
 }
 
-function getRepeatOneTitle(t: Translator, mode: PlaybackMode) {
+export function getRepeatOneTitle(t: Translator, mode: PlaybackMode) {
   return mode === 'repeat-one' ? t('player.repeatOneEnabled') : t('player.repeatOneDisabled')
 }
 
-const DEFAULT_ARTWORK_URL = '/monotone_bg_wide.png'
+export const DEFAULT_ARTWORK_URL = '/monotone_bg_wide.png'
 
 export function MediaControlButtons({
   trackId,
@@ -722,6 +725,9 @@ export function MediaControl({
   getVoiceHelpText,
   voiceLanguage,
   onOpenNowPlaying,
+  isWindowFullScreen,
+  onToggleWindowFullScreen,
+  onEnterMiniMode,
   onArtworkResolved,
   onSaved,
 }: MediaControlProps) {
@@ -953,6 +959,9 @@ export function MediaControl({
               setMoreMenu(null)
               setDialogMode('album-art')
             },
+            isWindowFullScreen,
+            onToggleWindowFullScreen,
+            onEnterMiniMode,
           })}
         />
       ) : null}
@@ -995,6 +1004,9 @@ function getPlayerMoreMenuItems({
   onSeeMusicInfo,
   onSeeLyrics,
   onSeeAlbumArt,
+  isWindowFullScreen,
+  onToggleWindowFullScreen,
+  onEnterMiniMode,
 }: {
   song: LibrarySong | null
   playlists: LibraryPlaylist[]
@@ -1011,6 +1023,9 @@ function getPlayerMoreMenuItems({
   onSeeMusicInfo: () => void
   onSeeLyrics: () => void
   onSeeAlbumArt: () => void
+  isWindowFullScreen: boolean
+  onToggleWindowFullScreen: () => void
+  onEnterMiniMode: () => void
 }) {
   const items: MenuFlyoutItem[] = [
     { key: 'quick-play', text: t('nowPlaying.quickPlay'), icon: 'play', onClick: onQuickPlay },
@@ -1038,6 +1053,18 @@ function getPlayerMoreMenuItems({
   }
 
   items.push(
+    {
+      key: isWindowFullScreen ? 'exit-full-screen' : 'full-screen',
+      text: isWindowFullScreen ? t('nowPlaying.exitFullScreenItem') : t('nowPlaying.fullScreen'),
+      icon: isWindowFullScreen ? 'fullscreenExit' : 'fullscreen',
+      onClick: onToggleWindowFullScreen,
+    },
+    {
+      key: 'mini-mode',
+      text: t('player.miniMode'),
+      icon: 'miniMode',
+      onClick: onEnterMiniMode,
+    },
     getPreferenceMenuFlyoutItem({
       type: 'song',
       itemId: String(song.id),
@@ -1049,8 +1076,8 @@ function getPlayerMoreMenuItems({
     { key: 'see-artist', text: t('context.seeArtist'), icon: 'users', onClick: () => onSeeArtist(song.artist) },
     { key: 'see-album', text: t('context.seeAlbum'), icon: 'albums', onClick: onSeeAlbum },
     { key: 'see-music-info', text: t('context.seeMusicInfo'), icon: 'info', keepOpen: true, onClick: onSeeMusicInfo },
-    { key: 'see-lyrics', text: t('context.seeLyrics'), icon: 'songs', keepOpen: true, onClick: onSeeLyrics },
-    { key: 'see-album-art', text: t('context.seeAlbumArt'), icon: 'albums', keepOpen: true, onClick: onSeeAlbumArt },
+    { key: 'see-lyrics', text: t('context.seeLyrics'), icon: 'lyrics', keepOpen: true, onClick: onSeeLyrics },
+    { key: 'see-album-art', text: t('context.seeAlbumArt'), icon: 'pictures', keepOpen: true, onClick: onSeeAlbumArt },
   )
 
   return items

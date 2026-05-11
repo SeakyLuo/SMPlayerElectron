@@ -4,6 +4,7 @@ import clsx from 'clsx'
 import { Icon } from './icons'
 
 export const APPBAR_PAGE_ACTIONS_ID = 'smplayer-page-appbar-actions'
+export const APPBAR_PAGE_BOTTOM_ID = 'smplayer-page-appbar-bottom'
 
 interface AppBarProps {
   menuLabel: string
@@ -37,6 +38,7 @@ export function AppBar({
         {children}
       </div>
       {actions ? <div className="appbar-actions">{actions}</div> : null}
+      <div className="appbar-bottom" id={APPBAR_PAGE_BOTTOM_ID} />
     </header>
   )
 }

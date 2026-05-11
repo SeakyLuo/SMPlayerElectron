@@ -193,6 +193,10 @@
   will-change: transform;
 }
 
+.grid-view-holder.is-static {
+  touch-action: pan-y;
+}
+
 .grid-view-holder-placeholder {
   display: grid;
   place-items: center;

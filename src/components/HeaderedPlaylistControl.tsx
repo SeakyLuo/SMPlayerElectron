@@ -408,7 +408,7 @@ export function HeaderedPlaylistControl({
         onClick={shuffle}
       />
       <CommandBarButton
-        icon="menu"
+        icon="multiSelect"
         label={captionFor('multiSelect')}
         disabled={songs.length === 0}
         onClick={() => {
@@ -467,7 +467,7 @@ export function HeaderedPlaylistControl({
       {
         key: 'multi-select',
         text: captionFor('multiSelect'),
-        icon: 'menu',
+        icon: 'multiSelect',
         disabled: songs.length === 0,
         onClick: () => {
           setSelectionMode(true)
@@ -622,9 +622,17 @@ export function HeaderedPlaylistControl({
               onToggleSelection={() => {
                 toggleSongSelection(song.id)
               }}
-              onRemoveFromListClick={removable ? (contextSong) => {
-                onRemoveSongs?.([contextSong.id])
-              } : undefined}
+              onPlayNextClick={(contextSong) => {
+                if (onPlayNext) {
+                  onPlayNext(contextSong.id)
+                  return
+                }
+
+                const nextQueue = nowPlayingSongIds.slice()
+                const currentIndex = selectedTrackId == null ? -1 : nextQueue.indexOf(selectedTrackId)
+                nextQueue.splice(Math.max(0, currentIndex + 1), 0, contextSong.id)
+                onPlayTrack(selectedTrackId ?? contextSong.id, nextQueue)
+              }}
               onAddToPlaylistClick={(contextSong, x, y) => {
                 setAddToMenu({ songIds: [contextSong.id], x, y })
               }}

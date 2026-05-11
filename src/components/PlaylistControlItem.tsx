@@ -29,6 +29,7 @@ interface PlaylistControlItemProps {
   onToggleSelection: () => void
   onToggleFavorite?: (songId: number, favorite: boolean) => void
   onRemoveFromListClick?: (song: LibrarySong) => void
+  onPlayNextClick?: (song: LibrarySong) => void
   onAddToPlaylistClick?: (song: LibrarySong, x: number, y: number) => void
   onContextMenu: (song: LibrarySong, x: number, y: number) => void
   onSeeAlbum?: (song: LibrarySong) => void
@@ -59,6 +60,7 @@ export function PlaylistControlItem({
   onToggleSelection,
   onToggleFavorite,
   onRemoveFromListClick,
+  onPlayNextClick,
   onAddToPlaylistClick,
   onContextMenu,
   onSeeAlbum,
@@ -209,6 +211,20 @@ export function PlaylistControlItem({
             }}
           >
             <Icon name="plus" />
+          </button>
+        ) : null}
+        {onPlayNextClick ? (
+          <button
+            type="button"
+            className="now-playing-queue-action is-hover-action is-play-next-action"
+            aria-label={t('context.playNext')}
+            title={t('context.playNext')}
+            onClick={(event) => {
+              event.stopPropagation()
+              onPlayNextClick(song)
+            }}
+          >
+            <Icon name="next" />
           </button>
         ) : null}
         {onRemoveFromListClick ? (

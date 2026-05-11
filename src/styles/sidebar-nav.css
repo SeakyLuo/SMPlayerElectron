@@ -18,6 +18,11 @@
   border-top: 1px solid rgba(108, 117, 128, 0.24);
 }
 
+.app-shell.night-mode .sidebar.is-collapsed .nav-section + .nav-section,
+.app-shell.night-mode .nav-section + .nav-section {
+  border-top-color: var(--night-border);
+}
+
 .nav-section + .nav-section {
   margin-top: 8px;
   padding-top: 8px;
@@ -61,11 +66,29 @@
     box-shadow 120ms ease;
 }
 
+.app-shell.night-mode .nav-link,
+.app-shell.night-mode .playlist-nav-child,
+.app-shell.night-mode .playlist-nav-create,
+.app-shell.night-mode .playlist-nav-toggle {
+  color: var(--night-muted);
+}
+
 .nav-link:hover {
   transform: none;
   background: rgba(var(--accent-rgb), 0.1);
   color: var(--accent-strong);
   box-shadow: none;
+}
+
+.app-shell.night-mode .nav-link:hover,
+.app-shell.night-mode .nav-link.active,
+.app-shell.night-mode .playlist-nav-child:hover,
+.app-shell.night-mode .playlist-nav-child.active,
+.app-shell.night-mode .playlist-nav-create:hover,
+.app-shell.night-mode .playlist-nav-toggle:hover {
+  background: rgba(var(--accent-rgb), 0.18);
+  color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.12);
 }
 
 .nav-link > span:last-child,
@@ -130,6 +153,20 @@
   box-shadow: none;
 }
 
+.app-shell.night-mode .sidebar.is-collapsed .nav-link:hover,
+.app-shell.night-mode .sidebar.is-collapsed .nav-link:focus-visible,
+.app-shell.night-mode .sidebar.is-collapsed .nav-link.active,
+.app-shell.night-mode .sidebar.is-collapsed .nav-link.active:hover,
+.app-shell.night-mode .sidebar.is-collapsed .nav-link.active:focus-visible,
+.app-shell.night-mode .sidebar.is-collapsed .sidebar-collapse-button:hover,
+.app-shell.night-mode .sidebar.is-collapsed .sidebar-collapse-button:focus-visible,
+.app-shell.night-mode .sidebar.is-collapsed .sidebar-back-button:hover,
+.app-shell.night-mode .sidebar.is-collapsed .sidebar-back-button:focus-visible {
+  background: rgba(var(--accent-rgb), 0.2);
+  color: #fff;
+  box-shadow: none;
+}
+
 .sidebar.is-collapsed .nav-link.active::before,
 .sidebar.is-collapsed .nav-link.active .nav-tag::before {
   content: none;
@@ -153,6 +190,13 @@
   transform: translateY(-50%);
 }
 
+.app-shell.night-mode .sidebar-floating-tooltip {
+  border-color: var(--night-border);
+  background: rgba(29, 35, 43, 0.98);
+  color: var(--night-text);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.34);
+}
+
 .sidebar-floating-tooltip::before {
   content: '';
   position: absolute;
@@ -164,6 +208,12 @@
   border-bottom: 1px solid rgba(106, 119, 138, 0.2);
   background: rgba(255, 255, 255, 0.98);
   transform: translateY(-50%) rotate(45deg);
+}
+
+.app-shell.night-mode .sidebar-floating-tooltip::before {
+  border-left-color: var(--night-border);
+  border-bottom-color: var(--night-border);
+  background: rgba(29, 35, 43, 0.98);
 }
 
 .nav-tag {
@@ -182,8 +232,8 @@
 
 .nav-tag svg {
   display: block;
-  width: 19px;
-  height: 19px;
+  width: 21px;
+  height: 21px;
   transform: translateY(-1px);
 }
 
@@ -294,6 +344,10 @@
   scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: rgba(91, 105, 122, 0.42) transparent;
+}
+
+.app-shell.night-mode .playlist-nav-children.is-expanded {
+  scrollbar-color: rgba(203, 213, 225, 0.38) transparent;
 }
 
 .playlist-nav-children > * {
@@ -478,6 +532,13 @@
 .sidebar.is-collapsed .nav-link.active:focus-visible {
   background: rgba(var(--accent-rgb), 0.13) !important;
   box-shadow: none !important;
+}
+
+.app-shell.night-mode .sidebar.is-collapsed .nav-link.active,
+.app-shell.night-mode .sidebar.is-collapsed .nav-link.active:hover,
+.app-shell.night-mode .sidebar.is-collapsed .nav-link.active:focus-visible {
+  background: rgba(var(--accent-rgb), 0.2) !important;
+  color: #fff !important;
 }
 
 .sidebar.is-collapsed .nav-link.active::before,

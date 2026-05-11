@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import clsx from 'clsx'
 
 import type { Translator } from '../shared/i18n'
-import { APPBAR_PAGE_ACTIONS_ID } from './AppBar'
+import { APPBAR_PAGE_ACTIONS_ID, APPBAR_PAGE_BOTTOM_ID } from './AppBar'
 import { Icon } from './icons'
 
 export function AppBarPortal({ children }: { children: ReactNode }) {
@@ -12,6 +12,29 @@ export function AppBarPortal({ children }: { children: ReactNode }) {
   useEffect(() => {
     const updateHost = () => {
       setHost(document.getElementById(APPBAR_PAGE_ACTIONS_ID))
+    }
+
+    updateHost()
+    window.addEventListener('resize', updateHost)
+
+    return () => {
+      window.removeEventListener('resize', updateHost)
+    }
+  }, [])
+
+  if (!host?.isConnected) {
+    return null
+  }
+
+  return createPortal(children, host)
+}
+
+export function AppBarBottomPortal({ children }: { children: ReactNode }) {
+  const [host, setHost] = useState<HTMLElement | null>(null)
+
+  useEffect(() => {
+    const updateHost = () => {
+      setHost(document.getElementById(APPBAR_PAGE_BOTTOM_ID))
     }
 
     updateHost()

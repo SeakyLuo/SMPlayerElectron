@@ -18,6 +18,10 @@ const api: SmplayerApi = {
   startWindowDrag: () => ipcRenderer.invoke('window:start-drag'),
   stopWindowDrag: () => ipcRenderer.invoke('window:stop-drag'),
   setWindowControlsLight: (light) => ipcRenderer.invoke('window:set-controls-light', light),
+  setWindowFullScreen: (fullScreen) => ipcRenderer.invoke('window:set-full-screen', fullScreen),
+  getWindowFullScreen: () => ipcRenderer.invoke('window:get-full-screen'),
+  setWindowMiniMode: (miniMode) => ipcRenderer.invoke('window:set-mini-mode', miniMode),
+  getWindowMiniMode: () => ipcRenderer.invoke('window:get-mini-mode'),
   createLocalFolder: (rootPath, relativePath, name) => ipcRenderer.invoke('shell:create-local-folder', rootPath, relativePath, name),
   revealSystemLogs: () => ipcRenderer.invoke('shell:reveal-system-logs'),
   showTrackNotification: (track) => ipcRenderer.invoke('shell:show-track-notification', track),
@@ -129,6 +133,28 @@ const api: SmplayerApi = {
 
     return () => {
       ipcRenderer.removeListener('app:tray-command', listener)
+    }
+  },
+  onWindowFullScreenChange: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, fullScreen: boolean) => {
+      callback(fullScreen)
+    }
+
+    ipcRenderer.on('window:full-screen-change', listener)
+
+    return () => {
+      ipcRenderer.removeListener('window:full-screen-change', listener)
+    }
+  },
+  onWindowMiniModeChange: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, miniMode: boolean) => {
+      callback(miniMode)
+    }
+
+    ipcRenderer.on('window:mini-mode-change', listener)
+
+    return () => {
+      ipcRenderer.removeListener('window:mini-mode-change', listener)
     }
   },
   onOpenFiles: (callback) => {

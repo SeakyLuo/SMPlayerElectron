@@ -8,6 +8,7 @@
 .now-playing-list-shell,
 .recent-grid-shell,
 .recent-search-list,
+.search-page,
 .lyrics-scroll-shell,
 .preference-page {
   scrollbar-width: thin;
@@ -29,6 +30,7 @@
 .now-playing-list-shell:hover,
 .recent-grid-shell:hover,
 .recent-search-list:hover,
+.search-page:hover,
 .lyrics-scroll-shell:hover,
 .preference-page:hover {
   scrollbar-color: rgba(91, 105, 122, 0.5) transparent;
@@ -45,6 +47,7 @@
 .now-playing-list-shell::-webkit-scrollbar,
 .recent-grid-shell::-webkit-scrollbar,
 .recent-search-list::-webkit-scrollbar,
+.search-page::-webkit-scrollbar,
 .lyrics-scroll-shell::-webkit-scrollbar,
 .preference-page::-webkit-scrollbar {
   width: 9px;
@@ -62,6 +65,7 @@
 .now-playing-list-shell:hover::-webkit-scrollbar,
 .recent-grid-shell:hover::-webkit-scrollbar,
 .recent-search-list:hover::-webkit-scrollbar,
+.search-page:hover::-webkit-scrollbar,
 .lyrics-scroll-shell:hover::-webkit-scrollbar,
 .preference-page:hover::-webkit-scrollbar {
   width: 9px;
@@ -79,6 +83,7 @@
 .now-playing-list-shell::-webkit-scrollbar:hover,
 .recent-grid-shell::-webkit-scrollbar:hover,
 .recent-search-list::-webkit-scrollbar:hover,
+.search-page::-webkit-scrollbar:hover,
 .lyrics-scroll-shell::-webkit-scrollbar:hover,
 .preference-page::-webkit-scrollbar:hover {
   width: 9px;
@@ -96,6 +101,7 @@
 .now-playing-list-shell::-webkit-scrollbar-track,
 .recent-grid-shell::-webkit-scrollbar-track,
 .recent-search-list::-webkit-scrollbar-track,
+.search-page::-webkit-scrollbar-track,
 .lyrics-scroll-shell::-webkit-scrollbar-track,
 .preference-page::-webkit-scrollbar-track {
   background: transparent;
@@ -112,6 +118,7 @@
 .now-playing-list-shell::-webkit-scrollbar-thumb,
 .recent-grid-shell::-webkit-scrollbar-thumb,
 .recent-search-list::-webkit-scrollbar-thumb,
+.search-page::-webkit-scrollbar-thumb,
 .lyrics-scroll-shell::-webkit-scrollbar-thumb,
 .preference-page::-webkit-scrollbar-thumb {
   border-radius: 999px;
@@ -131,6 +138,7 @@
 .now-playing-list-shell:hover::-webkit-scrollbar-thumb,
 .recent-grid-shell:hover::-webkit-scrollbar-thumb,
 .recent-search-list:hover::-webkit-scrollbar-thumb,
+.search-page:hover::-webkit-scrollbar-thumb,
 .lyrics-scroll-shell:hover::-webkit-scrollbar-thumb,
 .preference-page:hover::-webkit-scrollbar-thumb {
   border-width: 4px;
@@ -148,6 +156,7 @@
 .now-playing-list-shell.is-scrollbar-hovered::-webkit-scrollbar-thumb,
 .recent-grid-shell.is-scrollbar-hovered::-webkit-scrollbar-thumb,
 .recent-search-list.is-scrollbar-hovered::-webkit-scrollbar-thumb,
+.search-page.is-scrollbar-hovered::-webkit-scrollbar-thumb,
 .lyrics-scroll-shell.is-scrollbar-hovered::-webkit-scrollbar-thumb,
 .preference-page.is-scrollbar-hovered::-webkit-scrollbar-thumb {
   border-width: 0;
@@ -165,6 +174,7 @@
 .now-playing-list-shell::-webkit-scrollbar-thumb:hover,
 .recent-grid-shell::-webkit-scrollbar-thumb:hover,
 .recent-search-list::-webkit-scrollbar-thumb:hover,
+.search-page::-webkit-scrollbar-thumb:hover,
 .lyrics-scroll-shell::-webkit-scrollbar-thumb:hover,
 .preference-page::-webkit-scrollbar-thumb:hover {
   border-width: 1px;

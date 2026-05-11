@@ -322,7 +322,7 @@ export function RecentPage({
         overflowLabel={t('player.more')}
       >
         <CommandBarButton
-          icon="menu"
+          icon="multiSelect"
           label={t('albums.multiSelect')}
           active={multiSelect}
           disabled={activeTab === 'searches' ? recentSearches.length === 0 : visibleSongs.length === 0}

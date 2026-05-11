@@ -152,7 +152,7 @@
   position: relative;
   flex: 0 0 82px;
   display: grid;
-  grid-template-columns: 64px minmax(190px, 1.18fr) minmax(138px, auto) minmax(160px, 0.72fr) 74px;
+  grid-template-columns: 64px minmax(190px, 1.18fr) minmax(170px, auto) minmax(160px, 0.72fr) 74px;
   align-items: center;
   gap: 14px;
   height: 82px;
@@ -172,7 +172,7 @@
 }
 
 .now-playing-queue-item:not(.has-album-column) {
-  grid-template-columns: 64px minmax(190px, 1fr) minmax(138px, auto) 74px;
+  grid-template-columns: 64px minmax(190px, 1fr) minmax(170px, auto) 74px;
 }
 
 .now-playing-queue-item:last-child {
@@ -519,7 +519,7 @@
   .app-shell.nav-minimal .now-playing-queue-item,
   .app-shell.nav-minimal .now-playing-queue-item:not(.has-album-column),
   .app-shell.nav-minimal .now-playing-queue-item.has-album-column {
-    grid-template-columns: 58px minmax(0, 1fr) 36px 50px;
+    grid-template-columns: 58px minmax(0, 1fr) 76px 50px;
     gap: 12px;
     flex-basis: 78px;
     height: 78px;
@@ -556,6 +556,10 @@
     display: none;
   }
 
+  .app-shell.nav-minimal .now-playing-queue-actions .now-playing-queue-action.is-play-next-action {
+    display: grid;
+  }
+
   .app-shell.nav-minimal .now-playing-queue-action {
     width: 34px;
     height: 34px;
@@ -582,7 +586,7 @@
 .playlist-control-compact .now-playing-queue-item,
 .playlist-control-compact .now-playing-queue-item:not(.has-album-column),
 .playlist-control-compact .now-playing-queue-item.has-album-column {
-  grid-template-columns: 58px minmax(0, 1fr) 36px 50px;
+  grid-template-columns: 58px minmax(0, 1fr) 76px 50px;
   gap: 12px;
   flex-basis: 78px;
   height: 78px;
@@ -618,6 +622,10 @@
 .playlist-control-compact .now-playing-queue-actions .now-playing-queue-action:not(:last-child),
 .playlist-control-compact .now-playing-queue-album {
   display: none;
+}
+
+.playlist-control-compact .now-playing-queue-actions .now-playing-queue-action.is-play-next-action {
+  display: grid;
 }
 
 .playlist-control-compact .now-playing-queue-action {

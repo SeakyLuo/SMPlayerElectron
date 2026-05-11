@@ -296,3 +296,61 @@
   border-color: var(--accent);
   background: var(--accent);
 }
+
+.app-shell.night-mode .albums-page .album-tile {
+  color: var(--night-text);
+}
+
+.app-shell.night-mode .albums-page .album-tile:hover,
+.app-shell.night-mode .albums-page .album-tile:focus-visible,
+.app-shell.night-mode .albums-page .album-tile:focus-within,
+.app-shell.night-mode .albums-page .album-tile.is-selected {
+  background: rgba(var(--accent-rgb), 0.14);
+  box-shadow:
+    0 12px 26px rgba(0, 0, 0, 0.26),
+    inset 0 0 0 1px rgba(var(--accent-rgb), 0.24);
+}
+
+.app-shell.night-mode .albums-page .album-art-control {
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.26);
+}
+
+.app-shell.night-mode .albums-page .album-tile-copy strong,
+.app-shell.night-mode .album-art-preview-dialog strong {
+  color: var(--night-text);
+}
+
+.app-shell.night-mode .albums-page .album-tile-copy span {
+  color: var(--night-muted);
+}
+
+.app-shell.night-mode .albums-page .album-select-mark {
+  border-color: rgba(220, 230, 242, 0.42);
+  background: rgba(12, 16, 22, 0.72);
+}
+
+.app-shell.night-mode .albums-page .album-select-mark.is-selected {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.app-shell.night-mode .album-art-preview-backdrop {
+  background: rgba(4, 8, 13, 0.62);
+}
+
+.app-shell.night-mode .album-art-preview-dialog {
+  border-color: var(--night-border);
+  background: rgba(22, 28, 36, 0.96);
+  box-shadow: 0 28px 72px rgba(0, 0, 0, 0.48);
+}
+
+.app-shell.night-mode .album-art-preview-close {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--night-muted);
+}
+
+.app-shell.night-mode .album-art-preview-close:hover {
+  background: rgba(var(--accent-rgb), 0.18);
+  color: color-mix(in srgb, var(--accent) 72%, #f5fbff 28%);
+}

@@ -1575,8 +1575,8 @@ function getNowPlayingFullMoreItems({
     { key: 'play-artist', text: t('detail.playArtist'), icon: 'users', onClick: onPlayArtist },
     { key: 'play-album', text: t('detail.playAlbum'), icon: 'albums', onClick: onPlayAlbum },
     { key: 'see-music-info', text: t('context.seeMusicInfo'), icon: 'info', keepOpen: true, onClick: onSeeMusicInfo },
-    { key: 'see-lyrics', text: t('context.seeLyrics'), icon: 'songs', keepOpen: true, onClick: onSeeLyrics },
-    { key: 'see-album-art', text: t('context.seeAlbumArt'), icon: 'albums', keepOpen: true, onClick: onSeeAlbumArt },
+    { key: 'see-lyrics', text: t('context.seeLyrics'), icon: 'lyrics', keepOpen: true, onClick: onSeeLyrics },
+    { key: 'see-album-art', text: t('context.seeAlbumArt'), icon: 'pictures', keepOpen: true, onClick: onSeeAlbumArt },
   )
 
   return items

@@ -440,6 +440,10 @@ export interface SmplayerApi {
   startWindowDrag: () => Promise<void>
   stopWindowDrag: () => Promise<void>
   setWindowControlsLight: (light: boolean) => Promise<void>
+  setWindowFullScreen: (fullScreen: boolean) => Promise<void>
+  getWindowFullScreen: () => Promise<boolean>
+  setWindowMiniMode: (miniMode: boolean) => Promise<void>
+  getWindowMiniMode: () => Promise<boolean>
   createLocalFolder: (rootPath: string, relativePath: string, name: string) => Promise<void>
   revealSystemLogs: () => Promise<void>
   showTrackNotification: (track: TrackNotificationPayload) => Promise<void>
@@ -522,5 +526,7 @@ export interface SmplayerApi {
   updateSongDuration: (songId: number, duration: number) => Promise<void>
   onGlobalMediaCommand: (callback: (command: GlobalMediaCommand) => void) => () => void
   onTrayCommand: (callback: (command: TrayCommand) => void) => () => void
+  onWindowFullScreenChange: (callback: (fullScreen: boolean) => void) => () => void
+  onWindowMiniModeChange: (callback: (miniMode: boolean) => void) => () => void
   onOpenFiles: (callback: (songIds: number[]) => void) => () => void
 }

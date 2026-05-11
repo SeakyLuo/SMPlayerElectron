@@ -343,7 +343,7 @@ export function getMusicMenuFlyoutItems({
   }
 
   if (normalizedOption.showSelect) {
-    items.push({ key: 'select', text: t('context.select'), icon: 'menu', onClick: onSelect })
+    items.push({ key: 'select', text: t('context.select'), icon: 'multiSelect', onClick: onSelect })
   }
 
   if (normalizedOption.showPreference) {
@@ -413,9 +413,9 @@ export function getMusicMenuFlyoutItems({
       items.push({ key: 'see-album', text: t('context.seeAlbum'), icon: 'albums', onClick: onSeeAlbum })
     }
     items.push({ key: 'see-music-info', text: t('context.seeMusicInfo'), icon: 'info', keepOpen: true, onClick: onSeeMusicInfo })
-    items.push({ key: 'see-lyrics', text: t('context.seeLyrics'), icon: 'songs', keepOpen: true, onClick: onSeeLyrics })
+    items.push({ key: 'see-lyrics', text: t('context.seeLyrics'), icon: 'lyrics', keepOpen: true, onClick: onSeeLyrics })
     if (normalizedOption.showAlbumArt) {
-      items.push({ key: 'see-album-art', text: t('context.seeAlbumArt'), icon: 'albums', keepOpen: true, onClick: onSeeAlbumArt })
+      items.push({ key: 'see-album-art', text: t('context.seeAlbumArt'), icon: 'pictures', keepOpen: true, onClick: onSeeAlbumArt })
     }
   }
 

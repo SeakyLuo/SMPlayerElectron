@@ -403,7 +403,7 @@ export function NowPlayingPage({
     {
       key: 'multi-select',
       text: t('albums.multiSelect'),
-      icon: 'menu' as const,
+      icon: 'multiSelect' as const,
       disabled: !canUseQueueCommands,
       onClick: toggleMultiSelect,
     },
@@ -504,7 +504,7 @@ export function NowPlayingPage({
           />
           <CommandBarButton
             active={multiSelect}
-            icon="menu"
+            icon="multiSelect"
             label={t('albums.multiSelect')}
             onClick={toggleMultiSelect}
           />

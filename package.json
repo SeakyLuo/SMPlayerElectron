@@ -21,6 +21,7 @@
     "dist:linux": "npm run build && electron-builder --linux"
   },
   "dependencies": {
+    "@fluentui/react-icons": "^2.0.326",
     "clsx": "^2.1.1",
     "music-metadata": "^11.12.3",
     "react": "^19.2.4",
