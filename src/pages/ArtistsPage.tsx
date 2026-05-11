@@ -765,6 +765,9 @@ export function ArtistsPage({
                               y,
                             })
                           }}
+                          onPlayNextClick={(contextSong) => {
+                            onPlayNext(contextSong.id)
+                          }}
                           onContextMenu={(contextSong, x, y) => {
                             setGroupMenu(null)
                             setSongContextMenu({
@@ -1054,7 +1057,7 @@ function ArtistGroupContextMenu({
         {
           key: menu.type === 'artist' ? 'multi-select' : 'select',
           text: menu.type === 'artist' ? t('common.multiSelect') : t('context.select'),
-          icon: 'menu',
+          icon: 'multiSelect',
           onClick: () => {
             onSelectSongs(songIds)
           },

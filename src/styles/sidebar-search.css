@@ -29,6 +29,13 @@
     box-shadow 140ms ease;
 }
 
+.app-shell.night-mode .search-form {
+  background: rgba(255, 255, 255, 0.045);
+  box-shadow:
+    inset 0 0 0 1px var(--night-border),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
 .search-form.has-query {
   grid-template-columns: 40px minmax(0, 1fr) 22px;
 }
@@ -38,6 +45,13 @@
   box-shadow:
     inset 0 0 0 1px rgba(var(--accent-rgb), 0.48),
     0 0 0 3px rgba(var(--accent-rgb), 0.1);
+}
+
+.app-shell.night-mode .search-form:focus-within {
+  background: rgba(var(--accent-rgb), 0.14);
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--accent-rgb), 0.5),
+    0 0 0 3px rgba(var(--accent-rgb), 0.14);
 }
 
 .search-shell label {
@@ -69,8 +83,16 @@
     transform 180ms cubic-bezier(0.2, 0, 0, 1);
 }
 
+.app-shell.night-mode .search-shell input {
+  color: var(--night-text);
+}
+
 .search-shell input::placeholder {
   color: rgba(61, 73, 88, 0.62);
+}
+
+.app-shell.night-mode .search-shell input::placeholder {
+  color: var(--night-subtle);
 }
 
 .search-shell input::-webkit-search-decoration,
@@ -101,6 +123,11 @@
   color: var(--text-muted);
   font-size: 14px;
   border-radius: 0;
+}
+
+.app-shell.night-mode .search-commit-button,
+.app-shell.night-mode .search-clear-button {
+  color: var(--night-muted);
 }
 
 .search-form:focus,
@@ -139,6 +166,11 @@
     opacity 120ms ease,
     background-color 120ms ease,
     color 120ms ease;
+}
+
+.app-shell.night-mode .search-clear-button {
+  background: rgba(var(--accent-rgb), 0.16);
+  color: #fff;
 }
 
 .search-clear-button:hover {
@@ -209,6 +241,12 @@
   backdrop-filter: blur(18px);
 }
 
+.app-shell.night-mode .search-history-panel {
+  border-color: var(--night-border);
+  background: rgba(29, 35, 43, 0.98);
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.36);
+}
+
 .search-history-header {
   display: flex;
   align-items: center;
@@ -221,6 +259,12 @@
   font-weight: 600;
   letter-spacing: 0;
   text-transform: none;
+}
+
+.app-shell.night-mode .search-history-header,
+.app-shell.night-mode .search-history-header button,
+.app-shell.night-mode .search-history-remove {
+  color: var(--night-muted);
 }
 
 .search-history-header button,
@@ -256,6 +300,10 @@
   background: rgba(var(--accent-rgb), 0.08);
 }
 
+.app-shell.night-mode .search-history-item:hover {
+  background: rgba(var(--accent-rgb), 0.16);
+}
+
 .search-history-select {
   display: flex;
   align-items: center;
@@ -270,6 +318,10 @@
   font-size: 14px;
   text-align: left;
   cursor: pointer;
+}
+
+.app-shell.night-mode .search-history-select {
+  color: var(--night-text);
 }
 
 .search-history-select span {

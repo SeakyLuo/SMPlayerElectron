@@ -1,13 +1,69 @@
-import type { SVGProps } from 'react'
+import {
+  AddRegular,
+  ArrowDownloadRegular,
+  ArrowLeftRegular,
+  ArrowRepeat1Regular,
+  ArrowRepeatAllRegular,
+  ArrowShuffleRegular,
+  ArrowSortRegular,
+  ArrowSyncRegular,
+  ArrowUndoRegular,
+  AppsListDetailRegular,
+  CheckmarkRegular,
+  ChevronDownRegular,
+  ChevronRightRegular,
+  ChevronUpRegular,
+  ChatRegular,
+  ClockRegular,
+  CommentTextRegular,
+  CopyRegular,
+  DeleteRegular,
+  DismissRegular,
+  EditRegular,
+  EyeRegular,
+  FolderRegular,
+  FolderProhibitedRegular,
+  FullScreenMaximizeRegular,
+  FullScreenMinimizeRegular,
+  GridDotsRegular,
+  HardDriveRegular,
+  HeartFilled,
+  HeartRegular,
+  ImageRegular,
+  InfoRegular,
+  LibraryRegular,
+  LineHorizontal3Regular,
+  MicRegular,
+  MoreHorizontalRegular,
+  MultiselectLtrRegular,
+  MusicNote2Regular,
+  NextRegular,
+  PauseRegular,
+  PeopleRegular,
+  PictureInPictureEnterRegular,
+  PlayRegular,
+  PreviousRegular,
+  SaveRegular,
+  SearchRegular,
+  SelectAllOffRegular,
+  SelectAllOnRegular,
+  SettingsRegular,
+  Speaker2Regular,
+  SpeakerMuteRegular,
+  StarRegular,
+  type FluentIconsProps,
+} from '@fluentui/react-icons'
+import type { ComponentType, SVGProps } from 'react'
 
 type IconProps = SVGProps<SVGSVGElement>
+type FluentIconComponent = ComponentType<FluentIconsProps>
 
 const paths = {
   blank: [<path key="blank" d="M12 12h.01" opacity="0" />],
   albums: [
-    <circle key="disc" cx="12" cy="12" r="8" />,
-    <circle key="center" cx="12" cy="12" r="2" />,
-    <path key="shine" d="M12 4a8 8 0 0 1 8 8" />,
+    <circle key="outer" cx="12" cy="12" r="8" />,
+    <circle key="inner" cx="12" cy="12" r="3" />,
+    <circle key="pin" cx="12" cy="12" r="0.7" fill="currentColor" stroke="none" />,
   ],
   arrowLeft: [<path key="arrow" d="m15 18-6-6 6-6" />],
   chevronDown: [<path key="chevron" d="m7 10 5 5 5-5" />],
@@ -71,13 +127,13 @@ const paths = {
     <circle key="c3" cx="16" cy="18" r="1" fill="currentColor" stroke="none" />,
   ],
   folder: [
-    <path key="tab" d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v1H3z" />,
-    <path key="body" d="M3 10h18l-2 9H5z" />,
+    <path key="body" d="M3.5 7.5a2 2 0 0 1 2-2h4.2l2 2H19a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2H5.5a2 2 0 0 1-2-2z" />,
+    <path key="top" d="M3.5 10h17" />,
   ],
   hiddenFolders: [
-    <path key="tab" d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v1H3z" />,
-    <path key="body" d="M3 10h18l-2 9H5z" />,
-    <path key="slash" d="M4 4l16 16" />,
+    <path key="body" d="M3.5 7.5a2 2 0 0 1 2-2h4.2l2 2H19a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2H5.5a2 2 0 0 1-2-2z" />,
+    <path key="top" d="M3.5 10h17" />,
+    <path key="slash" d="M4.5 4.5 19.5 19.5" />,
   ],
   heart: [
     <path
@@ -99,13 +155,18 @@ const paths = {
     <path key="dot" d="M12 8h.01" />,
   ],
   local: [
-    <path key="drive" d="M4 14h16l-2-8H6z" />,
-    <path key="base" d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4" />,
-    <path key="dot" d="M7 17h.01" />,
+    <path key="drive" d="M5.5 5.5h13l2 7h-17z" />,
+    <path key="base" d="M3.5 12.5h17v5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" />,
+    <path key="dot" d="M7 16h.01" />,
+  ],
+  lyrics: [
+    <path key="bubble" d="M5 5.5h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H9l-4 3v-12a2 2 0 0 1 2-2z" />,
+    <path key="line1" d="M9 10h7" />,
+    <path key="line2" d="M9 13h5" />,
   ],
   musicLibrary: [
     <path key="book1" d="M5 5v14" />,
-    <path key="book2" d="M10 5v14" />,
+    <path key="book2" d="M10 4.5v15" />,
     <path key="book3" d="M15 5v14" />,
     <path key="book4" d="m19 6 2 12" />,
   ],
@@ -114,26 +175,38 @@ const paths = {
     <path key="b" d="M4 12h16" />,
     <path key="c" d="M4 17h16" />,
   ],
+  miniMode: [
+    <rect key="outer" x="3.5" y="5" width="17" height="14" rx="2" />,
+    <rect key="inner" x="11.5" y="11.5" width="6" height="4.5" rx="1" />,
+  ],
+  multiSelect: [
+    <path key="check1" d="m4.5 7.5 1.7 1.7L9.2 6" />,
+    <path key="check2" d="m4.5 16.5 1.7 1.7 3-3.2" />,
+    <path key="line1" d="M12 7.5h8" />,
+    <path key="line2" d="M12 16.5h8" />,
+  ],
   moreHorizontal: [
     <circle key="a" cx="5" cy="12" r="1" />,
     <circle key="b" cx="12" cy="12" r="1" />,
     <circle key="c" cx="19" cy="12" r="1" />,
   ],
   next: [
-    <path key="play" d="m8 5 8 7-8 7z" />,
-    <path key="bar" d="M18 5v14" />,
+    <path key="play" d="m8 6 7.5 6L8 18z" />,
+    <path key="bar" d="M18 6v12" />,
   ],
   nowPlaying: [
-    <path key="list1" d="M4 7h9" />,
+    <path key="list1" d="M4 7h8" />,
     <path key="list2" d="M4 12h7" />,
     <path key="list3" d="M4 17h5" />,
-    <path key="note" d="M16 6v10.5a2.5 2.5 0 1 1-1.5-2.3V8l5-1.5v8a2.5 2.5 0 1 1-1.5-2.3V6z" />,
+    <path key="noteStem" d="M17 5.5v9.8" />,
+    <path key="noteHead" d="M17 15.3a2.4 2.4 0 1 1-1.6-2.3" />,
   ],
   playlists: [
-    <path key="a" d="M4 6h12" />,
-    <path key="b" d="M4 11h12" />,
-    <path key="c" d="M4 16h8" />,
-    <path key="note" d="M18 10v7a2 2 0 1 1-1.2-1.8V11z" />,
+    <path key="list1" d="M4 6.5h10" />,
+    <path key="list2" d="M4 11.5h9" />,
+    <path key="list3" d="M4 16.5h6" />,
+    <path key="stem" d="M18 8.5v8" />,
+    <circle key="head" cx="16" cy="17" r="2" />,
   ],
   pictures: [
     <rect key="frame" x="3" y="5" width="18" height="14" rx="2" />,
@@ -159,15 +232,15 @@ const paths = {
     <path key="hands" d="M12 7v5l3 2" />,
   ],
   rename: [
-    <path key="box" d="M4 17.5V20h2.5L18.8 7.7l-2.5-2.5z" />,
-    <path key="tip" d="m14.8 6.7 2.5 2.5" />,
-    <path key="line" d="M4 22h16" />,
+    <path key="body" d="M4 20h4l10.8-10.8a2.1 2.1 0 0 0-3-3L5 17z" />,
+    <path key="tip" d="m14.5 7.5 3 3" />,
+    <path key="line" d="M13 20h7" />,
   ],
   refresh: [
-    <path key="top" d="M20 6v5h-5" />,
-    <path key="topLine" d="M20 11a8 8 0 0 0-14.9-4" />,
-    <path key="bottom" d="M4 18v-5h5" />,
-    <path key="bottomLine" d="M4 13a8 8 0 0 0 14.9 4" />,
+    <path key="top" d="M19 5v5h-5" />,
+    <path key="topLine" d="M18.6 10A7 7 0 0 0 6.5 6.5" />,
+    <path key="bottom" d="M5 19v-5h5" />,
+    <path key="bottomLine" d="M5.4 14a7 7 0 0 0 12.1 3.5" />,
   ],
   refreshClock: [
     <path key="clock" d="M3 12a9 9 0 1 0 3-6.7" />,
@@ -212,11 +285,11 @@ const paths = {
     />,
   ],
   shuffle: [
-    <path key="a" d="M16 3h5v5" />,
-    <path key="b" d="M4 20 21 3" />,
-    <path key="c" d="M21 16v5h-5" />,
-    <path key="d" d="m15 15 6 6" />,
-    <path key="e" d="M4 4l5 5" />,
+    <path key="topLine" d="M4 7h2.2c2.2 0 3.4 2 5.2 5s3 5 5.4 5H20" />,
+    <path key="bottomLine" d="M4 17h2.2c2 0 3.2-1.7 4.7-4.2" />,
+    <path key="topExit" d="M14.1 9.2C15 7.8 15.9 7 17.3 7H20" />,
+    <path key="arrowTop" d="m17 4 3 3-3 3" />,
+    <path key="arrowBottom" d="m17 14 3 3-3 3" />,
   ],
   selectAll: [
     <path key="box" d="M4 4h16v16H4z" />,
@@ -228,10 +301,10 @@ const paths = {
     <circle key="right" cx="17" cy="16" r="3" />,
   ],
   sort: [
-    <path key="top" d="M4 7h10" />,
-    <path key="topArrow" d="m11 4 3 3-3 3" />,
-    <path key="bottom" d="M20 17H10" />,
-    <path key="bottomArrow" d="m13 14-3 3 3 3" />,
+    <path key="top" d="M4 7h11" />,
+    <path key="topArrow" d="m12 4 3 3-3 3" />,
+    <path key="bottom" d="M20 17H9" />,
+    <path key="bottomArrow" d="m12 14-3 3 3 3" />,
   ],
   trash: [
     <path key="lid" d="M4 7h16" />,
@@ -279,16 +352,88 @@ const paths = {
 
 export type IconName = keyof typeof paths
 
+const fluentIcons: Partial<Record<IconName, FluentIconComponent>> = {
+  arrowLeft: ArrowLeftRegular,
+  chevronDown: ChevronDownRegular,
+  chevronRight: ChevronRightRegular,
+  chevronUp: ChevronUpRegular,
+  check: CheckmarkRegular,
+  clearSelection: SelectAllOffRegular,
+  clear: DismissRegular,
+  close: DismissRegular,
+  copy: CopyRegular,
+  feedback: ChatRegular,
+  fullscreen: FullScreenMaximizeRegular,
+  fullscreenExit: FullScreenMinimizeRegular,
+  grip: GridDotsRegular,
+  folder: FolderRegular,
+  hiddenFolders: FolderProhibitedRegular,
+  heart: HeartRegular,
+  heartFilled: HeartFilled,
+  info: InfoRegular,
+  local: HardDriveRegular,
+  lyrics: CommentTextRegular,
+  miniMode: PictureInPictureEnterRegular,
+  musicLibrary: LibraryRegular,
+  menu: LineHorizontal3Regular,
+  multiSelect: MultiselectLtrRegular,
+  moreHorizontal: MoreHorizontalRegular,
+  next: NextRegular,
+  nowPlaying: AppsListDetailRegular,
+  pictures: ImageRegular,
+  plus: AddRegular,
+  play: PlayRegular,
+  pause: PauseRegular,
+  previous: PreviousRegular,
+  recent: ClockRegular,
+  rename: EditRegular,
+  refresh: ArrowSyncRegular,
+  refreshClock: ArrowSyncRegular,
+  repeat: ArrowRepeatAllRegular,
+  repeatOne: ArrowRepeat1Regular,
+  save: SaveRegular,
+  search: SearchRegular,
+  selectAll: SelectAllOnRegular,
+  settings: SettingsRegular,
+  shuffle: ArrowShuffleRegular,
+  songs: MusicNote2Regular,
+  sort: ArrowSortRegular,
+  star: StarRegular,
+  trash: DeleteRegular,
+  undo: ArrowUndoRegular,
+  import: ArrowDownloadRegular,
+  voice: MicRegular,
+  volume: Speaker2Regular,
+  volumeMuted: SpeakerMuteRegular,
+  users: PeopleRegular,
+  view: EyeRegular,
+}
+
 export function Icon({ name, className, ...props }: IconProps & { name: IconName }) {
+  const FluentIcon = fluentIcons[name]
+  const strokeWidth = name === 'albums' || name === 'playlists' ? 1.35 : 2.2
+
+  if (FluentIcon) {
+    return (
+      <FluentIcon
+        className={className}
+        aria-hidden="true"
+        focusable="false"
+        {...(props as FluentIconsProps)}
+      />
+    )
+  }
+
   return (
     <svg
       className={className}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.9"
+      strokeWidth={strokeWidth}
       strokeLinecap="round"
       strokeLinejoin="round"
+      vectorEffect="non-scaling-stroke"
       aria-hidden="true"
       focusable="false"
       {...props}

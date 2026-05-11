@@ -18,7 +18,7 @@ import { existsSync } from 'node:fs'
 import { basename, dirname, extname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
-import type { OpenDialogOptions, SaveDialogOptions } from 'electron'
+import type { OpenDialogOptions, Rectangle, SaveDialogOptions } from 'electron'
 import type {
   AppInfo,
   GlobalMediaCommand,
@@ -47,7 +47,12 @@ let remotePlayServer: RemotePlayServer | null = null
 let appTray: Tray | null = null
 let isQuitting = false
 let windowDragInterval: NodeJS.Timeout | null = null
+let isWindowMiniMode = false
+let windowBoundsBeforeMiniMode: Rectangle | null = null
+let wasWindowMaximizedBeforeMiniMode = false
 const openFileCoordinator = new OpenFileCoordinator()
+const defaultWindowMinimumSize = { width: 506, height: 520 }
+const miniModeWindowSize = { width: 300, height: 300 }
 
 function stopWindowDrag() {
   if (windowDragInterval) {
@@ -78,6 +83,81 @@ function startWindowDrag() {
     )
   }, 16)
 }
+
+function emitWindowFullScreenChange() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return
+  }
+
+  mainWindow.webContents.send('window:full-screen-change', mainWindow.isFullScreen())
+}
+
+function emitWindowMiniModeChange() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return
+  }
+
+  mainWindow.webContents.send('window:mini-mode-change', isWindowMiniMode)
+}
+
+function enterWindowMiniMode() {
+  const window = mainWindow!
+  stopWindowDrag()
+
+  if (!isWindowMiniMode) {
+    wasWindowMaximizedBeforeMiniMode = window.isMaximized()
+    if (wasWindowMaximizedBeforeMiniMode) {
+      window.unmaximize()
+    }
+    windowBoundsBeforeMiniMode = window.getBounds()
+  }
+
+  if (window.isFullScreen()) {
+    window.setFullScreen(false)
+    emitWindowFullScreenChange()
+  }
+
+  const currentBounds = window.getBounds()
+  const workArea = screen.getDisplayMatching(currentBounds).workArea
+  const x = Math.max(
+    workArea.x,
+    Math.min(currentBounds.x + currentBounds.width - miniModeWindowSize.width, workArea.x + workArea.width - miniModeWindowSize.width),
+  )
+  const y = Math.max(
+    workArea.y,
+    Math.min(currentBounds.y, workArea.y + workArea.height - miniModeWindowSize.height),
+  )
+
+  isWindowMiniMode = true
+  window.setMinimumSize(miniModeWindowSize.width, miniModeWindowSize.height)
+  window.setBounds({ x, y, ...miniModeWindowSize }, true)
+  window.setResizable(true)
+  window.setMaximizable(false)
+  window.setAlwaysOnTop(true, 'floating')
+  emitWindowMiniModeChange()
+}
+
+function exitWindowMiniMode() {
+  const window = mainWindow!
+  stopWindowDrag()
+  isWindowMiniMode = false
+  window.setAlwaysOnTop(false)
+  window.setResizable(true)
+  window.setMaximizable(true)
+  window.setMinimumSize(defaultWindowMinimumSize.width, defaultWindowMinimumSize.height)
+
+  if (windowBoundsBeforeMiniMode) {
+    window.setBounds(windowBoundsBeforeMiniMode, true)
+  }
+  if (wasWindowMaximizedBeforeMiniMode) {
+    window.maximize()
+  }
+
+  windowBoundsBeforeMiniMode = null
+  wasWindowMaximizedBeforeMiniMode = false
+  emitWindowMiniModeChange()
+}
+
 let hasShownTrayHint = false
 
 app.commandLine.appendSwitch(
@@ -347,8 +427,8 @@ async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1460,
     height: 940,
-    minWidth: 506,
-    minHeight: 520,
+    minWidth: defaultWindowMinimumSize.width,
+    minHeight: defaultWindowMinimumSize.height,
     show: false,
     autoHideMenuBar: true,
     backgroundColor: appWindowBackgroundColor,
@@ -396,6 +476,8 @@ async function createWindow() {
   mainWindow.on('closed', () => {
     stopWindowDrag()
   })
+  mainWindow.on('enter-full-screen', emitWindowFullScreenChange)
+  mainWindow.on('leave-full-screen', emitWindowFullScreenChange)
 
   mainWindow.on('show', () => {
     updateTrayMenu()
@@ -987,6 +1069,28 @@ app.whenReady().then(async () => {
         height: 32,
       })
     }
+  })
+  ipcMain.handle('window:set-full-screen', (_event, fullScreen: boolean) => {
+    stopWindowDrag()
+    if (fullScreen && isWindowMiniMode) {
+      exitWindowMiniMode()
+    }
+    mainWindow!.setFullScreen(fullScreen)
+    emitWindowFullScreenChange()
+  })
+  ipcMain.handle('window:get-full-screen', () => {
+    return mainWindow!.isFullScreen()
+  })
+  ipcMain.handle('window:set-mini-mode', (_event, miniMode: boolean) => {
+    if (miniMode) {
+      enterWindowMiniMode()
+      return
+    }
+
+    exitWindowMiniMode()
+  })
+  ipcMain.handle('window:get-mini-mode', () => {
+    return isWindowMiniMode
   })
   ipcMain.handle('shell:create-local-folder', async (_event, rootPath: string, relativePath: string, name: string) => {
     await mkdir(join(rootPath, relativePath, name), { recursive: true })

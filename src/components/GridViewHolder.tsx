@@ -1,4 +1,4 @@
-import { type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react'
+import { type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
 
 import { GridArtworkCardContent } from './GridArtworkCardContent'
 import { Icon } from './icons'
@@ -17,6 +17,9 @@ interface GridViewHolderProps {
   onPointerDragStart?: (event: PointerEvent<HTMLDivElement>) => void
   cardRef?: (element: HTMLDivElement | null) => void
   dragOverlay?: boolean
+  selectionMode?: boolean
+  selectedMark?: ReactNode
+  showDragHandle?: boolean
   style?: CSSProperties
   onContextMenu?: (x: number, y: number) => void
 }
@@ -32,6 +35,9 @@ export function GridViewHolder({
   onPointerDragStart,
   cardRef,
   dragOverlay = false,
+  selectionMode = false,
+  selectedMark,
+  showDragHandle = true,
   style,
   onContextMenu,
 }: GridViewHolderProps) {
@@ -59,11 +65,11 @@ export function GridViewHolder({
       role="button"
       ref={cardRef}
       tabIndex={0}
-      className={`grid-view-holder${selected ? ' is-selected' : ''}${dragging ? ' is-dragging' : ''}${dragOverlay ? ' is-drag-overlay' : ''}`}
+      className={`grid-view-holder${selected ? ' is-selected' : ''}${dragging ? ' is-dragging' : ''}${dragOverlay ? ' is-drag-overlay' : ''}${showDragHandle ? '' : ' is-static'}`}
       style={style}
       title={playlist.name}
       onClick={onOpen}
-      onPointerDown={startPointerDrag}
+      onPointerDown={showDragHandle ? startPointerDrag : undefined}
       onContextMenu={(event) => {
         event.preventDefault()
         onContextMenu?.(event.clientX, event.clientY)
@@ -71,7 +77,7 @@ export function GridViewHolder({
       onKeyDown={openOnKeyDown}
     >
       <GridArtworkCardContent
-        actions={[
+        actions={selectionMode ? [] : [
           {
             key: 'play',
             title: t('context.play'),
@@ -82,20 +88,23 @@ export function GridViewHolder({
         ]}
         artworkUrls={getPlaylistArtworkDisplayUrls(artworkUrls)}
         fallbackIcon="playlists"
+        selectedMark={selectedMark}
         subtitle={t('playlists.songCount', { count: playlist.songCount })}
         title={playlist.name}
       />
-      <button
-        aria-label={t('playlists.dragToSort')}
-        className="grid-view-holder-drag-handle"
-        title={t('playlists.dragToSort')}
-        type="button"
-        onClick={(event) => {
-          event.stopPropagation()
-        }}
-      >
-        <Icon name="grip" />
-      </button>
+      {showDragHandle ? (
+        <button
+          aria-label={t('playlists.dragToSort')}
+          className="grid-view-holder-drag-handle"
+          title={t('playlists.dragToSort')}
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation()
+          }}
+        >
+          <Icon name="grip" />
+        </button>
+      ) : null}
     </div>
   )
 }

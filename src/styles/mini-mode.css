@@ -1,0 +1,370 @@
+.mini-mode-page {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: #050607;
+  color: #fff;
+  font-family: 'Segoe UI Variable Display', 'Aptos', 'Segoe UI', sans-serif;
+  user-select: none;
+}
+
+.mini-mode-page::before,
+.mini-mode-page::after {
+  position: absolute;
+  inset: 0;
+  content: '';
+}
+
+.mini-mode-page::before {
+  background-image: var(--mini-mode-artwork);
+  background-position: center;
+  background-size: cover;
+}
+
+.mini-mode-page::after {
+  background: rgba(0, 0, 0, 0.75);
+}
+
+.mini-mode-titlebar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 3;
+  height: 32px;
+  background: transparent;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.mini-mode-artwork-probe {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.mini-mode-transport,
+.mini-mode-bottom,
+.mini-mode-more-panel,
+.mini-mode-voice-popover {
+  position: absolute;
+  z-index: 2;
+}
+
+.mini-mode-page button,
+.mini-mode-page input,
+.mini-mode-more-panel,
+.mini-mode-voice-popover {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.mini-mode-transport {
+  top: 50%;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transform: translate(-50%, -50%);
+}
+
+.mini-mode-button,
+.mini-mode-actions button,
+.mini-mode-more-panel button,
+.mini-mode-volume-row button,
+.mini-mode-voice-popover button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.mini-mode-button {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 9px;
+  border-radius: 50%;
+  transition:
+    background-color 120ms ease,
+    transform 120ms ease;
+}
+
+.mini-mode-button.primary {
+  width: 48px;
+  height: 48px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.mini-mode-button:hover:not(:disabled),
+.mini-mode-button:focus-visible:not(:disabled),
+.mini-mode-actions button:hover:not(:disabled),
+.mini-mode-actions button:focus-visible:not(:disabled) {
+  background: rgba(255, 255, 255, 0.2);
+  outline: none;
+}
+
+.mini-mode-button:active:not(:disabled),
+.mini-mode-actions button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.mini-mode-button:disabled,
+.mini-mode-actions button:disabled {
+  cursor: default;
+  opacity: 0.48;
+}
+
+.mini-mode-button svg,
+.mini-mode-actions svg,
+.mini-mode-more-panel svg,
+.mini-mode-volume-row svg,
+.mini-mode-voice-popover svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.mini-mode-loading-spinner {
+  width: 22px;
+  height: 22px;
+  border: 2px solid rgba(255, 255, 255, 0.34);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: player-loading-spinner 800ms linear infinite;
+}
+
+.mini-mode-bottom {
+  right: 10px;
+  bottom: 0;
+  left: 10px;
+  display: grid;
+  grid-template-rows: auto 34px 18px;
+  row-gap: 0;
+}
+
+.mini-mode-track-copy {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  min-width: 0;
+  margin-bottom: 1px;
+}
+
+.mini-mode-track-copy strong,
+.mini-mode-track-copy span {
+  max-width: 100%;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mini-mode-track-copy strong {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.mini-mode-track-copy span {
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 13px;
+  font-weight: 520;
+  line-height: 1.2;
+}
+
+.mini-mode-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  min-height: 34px;
+}
+
+.mini-mode-actions button {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 8px;
+  border-radius: 50%;
+}
+
+.mini-mode-actions button.is-active {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.mini-mode-progress-slider,
+.mini-mode-volume-slider {
+  appearance: none;
+  width: 100%;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.mini-mode-progress-slider {
+  height: 18px;
+}
+
+.mini-mode-volume-slider {
+  height: 20px;
+}
+
+.mini-mode-progress-slider::-webkit-slider-runnable-track,
+.mini-mode-volume-slider::-webkit-slider-runnable-track {
+  height: 2px;
+  border-radius: 999px;
+  background:
+    linear-gradient(
+      to right,
+      rgba(255, 255, 255, 0.96) 0,
+      rgba(255, 255, 255, 0.96) var(--range-progress, 0%),
+      rgba(255, 255, 255, 0.32) var(--range-progress, 0%),
+      rgba(255, 255, 255, 0.32) 100%
+    );
+}
+
+.mini-mode-progress-slider::-webkit-slider-thumb,
+.mini-mode-volume-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 0;
+  height: 0;
+}
+
+.mini-mode-volume-slider::-webkit-slider-thumb {
+  width: 12px;
+  height: 12px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.mini-mode-more-panel {
+  right: 10px;
+  bottom: 46px;
+  display: grid;
+  width: 204px;
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(34, 34, 34, 0.96);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(18px) saturate(150%);
+}
+
+.mini-mode-more-panel button {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  padding: 0 9px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 560;
+  text-align: left;
+}
+
+.mini-mode-more-panel button:hover,
+.mini-mode-more-panel button:focus-visible,
+.mini-mode-more-panel button.is-active {
+  background: rgba(255, 255, 255, 0.16);
+  outline: none;
+}
+
+.mini-mode-more-panel button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mini-mode-more-panel button svg {
+  width: 18px;
+  height: 18px;
+}
+
+.mini-mode-volume-row {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  margin: 2px 8px 2px 0;
+}
+
+.mini-mode-volume-row button {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 9px;
+  border-radius: 50%;
+}
+
+.mini-mode-volume-row button:hover,
+.mini-mode-volume-row button:focus-visible {
+  background: rgba(255, 255, 255, 0.16);
+  outline: none;
+}
+
+.mini-mode-voice-popover {
+  right: 10px;
+  bottom: 48px;
+  left: 10px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(34, 34, 34, 0.96);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(18px) saturate(150%);
+}
+
+.mini-mode-voice-popover span {
+  grid-column: 1 / -1;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.mini-mode-voice-popover p {
+  min-width: 0;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 560;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.mini-mode-voice-popover button {
+  min-width: 30px;
+  height: 30px;
+  padding: 7px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.mini-mode-voice-popover button:hover,
+.mini-mode-voice-popover button:focus-visible {
+  background: rgba(255, 255, 255, 0.16);
+  outline: none;
+}
+
+@media (max-height: 249px) {
+  .mini-mode-track-copy {
+    display: none;
+  }
+
+  .mini-mode-bottom {
+    grid-template-rows: 34px 18px;
+  }
+}

@@ -123,6 +123,13 @@ export function Sidebar({
     onToggleCollapsed()
   }
 
+  const commitSearch = (query: string) => {
+    onSearchCommit(query)
+    setIsSearchFocused(false)
+    searchInputRef.current?.blur()
+    onNavigate()
+  }
+
   const clearPlaylistDragState = () => {
     draggedPlaylistIdRef.current = null
     setDraggingPlaylistId(null)
@@ -247,7 +254,7 @@ export function Sidebar({
                 return
               }
 
-              onSearchCommit(searchQuery)
+              commitSearch(searchQuery)
             }}
           >
             <button
@@ -328,7 +335,7 @@ export function Sidebar({
                         }}
                         onClick={() => {
                           onSearchChange(entry.query)
-                          onSearchCommit(entry.query)
+                          commitSearch(entry.query)
                         }}
                       >
                         <span>{entry.query}</span>

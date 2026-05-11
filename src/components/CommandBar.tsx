@@ -24,6 +24,7 @@ interface CommandBarProps {
   className?: string
   content?: ReactNode
   dynamicOverflow?: boolean
+  overflowReserve?: number
   overflowItems?: MenuFlyoutItem[]
   overflowLabel?: string
 }
@@ -51,6 +52,7 @@ export function CommandBar({
   className,
   content,
   dynamicOverflow = true,
+  overflowReserve = 0,
   overflowItems = [],
   overflowLabel = 'More',
 }: CommandBarProps) {
@@ -101,7 +103,7 @@ export function CommandBar({
       }
     })
 
-    const availableWidth = primaryElement.clientWidth
+    const availableWidth = Math.max(0, primaryElement.clientWidth - overflowReserve)
     const moreWidth = Math.ceil(moreRef.current?.getBoundingClientRect().width ?? 52)
     const nextOverflowedIndexes = new Set<number>()
     let totalWidth = childrenArray.reduce<number>((total, _, index) => total + (itemWidths.current[index] ?? 0), 0)
@@ -123,7 +125,7 @@ export function CommandBar({
     setOverflowedIndexes((current) => (
       areIndexSetsEqual(current, nextOverflowedIndexes) ? current : nextOverflowedIndexes
     ))
-  }, [childrenArray, dynamicOverflow, overflowItems.length])
+  }, [childrenArray, dynamicOverflow, overflowItems.length, overflowReserve])
 
   const updateDynamicOverflow = useCallback(() => {
     window.cancelAnimationFrame(animationFrameRef.current)

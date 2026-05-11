@@ -21,6 +21,10 @@
   app-region: no-drag;
 }
 
+.app-shell.night-mode .sidebar {
+  color: var(--night-text);
+}
+
 .sidebar * {
   -webkit-app-region: no-drag;
   app-region: no-drag;
@@ -100,6 +104,15 @@
     transform 180ms cubic-bezier(0.2, 0, 0, 1);
 }
 
+.app-shell.night-mode .sidebar-app-name,
+.app-shell.night-mode .brand-name {
+  color: var(--night-text);
+}
+
+.app-shell.night-mode .brand-topline {
+  color: var(--night-subtle);
+}
+
 .sidebar.is-collapsed .sidebar-titlebar {
   justify-content: center;
   width: var(--sidebar-collapsed-item-size);
@@ -128,6 +141,11 @@
   background: transparent;
   color: #222;
   cursor: pointer;
+}
+
+.app-shell.night-mode .sidebar-collapse-button,
+.app-shell.night-mode .sidebar-back-button {
+  color: var(--night-muted);
 }
 
 .sidebar-back-button:focus,
@@ -181,6 +199,12 @@
 
 .sidebar-back-button:hover {
   color: var(--accent-strong);
+}
+
+.app-shell.night-mode .sidebar-back-button:hover,
+.app-shell.night-mode .sidebar-collapse-button:hover {
+  background: rgba(var(--accent-rgb), 0.18);
+  color: #fff;
 }
 
 .brand {
@@ -258,4 +282,9 @@
 .sidebar.is-collapsed .search-commit-button:hover {
   background: rgba(var(--accent-rgb), 0.12);
   color: var(--accent-strong);
+}
+
+.app-shell.night-mode .sidebar.is-collapsed .search-commit-button:hover {
+  background: rgba(var(--accent-rgb), 0.18);
+  color: #fff;
 }

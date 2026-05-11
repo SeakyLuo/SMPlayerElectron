@@ -29,31 +29,31 @@
 .search-result-tabs {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 44px;
+  gap: 8px;
+  min-height: 38px;
   overflow-x: auto;
-  padding: 8px 2px 12px;
+  padding: 4px 2px 8px;
 }
 
 .search-result-tabs button {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
+  gap: 7px;
   flex: 0 0 auto;
-  min-height: 34px;
-  padding: 0 18px;
+  min-height: 30px;
+  padding: 0 13px;
   border: 1px solid rgba(118, 132, 153, 0.22);
   border-radius: 999px;
   background: transparent;
   color: var(--text-strong);
   box-shadow: none;
   font: inherit;
-  font-size: 14px;
+  font-size: 13px;
   cursor: pointer;
 }
 
 .search-result-tabs button strong {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 680;
 }
 
@@ -97,6 +97,10 @@
 .search-multi-select-button svg {
   width: 16px;
   height: 16px;
+}
+
+.search-appbar-multi-select-button {
+  display: none;
 }
 
 .search-loading-state {
@@ -346,4 +350,120 @@
   display: flex;
   flex-direction: column;
   gap: 0;
+}
+
+.search-album-result-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 180px);
+  gap: 26px 30px;
+  align-items: start;
+}
+
+.search-result-section .search-grid-view-holder-grid,
+.search-result-section .search-folder-result-grid {
+  padding: 0;
+}
+
+.app-shell.nav-minimal .search-result-section .search-grid-view-holder-grid {
+  padding: 0;
+}
+
+.app-shell.nav-minimal .search-result-section .search-folder-result-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 180px);
+  gap: 26px 30px;
+  align-items: start;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+
+.app-shell.nav-minimal .search-result-toolbar {
+  display: none;
+}
+
+.app-shell.nav-minimal .search-page {
+  padding: 6px 0 calc(var(--player-height) + 2px) 8px;
+}
+
+.app-shell.nav-minimal .search-result-stack {
+  gap: 16px;
+  padding: 0 0 12px;
+}
+
+.app-shell.nav-minimal .search-result-toolbar > .search-multi-select-button {
+  display: none;
+}
+
+.app-shell.nav-minimal .search-appbar-multi-select-button {
+  flex: 0 0 auto;
+  display: inline-flex;
+  min-width: 40px;
+  min-height: 40px;
+  height: 40px;
+  padding: 0 10px;
+  gap: 7px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #111827;
+  box-shadow: none;
+  font-size: 14px;
+  font-weight: 720;
+}
+
+.app-shell.nav-minimal .search-appbar-multi-select-button:hover,
+.app-shell.nav-minimal .search-appbar-multi-select-button.is-active {
+  background: rgba(17, 24, 39, 0.07);
+  color: #0f172a;
+}
+
+.app-shell.nav-minimal .search-result-tabs {
+  width: 100%;
+  min-width: 0;
+  gap: 6px;
+  min-height: 40px;
+  max-width: 100%;
+  padding: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  touch-action: pan-x;
+  -webkit-overflow-scrolling: touch;
+}
+
+.app-shell.nav-minimal .appbar-bottom .search-result-tabs {
+  height: 40px;
+  padding-right: 8px;
+}
+
+.app-shell.nav-minimal .search-result-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.app-shell.nav-minimal .search-result-tabs button {
+  min-height: 34px;
+  padding: 0 12px;
+  border-color: rgba(83, 99, 121, 0.14);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.5);
+  color: #1f2937;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42);
+  font-size: 13px;
+  font-weight: 720;
+  white-space: nowrap;
+}
+
+.app-shell.nav-minimal .search-result-tabs button.is-active {
+  border-color: rgba(var(--accent-rgb), 0.22);
+  background: rgba(var(--accent-rgb), 0.12);
+  color: var(--accent-strong);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.46);
+}
+
+.app-shell.nav-minimal .search-result-tabs button strong {
+  font-size: 12px;
+  font-weight: 760;
 }

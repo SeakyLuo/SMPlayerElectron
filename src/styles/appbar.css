@@ -32,6 +32,10 @@
   gap: 8px;
 }
 
+.appbar-bottom {
+  display: none;
+}
+
 .appbar-page-actions {
   display: flex;
   align-items: center;
@@ -128,6 +132,36 @@
   backdrop-filter: none;
 }
 
+.app-shell.nav-minimal .workspace-header:has(.appbar-bottom > *) {
+  flex-wrap: wrap;
+  align-content: flex-start;
+  align-items: flex-start;
+  height: 80px;
+  min-height: 80px;
+  row-gap: 0;
+}
+
+.app-shell.nav-minimal .workspace-header:has(.appbar-bottom > *) .appbar-title-group,
+.app-shell.nav-minimal .workspace-header:has(.appbar-bottom > *) .appbar-actions {
+  height: 40px;
+}
+
+.app-shell.nav-minimal .workspace-header:has(.appbar-bottom > *) .appbar-bottom {
+  display: flex;
+  align-items: center;
+  flex: 0 0 100%;
+  width: calc(100% + 22px);
+  height: 40px;
+  min-width: 0;
+  margin: 0 -14px 0 -8px;
+  padding: 0 0 0 8px;
+  box-sizing: border-box;
+  overflow: hidden;
+  background: var(--minimal-toolbar-background);
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
 .app-shell.nav-minimal .workspace.is-immersive-route .workspace-header {
   background: transparent;
   color: #111827;
@@ -165,7 +199,11 @@
 }
 
 .app-shell.nav-minimal .workspace.is-local-route .workspace-header {
-  padding: 0 14px 0 8px;
+  padding: 0 15px 0 8px;
+}
+
+.app-shell.nav-minimal .workspace.is-local-route .appbar-actions:has(.appbar-page-actions:empty) {
+  display: none;
 }
 
 .app-shell.nav-minimal .workspace-header .local-title-grid {
@@ -180,30 +218,25 @@
 }
 
 .app-shell.nav-minimal .workspace-header .folder-chain-list-view {
-  min-height: 32px;
-  height: 32px;
+  min-height: 36px;
+  height: 36px;
   padding: 0 2px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
+  border-radius: 8px;
 }
 
 .app-shell.nav-minimal .workspace-header .folder-chain-item-path-button {
-  height: 32px;
+  height: 36px;
   max-width: min(220px, 42vw);
   padding: 0 6px;
   font-size: 14px;
 }
 
 .app-shell.nav-minimal .workspace-header .folder-chain-item-dropdown-button {
-  height: 32px;
+  height: 36px;
 }
 
 .app-shell.nav-minimal .workspace-header .hidden-folders-list-button {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+  display: none;
 }
 
 .app-shell.nav-minimal .appbar-icon-button {

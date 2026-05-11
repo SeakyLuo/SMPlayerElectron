@@ -431,7 +431,7 @@
 }
 
 .headered-playlist-list {
-  --headered-playlist-grid: 64px minmax(190px, 1fr) minmax(138px, auto) 74px;
+  --headered-playlist-grid: 64px minmax(190px, 1fr) minmax(170px, auto) 74px;
   position: relative;
   z-index: 1;
   display: flex;
@@ -478,7 +478,7 @@
 }
 
 .headered-playlist-list.has-album {
-  --headered-playlist-grid: 64px minmax(190px, 1.18fr) minmax(138px, auto) minmax(160px, 0.72fr) 74px;
+  --headered-playlist-grid: 64px minmax(190px, 1.18fr) minmax(170px, auto) minmax(160px, 0.72fr) 74px;
 }
 
 .headered-playlist-bottom-spacer {

@@ -3,6 +3,7 @@ import clsx from 'clsx'
 import { useNavigate } from 'react-router-dom'
 
 import { AlbumArtControl } from '../components/AlbumArtControl'
+import { AlbumTile } from '../components/AlbumTile'
 import { AppBarPortal, AppBarSearch } from '../components/AppBarPortal'
 import { CommandBar, CommandBarButton } from '../components/CommandBar'
 import { Icon } from '../components/icons'
@@ -33,6 +34,7 @@ interface AlbumView {
   songs: LibrarySong[]
   artworkUrl: string
   duration: number
+  songIds: number[]
 }
 
 interface AlbumsPageProps {
@@ -432,7 +434,7 @@ export function AlbumsPage({
           overflowLabel={t('player.more')}
         >
           <CommandBarButton
-            icon="menu"
+            icon="multiSelect"
             label={t('common.multiSelect')}
             active={multiSelect}
             onClick={() => {
@@ -668,83 +670,6 @@ export function AlbumsPage({
   )
 }
 
-function AlbumTile({
-  album,
-  multiSelect,
-  selected,
-  t,
-  onOpenAlbum,
-  onPlayAlbum,
-  onAddAlbum,
-  onToggleSelection,
-  onOpenContextMenu,
-}: {
-  album: AlbumView
-  multiSelect: boolean
-  selected: boolean
-  t: Translator
-  onOpenAlbum: () => void
-  onPlayAlbum: () => void
-  onAddAlbum: (position: MenuFlyoutPosition) => void
-  onToggleSelection: () => void
-  onOpenContextMenu: (position: MenuFlyoutPosition) => void
-}) {
-  const content = (
-    <>
-      <AlbumArtControl title={album.name} artworkUrl={album.artworkUrl} songId={album.songs[0]!.id} />
-      <div className="album-tile-copy">
-        <strong title={album.name}>{album.name}</strong>
-        <span title={album.artist}>{album.artist}</span>
-      </div>
-    </>
-  )
-
-  return (
-    <article
-      className={[
-        'album-tile',
-        multiSelect ? 'is-selection-mode' : '',
-        selected ? 'is-selected' : '',
-      ].filter(Boolean).join(' ')}
-      onContextMenu={(event) => {
-        event.preventDefault()
-        onOpenContextMenu({ x: event.clientX, y: event.clientY })
-      }}
-    >
-      <button
-        type="button"
-        className="album-tile-surface"
-        title={album.name}
-        onClick={multiSelect ? onToggleSelection : onOpenAlbum}
-      >
-        {content}
-      </button>
-      <div className="album-hover-actions">
-        <button type="button" onClick={onPlayAlbum} aria-label={t('detail.playAlbum')} title={t('detail.playAlbum')}>
-          <Icon name="play" />
-        </button>
-        <button
-          type="button"
-          className="album-add-button"
-          onClick={(event) => {
-            event.stopPropagation()
-            onAddAlbum({ x: event.clientX, y: event.clientY })
-          }}
-          aria-label={t('context.addToPlaylist')}
-          title={t('context.addToPlaylist')}
-        >
-          <span aria-hidden="true" />
-        </button>
-      </div>
-      {multiSelect || selected ? (
-        <span className={selected ? 'album-select-mark is-selected' : 'album-select-mark'} aria-hidden="true">
-          {selected ? <Icon name="check" /> : null}
-        </span>
-      ) : null}
-    </article>
-  )
-}
-
 function getAlbumContextMenuItems({
   album,
   playlists,
@@ -791,7 +716,7 @@ function getAlbumContextMenuItems({
   if (addToItem) {
     items.push(addToItem)
   }
-  items.push({ key: 'select', text: t('context.select'), icon: 'menu', onClick: onSelect })
+  items.push({ key: 'select', text: t('context.select'), icon: 'multiSelect', onClick: onSelect })
   items.push(getPreferenceMenuFlyoutItem({
     type: 'album',
     itemId: album.name,
@@ -803,7 +728,7 @@ function getAlbumContextMenuItems({
   items.push({
     key: 'see-album-art',
     text: t('context.seeAlbumArt'),
-    icon: 'albums',
+    icon: 'pictures',
     onClick: onSeeAlbumArt,
   })
   return items
@@ -842,6 +767,7 @@ function buildAlbumViews(songs: LibrarySong[], t: Translator): AlbumView[] {
     songs: albumSongs.slice().sort((left, right) => compareLocalText(left.title, right.title)),
     artworkUrl: albumSongs.find((song) => song.artworkUrl)?.artworkUrl ?? '',
     duration: albumSongs.reduce((total, song) => total + song.duration, 0),
+    songIds: albumSongs.map((song) => song.id),
   }))
 }
 

@@ -25,6 +25,7 @@ import { CollectionPage } from './pages/CollectionPage'
 import { HiddenFoldersPage } from './pages/HiddenFoldersPage'
 import { LibraryDataSourceMusicPage } from './pages/LibraryDataSourceMusicPage'
 import { LocalPage, LocalTitleGrid } from './pages/LocalPage'
+import { MiniModePage } from './pages/MiniModePage'
 import { MyFavoritesPage } from './pages/MyFavoritesPage'
 import { NowPlayingFullPage } from './pages/NowPlayingFullPage'
 import { NowPlayingPage } from './pages/NowPlayingPage'
@@ -366,6 +367,8 @@ function App() {
   const navigationType = useNavigationType()
   const [navigationDepth, setNavigationDepth] = useState(0)
   const [showNowPlayingFullPage, setShowNowPlayingFullPage] = useState(false)
+  const [isWindowFullScreen, setIsWindowFullScreen] = useState(false)
+  const [isMiniMode, setIsMiniMode] = useState(false)
   const [windowControlClockMinute, setWindowControlClockMinute] = useState(getClockMinute)
   const [isCreatePlaylistDialogOpen, setIsCreatePlaylistDialogOpen] = useState(false)
   const [pendingCreatedPlaylistName, setPendingCreatedPlaylistName] = useState('')
@@ -421,21 +424,39 @@ function App() {
   const saveViewState = useLibraryStore((state) => state.saveViewState)
   const showUndoableNotification = useUndoableNotificationStore((state) => state.show)
   const [localRelativePath, setLocalRelativePath] = useState('')
-  const nowPlayingFullUsesLightWindowControls = showNowPlayingFullPage && (
-    snapshot.settings.nightMode === 'on' ||
-    (
-      snapshot.settings.nightMode === 'auto' &&
-      isClockMinuteInRange(
-        windowControlClockMinute,
-        settingsTimeToMinute(snapshot.settings.nightModeStartTime),
-        settingsTimeToMinute(snapshot.settings.nightModeEndTime),
-      )
+  const nightModeActive = snapshot.settings.nightMode === 'on' || (
+    snapshot.settings.nightMode === 'auto' &&
+    isClockMinuteInRange(
+      windowControlClockMinute,
+      settingsTimeToMinute(snapshot.settings.nightModeStartTime),
+      settingsTimeToMinute(snapshot.settings.nightModeEndTime),
     )
   )
+  const usesLightWindowControls = isMiniMode || nightModeActive
 
   useEffect(() => {
-    void window.smplayer?.setWindowControlsLight(nowPlayingFullUsesLightWindowControls)
-  }, [nowPlayingFullUsesLightWindowControls])
+    void window.smplayer?.setWindowControlsLight(usesLightWindowControls)
+  }, [usesLightWindowControls])
+
+  useEffect(() => {
+    void window.smplayer?.getWindowFullScreen().then(setIsWindowFullScreen)
+    return window.smplayer?.onWindowFullScreenChange(setIsWindowFullScreen)
+  }, [])
+
+  useEffect(() => {
+    void window.smplayer?.getWindowMiniMode().then((miniMode) => {
+      setIsMiniMode(miniMode)
+      if (miniMode) {
+        setShowNowPlayingFullPage(false)
+      }
+    })
+    return window.smplayer?.onWindowMiniModeChange((miniMode) => {
+      setIsMiniMode(miniMode)
+      if (miniMode) {
+        setShowNowPlayingFullPage(false)
+      }
+    })
+  }, [])
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -1193,6 +1214,8 @@ function App() {
   const currentPageTitle = compactArtistTitle || immersiveHeaderTitle ||
     (location.pathname === '/' && !initialLoadComplete
     ? ''
+    : isInAlbumDetail
+      ? ''
     : getPageTitle(
       location.pathname,
       snapshot.counts,
@@ -1228,6 +1251,17 @@ function App() {
 
   const stopMinimalTitlebarDrag = () => {
     void window.smplayer?.stopWindowDrag()
+  }
+
+  const enterMiniMode = () => {
+    setShowNowPlayingFullPage(false)
+    setIsMiniMode(true)
+    void window.smplayer?.setWindowMiniMode(true)
+  }
+
+  const exitMiniMode = () => {
+    setIsMiniMode(false)
+    void window.smplayer?.setWindowMiniMode(false)
   }
 
   useEffect(() => {
@@ -1282,9 +1316,28 @@ function App() {
     voiceLanguage: resolveLocale(snapshot.settings.preferredLanguage),
   }
 
+  if (isMiniMode) {
+    return (
+      <MiniModePage
+        track={playerTrack}
+        currentSong={playback.currentTrack}
+        disabled={snapshot.nowPlaying.songIds.length === 0}
+        t={t}
+        {...playerControlBindings}
+        onQuickPlay={() => {
+          void playQuick()
+        }}
+        onExitMiniMode={exitMiniMode}
+        onArtworkResolved={(trackId, artworkUrl) => {
+          setResolvedArtwork({ trackId, artworkUrl })
+        }}
+      />
+    )
+  }
+
   return (
     <div
-      className={`app-shell${isNavigationRail ? ' nav-collapsed' : ''}${isNavigationOverlay ? ' nav-overlay' : ''}${isNavigationOverlayOpen && !isNavigationMinimal ? ' nav-overlay-open' : ''}${isNavigationMinimal ? ' nav-minimal' : ''}${isNavigationMinimal && isMinimalNavigationOpen ? ' nav-minimal-open' : ''}`}
+      className={`app-shell${isNavigationRail ? ' nav-collapsed' : ''}${isNavigationOverlay ? ' nav-overlay' : ''}${isNavigationOverlayOpen && !isNavigationMinimal ? ' nav-overlay-open' : ''}${isNavigationMinimal ? ' nav-minimal' : ''}${isNavigationMinimal && isMinimalNavigationOpen ? ' nav-minimal-open' : ''}${nightModeActive ? ' night-mode' : ''}`}
     >
       {isNavigationMinimal ? (
         <div
@@ -1921,6 +1974,9 @@ function App() {
                   onSearchDirectory={(query, folderRelativePath) => {
                     commitDirectorySearchQuery(query, folderRelativePath)
                   }}
+                  onHiddenFoldersListButtonClick={() => {
+                    navigate('/hidden-folders')
+                  }}
                 />
               }
             />
@@ -2224,6 +2280,13 @@ function App() {
           onOpenNowPlaying={() => {
             setShowNowPlayingFullPage(true)
           }}
+          isWindowFullScreen={isWindowFullScreen}
+          onToggleWindowFullScreen={() => {
+            const nextFullScreen = !isWindowFullScreen
+            setIsWindowFullScreen(nextFullScreen)
+            void window.smplayer?.setWindowFullScreen(nextFullScreen)
+          }}
+          onEnterMiniMode={enterMiniMode}
           onArtworkResolved={(trackId, artworkUrl) => {
             setResolvedArtwork({ trackId, artworkUrl })
           }}
@@ -2398,6 +2461,7 @@ function LocalPageRoute({
   onDeleteLocalItems,
   onUpdateFolderSort,
   onSearchDirectory,
+  onHiddenFoldersListButtonClick,
 }: {
   songs: LibrarySong[]
   folders: LibraryFolder[]
@@ -2436,6 +2500,7 @@ function LocalPageRoute({
   onDeleteLocalItems: (songIds: number[], folderPaths: string[]) => void | Promise<void>
   onUpdateFolderSort: (folderPath: string, sortCriterion: LocalFolderSortCriterion) => void | Promise<void>
   onSearchDirectory: (query: string, folderRelativePath: string) => void
+  onHiddenFoldersListButtonClick: () => void
 }) {
   return (
     <LocalPage
@@ -2476,6 +2541,7 @@ function LocalPageRoute({
       onDeleteLocalItems={onDeleteLocalItems}
       onUpdateFolderSort={onUpdateFolderSort}
       onSearchDirectory={onSearchDirectory}
+      onHiddenFoldersListButtonClick={onHiddenFoldersListButtonClick}
     />
   )
 }

@@ -18,6 +18,19 @@
   transition: grid-template-columns 180ms cubic-bezier(0.2, 0, 0, 1);
 }
 
+.app-shell.night-mode {
+  --minimal-toolbar-background: #101419;
+  --night-shell-bg: #0f1318;
+  --night-panel: #171c22;
+  --night-panel-strong: #1d232b;
+  --night-border: rgba(214, 224, 236, 0.12);
+  --night-text: rgba(246, 249, 252, 0.94);
+  --night-muted: rgba(203, 213, 225, 0.68);
+  --night-subtle: rgba(203, 213, 225, 0.46);
+  background: var(--night-shell-bg);
+  color: var(--night-text);
+}
+
 .app-shell.nav-minimal::before {
   content: '';
   position: absolute;
@@ -71,6 +84,11 @@
   -webkit-backdrop-filter: blur(28px);
 }
 
+.app-shell.night-mode.nav-overlay-open .sidebar {
+  background: rgba(16, 20, 25, 0.96);
+  box-shadow: 18px 0 48px rgba(0, 0, 0, 0.36);
+}
+
 .app-shell.nav-minimal {
   --sidebar-width: 0px;
   grid-template-columns: minmax(0, 1fr);
@@ -96,6 +114,10 @@
   color: #111827;
   -webkit-app-region: drag;
   app-region: drag;
+}
+
+.app-shell.night-mode.nav-minimal .minimal-titlebar {
+  color: var(--night-text);
 }
 
 .app-shell.nav-minimal:has(.workspace.is-immersive-route) .minimal-titlebar {
@@ -126,6 +148,11 @@
 .minimal-titlebar-back-button:focus-visible {
   background: rgba(17, 24, 39, 0.07);
   outline: none;
+}
+
+.app-shell.night-mode .minimal-titlebar-back-button:hover,
+.app-shell.night-mode .minimal-titlebar-back-button:focus-visible {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .minimal-titlebar-back-button svg {
@@ -189,12 +216,26 @@
   pointer-events: none;
 }
 
+.app-shell.nav-minimal.nav-minimal-open .minimal-titlebar {
+  z-index: 120;
+}
+
 .app-shell.nav-minimal.nav-minimal-open .sidebar {
-  z-index: 260;
+  top: 0;
+  bottom: 0;
+  z-index: 100;
+  padding-top: 40px;
+  padding-bottom: calc(var(--player-height) + 8px);
   pointer-events: auto;
   visibility: visible;
+  box-shadow: 18px 0 42px rgba(34, 48, 70, 0.2);
   transform: none;
   transition: none;
+}
+
+.app-shell.night-mode.nav-minimal.nav-minimal-open .sidebar {
+  background: rgba(16, 20, 25, 0.96);
+  box-shadow: 18px 0 42px rgba(0, 0, 0, 0.38);
 }
 
 .app-shell.nav-minimal.nav-minimal-open .workspace {
@@ -203,8 +244,6 @@
   app-region: no-drag;
 }
 
-.app-shell.nav-minimal.nav-minimal-open .minimal-titlebar,
-.app-shell.nav-minimal.nav-minimal-open .minimal-titlebar *,
 .app-shell.nav-minimal.nav-minimal-open .workspace *,
 .app-shell.nav-minimal.nav-minimal-open .workspace::before,
 .app-shell.nav-minimal.nav-minimal-open .workspace::after {
