@@ -166,6 +166,17 @@ export function MiniModePage({
     }
     recognition.onerror = (event) => {
       setVoiceAssistantState('idle')
+      if (event.error === 'aborted') {
+        return
+      }
+
+      if (event.error === 'no-speech') {
+        voiceAssistantTimerRef.current = window.setTimeout(() => {
+          startVoiceRecognition(false)
+        }, 250)
+        return
+      }
+
       if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
         setVoiceAssistantNeedsPrivacySettings(true)
         setVoiceAssistantText(t('voiceAssistant.privacyRequired'))
@@ -181,6 +192,14 @@ export function MiniModePage({
     recognition.onresult = (event) => {
       setVoiceAssistantState('processing')
       const transcript = event.results[event.resultIndex][0].transcript.trim()
+      if (!transcript) {
+        setVoiceAssistantState('idle')
+        voiceAssistantTimerRef.current = window.setTimeout(() => {
+          startVoiceRecognition(false)
+        }, 250)
+        return
+      }
+
       setVoiceAssistantText(transcript)
       void onVoiceCommand(transcript).then(({ message, shouldContinue }) => {
         setVoiceAssistantText(message)
@@ -195,6 +214,12 @@ export function MiniModePage({
         })
       })
     }
+    recognition.addEventListener('nomatch', () => {
+      setVoiceAssistantState('idle')
+      voiceAssistantTimerRef.current = window.setTimeout(() => {
+        startVoiceRecognition(false)
+      }, 250)
+    })
 
     if (showHint) {
       setVoiceAssistantText(getVoiceHint())

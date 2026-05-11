@@ -163,20 +163,49 @@
 }
 
 .app-shell.nav-minimal .workspace.is-headered-playlist-route .workspace-header {
-  background: var(--immersive-topbar-background);
+  overflow: hidden;
+  isolation: isolate;
+  background: transparent;
+  color: #fff;
+  box-shadow: var(--immersive-topbar-shadow);
+}
+
+.app-shell.nav-minimal .workspace.is-headered-playlist-route .workspace-header:has(.appbar-bottom > *) .appbar-bottom {
+  background: transparent;
+}
+
+.app-shell.nav-minimal .workspace.is-headered-playlist-route .workspace-header::before,
+.app-shell.nav-minimal .workspace.is-headered-playlist-route .workspace-header::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.app-shell.nav-minimal .workspace.is-headered-playlist-route .workspace-header::before {
+  z-index: 0;
+  backdrop-filter: var(--immersive-topbar-filter);
+  -webkit-backdrop-filter: var(--immersive-topbar-filter);
+}
+
+.app-shell.nav-minimal .workspace.is-headered-playlist-route .workspace-header::after {
+  z-index: 0;
+  background:
+    radial-gradient(circle at 18% 0, rgba(255, 255, 255, var(--immersive-topbar-highlight-alpha)), transparent 42%),
+    linear-gradient(180deg, rgba(255, 255, 255, var(--immersive-topbar-highlight-alpha)), rgba(255, 255, 255, 0)),
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, var(--immersive-topbar-noise-opacity)) 0 1px, transparent 1px 3px),
+    var(--immersive-topbar-background);
   background-repeat: no-repeat;
   background-origin: border-box;
   background-clip: border-box;
   background-size: 100% 72px;
   background-position: 0 -32px;
-  color: #fff;
   box-shadow: var(--immersive-topbar-shadow);
-  backdrop-filter: var(--immersive-topbar-filter);
-  -webkit-backdrop-filter: var(--immersive-topbar-filter);
 }
 
-.app-shell.nav-minimal .workspace.is-headered-playlist-route .workspace-header:has(.appbar-bottom > *) .appbar-bottom {
-  background: transparent;
+.app-shell.nav-minimal .workspace.is-headered-playlist-route .workspace-header > * {
+  position: relative;
+  z-index: 1;
 }
 
 .app-shell.nav-minimal .workspace.is-headered-playlist-route .workspace-header h1,
@@ -565,16 +594,9 @@ body.night-mode .app-shell.nav-minimal .workspace-header:has(.appbar-bottom > *)
 }
 
 body.night-mode .app-shell.nav-minimal .workspace.is-headered-playlist-route .workspace-header {
-  background: var(--immersive-topbar-background);
-  background-repeat: no-repeat;
-  background-origin: border-box;
-  background-clip: border-box;
-  background-size: 100% 72px;
-  background-position: 0 -32px;
+  background: transparent;
   color: var(--night-text);
   box-shadow: var(--immersive-topbar-shadow);
-  backdrop-filter: var(--immersive-topbar-filter);
-  -webkit-backdrop-filter: var(--immersive-topbar-filter);
 }
 
 body.night-mode .app-shell.nav-minimal .workspace.is-headered-playlist-route .workspace-header:has(.appbar-bottom > *) .appbar-bottom {

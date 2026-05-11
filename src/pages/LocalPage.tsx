@@ -2182,10 +2182,10 @@ function LocalContentSection({
 }) {
   return (
     <section className={expanded ? 'local-content-section is-expanded' : 'local-content-section'}>
-      <button className="local-content-section-header" type="button" onClick={onToggle}>
+      <button className={expanded ? 'local-content-section-header is-expanded' : 'local-content-section-header'} type="button" onClick={onToggle}>
         <Icon name={expanded ? 'chevronDown' : 'chevronRight'} />
         <span>{title}</span>
-        <span className="local-content-section-count">({count})</span>
+        <span className="local-content-section-count">{count}</span>
       </button>
       {expanded ? children : null}
     </section>
@@ -2206,10 +2206,10 @@ function LocalTableSectionHeader({
   return (
     <tr className="local-table-section-row">
       <td colSpan={3}>
-        <button className="local-content-section-header" type="button" onClick={onToggle}>
+        <button className={expanded ? 'local-content-section-header is-expanded' : 'local-content-section-header'} type="button" onClick={onToggle}>
           <Icon name={expanded ? 'chevronDown' : 'chevronRight'} />
           <span>{title}</span>
-          <span className="local-content-section-count">({count})</span>
+          <span className="local-content-section-count">{count}</span>
         </button>
       </td>
     </tr>

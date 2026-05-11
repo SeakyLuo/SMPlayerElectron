@@ -13,8 +13,7 @@
 .search-page,
 .settings-time-column,
 .lyrics-scroll-shell,
-.preference-page,
-.voice-assistant-help-body {
+.preference-page {
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
 }
@@ -39,8 +38,7 @@
 .search-page:hover,
 .settings-time-column:hover,
 .lyrics-scroll-shell:hover,
-.preference-page:hover,
-.voice-assistant-help-body:hover {
+.preference-page:hover {
   scrollbar-color: rgba(91, 105, 122, 0.5) transparent;
 }
 
@@ -60,8 +58,7 @@
 .search-page::-webkit-scrollbar,
 .settings-time-column::-webkit-scrollbar,
 .lyrics-scroll-shell::-webkit-scrollbar,
-.preference-page::-webkit-scrollbar,
-.voice-assistant-help-body::-webkit-scrollbar {
+.preference-page::-webkit-scrollbar {
   width: 9px;
   height: 9px;
 }
@@ -82,8 +79,7 @@
 .search-page:hover::-webkit-scrollbar,
 .settings-time-column:hover::-webkit-scrollbar,
 .lyrics-scroll-shell:hover::-webkit-scrollbar,
-.preference-page:hover::-webkit-scrollbar,
-.voice-assistant-help-body:hover::-webkit-scrollbar {
+.preference-page:hover::-webkit-scrollbar {
   width: 9px;
   height: 9px;
 }
@@ -104,8 +100,7 @@
 .search-page::-webkit-scrollbar:hover,
 .settings-time-column::-webkit-scrollbar:hover,
 .lyrics-scroll-shell::-webkit-scrollbar:hover,
-.preference-page::-webkit-scrollbar:hover,
-.voice-assistant-help-body::-webkit-scrollbar:hover {
+.preference-page::-webkit-scrollbar:hover {
   width: 9px;
   height: 9px;
 }
@@ -126,8 +121,7 @@
 .search-page::-webkit-scrollbar-track,
 .settings-time-column::-webkit-scrollbar-track,
 .lyrics-scroll-shell::-webkit-scrollbar-track,
-.preference-page::-webkit-scrollbar-track,
-.voice-assistant-help-body::-webkit-scrollbar-track {
+.preference-page::-webkit-scrollbar-track {
   background: transparent;
 }
 
@@ -147,8 +141,7 @@
 .search-page::-webkit-scrollbar-thumb,
 .settings-time-column::-webkit-scrollbar-thumb,
 .lyrics-scroll-shell::-webkit-scrollbar-thumb,
-.preference-page::-webkit-scrollbar-thumb,
-.voice-assistant-help-body::-webkit-scrollbar-thumb {
+.preference-page::-webkit-scrollbar-thumb {
   border-radius: 999px;
   border: 3px solid transparent;
   background: transparent;
@@ -171,8 +164,7 @@
 .search-page:hover::-webkit-scrollbar-thumb,
 .settings-time-column:hover::-webkit-scrollbar-thumb,
 .lyrics-scroll-shell:hover::-webkit-scrollbar-thumb,
-.preference-page:hover::-webkit-scrollbar-thumb,
-.voice-assistant-help-body:hover::-webkit-scrollbar-thumb {
+.preference-page:hover::-webkit-scrollbar-thumb {
   border-width: 4px;
   background: rgba(91, 105, 122, 0.5);
 }
@@ -193,8 +185,7 @@
 .search-page.is-scrollbar-hovered::-webkit-scrollbar-thumb,
 .settings-time-column.is-scrollbar-hovered::-webkit-scrollbar-thumb,
 .lyrics-scroll-shell.is-scrollbar-hovered::-webkit-scrollbar-thumb,
-.preference-page.is-scrollbar-hovered::-webkit-scrollbar-thumb,
-.voice-assistant-help-body.is-scrollbar-hovered::-webkit-scrollbar-thumb {
+.preference-page.is-scrollbar-hovered::-webkit-scrollbar-thumb {
   border-width: 0;
   background: rgba(67, 80, 96, 0.68);
 }
@@ -215,8 +206,7 @@
 .search-page::-webkit-scrollbar-thumb:hover,
 .settings-time-column::-webkit-scrollbar-thumb:hover,
 .lyrics-scroll-shell::-webkit-scrollbar-thumb:hover,
-.preference-page::-webkit-scrollbar-thumb:hover,
-.voice-assistant-help-body::-webkit-scrollbar-thumb:hover {
+.preference-page::-webkit-scrollbar-thumb:hover {
   border-width: 1px;
 }
 
@@ -235,8 +225,7 @@ body.night-mode .app-shell .recent-search-list:hover,
 body.night-mode .app-shell .search-page:hover,
 body.night-mode .app-shell .settings-time-column:hover,
 body.night-mode .app-shell .lyrics-scroll-shell:hover,
-body.night-mode .app-shell .preference-page:hover,
-body.night-mode .app-shell .voice-assistant-help-body:hover {
+body.night-mode .app-shell .preference-page:hover {
   scrollbar-color: rgba(150, 164, 182, 0.45) transparent;
 }
 
@@ -255,8 +244,7 @@ body.night-mode .app-shell .recent-search-list:hover::-webkit-scrollbar-thumb,
 body.night-mode .app-shell .search-page:hover::-webkit-scrollbar-thumb,
 body.night-mode .app-shell .settings-time-column:hover::-webkit-scrollbar-thumb,
 body.night-mode .app-shell .lyrics-scroll-shell:hover::-webkit-scrollbar-thumb,
-body.night-mode .app-shell .preference-page:hover::-webkit-scrollbar-thumb,
-body.night-mode .app-shell .voice-assistant-help-body:hover::-webkit-scrollbar-thumb {
+body.night-mode .app-shell .preference-page:hover::-webkit-scrollbar-thumb {
   background: rgba(150, 164, 182, 0.45);
 }
 
@@ -276,7 +264,6 @@ body.night-mode .app-shell .search-page.is-scrollbar-hovered::-webkit-scrollbar-
 body.night-mode .app-shell .settings-time-column.is-scrollbar-hovered::-webkit-scrollbar-thumb,
 body.night-mode .app-shell .lyrics-scroll-shell.is-scrollbar-hovered::-webkit-scrollbar-thumb,
 body.night-mode .app-shell .preference-page.is-scrollbar-hovered::-webkit-scrollbar-thumb,
-body.night-mode .app-shell .voice-assistant-help-body.is-scrollbar-hovered::-webkit-scrollbar-thumb,
 body.night-mode .app-shell .workspace-content::-webkit-scrollbar-thumb:hover,
 body.night-mode .app-shell .table-shell::-webkit-scrollbar-thumb:hover,
 body.night-mode .app-shell .albums-grid::-webkit-scrollbar-thumb:hover,
@@ -292,8 +279,7 @@ body.night-mode .app-shell .recent-search-list::-webkit-scrollbar-thumb:hover,
 body.night-mode .app-shell .search-page::-webkit-scrollbar-thumb:hover,
 body.night-mode .app-shell .settings-time-column::-webkit-scrollbar-thumb:hover,
 body.night-mode .app-shell .lyrics-scroll-shell::-webkit-scrollbar-thumb:hover,
-body.night-mode .app-shell .preference-page::-webkit-scrollbar-thumb:hover,
-body.night-mode .app-shell .voice-assistant-help-body::-webkit-scrollbar-thumb:hover {
+body.night-mode .app-shell .preference-page::-webkit-scrollbar-thumb:hover {
   background: rgba(188, 202, 220, 0.62);
 }
 
