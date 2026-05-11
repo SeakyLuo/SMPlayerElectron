@@ -748,30 +748,56 @@ body.night-mode .app-shell.nav-minimal .player-bar {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   align-items: center;
-  width: max-content;
-  max-width: min(420px, calc(100vw - 24px));
-  min-height: 46px;
-  padding: 9px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.62);
-  border-radius: 2px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(246, 250, 255, 0.54)),
-    rgba(255, 255, 255, 0.36);
-  box-shadow: 0 18px 42px rgba(60, 79, 108, 0.24);
+  width: min(560px, calc(100vw - 40px));
+  min-height: 52px;
+  padding: 11px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.82);
+  border-radius: 18px;
+  background: transparent;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    inset 0 -1px 0 rgba(109, 126, 152, 0.08),
+    0 16px 34px rgba(70, 87, 112, 0.16);
   color: var(--text-strong);
-  backdrop-filter: blur(34px) saturate(180%);
-  -webkit-backdrop-filter: blur(34px) saturate(180%);
+  isolation: isolate;
+  overflow: hidden;
   -webkit-app-region: no-drag;
   app-region: no-drag;
 }
 
+.voice-assistant-popover::before {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: rgba(246, 250, 255, 0.72);
+  backdrop-filter: blur(46px) saturate(165%) contrast(96%);
+  -webkit-backdrop-filter: blur(46px) saturate(165%) contrast(96%);
+  content: '';
+  pointer-events: none;
+}
+
+.voice-assistant-popover::after {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0.34) 38%, transparent 74%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(229, 237, 248, 0.3)),
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 5px);
+  content: '';
+  pointer-events: none;
+}
+
 .voice-assistant-copy {
+  position: relative;
+  z-index: 1;
   display: block;
   min-width: 0;
   color: inherit;
   font-size: 14px;
   font-weight: 400;
-  line-height: 1.45;
+  line-height: 1.35;
+  text-align: center;
   overflow-wrap: break-word;
 }
 
@@ -805,11 +831,35 @@ body.night-mode .app-shell.nav-minimal .player-bar {
   color: var(--accent);
 }
 
+.voice-assistant-popover.is-capturing {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    inset 0 -1px 0 rgba(109, 126, 152, 0.08),
+    0 0 0 1px rgba(var(--accent-rgb), 0.08),
+    0 16px 34px rgba(70, 87, 112, 0.16);
+}
+
+.voice-assistant-popover.is-capturing::after {
+  background:
+    radial-gradient(circle at 50% 50%, transparent 0 18px, rgba(var(--accent-rgb), 0.28) 20px 22px, transparent 24px),
+    radial-gradient(circle at 50% 50%, transparent 0 34px, rgba(var(--accent-rgb), 0.16) 36px 39px, transparent 42px),
+    linear-gradient(100deg, transparent 0%, rgba(var(--accent-rgb), 0.12) 46%, rgba(255, 255, 255, 0.42) 50%, rgba(var(--accent-rgb), 0.12) 54%, transparent 100%),
+    radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0.34) 38%, transparent 74%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(229, 237, 248, 0.3)),
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 5px);
+  background-position: center, center, -120% 0, 0 0, 0 0, 0 0;
+  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, repeat;
+  background-size: 80px 80px, 124px 124px, 48% 100%, 100% 100%, 100% 100%, auto;
+  animation: voice-assistant-listening-ripple 2.4s ease-out infinite;
+}
+
 .voice-assistant-progress {
+  position: relative;
+  z-index: 1;
   height: 2px;
   width: 280px;
   max-width: calc(100vw - 48px);
-  margin: 8px 0;
+  margin: 8px auto;
   overflow: hidden;
   border-radius: 999px;
   background: rgba(17, 24, 39, 0.12);
@@ -825,117 +875,27 @@ body.night-mode .app-shell.nav-minimal .player-bar {
   animation: media-progress-loading 1.2s ease-in-out infinite;
 }
 
-.voice-assistant-help-dialog {
-  position: fixed;
-  inset: 0;
-  z-index: 320;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: rgba(246, 249, 252, 0.3);
-  backdrop-filter: blur(24px) saturate(170%);
-  -webkit-backdrop-filter: blur(24px) saturate(170%);
-}
-
-.voice-assistant-help-panel {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  width: min(600px, calc(100vw - 32px));
-  height: min(800px, calc(100vh - 48px));
-  border: 1px solid rgba(255, 255, 255, 0.62);
-  border-radius: 8px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(247, 250, 255, 0.64)),
-    rgba(255, 255, 255, 0.42);
-  box-shadow: 0 28px 76px rgba(64, 80, 108, 0.28);
-  color: var(--text-strong);
-  overflow: hidden;
-  backdrop-filter: blur(36px) saturate(180%);
-  -webkit-backdrop-filter: blur(36px) saturate(180%);
-}
-
-.voice-assistant-help-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 22px 24px 12px;
-  border-bottom: 1px solid rgba(17, 24, 39, 0.08);
-}
-
-.voice-assistant-help-header h2 {
-  margin: 0;
-  font-size: 30px;
-  font-weight: 700;
-  letter-spacing: 0;
-}
-
-.voice-assistant-help-header button {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: rgba(17, 24, 39, 0.72);
-  cursor: pointer;
-}
-
-.voice-assistant-help-header button:hover {
-  background: rgba(17, 24, 39, 0.08);
-}
-
-.voice-assistant-help-body {
-  overflow: auto;
-  padding: 18px 24px 24px;
-}
-
-.voice-assistant-help-body h3 {
-  margin: 10px 0 12px;
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: 0;
-}
-
-.voice-assistant-command-list {
-  display: grid;
-  grid-template-columns: 80px minmax(0, 1fr);
-  column-gap: 16px;
-  row-gap: 12px;
-  margin-bottom: 24px;
-}
-
-.voice-assistant-command-list span {
-  font-size: 14px;
-  font-weight: 700;
-  color: inherit;
-}
-
-.voice-assistant-command-list p {
-  margin: 0;
-  color: rgba(31, 41, 55, 0.72);
-  font-size: 14px;
-  line-height: 1.45;
-}
-
-.voice-assistant-help-body ol {
-  margin: 0;
-  padding-left: 22px;
-  color: rgba(31, 41, 55, 0.72);
-  font-size: 14px;
-  line-height: 1.55;
-}
-
 body.night-mode .voice-assistant-popover {
-  border-color: rgba(218, 229, 242, 0.14);
-  background:
-    linear-gradient(180deg, rgba(19, 25, 34, 0.66), rgba(8, 12, 18, 0.56)),
-    rgba(9, 13, 19, 0.44);
-  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.42);
+  border-color: rgba(221, 231, 243, 0.18);
+  background: transparent;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.22),
+    0 18px 42px rgba(0, 0, 0, 0.34);
   color: #f6f8fb;
-  backdrop-filter: blur(36px) saturate(185%);
-  -webkit-backdrop-filter: blur(36px) saturate(185%);
+}
+
+body.night-mode .voice-assistant-popover::before {
+  background: rgba(16, 21, 29, 0.76);
+  backdrop-filter: blur(48px) saturate(165%) contrast(96%);
+  -webkit-backdrop-filter: blur(48px) saturate(165%) contrast(96%);
+}
+
+body.night-mode .voice-assistant-popover::after {
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.045) 42%, transparent 76%),
+    linear-gradient(180deg, rgba(49, 59, 72, 0.44), rgba(8, 12, 18, 0.28)),
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.032) 0 1px, transparent 1px 5px);
 }
 
 body.night-mode .voice-assistant-help-button {
@@ -946,42 +906,29 @@ body.night-mode .voice-assistant-popover button:hover {
   color: #fff;
 }
 
+body.night-mode .voice-assistant-popover.is-capturing {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.22),
+    0 0 0 1px rgba(var(--accent-rgb), 0.14),
+    0 18px 42px rgba(0, 0, 0, 0.34);
+}
+
+body.night-mode .voice-assistant-popover.is-capturing::after {
+  background:
+    radial-gradient(circle at 50% 50%, transparent 0 18px, rgba(var(--accent-rgb), 0.34) 20px 22px, transparent 24px),
+    radial-gradient(circle at 50% 50%, transparent 0 34px, rgba(var(--accent-rgb), 0.2) 36px 39px, transparent 42px),
+    linear-gradient(100deg, transparent 0%, rgba(var(--accent-rgb), 0.12) 46%, rgba(255, 255, 255, 0.12) 50%, rgba(var(--accent-rgb), 0.12) 54%, transparent 100%),
+    radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.045) 42%, transparent 76%),
+    linear-gradient(180deg, rgba(49, 59, 72, 0.44), rgba(8, 12, 18, 0.28)),
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.032) 0 1px, transparent 1px 5px);
+  background-position: center, center, -120% 0, 0 0, 0 0, 0 0;
+  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, repeat;
+  background-size: 80px 80px, 124px 124px, 48% 100%, 100% 100%, 100% 100%, auto;
+}
+
 body.night-mode .voice-assistant-progress {
   background: rgba(255, 255, 255, 0.14);
-}
-
-body.night-mode .voice-assistant-help-dialog {
-  background: rgba(4, 8, 13, 0.46);
-  backdrop-filter: blur(26px) saturate(165%);
-  -webkit-backdrop-filter: blur(26px) saturate(165%);
-}
-
-body.night-mode .voice-assistant-help-panel {
-  border-color: rgba(218, 229, 242, 0.14);
-  background:
-    linear-gradient(180deg, rgba(20, 26, 36, 0.7), rgba(9, 13, 20, 0.6)),
-    rgba(10, 15, 22, 0.46);
-  box-shadow: 0 28px 76px rgba(0, 0, 0, 0.5);
-  color: #f6f8fb;
-  backdrop-filter: blur(38px) saturate(180%);
-  -webkit-backdrop-filter: blur(38px) saturate(180%);
-}
-
-body.night-mode .voice-assistant-help-header {
-  border-bottom-color: rgba(218, 229, 242, 0.1);
-}
-
-body.night-mode .voice-assistant-help-header button {
-  color: rgba(244, 248, 255, 0.86);
-}
-
-body.night-mode .voice-assistant-help-header button:hover {
-  background: rgba(255, 255, 255, 0.12);
-}
-
-body.night-mode .voice-assistant-command-list p,
-body.night-mode .voice-assistant-help-body ol {
-  color: rgba(244, 248, 255, 0.72);
 }
 
 @media (max-width: 560px) {
@@ -998,5 +945,31 @@ body.night-mode .voice-assistant-help-body ol {
 
   .voice-assistant-help-button {
     font-size: 13px;
+  }
+}
+
+@keyframes voice-assistant-listening-ripple {
+  0% {
+    background-position: center, center, -120% 0, 0 0, 0 0, 0 0;
+    background-size: 80px 80px, 124px 124px, 48% 100%, 100% 100%, 100% 100%, auto;
+    opacity: 0.82;
+  }
+
+  42% {
+    background-position: center, center, 50% 0, 0 0, 0 0, 0 0;
+    background-size: 210px 210px, 124px 124px, 48% 100%, 100% 100%, 100% 100%, auto;
+    opacity: 1;
+  }
+
+  72% {
+    background-position: center, center, 120% 0, 0 0, 0 0, 0 0;
+    background-size: 340px 340px, 230px 230px, 48% 100%, 100% 100%, 100% 100%, auto;
+    opacity: 0.92;
+  }
+
+  100% {
+    background-position: center, center, 180% 0, 0 0, 0 0, 0 0;
+    background-size: 460px 460px, 330px 330px, 48% 100%, 100% 100%, 100% 100%, auto;
+    opacity: 0.82;
   }
 }

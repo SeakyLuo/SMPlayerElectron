@@ -1,4 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 import type { Translator } from '../shared/i18n'
 import { Icon } from './icons'
@@ -111,6 +112,11 @@ export const VoiceAssistantFlyout = forwardRef<VoiceAssistantFlyoutHandle, Voice
     recognition.continuous = false
     recognition.interimResults = false
     recognition.maxAlternatives = 1
+    recognition.onstart = () => {
+      if (speechRecognitionRef.current === recognition && recognitionSessionRef.current === sessionId) {
+        setState('capturing')
+      }
+    }
     recognition.onsoundstart = () => {
       if (speechRecognitionRef.current === recognition && recognitionSessionRef.current === sessionId) {
         setState('capturing')
@@ -144,9 +150,7 @@ export const VoiceAssistantFlyout = forwardRef<VoiceAssistantFlyoutHandle, Voice
         return
       }
 
-      shouldRestartOnEnd = false
-      setText(t('voiceAssistant.notUnderstood'))
-      setShowHelpLink(false)
+      shouldRestartOnEnd = true
     }
     recognition.onend = () => {
       if (speechRecognitionRef.current === recognition) {
@@ -205,20 +209,15 @@ export const VoiceAssistantFlyout = forwardRef<VoiceAssistantFlyoutHandle, Voice
         return
       }
 
-      shouldRestartOnEnd = false
       setState('idle')
-      setText(t('voiceAssistant.notUnderstood'))
-      setShowHelpLink(false)
-      speak(t('voiceAssistant.notUnderstood'), () => {
-        scheduleRecognitionRestart(sessionId)
-      })
+      shouldRestartOnEnd = true
     })
 
     if (showHint) {
       setText(getVoiceHint())
       setShowHelpLink(true)
     }
-    setState('idle')
+    setState('capturing')
     recognition.start()
   }
 
@@ -282,44 +281,43 @@ export const VoiceAssistantFlyout = forwardRef<VoiceAssistantFlyoutHandle, Voice
           </div>
         </>
       ) : null}
-      {helpOpen ? (
-        <div className="voice-assistant-help-dialog" role="dialog" aria-modal="true" aria-labelledby="voice-assistant-help-title">
-          <div className="voice-assistant-help-panel">
-            <div className="voice-assistant-help-header">
+      {helpOpen ? createPortal(
+        <div className="settings-modal-backdrop" role="presentation">
+          <section className="settings-modal" role="dialog" aria-modal="true" aria-labelledby="voice-assistant-help-title">
+            <header>
               <h2 id="voice-assistant-help-title">{t('voiceAssistant.helpTitle')}</h2>
               <button type="button" onClick={() => setHelpOpen(false)} aria-label={t('common.close')} title={t('common.close')}>
-                <Icon name="close" />
+                <Icon name="arrowLeft" className="dialog-back-icon" />
+                <Icon name="close" className="dialog-close-icon" />
               </button>
+              <span className="dialog-titlebar-title">{t('app.shell')}</span>
+            </header>
+            <div className="release-notes-list">
+              <section className="release-note-version">
+                <h3>{t('voiceAssistant.supportedCommands')}</h3>
+                <ol>
+                  <li>{`${t('voiceAssistant.command.play')} ${t('voiceAssistant.command.play1')}`}</li>
+                  <li>{t('voiceAssistant.command.play2')}</li>
+                  <li>{t('voiceAssistant.command.play3')}</li>
+                  <li>{`${t('voiceAssistant.command.playControl')} ${t('voiceAssistant.command.playControl1')}`}</li>
+                  <li>{`${t('voiceAssistant.command.volume')} ${t('voiceAssistant.command.volume1')}`}</li>
+                  <li>{t('voiceAssistant.command.volume2')}</li>
+                  <li>{`${t('voiceAssistant.command.search')} ${t('voiceAssistant.command.search1')}`}</li>
+                  <li>{`${t('voiceAssistant.command.help')} ${t('voiceAssistant.command.help1')}`}</li>
+                </ol>
+              </section>
+              <section className="release-note-version">
+                <h3>{t('voiceAssistant.notice')}</h3>
+                <ol>
+                  <li>{t('voiceAssistant.noticeSmartness')}</li>
+                  <li>{t('voiceAssistant.noticeCommandIntro')}</li>
+                  <li>{t('voiceAssistant.noticeExample')}</li>
+                </ol>
+              </section>
             </div>
-            <div className="voice-assistant-help-body">
-              <h3>{t('voiceAssistant.supportedCommands')}</h3>
-              <div className="voice-assistant-command-list">
-                <span>{t('voiceAssistant.command.play')}</span>
-                <p>{t('voiceAssistant.command.play1')}</p>
-                <span />
-                <p>{t('voiceAssistant.command.play2')}</p>
-                <span />
-                <p>{t('voiceAssistant.command.play3')}</p>
-                <span>{t('voiceAssistant.command.playControl')}</span>
-                <p>{t('voiceAssistant.command.playControl1')}</p>
-                <span>{t('voiceAssistant.command.volume')}</span>
-                <p>{t('voiceAssistant.command.volume1')}</p>
-                <span />
-                <p>{t('voiceAssistant.command.volume2')}</p>
-                <span>{t('voiceAssistant.command.search')}</span>
-                <p>{t('voiceAssistant.command.search1')}</p>
-                <span>{t('voiceAssistant.command.help')}</span>
-                <p>{t('voiceAssistant.command.help1')}</p>
-              </div>
-              <h3>{t('voiceAssistant.notice')}</h3>
-              <ol>
-                <li>{t('voiceAssistant.noticeSmartness')}</li>
-                <li>{t('voiceAssistant.noticeCommandIntro')}</li>
-                <li>{t('voiceAssistant.noticeExample')}</li>
-              </ol>
-            </div>
-          </div>
-        </div>
+          </section>
+        </div>,
+        document.body,
       ) : null}
     </>
   )

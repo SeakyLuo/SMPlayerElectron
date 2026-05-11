@@ -30,6 +30,8 @@
     rgba(246, 249, 252, var(--immersive-topbar-surface-alpha));
   --immersive-topbar-filter: blur(var(--immersive-topbar-blur)) saturate(150%);
   --immersive-topbar-shadow: 0 1px 0 rgba(17, 24, 39, var(--immersive-topbar-shadow-alpha));
+  --immersive-topbar-noise-opacity: 0;
+  --immersive-topbar-highlight-alpha: 0;
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   height: 100vh;
@@ -157,26 +159,50 @@ body.night-mode .app-shell.nav-minimal .minimal-titlebar {
 }
 
 .app-shell.nav-minimal.is-headered-playlist-route .minimal-titlebar {
-  background: var(--immersive-topbar-background);
-  background-repeat: no-repeat;
-  background-origin: border-box;
-  background-clip: border-box;
-  background-size: 100% 72px;
-  background-position: 0 0;
+  overflow: hidden;
+  isolation: isolate;
+  background: transparent;
   color: #fff;
   box-shadow: none;
+}
+
+body.night-mode .app-shell.nav-minimal.is-headered-playlist-route .minimal-titlebar {
+  background: transparent;
+  color: var(--night-text);
+}
+
+.app-shell.nav-minimal.is-headered-playlist-route .minimal-titlebar::before,
+.app-shell.nav-minimal.is-headered-playlist-route .minimal-titlebar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.app-shell.nav-minimal.is-headered-playlist-route .minimal-titlebar::before {
+  z-index: 0;
   backdrop-filter: var(--immersive-topbar-filter);
   -webkit-backdrop-filter: var(--immersive-topbar-filter);
 }
 
-body.night-mode .app-shell.nav-minimal.is-headered-playlist-route .minimal-titlebar {
-  background: var(--immersive-topbar-background);
+.app-shell.nav-minimal.is-headered-playlist-route .minimal-titlebar::after {
+  z-index: 0;
+  background:
+    radial-gradient(circle at 18% 0, rgba(255, 255, 255, var(--immersive-topbar-highlight-alpha)), transparent 42%),
+    linear-gradient(180deg, rgba(255, 255, 255, var(--immersive-topbar-highlight-alpha)), rgba(255, 255, 255, 0)),
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, var(--immersive-topbar-noise-opacity)) 0 1px, transparent 1px 3px),
+    var(--immersive-topbar-background);
   background-repeat: no-repeat;
   background-origin: border-box;
   background-clip: border-box;
   background-size: 100% 72px;
   background-position: 0 0;
-  color: var(--night-text);
+  box-shadow: none;
+}
+
+.app-shell.nav-minimal.is-headered-playlist-route .minimal-titlebar > * {
+  position: relative;
+  z-index: 1;
 }
 
 .app-shell.nav-minimal.is-headered-playlist-route .minimal-titlebar-back-button:hover,

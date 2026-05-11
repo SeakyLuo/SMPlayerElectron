@@ -130,7 +130,7 @@
 .headered-playlist-backdrop {
   position: absolute;
   inset: 0 -40px auto 0;
-  height: var(--header-hero-height);
+  height: calc(var(--header-hero-height) + 110px);
   overflow: hidden;
   border-radius: inherit;
   pointer-events: none;
@@ -139,6 +139,8 @@
     radial-gradient(circle at 20% 22%, rgba(var(--header-cover-rgb), 0.32), transparent 40%),
     radial-gradient(circle at 78% 10%, rgba(var(--header-cover-rgb), 0.16), transparent 48%),
     rgba(246, 249, 252, 0.98);
+  mask-image: linear-gradient(180deg, #000 0%, #000 calc(100% - 112px), transparent 100%);
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 calc(100% - 112px), transparent 100%);
 }
 
 .headered-playlist-backdrop::before {
@@ -569,6 +571,8 @@
       radial-gradient(circle at 78% 10%, rgba(var(--header-cover-rgb), 0.16), transparent 48%),
       rgba(246, 249, 252, 0.98);
     opacity: calc(1 - var(--header-collapse-progress));
+    mask-image: none;
+    -webkit-mask-image: none;
   }
 
   .headered-playlist-backdrop::before {

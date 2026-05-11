@@ -1041,6 +1041,8 @@ function useHeaderedPlaylistScroll(
       const topbarSurfaceAlpha = (0.2 * collapseProgress).toFixed(3)
       const topbarShadowAlpha = (0.05 * collapseProgress).toFixed(3)
       const topbarBlur = `${Math.round(18 * collapseProgress)}px`
+      const topbarHighlightAlpha = (0.08 * collapseProgress).toFixed(3)
+      const topbarNoiseOpacity = (0.035 * collapseProgress).toFixed(3)
       const heroCoverAlpha = (0.22 * collapseProgress).toFixed(3)
       const heroSurfaceAlpha = (0.9 * collapseProgress).toFixed(3)
       const heroBlur = `${Math.round(18 * collapseProgress)}px`
@@ -1102,6 +1104,8 @@ function useHeaderedPlaylistScroll(
       appShell.style.setProperty('--immersive-topbar-surface-alpha', topbarSurfaceAlpha)
       appShell.style.setProperty('--immersive-topbar-shadow-alpha', topbarShadowAlpha)
       appShell.style.setProperty('--immersive-topbar-blur', topbarBlur)
+      appShell.style.setProperty('--immersive-topbar-highlight-alpha', topbarHighlightAlpha)
+      appShell.style.setProperty('--immersive-topbar-noise-opacity', topbarNoiseOpacity)
       control.style.setProperty('--header-hero-height', `${heroHeight}px`)
       control.style.setProperty('--header-hero-padding-top', `${heroPaddingTop}px`)
       control.style.setProperty('--header-cover-size', `${coverSize}px`)
@@ -1145,6 +1149,8 @@ function useHeaderedPlaylistScroll(
       appShell.style.removeProperty('--immersive-topbar-surface-alpha')
       appShell.style.removeProperty('--immersive-topbar-shadow-alpha')
       appShell.style.removeProperty('--immersive-topbar-blur')
+      appShell.style.removeProperty('--immersive-topbar-highlight-alpha')
+      appShell.style.removeProperty('--immersive-topbar-noise-opacity')
       setIsHeaderCollapsed(false)
       if (appBarTitleRef.current) {
         appBarTitleRef.current = ''
