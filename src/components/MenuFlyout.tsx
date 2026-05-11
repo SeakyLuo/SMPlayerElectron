@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 
 import type { MenuFlyoutItem, MenuFlyoutPosition } from './MenuFlyoutHelper'
 import { Icon } from './icons'
+import { getVolumeIconName } from './volumeIcon'
 
 export function MenuFlyout({
   items,
@@ -99,6 +100,7 @@ function MenuFlyoutSubmenu({
     left: -10000,
     top: 8,
     maxHeight: Math.max(120, menuBoundaryHeight - 16),
+    scrollable: false,
   })
   const submenuLength = item.submenu!.length
 
@@ -110,7 +112,7 @@ function MenuFlyoutSubmenu({
     const panelWidth = panelElement.getBoundingClientRect().width
     const fullPanelHeight = panelElement.scrollHeight
     const boundaryBottom = getMenuBoundaryBottom(margin)
-    const availableHeight = Math.max(120, boundaryBottom - margin)
+    const availableHeight = Math.max(120, boundaryBottom - margin * 2)
     const panelHeight = Math.min(fullPanelHeight, availableHeight)
 
     let left = triggerRect.right - 2
@@ -120,10 +122,14 @@ function MenuFlyoutSubmenu({
     left = Math.max(margin, Math.min(left, window.innerWidth - panelWidth - margin))
 
     const top = Math.max(margin, Math.min(triggerRect.top - 6, boundaryBottom - panelHeight))
+    const availablePanelHeight = Math.max(120, boundaryBottom - top - margin)
+    const scrollable = fullPanelHeight > availablePanelHeight + 2
+    const maxHeight = scrollable ? availablePanelHeight : fullPanelHeight + 2
     setLayout({
       left,
       top,
-      maxHeight: Math.max(120, boundaryBottom - top - margin),
+      maxHeight,
+      scrollable,
     })
   }
 
@@ -149,6 +155,7 @@ function MenuFlyoutSubmenu({
           '--submenu-left': `${layout.left}px`,
           '--submenu-top': `${layout.top}px`,
           '--submenu-max-height': `${layout.maxHeight}px`,
+          overflowY: layout.scrollable ? 'auto' : 'hidden',
         } as CSSProperties}
       >
         {item.submenu!.map((subitem) => renderMenuItem(subitem, menuBoundaryHeight, onClose))}
@@ -160,6 +167,10 @@ function MenuFlyoutSubmenu({
 function renderMenuItem(item: MenuFlyoutItem, menuBoundaryHeight: number, onClose: () => void) {
   if (item.separator) {
     return <div className="library-context-menu-separator" key={item.key} role="separator" />
+  }
+
+  if (item.kind === 'volume') {
+    return <MenuFlyoutVolumeItem item={item} key={item.key} />
   }
 
   if (item.submenu) {
@@ -174,6 +185,110 @@ function renderMenuItem(item: MenuFlyoutItem, menuBoundaryHeight: number, onClos
   }
 
   return <MenuFlyoutButton item={item} key={item.key} onClose={onClose} />
+}
+
+function MenuFlyoutVolumeItem({ item }: { item: MenuFlyoutItem }) {
+  const volumeValue = item.volumeValue ?? 0
+  const volumeTitle = item.text
+  const [tooltipActive, setTooltipActive] = useState(false)
+  const tooltipTimerRef = useRef<number | null>(null)
+  const volumeTooltipValue = item.volumeMuted ? 0 : volumeValue
+  const volumeIconName = getVolumeIconName(volumeValue, item.volumeMuted === true)
+
+  const clearTooltipTimer = () => {
+    if (tooltipTimerRef.current != null) {
+      window.clearTimeout(tooltipTimerRef.current)
+      tooltipTimerRef.current = null
+    }
+  }
+
+  const showTooltip = (timeout = 900) => {
+    clearTooltipTimer()
+    setTooltipActive(true)
+    tooltipTimerRef.current = window.setTimeout(() => {
+      setTooltipActive(false)
+      tooltipTimerRef.current = null
+    }, timeout)
+  }
+
+  const keepTooltipVisible = () => {
+    clearTooltipTimer()
+    setTooltipActive(true)
+  }
+
+  const commitVolumeChange = (value: string) => {
+    item.onVolumeChange?.(Number(value))
+  }
+
+  useEffect(() => {
+    return () => {
+      clearTooltipTimer()
+    }
+  }, [])
+
+  return (
+    <div className="library-context-volume-item" role="menuitem" aria-label={volumeTitle}>
+      <button
+        type="button"
+        className="library-context-volume-button"
+        disabled={item.disabled}
+        aria-label={volumeTitle}
+        title={volumeTitle}
+        onClick={item.onToggleMute}
+      >
+        <Icon name={volumeIconName} />
+      </button>
+      <div
+        className={`library-context-volume-slider-wrap${tooltipActive ? ' is-active' : ''}${item.disabled ? ' is-disabled' : ''}`}
+        style={{ '--volume-tooltip-left': `${volumeTooltipValue}%` } as CSSProperties}
+      >
+        <input
+          className="media-slider library-context-volume-slider"
+          type="range"
+          min="0"
+          max="100"
+          value={volumeValue}
+          disabled={item.disabled}
+          style={{ '--range-progress': `${volumeValue}%` } as CSSProperties}
+          onChange={() => {
+            keepTooltipVisible()
+          }}
+          onInput={(event) => {
+            commitVolumeChange(event.currentTarget.value)
+          }}
+          onPointerDown={() => {
+            keepTooltipVisible()
+          }}
+          onPointerEnter={() => {
+            keepTooltipVisible()
+          }}
+          onPointerLeave={() => {
+            setTooltipActive(false)
+          }}
+          onPointerUp={(event) => {
+            commitVolumeChange(event.currentTarget.value)
+            showTooltip(650)
+          }}
+          onPointerCancel={() => {
+            setTooltipActive(false)
+          }}
+          onLostPointerCapture={(event) => {
+            commitVolumeChange(event.currentTarget.value)
+            showTooltip(650)
+          }}
+          onFocus={() => {
+            keepTooltipVisible()
+          }}
+          onBlur={() => {
+            setTooltipActive(false)
+          }}
+          aria-label={volumeTitle}
+          aria-valuetext={String(volumeTooltipValue)}
+        />
+        <span className="volume-slider-tooltip" aria-hidden="true">{volumeTooltipValue}</span>
+      </div>
+    </div>
+  )
 }
 
 function MenuFlyoutButton({ item, onClose }: { item: MenuFlyoutItem; onClose: () => void }) {

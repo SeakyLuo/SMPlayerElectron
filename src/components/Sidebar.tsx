@@ -4,6 +4,9 @@ import { flushSync } from 'react-dom'
 import { useLocation, useNavigate } from 'react-router-dom'
 
 import { Icon, type IconName } from './icons'
+import { MenuFlyout } from './MenuFlyout'
+import { getPlaylistCardMenuItems } from './PlaylistMenuItems'
+import { RenameDialog } from './RenameDialog'
 import type { LibraryPlaylist, SearchHistoryEntry } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
 
@@ -51,6 +54,9 @@ interface SidebarProps {
   onGoBack: () => void
   onNavigate: () => void
   onCreatePlaylist: () => void
+  onCreatePlaylistWithSongs: (name: string, songIds: number[]) => void
+  onDeletePlaylist: (playlistId: number) => void
+  onRenamePlaylist: (playlistId: number, name: string) => void
   onReorderPlaylists: (playlistIds: number[]) => void
   onQuickPlayPlaylist: (playlistId: number) => void
   getRestoredNavTarget: (target: string) => string
@@ -73,6 +79,9 @@ export function Sidebar({
   onGoBack,
   onNavigate,
   onCreatePlaylist,
+  onCreatePlaylistWithSongs,
+  onDeletePlaylist,
+  onRenamePlaylist,
   onReorderPlaylists,
   onQuickPlayPlaylist,
   getRestoredNavTarget,
@@ -81,6 +90,8 @@ export function Sidebar({
   const [isPlaylistNavExpanded, setIsPlaylistNavExpanded] = useState(false)
   const [draggingPlaylistId, setDraggingPlaylistId] = useState<number | null>(null)
   const [dropIndicator, setDropIndicator] = useState<{ playlistId: number; position: 'before' | 'after' } | null>(null)
+  const [playlistMenu, setPlaylistMenu] = useState<{ playlist: LibraryPlaylist; x: number; y: number } | null>(null)
+  const [renamePlaylistDialog, setRenamePlaylistDialog] = useState<LibraryPlaylist | null>(null)
   const [collapsedTooltip, setCollapsedTooltip] = useState<{ text: string; left: number; top: number } | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const focusSearchAfterExpandRef = useRef(false)
@@ -115,7 +126,11 @@ export function Sidebar({
   useEffect(() => {
     if (!collapsed) {
       setCollapsedTooltip(null)
+      return
     }
+
+    setPlaylistMenu(null)
+    setRenamePlaylistDialog(null)
   }, [collapsed])
 
   const expandAndFocusSearch = () => {
@@ -425,6 +440,11 @@ export function Sidebar({
                   draggable
                   onClick={() => openPlaylist(playlist.id)}
                   onKeyDown={(event) => openPlaylistOnKeyDown(event, playlist.id)}
+                  onContextMenu={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    setPlaylistMenu({ playlist, x: event.clientX, y: event.clientY })
+                  }}
                   onDragStart={(event) => {
                     draggedPlaylistIdRef.current = playlist.id
                     setDraggingPlaylistId(playlist.id)
@@ -483,6 +503,41 @@ export function Sidebar({
         <NavItem {...settingsLink} label={t(settingsLink.labelKey)} targetTo={getRestoredNavTarget(settingsLink.to)} onNavigate={onNavigate} />
       </div>
     </aside>
+    {playlistMenu ? (
+      <MenuFlyout
+        position={playlistMenu}
+        onClose={() => {
+          setPlaylistMenu(null)
+        }}
+        items={getPlaylistCardMenuItems({
+          playlist: playlistMenu.playlist,
+          playlists,
+          t,
+          onCreatePlaylistWithSongs,
+          onRequestRenamePlaylist: (playlist) => {
+            setRenamePlaylistDialog(playlist)
+            setPlaylistMenu(null)
+          },
+          onDeletePlaylist,
+        })}
+      />
+    ) : null}
+    {renamePlaylistDialog ? (
+      <RenameDialog
+        t={t}
+        title={t('playlists.rename')}
+        playlists={playlists.filter((playlist) => playlist.id !== renamePlaylistDialog.id)}
+        defaultName={renamePlaylistDialog.name}
+        confirmText={t('playlists.rename')}
+        onCancel={() => {
+          setRenamePlaylistDialog(null)
+        }}
+        onConfirm={(name) => {
+          onRenamePlaylist(renamePlaylistDialog.id, name)
+          setRenamePlaylistDialog(null)
+        }}
+      />
+    ) : null}
     {collapsed && collapsedTooltip
       ? createPortal(
           <div

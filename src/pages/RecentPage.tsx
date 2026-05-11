@@ -1,9 +1,8 @@
 import clsx from 'clsx'
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-import { APPBAR_PAGE_ACTIONS_ID } from '../components/AppBar'
+import { AppBarPortal } from '../components/AppBarPortal'
 import { CommandBar, CommandBarButton } from '../components/CommandBar'
 import { requestConfirmDialog } from '../components/dialogService'
 import { GridViewMusicItemControl } from '../components/GridViewMusicItemControl'
@@ -74,15 +73,90 @@ function getParentFolderPath(filePath: string) {
 }
 
 const RECENT_ADDED_LIMIT = 500
-const RECENT_GRID_MIN_COLUMN_WIDTH = 252
+const RECENT_GRID_COLUMN_WIDTH = 300
 const RECENT_GRID_COLUMN_GAP = 28
 const RECENT_GRID_ROW_HEIGHT = 136
-const RECENT_GRID_COMPACT_ROW_HEIGHT = 104
 const RECENT_GRID_BOTTOM_PADDING = 92
 const RECENT_GRID_OVERSCAN_ROWS = 3
 const RECENT_SEARCH_ROW_HEIGHT = 56
 const RECENT_SEARCH_BOTTOM_PADDING = 92
 const RECENT_SEARCH_OVERSCAN_ROWS = 8
+
+function useRecentScrollbar(
+  scrollFrameRef: RefObject<HTMLDivElement | null>,
+  scrollContainerRef: RefObject<HTMLDivElement | null>,
+  scrollbarTrackRef: RefObject<HTMLDivElement | null>,
+  contentHeight: number,
+) {
+  useLayoutEffect(() => {
+    const scrollFrame = scrollFrameRef.current
+    const scrollContainer = scrollContainerRef.current
+    if (!scrollFrame || !scrollContainer) {
+      return
+    }
+
+    let animationFrame = 0
+    const updateScrollbar = () => {
+      const maxScrollTop = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight)
+      const trackHeight = scrollContainer.clientHeight
+      const thumbHeight = maxScrollTop > 0
+        ? Math.max(38, Math.round((trackHeight / scrollContainer.scrollHeight) * trackHeight))
+        : trackHeight
+      const thumbTop = maxScrollTop > 0
+        ? Math.round((scrollContainer.scrollTop / maxScrollTop) * Math.max(0, trackHeight - thumbHeight))
+        : 0
+
+      scrollFrame.style.setProperty('--recent-scrollbar-thumb-height', `${thumbHeight}px`)
+      scrollFrame.style.setProperty('--recent-scrollbar-thumb-top', `${thumbTop}px`)
+      scrollFrame.classList.toggle('has-scrollbar', maxScrollTop > 1)
+    }
+    const scheduleUpdate = () => {
+      window.cancelAnimationFrame(animationFrame)
+      animationFrame = window.requestAnimationFrame(updateScrollbar)
+    }
+
+    updateScrollbar()
+    scrollContainer.addEventListener('scroll', scheduleUpdate, { passive: true })
+    const resizeObserver = new ResizeObserver(scheduleUpdate)
+    resizeObserver.observe(scrollFrame)
+    resizeObserver.observe(scrollContainer)
+    window.addEventListener('resize', scheduleUpdate)
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame)
+      scrollContainer.removeEventListener('scroll', scheduleUpdate)
+      resizeObserver.disconnect()
+      window.removeEventListener('resize', scheduleUpdate)
+    }
+  }, [contentHeight, scrollFrameRef, scrollContainerRef])
+
+  return (event: ReactPointerEvent<HTMLDivElement>) => {
+    const scrollFrame = scrollFrameRef.current
+    const scrollContainer = scrollContainerRef.current
+    const scrollbarTrack = scrollbarTrackRef.current
+    if (!scrollFrame || !scrollContainer || !scrollbarTrack) {
+      return
+    }
+
+    event.preventDefault()
+    const maxScrollTop = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight)
+    const thumbHeight = Number.parseFloat(getComputedStyle(scrollFrame).getPropertyValue('--recent-scrollbar-thumb-height'))
+    const trackRange = Math.max(1, scrollbarTrack.clientHeight - thumbHeight)
+    const scrollPerPixel = maxScrollTop / trackRange
+    const startY = event.clientY
+    const startScrollTop = scrollContainer.scrollTop
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      scrollContainer.scrollTop = startScrollTop + (moveEvent.clientY - startY) * scrollPerPixel
+    }
+    const onPointerUp = () => {
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', onPointerUp)
+    }
+
+    window.addEventListener('pointermove', onPointerMove)
+    window.addEventListener('pointerup', onPointerUp)
+  }
+}
 
 export function RecentPage({
   songs,
@@ -125,7 +199,6 @@ export function RecentPage({
   const [songPreferenceItem, setSongPreferenceItem] = useState<PreferenceItemSnapshot | null>(null)
   const [recentAddedTimelineLabel, setRecentAddedTimelineLabel] = useState('')
   const [recentPlayedTimelineLabel, setRecentPlayedTimelineLabel] = useState('')
-  const [appBarActionsHost, setAppBarActionsHost] = useState<HTMLElement | null>(null)
   const navigate = useNavigate()
   const folders = useLibraryStore((state) => state.snapshot.folders)
   const nowPlayingSongIds = useLibraryStore((state) => state.snapshot.nowPlaying.songIds)
@@ -166,19 +239,6 @@ export function RecentPage({
   const selectedVisibleSearchIds = recentSearches.filter((entry) => selectedSearchIds.has(entry.id)).map((entry) => entry.id)
   const selectedCount = activeTab === 'searches' ? selectedVisibleSearchIds.length : selectedVisibleSongIds.length
   const canClearHistory = activeTab === 'played' ? recentSongs.length > 0 : recentSearches.length > 0
-
-  useEffect(() => {
-    const updateAppBarActionsHost = () => {
-      setAppBarActionsHost(document.getElementById(APPBAR_PAGE_ACTIONS_ID))
-    }
-
-    updateAppBarActionsHost()
-    window.addEventListener('resize', updateAppBarActionsHost)
-
-    return () => {
-      window.removeEventListener('resize', updateAppBarActionsHost)
-    }
-  }, [])
 
   useEffect(() => {
     if (songMenu) {
@@ -304,14 +364,11 @@ export function RecentPage({
 
   return (
     <section className="recent-page page-panel">
-      {appBarActionsHost
-        ? createPortal(
-            <div className="recent-appbar-tabs search-result-tabs" role="tablist">
-              {renderRecentTabs()}
-            </div>,
-            appBarActionsHost,
-          )
-        : null}
+      <AppBarPortal>
+        <div className="recent-appbar-tabs search-result-tabs" role="tablist">
+          {renderRecentTabs()}
+        </div>
+      </AppBarPortal>
       <div className="recent-tabs search-result-tabs">
         {renderRecentTabs()}
       </div>
@@ -684,14 +741,16 @@ function RecentSongGrid({
   onOpenMenu: (menu: RecentSongMenuState) => void
 }) {
   const gridRef = useRef<HTMLDivElement | null>(null)
+  const gridScrollFrameRef = useRef<HTMLDivElement | null>(null)
+  const gridScrollbarTrackRef = useRef<HTMLDivElement | null>(null)
   const [scrollTop, setScrollTop] = useState(0)
   const [viewportHeight, setViewportHeight] = useState(640)
   const [gridWidth, setGridWidth] = useState(960)
   const columnCount = Math.max(
     1,
-    Math.floor((gridWidth + RECENT_GRID_COLUMN_GAP) / (RECENT_GRID_MIN_COLUMN_WIDTH + RECENT_GRID_COLUMN_GAP)),
+    Math.floor((gridWidth + RECENT_GRID_COLUMN_GAP) / (RECENT_GRID_COLUMN_WIDTH + RECENT_GRID_COLUMN_GAP)),
   )
-  const rowHeight = gridWidth <= 520 ? RECENT_GRID_COMPACT_ROW_HEIGHT : RECENT_GRID_ROW_HEIGHT
+  const rowHeight = RECENT_GRID_ROW_HEIGHT
   const rowCount = Math.ceil(songs.length / columnCount)
   const listHeight = rowCount * rowHeight
   const effectiveScrollTop = Math.min(scrollTop, Math.max(0, listHeight - viewportHeight))
@@ -705,6 +764,12 @@ function RecentSongGrid({
   )
   const renderedSongs = songs.slice(startRow * columnCount, endRow * columnCount)
   const windowTop = startRow * rowHeight
+  const onGridScrollbarPointerDown = useRecentScrollbar(
+    gridScrollFrameRef,
+    gridRef,
+    gridScrollbarTrackRef,
+    listHeight,
+  )
 
   useEffect(() => {
     const grid = gridRef.current
@@ -734,52 +799,53 @@ function RecentSongGrid({
   }, [columnCount, getTimelineDate, onTimelineLabelChange, songs, startRow, t])
 
   if (songs.length === 0) {
-    return loading ? <LoadingState t={t} compact /> : (
-      <div className="empty-state compact">
-        <h3>{t('recent.empty')}</h3>
-      </div>
-    )
+    return loading ? <LoadingState t={t} compact /> : null
   }
 
   return (
-    <div
-      className="recent-grid-shell"
-      ref={gridRef}
-      onScroll={(event) => {
-        setScrollTop(event.currentTarget.scrollTop)
-      }}
-    >
-      <div className="recent-grid-virtual" style={{ height: listHeight + RECENT_GRID_BOTTOM_PADDING }}>
-        <div
-          className="recent-song-grid-window"
-          style={{
-            gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
-            transform: `translateY(${windowTop}px)`,
-          }}
-        >
-          {renderedSongs.map((song) => (
-            <GridViewMusicItemControl
-              key={song.id}
-              song={song}
-              queueSongIds={queueSongIds}
-              selected={selectedSongIds.has(song.id)}
-              current={song.id === selectedTrackId}
-              playing={song.id === selectedTrackId && isPlaying}
-              multiSelect={multiSelect}
-              t={t}
-              detailLabel={getDetailLabel?.(song)}
-              onPlayTrack={onPlayTrack}
-              onTogglePlayPause={onTogglePlayPause}
-              onToggleSelection={onToggleSelection}
-              onAddToPlaylistClick={(event, menuSong) => {
-                onOpenAddToMenu({ songIds: [menuSong.id], defaultPlaylistName: '', x: event.clientX, y: event.clientY })
-              }}
-              onContextMenu={(event, menuSong) => {
-                onOpenMenu({ song: menuSong, x: event.clientX, y: event.clientY, canRemove })
-              }}
-            />
-          ))}
+    <div className="recent-grid-scroll-frame" ref={gridScrollFrameRef}>
+      <div
+        className="recent-grid-shell"
+        ref={gridRef}
+        onScroll={(event) => {
+          setScrollTop(event.currentTarget.scrollTop)
+        }}
+      >
+        <div className="recent-grid-virtual" style={{ height: listHeight + RECENT_GRID_BOTTOM_PADDING }}>
+          <div
+            className="recent-song-grid-window"
+            style={{
+              gridTemplateColumns: `repeat(${columnCount}, minmax(0, min(${RECENT_GRID_COLUMN_WIDTH}px, 100%)))`,
+              transform: `translateY(${windowTop}px)`,
+            }}
+          >
+            {renderedSongs.map((song) => (
+              <GridViewMusicItemControl
+                key={song.id}
+                song={song}
+                queueSongIds={queueSongIds}
+                selected={selectedSongIds.has(song.id)}
+                current={song.id === selectedTrackId}
+                playing={song.id === selectedTrackId && isPlaying}
+                multiSelect={multiSelect}
+                t={t}
+                detailLabel={getDetailLabel?.(song)}
+                onPlayTrack={onPlayTrack}
+                onTogglePlayPause={onTogglePlayPause}
+                onToggleSelection={onToggleSelection}
+                onAddToPlaylistClick={(event, menuSong) => {
+                  onOpenAddToMenu({ songIds: [menuSong.id], defaultPlaylistName: '', x: event.clientX, y: event.clientY })
+                }}
+                onContextMenu={(event, menuSong) => {
+                  onOpenMenu({ song: menuSong, x: event.clientX, y: event.clientY, canRemove })
+                }}
+              />
+            ))}
+          </div>
         </div>
+      </div>
+      <div className="recent-scrollbar" ref={gridScrollbarTrackRef} aria-hidden="true">
+        <div className="recent-scrollbar-thumb" onPointerDown={onGridScrollbarPointerDown} />
       </div>
     </div>
   )
@@ -807,6 +873,8 @@ function RecentSearchList({
   onRemove: (entryId: number) => void
 }) {
   const listRef = useRef<HTMLDivElement | null>(null)
+  const listScrollFrameRef = useRef<HTMLDivElement | null>(null)
+  const listScrollbarTrackRef = useRef<HTMLDivElement | null>(null)
   const [scrollTop, setScrollTop] = useState(0)
   const [viewportHeight, setViewportHeight] = useState(640)
   const listHeight = entries.length * RECENT_SEARCH_ROW_HEIGHT
@@ -822,6 +890,12 @@ function RecentSearchList({
   const renderedEntries = entries.slice(startIndex, endIndex)
   const topSpacerHeight = startIndex * RECENT_SEARCH_ROW_HEIGHT
   const bottomSpacerHeight = (entries.length - endIndex) * RECENT_SEARCH_ROW_HEIGHT + RECENT_SEARCH_BOTTOM_PADDING
+  const onListScrollbarPointerDown = useRecentScrollbar(
+    listScrollFrameRef,
+    listRef,
+    listScrollbarTrackRef,
+    listHeight,
+  )
 
   useEffect(() => {
     const list = listRef.current
@@ -842,63 +916,64 @@ function RecentSearchList({
   }, [])
 
   if (entries.length === 0) {
-    return loading ? <LoadingState t={t} compact /> : (
-      <div className="empty-state compact">
-        <h3>{t('recent.noSearches')}</h3>
-      </div>
-    )
+    return loading ? <LoadingState t={t} compact /> : null
   }
 
   return (
-    <div
-      className="recent-search-list"
-      ref={listRef}
-      onScroll={(event) => {
-        setScrollTop(event.currentTarget.scrollTop)
-      }}
-    >
-      {topSpacerHeight > 0 ? <div className="recent-search-spacer" style={{ height: topSpacerHeight }} /> : null}
-      {renderedEntries.map((entry) => (
-        <div
-          className={clsx('recent-search-row', {
-            'is-selected': selectedEntryIds.has(entry.id),
-          })}
-          key={entry.id}
-        >
-          <button
-            type="button"
-            className="recent-search-row-main"
-            onClick={() => {
-              if (multiSelect) {
-                onToggleSelection(entry.id)
-              } else {
-                onSearch(entry.query)
-              }
-            }}
+    <div className="recent-search-scroll-frame" ref={listScrollFrameRef}>
+      <div
+        className="recent-search-list"
+        ref={listRef}
+        onScroll={(event) => {
+          setScrollTop(event.currentTarget.scrollTop)
+        }}
+      >
+        {topSpacerHeight > 0 ? <div className="recent-search-spacer" style={{ height: topSpacerHeight }} /> : null}
+        {renderedEntries.map((entry) => (
+          <div
+            className={clsx('recent-search-row', {
+              'is-selected': selectedEntryIds.has(entry.id),
+            })}
+            key={entry.id}
           >
-            {multiSelect ? (
-              <span className="playlist-control-item-selection-mark">
-                {selectedEntryIds.has(entry.id) ? <Icon name="check" /> : null}
-              </span>
-            ) : null}
-            <span>{entry.query}</span>
-            <RecentSearchTime value={entry.searchedAt} preferredLanguage={preferredLanguage} />
-          </button>
-          {!multiSelect ? (
             <button
               type="button"
-              className="recent-search-remove"
-              aria-label={t('sidebar.removeRecentSearch', { query: entry.query })}
+              className="recent-search-row-main"
               onClick={() => {
-                onRemove(entry.id)
+                if (multiSelect) {
+                  onToggleSelection(entry.id)
+                } else {
+                  onSearch(entry.query)
+                }
               }}
             >
-              <Icon name="close" />
+              {multiSelect ? (
+                <span className="playlist-control-item-selection-mark">
+                  {selectedEntryIds.has(entry.id) ? <Icon name="check" /> : null}
+                </span>
+              ) : null}
+              <span>{entry.query}</span>
+              <RecentSearchTime value={entry.searchedAt} preferredLanguage={preferredLanguage} />
             </button>
-          ) : null}
-        </div>
-      ))}
-      {bottomSpacerHeight > 0 ? <div className="recent-search-spacer" style={{ height: bottomSpacerHeight }} /> : null}
+            {!multiSelect ? (
+              <button
+                type="button"
+                className="recent-search-remove"
+                aria-label={t('sidebar.removeRecentSearch', { query: entry.query })}
+                onClick={() => {
+                  onRemove(entry.id)
+                }}
+              >
+                <Icon name="close" />
+              </button>
+            ) : null}
+          </div>
+        ))}
+        {bottomSpacerHeight > 0 ? <div className="recent-search-spacer" style={{ height: bottomSpacerHeight }} /> : null}
+      </div>
+      <div className="recent-scrollbar" ref={listScrollbarTrackRef} aria-hidden="true">
+        <div className="recent-scrollbar-thumb" onPointerDown={onListScrollbarPointerDown} />
+      </div>
     </div>
   )
 }

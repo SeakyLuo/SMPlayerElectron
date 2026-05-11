@@ -410,6 +410,24 @@
   padding-left: 20px;
 }
 
+.voice-assistant-command-rows {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  column-gap: 16px;
+  row-gap: 12px;
+}
+
+.voice-assistant-command-rows span {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.voice-assistant-command-rows p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
 .preference-modal {
   width: min(1080px, calc(100vw - 48px));
   height: min(820px, calc(100vh - 48px));

@@ -192,3 +192,43 @@
   max-width: 460px;
   width: 38vw;
 }
+
+body.night-mode .app-shell .remote-share-dialog header p,
+body.night-mode .app-shell .remote-share-muted,
+body.night-mode .app-shell .remote-share-message,
+body.night-mode .app-shell .remote-share-status-row span,
+body.night-mode .app-shell .remote-share-device span,
+body.night-mode .app-shell .remote-share-field span,
+body.night-mode .app-shell .remote-library-header p,
+body.night-mode .app-shell .remote-library-player span {
+  color: var(--night-muted);
+}
+
+body.night-mode .app-shell .remote-share-section {
+  border-top-color: var(--night-border);
+}
+
+body.night-mode .app-shell .remote-share-address,
+body.night-mode .app-shell .remote-share-device,
+body.night-mode .app-shell .remote-library-player {
+  border-color: var(--night-border);
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--night-text);
+}
+
+body.night-mode .app-shell .remote-share-section button,
+body.night-mode .app-shell .remote-share-address button,
+body.night-mode .app-shell .remote-share-device button,
+body.night-mode .app-shell .remote-share-device-link,
+body.night-mode .app-shell .remote-share-field input {
+  border-color: var(--night-border);
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--night-text);
+}
+
+body.night-mode .app-shell .remote-share-section .input-dialog-primary,
+body.night-mode .app-shell .remote-library-player button {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}

@@ -22,6 +22,7 @@ interface VoiceAssistantFlyoutProps {
   onVoiceCommand: (text: string) => Promise<VoiceAssistantResponse>
   getVoiceHint: () => string
   onOpenChange: (open: boolean) => void
+  className?: string
 }
 
 export const VoiceAssistantFlyout = forwardRef<VoiceAssistantFlyoutHandle, VoiceAssistantFlyoutProps>(function VoiceAssistantFlyout({
@@ -30,13 +31,13 @@ export const VoiceAssistantFlyout = forwardRef<VoiceAssistantFlyoutHandle, Voice
   onVoiceCommand,
   getVoiceHint,
   onOpenChange,
+  className,
 }, ref) {
   const [open, setOpen] = useState(false)
   const [text, setText] = useState('')
   const [state, setState] = useState<VoiceAssistantState>('idle')
   const [showHelpLink, setShowHelpLink] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
-  const speechRecognitionRef = useRef<SpeechRecognition | null>(null)
   const closeTimerRef = useRef<number | null>(null)
   const restartTimerRef = useRef<number | null>(null)
   const recognitionSessionRef = useRef(0)
@@ -65,8 +66,7 @@ export const VoiceAssistantFlyout = forwardRef<VoiceAssistantFlyoutHandle, Voice
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel()
     }
-    speechRecognitionRef.current?.stop()
-    speechRecognitionRef.current = null
+    void window.smplayer!.cancelSpeechRecognition()
     setOpen(false)
     setState('idle')
     setShowHelpLink(false)
@@ -89,136 +89,77 @@ export const VoiceAssistantFlyout = forwardRef<VoiceAssistantFlyoutHandle, Voice
     clearRestartTimer()
     restartTimerRef.current = window.setTimeout(() => {
       if (listeningRef.current && recognitionSessionRef.current === sessionId) {
-        startRecognition(false, sessionId)
+        void startRecognition(false, sessionId)
       }
     }, 250)
   }
 
-  const startRecognition = (showHint: boolean, sessionId = recognitionSessionRef.current) => {
-    const SpeechRecognition = window.SpeechRecognition ?? window.webkitSpeechRecognition
-
-    if (!SpeechRecognition) {
-      listeningRef.current = false
-      setText(t('voiceAssistant.unavailable'))
-      setShowHelpLink(false)
-      return
-    }
-
+  const startRecognition = async (showHint: boolean, sessionId = recognitionSessionRef.current) => {
     clearRestartTimer()
-    const recognition = new SpeechRecognition()
-    speechRecognitionRef.current = recognition
-    let shouldRestartOnEnd = true
-    recognition.lang = voiceLanguage
-    recognition.continuous = false
-    recognition.interimResults = false
-    recognition.maxAlternatives = 1
-    recognition.onstart = () => {
-      if (speechRecognitionRef.current === recognition && recognitionSessionRef.current === sessionId) {
-        setState('capturing')
-      }
-    }
-    recognition.onsoundstart = () => {
-      if (speechRecognitionRef.current === recognition && recognitionSessionRef.current === sessionId) {
-        setState('capturing')
-      }
-    }
-    recognition.onspeechend = () => {
-      if (speechRecognitionRef.current === recognition && recognitionSessionRef.current === sessionId) {
-        setState('processing')
-      }
-    }
-    recognition.onerror = (event) => {
-      if (speechRecognitionRef.current !== recognition || recognitionSessionRef.current !== sessionId) {
-        return
-      }
-
-      setState('idle')
-      if (event.error === 'aborted') {
-        shouldRestartOnEnd = false
-        return
-      }
-
-      if (event.error === 'no-speech') {
-        return
-      }
-
-      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-        listeningRef.current = false
-        shouldRestartOnEnd = false
-        setText(t('voiceAssistant.privacyRequired'))
-        setShowHelpLink(false)
-        return
-      }
-
-      shouldRestartOnEnd = true
-    }
-    recognition.onend = () => {
-      if (speechRecognitionRef.current === recognition) {
-        speechRecognitionRef.current = null
-      }
-      if (recognitionSessionRef.current !== sessionId) {
-        return
-      }
-      if (listeningRef.current && shouldRestartOnEnd) {
-        setState('idle')
-        scheduleRecognitionRestart(sessionId)
-        return
-      }
-      setState((current) => current === 'processing' ? current : 'idle')
-    }
-    recognition.onresult = (event) => {
-      if (speechRecognitionRef.current !== recognition || recognitionSessionRef.current !== sessionId) {
-        return
-      }
-
-      shouldRestartOnEnd = false
-      const transcript = event.results[event.resultIndex][0].transcript.trim()
-      if (!transcript) {
-        setState('idle')
-        scheduleRecognitionRestart(sessionId)
-        return
-      }
-
-      setText(transcript)
-      setShowHelpLink(false)
-      setState('idle')
-      void onVoiceCommand(transcript).then(({ message, shouldContinue }) => {
-        if (recognitionSessionRef.current !== sessionId) {
-          return
-        }
-
-        if (shouldContinue) {
-          speak(message, () => {
-            scheduleRecognitionRestart(sessionId)
-          })
-          return
-        }
-
-        listeningRef.current = false
-        if (message === t('voiceAssistant.help')) {
-          setHelpOpen(true)
-        } else if (message && message !== t('voiceAssistant.executed')) {
-          speak(message, () => {})
-        }
-
-        closeTimerRef.current = window.setTimeout(close, 5000)
-      })
-    }
-    recognition.addEventListener('nomatch', () => {
-      if (speechRecognitionRef.current !== recognition || recognitionSessionRef.current !== sessionId) {
-        return
-      }
-
-      setState('idle')
-      shouldRestartOnEnd = true
-    })
-
     if (showHint) {
       setText(getVoiceHint())
       setShowHelpLink(true)
     }
-    setState('capturing')
-    recognition.start()
+
+    setState('idle')
+    const result = await window.smplayer!.recognizeSpeech(voiceLanguage)
+    if (recognitionSessionRef.current !== sessionId || !listeningRef.current) {
+      return
+    }
+
+    const transcript = result.text.trim()
+    if (!transcript) {
+      if (result.error === 'no-speech') {
+        setState('idle')
+        scheduleRecognitionRestart(sessionId)
+        return
+      }
+
+      listeningRef.current = false
+      setState('idle')
+      setShowHelpLink(false)
+      if (result.error === 'canceled') {
+        close()
+      } else if (result.error === 'unsupported-platform' || result.error === 'unavailable') {
+        setText(t('voiceAssistant.unavailable'))
+      } else if (result.error === 'privacy-required') {
+        setText(t('voiceAssistant.privacyRequired'))
+      } else if (result.error === 'audio-capture') {
+        setText(t('voiceAssistant.audioCaptureFailed'))
+      } else {
+        setText(t('voiceAssistant.recognitionUnavailable'))
+      }
+      return
+    }
+
+    setText(transcript)
+    setShowHelpLink(false)
+    setState('processing')
+    const { message, shouldContinue } = await onVoiceCommand(transcript)
+    if (recognitionSessionRef.current !== sessionId) {
+      return
+    }
+
+    if (shouldContinue) {
+      speak(message, () => {
+        scheduleRecognitionRestart(sessionId)
+      })
+      return
+    }
+
+    listeningRef.current = false
+    if (message === t('voiceAssistant.canceled')) {
+      close()
+      return
+    }
+
+    if (message === t('voiceAssistant.help')) {
+      setHelpOpen(true)
+    } else if (message && message !== t('voiceAssistant.executed')) {
+      speak(message, () => {})
+    }
+
+    closeTimerRef.current = window.setTimeout(close, 5000)
   }
 
   const openFlyout = () => {
@@ -226,8 +167,13 @@ export const VoiceAssistantFlyout = forwardRef<VoiceAssistantFlyoutHandle, Voice
     listeningRef.current = true
     clearCloseTimer()
     clearRestartTimer()
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel()
+    }
+    void window.smplayer!.cancelSpeechRecognition()
     setOpen(true)
-    startRecognition(true, recognitionSessionRef.current)
+    setState('idle')
+    void startRecognition(true, recognitionSessionRef.current)
   }
 
   const openHelp = () => {
@@ -243,6 +189,25 @@ export const VoiceAssistantFlyout = forwardRef<VoiceAssistantFlyoutHandle, Voice
     onOpenChange(open)
   }, [onOpenChange, open])
 
+  useEffect(() => window.smplayer!.onVoiceRecognitionHypothesis((hypothesis) => {
+    if (!listeningRef.current) {
+      return
+    }
+
+    const transcript = hypothesis.text.trim()
+    if (transcript) {
+      setState('capturing')
+      setText(transcript)
+      setShowHelpLink(false)
+    }
+  }), [])
+
+  useEffect(() => window.smplayer!.onVoiceRecognitionStateChange((update) => {
+    if (listeningRef.current) {
+      setState(update.state)
+    }
+  }), [])
+
   useEffect(() => () => {
     listeningRef.current = false
     recognitionSessionRef.current += 1
@@ -251,35 +216,41 @@ export const VoiceAssistantFlyout = forwardRef<VoiceAssistantFlyoutHandle, Voice
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel()
     }
-    speechRecognitionRef.current?.stop()
+    void window.smplayer!.cancelSpeechRecognition()
   }, [])
 
   return (
     <>
-      {open ? (
+      {open ? createPortal(
         <>
-          <button className="voice-assistant-dismiss-layer" type="button" aria-label={t('common.close')} onClick={close} />
-          <div className={`voice-assistant-popover is-${state}`} role="status">
+          <button className="voice-assistant-dismiss-layer" type="button" aria-label={t('common.close')} onPointerDown={close} />
+          <div
+            className={['voice-assistant-popover', `is-${state}`, className].filter(Boolean).join(' ')}
+            role="status"
+            onPointerDown={(event) => {
+              if (!(event.target as HTMLElement).closest('.voice-assistant-help-button')) {
+                close()
+              }
+            }}
+          >
+            {state === 'capturing' ? <span className="voice-assistant-ripples" aria-hidden="true" /> : null}
             <div className="voice-assistant-copy">
-              {showProgress ? null : (
-                <>
-                  <span>{text}</span>
-                  {showHelpLink ? (
-                    <button
-                      type="button"
-                      className="voice-assistant-help-button"
-                      onClick={openHelp}
-                      title={t('voiceAssistant.getHelp')}
-                    >
-                      {t('voiceAssistant.getHelp')}
-                    </button>
-                  ) : null}
-                </>
-              )}
+              {showProgress ? <span className="voice-assistant-spinner" aria-hidden="true" /> : null}
+              <span>{text}</span>
+              {showHelpLink ? (
+                <button
+                  type="button"
+                  className="voice-assistant-help-button"
+                  onClick={openHelp}
+                  title={t('voiceAssistant.getHelp')}
+                >
+                  {t('voiceAssistant.getHelp')}
+                </button>
+              ) : null}
             </div>
-            {showProgress ? <div className="voice-assistant-progress" aria-hidden="true" /> : null}
           </div>
-        </>
+        </>,
+        document.body,
       ) : null}
       {helpOpen ? createPortal(
         <div className="settings-modal-backdrop" role="presentation">
@@ -295,16 +266,24 @@ export const VoiceAssistantFlyout = forwardRef<VoiceAssistantFlyoutHandle, Voice
             <div className="release-notes-list">
               <section className="release-note-version">
                 <h3>{t('voiceAssistant.supportedCommands')}</h3>
-                <ol>
-                  <li>{`${t('voiceAssistant.command.play')} ${t('voiceAssistant.command.play1')}`}</li>
-                  <li>{t('voiceAssistant.command.play2')}</li>
-                  <li>{t('voiceAssistant.command.play3')}</li>
-                  <li>{`${t('voiceAssistant.command.playControl')} ${t('voiceAssistant.command.playControl1')}`}</li>
-                  <li>{`${t('voiceAssistant.command.volume')} ${t('voiceAssistant.command.volume1')}`}</li>
-                  <li>{t('voiceAssistant.command.volume2')}</li>
-                  <li>{`${t('voiceAssistant.command.search')} ${t('voiceAssistant.command.search1')}`}</li>
-                  <li>{`${t('voiceAssistant.command.help')} ${t('voiceAssistant.command.help1')}`}</li>
-                </ol>
+                <div className="voice-assistant-command-rows">
+                  <span>{t('voiceAssistant.command.play')}</span>
+                  <p>{t('voiceAssistant.command.play1')}</p>
+                  <span />
+                  <p>{t('voiceAssistant.command.play2')}</p>
+                  <span />
+                  <p>{t('voiceAssistant.command.play3')}</p>
+                  <span>{t('voiceAssistant.command.playControl')}</span>
+                  <p>{t('voiceAssistant.command.playControl1')}</p>
+                  <span>{t('voiceAssistant.command.volume')}</span>
+                  <p>{t('voiceAssistant.command.volume1')}</p>
+                  <span />
+                  <p>{t('voiceAssistant.command.volume2')}</p>
+                  <span>{t('voiceAssistant.command.search')}</span>
+                  <p>{t('voiceAssistant.command.search1')}</p>
+                  <span>{t('voiceAssistant.command.help')}</span>
+                  <p>{t('voiceAssistant.command.help1')}</p>
+                </div>
               </section>
               <section className="release-note-version">
                 <h3>{t('voiceAssistant.notice')}</h3>

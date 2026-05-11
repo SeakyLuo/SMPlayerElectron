@@ -13,12 +13,13 @@ import {
   screen,
   shell,
 } from 'electron'
+import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { copyFile, mkdir, readdir, stat } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { basename, dirname, extname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
-import type { OpenDialogOptions, Rectangle, SaveDialogOptions } from 'electron'
+import type { JumpListCategory, OpenDialogOptions, Rectangle, SaveDialogOptions } from 'electron'
 import type {
   AppInfo,
   GlobalMediaCommand,
@@ -33,7 +34,11 @@ import type {
   RemoteLibrarySnapshot,
   SearchHistoryEntry,
   TrackNotificationPayload,
+  VoiceRecognitionHypothesis,
+  VoiceRecognitionResult,
+  VoiceRecognitionStateChange,
 } from '../src/shared/contracts'
+import { createTranslator } from '../src/shared/i18n'
 import { SmplayerDataStore } from './services/data-store'
 import { AUDIO_EXTENSIONS, SMPLAYER_DB_NAME } from './services/constants'
 import { OpenFileCoordinator } from './services/open-file-coordinator'
@@ -53,6 +58,7 @@ let wasWindowMaximizedBeforeMiniMode = false
 const openFileCoordinator = new OpenFileCoordinator()
 const defaultWindowMinimumSize = { width: 506, height: 520 }
 const miniModeWindowSize = { width: 300, height: 300 }
+const windowsJumpListRecentLimit = 10
 
 function stopWindowDrag() {
   if (windowDragInterval) {
@@ -455,6 +461,230 @@ async function openVoiceAssistantPrivacySettings() {
   )
 }
 
+function escapePowerShellSingleQuotedString(value: string) {
+  return value.replace(/'/g, "''")
+}
+
+let activeVoiceRecognitionProcess: ChildProcessWithoutNullStreams | null = null
+
+type WindowsSpeechRecognitionOutput =
+  | (VoiceRecognitionHypothesis & { type: 'hypothesis' })
+  | { type: 'state'; state: string }
+  | (VoiceRecognitionResult & { type?: undefined })
+
+function cancelWindowsSpeechRecognition() {
+  activeVoiceRecognitionProcess?.kill()
+  activeVoiceRecognitionProcess = null
+}
+
+function getWindowsSpeechRecognitionScript(language: string) {
+  const cultureName = language.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en-US'
+
+  return `
+$ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+$cultureName = '${escapePowerShellSingleQuotedString(cultureName)}'
+$recognizer = $null
+
+function Write-RecognitionOutput($payload) {
+  $json = $payload | ConvertTo-Json -Compress
+  [Console]::Out.WriteLine($json)
+  [Console]::Out.Flush()
+}
+
+function Await-WinRtOperation($operation, [Type]$resultType) {
+  $method = [System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object {
+    $_.Name -eq 'AsTask' -and $_.IsGenericMethodDefinition -and $_.GetParameters().Count -eq 1
+  } | Select-Object -First 1
+  $task = $method.MakeGenericMethod($resultType).Invoke($null, @($operation))
+  return $task.GetAwaiter().GetResult()
+}
+
+function Resolve-SpeechLanguage($requestedLanguageTag) {
+  [Windows.Globalization.Language, Windows.Globalization, ContentType=WindowsRuntime] | Out-Null
+  $requestedLanguage = [Windows.Globalization.Language]::new($requestedLanguageTag)
+  $supportedLanguages = [Windows.Media.SpeechRecognition.SpeechRecognizer]::SupportedTopicLanguages
+  $exactLanguage = $supportedLanguages | Where-Object { $_.LanguageTag -eq $requestedLanguage.LanguageTag } | Select-Object -First 1
+  if ($null -ne $exactLanguage) {
+    return $exactLanguage
+  }
+
+  $primaryLanguage = $requestedLanguage.LanguageTag.Split('-')[0]
+  $primaryMatch = $supportedLanguages | Where-Object { $_.LanguageTag.StartsWith($primaryLanguage) } | Select-Object -First 1
+  if ($null -ne $primaryMatch) {
+    return $primaryMatch
+  }
+
+  return [Windows.Media.SpeechRecognition.SpeechRecognizer]::SystemSpeechLanguage
+}
+
+try {
+  Add-Type -AssemblyName System.Runtime.WindowsRuntime
+  [Windows.Media.SpeechRecognition.SpeechRecognizer, Windows.Media.SpeechRecognition, ContentType=WindowsRuntime] | Out-Null
+  $recognizerLanguage = Resolve-SpeechLanguage $cultureName
+  if ($null -eq $recognizerLanguage) {
+    Write-RecognitionOutput @{ text = ''; error = 'unavailable' }
+    exit 0
+  }
+
+  $recognizer = [Windows.Media.SpeechRecognition.SpeechRecognizer]::new($recognizerLanguage)
+  $recognizer.UIOptions.IsReadBackEnabled = $false
+  $recognizer.add_HypothesisGenerated({
+    param($sender, $eventArgs)
+    if ($null -ne $eventArgs -and -not [string]::IsNullOrWhiteSpace($eventArgs.Hypothesis.Text)) {
+      Write-RecognitionOutput @{ type = 'hypothesis'; text = $eventArgs.Hypothesis.Text }
+    }
+  })
+  $recognizer.add_StateChanged({
+    param($sender, $eventArgs)
+    if ($null -ne $eventArgs) {
+      Write-RecognitionOutput @{ type = 'state'; state = $eventArgs.State.ToString() }
+    }
+  })
+  $compileResult = Await-WinRtOperation ($recognizer.CompileConstraintsAsync()) ([Windows.Media.SpeechRecognition.SpeechRecognitionCompilationResult])
+  if ($compileResult.Status -ne [Windows.Media.SpeechRecognition.SpeechRecognitionResultStatus]::Success) {
+    Write-RecognitionOutput @{ text = ''; error = 'unavailable' }
+    exit 0
+  }
+
+  Write-RecognitionOutput @{ type = 'state'; state = 'Capturing' }
+  $result = Await-WinRtOperation ($recognizer.RecognizeWithUIAsync()) ([Windows.Media.SpeechRecognition.SpeechRecognitionResult])
+  if ($null -eq $result) {
+    Write-RecognitionOutput @{ text = ''; error = 'no-speech' }
+    exit 0
+  }
+  if ($result.Status -eq [Windows.Media.SpeechRecognition.SpeechRecognitionResultStatus]::UserCanceled) {
+    Write-RecognitionOutput @{ text = ''; error = 'canceled' }
+    exit 0
+  }
+  if ($result.Status -ne [Windows.Media.SpeechRecognition.SpeechRecognitionResultStatus]::Success) {
+    Write-RecognitionOutput @{ text = ''; error = 'failed' }
+    exit 0
+  }
+  if ([string]::IsNullOrWhiteSpace($result.Text)) {
+    Write-RecognitionOutput @{ text = ''; error = 'no-speech' }
+    exit 0
+  }
+
+  Write-RecognitionOutput @{ text = $result.Text }
+} catch [System.UnauthorizedAccessException] {
+  Write-RecognitionOutput @{ text = ''; error = 'privacy-required' }
+} catch {
+  if ($_.Exception.Message -like '*speech privacy policy*') {
+    Write-RecognitionOutput @{ text = ''; error = 'privacy-required' }
+  } else {
+    Write-RecognitionOutput @{ text = ''; error = 'failed' }
+  }
+} finally {
+  if ($null -ne $recognizer) {
+    $recognizer.Dispose()
+  }
+}
+`
+}
+
+function recognizeWindowsSpeech(language: string): Promise<VoiceRecognitionResult> {
+  if (process.platform !== 'win32') {
+    return Promise.resolve({ text: '', error: 'unsupported-platform' })
+  }
+
+  return new Promise((resolve) => {
+    cancelWindowsSpeechRecognition()
+    const script = getWindowsSpeechRecognitionScript(language)
+    const encodedScript = Buffer.from(script, 'utf16le').toString('base64')
+    const child = spawn('powershell.exe', [
+      '-NoProfile',
+      '-NonInteractive',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-EncodedCommand',
+      encodedScript,
+    ], {
+      windowsHide: true,
+    })
+    activeVoiceRecognitionProcess = child
+    let settled = false
+    let stdout = ''
+    let stdoutRemainder = ''
+    const finish = (result: VoiceRecognitionResult) => {
+      if (settled) {
+        return
+      }
+
+      settled = true
+      if (activeVoiceRecognitionProcess === child) {
+        activeVoiceRecognitionProcess = null
+      }
+      resolve(result)
+    }
+    const emitRecognitionState = (state: string) => {
+      let mappedState: VoiceRecognitionStateChange['state'] = 'idle'
+      if (state === 'Capturing' || state === 'SoundStarted' || state === 'SpeechDetected') {
+        mappedState = 'capturing'
+      } else if (state === 'Processing') {
+        mappedState = 'processing'
+      }
+
+      mainWindow?.webContents.send('voice:recognition-state', { state: mappedState } satisfies VoiceRecognitionStateChange)
+    }
+    const handleOutputLine = (line: string) => {
+      const output = line.trim()
+      if (!output) {
+        return
+      }
+
+      stdout += `${output}\n`
+      try {
+        const payload = JSON.parse(output) as WindowsSpeechRecognitionOutput
+        if (activeVoiceRecognitionProcess !== child) {
+          return
+        }
+
+        if (payload.type === 'hypothesis' && payload.text.trim()) {
+          mainWindow?.webContents.send('voice:recognition-hypothesis', { text: payload.text.trim() } satisfies VoiceRecognitionHypothesis)
+        } else if (payload.type === 'state' && payload.state) {
+          emitRecognitionState(payload.state)
+        }
+      } catch {
+        stdout += ''
+      }
+    }
+
+    const timeout = setTimeout(() => {
+      child.kill()
+      finish({ text: '', error: 'no-speech' })
+    }, 18000)
+
+    child.stdout.setEncoding('utf8')
+    child.stdout.on('data', (chunk: string) => {
+      stdoutRemainder += chunk
+      const lines = stdoutRemainder.split(/\r?\n/)
+      stdoutRemainder = lines.pop() ?? ''
+      lines.forEach(handleOutputLine)
+    })
+    child.on('error', () => {
+      clearTimeout(timeout)
+      finish({ text: '', error: 'failed' })
+    })
+    child.on('close', () => {
+      clearTimeout(timeout)
+      if (stdoutRemainder) {
+        handleOutputLine(stdoutRemainder)
+      }
+      try {
+        const output = stdout.trim().split(/\r?\n/).at(-1) ?? ''
+        const result = JSON.parse(output) as VoiceRecognitionResult
+        finish({
+          text: typeof result.text === 'string' ? result.text : '',
+          error: result.error,
+        })
+      } catch {
+        finish({ text: '', error: activeVoiceRecognitionProcess === child ? 'failed' : 'canceled' })
+      }
+    })
+  })
+}
+
 async function createWindow() {
   const startupNightModeActive = getStartupNightModeActive()
   mainWindow = new BrowserWindow({
@@ -532,7 +762,10 @@ async function createWindow() {
   })
   mainWindow.webContents.session.setPermissionRequestHandler((_webContents, permission, callback, details) => {
     const mediaTypes = 'mediaTypes' in details ? details.mediaTypes : undefined
-    callback(permission === 'media' && mediaTypes?.includes('audio') === true)
+    callback(permission === 'media' && (mediaTypes === undefined || mediaTypes.includes('audio')))
+  })
+  mainWindow.webContents.session.setPermissionCheckHandler((_webContents, permission) => {
+    return permission === 'media'
   })
 
   const startupRoute = resolveStartupRoute(dataStore!.getSettingsSnapshot().lastPage)
@@ -568,6 +801,42 @@ function showMainWindow() {
   }
   mainWindow.show()
   mainWindow.focus()
+}
+
+function updateWindowsJumpList() {
+  if (process.platform !== 'win32') {
+    return
+  }
+
+  const settings = dataStore!.getSettingsSnapshot()
+  const t = createTranslator(settings.preferredLanguage, app.getLocale())
+  const recentFileItems = dataStore!.getRecentPlayedSongPaths(windowsJumpListRecentLimit).map((filePath) => ({
+    type: 'file' as const,
+    path: filePath,
+  }))
+  const categories: JumpListCategory[] = [
+    ...(recentFileItems.length > 0
+      ? [{
+          type: 'custom' as const,
+          name: t('common.recent'),
+          items: recentFileItems,
+        }]
+      : []),
+    {
+      type: 'tasks',
+      items: [{
+        type: 'task',
+        title: t('app.shell'),
+        description: t('app.shell'),
+        program: process.execPath,
+        args: '--smplayer-show-window',
+        iconPath: getAppIconPath(),
+        iconIndex: 0,
+      }],
+    },
+  ]
+
+  app.setJumpList(categories)
 }
 
 function hideMainWindow() {
@@ -829,6 +1098,7 @@ app.whenReady().then(async () => {
   app.setAppUserModelId('com.seaky.smplayer')
   app.setPath('userData', await resolveUserDataPath())
   dataStore = new SmplayerDataStore(app.getPath('userData'))
+  updateWindowsJumpList()
   remotePlayServer = new RemotePlayServer(dataStore)
   if (dataStore.getRemoteShareSettings().shareEnabled) {
     await remotePlayServer.start()
@@ -1136,6 +1406,8 @@ app.whenReady().then(async () => {
   ipcMain.handle('shell:send-feedback-email', () => sendFeedbackEmail())
   ipcMain.handle('shell:open-feedback-browser', () => openFeedbackInBrowser())
   ipcMain.handle('shell:open-voice-assistant-privacy-settings', () => openVoiceAssistantPrivacySettings())
+  ipcMain.handle('voice:recognize', (_event, language: string) => recognizeWindowsSpeech(language))
+  ipcMain.handle('voice:cancel-recognition', () => cancelWindowsSpeechRecognition())
   ipcMain.handle('shell:reveal-system-logs', () => revealSystemLogs())
   ipcMain.handle('shell:show-track-notification', async (_event, track: TrackNotificationPayload) => {
     if (!Notification.isSupported()) {
@@ -1239,6 +1511,7 @@ app.whenReady().then(async () => {
     if (currentRootPath && importedRootPath && currentRootPath !== importedRootPath) {
       dataStore.replaceRootPathReferences(importedRootPath, currentRootPath)
     }
+    updateWindowsJumpList()
     return { canceled: false, path: sourcePath }
   })
   ipcMain.handle('library:set-favorite', (_event, songId: number, favorite: boolean) =>
@@ -1295,14 +1568,26 @@ app.whenReady().then(async () => {
     dataStore!.restoreRecentSearch(entry),
   )
   ipcMain.handle('search:clear-recent', () => dataStore!.clearRecentSearches())
-  ipcMain.handle('recent-played:remove', (_event, songIds: number[]) =>
-    dataStore!.removeRecentPlayed(songIds),
-  )
-  ipcMain.handle('recent-played:restore', (_event, songIds: number[]) =>
-    dataStore!.restoreRecentPlayed(songIds),
-  )
-  ipcMain.handle('recent-played:clear', () => dataStore!.clearRecentPlayed())
-  ipcMain.handle('settings:update', (_event, update) => dataStore!.updateSettings(update))
+  ipcMain.handle('recent-played:remove', (_event, songIds: number[]) => {
+    const result = dataStore!.removeRecentPlayed(songIds)
+    updateWindowsJumpList()
+    return result
+  })
+  ipcMain.handle('recent-played:restore', (_event, songIds: number[]) => {
+    const result = dataStore!.restoreRecentPlayed(songIds)
+    updateWindowsJumpList()
+    return result
+  })
+  ipcMain.handle('recent-played:clear', () => {
+    const result = dataStore!.clearRecentPlayed()
+    updateWindowsJumpList()
+    return result
+  })
+  ipcMain.handle('settings:update', (_event, update) => {
+    const result = dataStore!.updateSettings(update)
+    updateWindowsJumpList()
+    return result
+  })
   ipcMain.handle('preferences:update-settings', (_event, update) =>
     dataStore!.updatePreferenceSettings(update),
   )
@@ -1322,9 +1607,15 @@ app.whenReady().then(async () => {
   ipcMain.handle('playback:save-settings', (_event, update) =>
     dataStore!.savePlaybackSettings(update),
   )
-  ipcMain.handle('playback:mark-song-played', (_event, songId: number) =>
-    dataStore!.markSongPlayed(songId),
-  )
+  ipcMain.on('playback:save-settings-immediate', (event, update) => {
+    dataStore!.savePlaybackSettings(update)
+    event.returnValue = true
+  })
+  ipcMain.handle('playback:mark-song-played', (_event, songId: number) => {
+    const result = dataStore!.markSongPlayed(songId)
+    updateWindowsJumpList()
+    return result
+  })
 
   await createWindow()
   await openPendingFilePaths()
@@ -1344,6 +1635,7 @@ app.whenReady().then(async () => {
 
 app.on('before-quit', () => {
   isQuitting = true
+  dataStore?.flush()
   void remotePlayServer?.stop()
 })
 

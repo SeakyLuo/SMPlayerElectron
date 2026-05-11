@@ -271,7 +271,7 @@ export class SmplayerDataStore {
   private readonly upsertFileStatement
   private readonly getPlaylistsStatement
   private readonly getCustomPlaylistIdsStatement
-  private readonly getMaxCustomPlaylistPriorityStatement
+  private readonly incrementCustomPlaylistPrioritiesStatement
   private readonly getPlaylistSongIdsStatement
   private readonly getPlaylistItemsStatement
   private readonly getSongsStatement
@@ -279,6 +279,7 @@ export class SmplayerDataStore {
   private readonly getSongArtistsStatement
   private readonly getSongPathStatement
   private readonly getRecentSongsStatement
+  private readonly getRecentSongPathsStatement
   private readonly getCountsStatement
   private readonly getActivePlaylistStatement
   private readonly updatePlaybackRestoreStateStatement
@@ -598,7 +599,7 @@ export class SmplayerDataStore {
         ON Music.Id = PlaylistItem.ItemId
        AND Music.State = ?
       WHERE Playlist.State = ?
-      GROUP BY Playlist.Id, Playlist.Name, Playlist.Criterion
+      GROUP BY Playlist.Id, Playlist.Name, Playlist.Criterion, Playlist.Priority
       ORDER BY
         CASE
           WHEN Playlist.Id = ? THEN 0
@@ -620,11 +621,12 @@ export class SmplayerDataStore {
         LOWER(Playlist.Name),
         Playlist.Id
     `)
-    this.getMaxCustomPlaylistPriorityStatement = this.db.prepare(`
-      SELECT MAX(Priority) AS priority
-      FROM Playlist
+    this.incrementCustomPlaylistPrioritiesStatement = this.db.prepare(`
+      UPDATE Playlist
+      SET Priority = Priority + 1
       WHERE State = ?
         AND Id NOT IN (?, ?)
+        AND Name <> ?
     `)
     this.getPlaylistItemsStatement = this.db.prepare(`
       SELECT
@@ -723,6 +725,17 @@ export class SmplayerDataStore {
             AND ItemId = Music.Id
             AND State = ?
         ) AS favorite
+      FROM RecentRecord
+      INNER JOIN Music
+        ON Music.Id = CAST(RecentRecord.ItemId AS INTEGER)
+      WHERE RecentRecord.Type = 0
+        AND RecentRecord.State = ?
+        AND Music.State = ?
+      ORDER BY RecentRecord.Id DESC
+      LIMIT ?
+    `)
+    this.getRecentSongPathsStatement = this.db.prepare(`
+      SELECT Music.Path AS path
       FROM RecentRecord
       INNER JOIN Music
         ON Music.Id = CAST(RecentRecord.ItemId AS INTEGER)
@@ -1183,6 +1196,16 @@ export class SmplayerDataStore {
       lastPlaylistId: settings.LastPlaylist,
       lastReleaseNotesVersion: settings.LastReleaseNotesVersion,
     }
+  }
+
+  getRecentPlayedSongPaths(limit: number) {
+    const rows = this.getRecentSongPathsStatement.all(
+      ACTIVE_STATE.active,
+      ACTIVE_STATE.active,
+      limit,
+    ) as unknown as Array<{ path: string }>
+
+    return rows.map((row) => row.path)
   }
 
   getLibrarySnapshot(): LibrarySnapshot {
@@ -2758,16 +2781,16 @@ export class SmplayerDataStore {
   createPlaylist(name: string, songIds: number[] = []): LibraryPlaylist {
     const nextName = this.validatePlaylistName(name)
     const settings = this.getSettings()
-    const maxPriorityRow = this.getMaxCustomPlaylistPriorityStatement.get(
-      ACTIVE_STATE.active,
-      settings.MyFavorites,
-      settings.NowPlaying,
-    ) as { priority: number | null } | undefined
-    const nextPriority = (maxPriorityRow?.priority ?? -1) + 1
 
     this.db.exec('BEGIN')
     try {
-      const result = this.insertPlaylistStatement.run(nextName, nextPriority, ACTIVE_STATE.active)
+      this.incrementCustomPlaylistPrioritiesStatement.run(
+        ACTIVE_STATE.active,
+        settings.MyFavorites,
+        settings.NowPlaying,
+        PLAYLIST_NAMES.nowPlaying,
+      )
+      const result = this.insertPlaylistStatement.run(nextName, 0, ACTIVE_STATE.active)
       const playlistId = Number(result.lastInsertRowid)
       this.setPlaylistSongsState(playlistId, songIds, true)
       this.db.exec('COMMIT')
@@ -2775,6 +2798,7 @@ export class SmplayerDataStore {
       return {
         id: playlistId,
         name: nextName,
+        priority: 0,
         songCount: playlistSongIds.length,
         songIds: playlistSongIds,
         sortCriterion: 'title',
@@ -2805,15 +2829,33 @@ export class SmplayerDataStore {
   }
 
   restorePlaylist(playlist: LibraryPlaylist) {
+    const settings = this.getSettings()
+
     this.db.exec('BEGIN')
     try {
       const nextName = this.validatePlaylistName(playlist.name, playlist.id)
+      this.db.prepare(`
+        UPDATE Playlist
+        SET Priority = Priority + 1
+        WHERE State = ?
+          AND Id NOT IN (?, ?, ?)
+          AND Name <> ?
+          AND Priority >= ?
+      `).run(
+        ACTIVE_STATE.active,
+        settings.MyFavorites,
+        settings.NowPlaying,
+        playlist.id,
+        PLAYLIST_NAMES.nowPlaying,
+        playlist.priority,
+      )
       this.updatePlaylistNameStatement.run(nextName, playlist.id)
       this.db.prepare(`
         UPDATE Playlist
-        SET Criterion = ?
+        SET Criterion = ?,
+            Priority = ?
         WHERE Id = ?
-      `).run(this.toPlaylistSortValue(playlist.sortCriterion), playlist.id)
+      `).run(this.toPlaylistSortValue(playlist.sortCriterion), playlist.priority, playlist.id)
       this.updatePlaylistStateStatement.run(ACTIVE_STATE.active, playlist.id)
       this.markPlaylistItemsInactiveStatement.run(ACTIVE_STATE.inactive, playlist.id)
       this.setPlaylistSongsState(playlist.id, playlist.songIds, true)

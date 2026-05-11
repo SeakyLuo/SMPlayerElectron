@@ -8,14 +8,14 @@ import {
   type MediaControlTrack,
   type VoiceAssistantResponse,
 } from '../components/MediaControl'
+import { VoiceAssistantFlyout, type VoiceAssistantFlyoutHandle } from '../components/VoiceAssistantFlyout'
 import { Icon } from '../components/icons'
+import { getVolumeIconName } from '../components/volumeIcon'
 import { useSongArtwork } from '../hooks/useSongArtwork'
 import type { LibrarySong, PlaybackMode } from '../shared/contracts'
 import { formatDuration } from '../shared/formatters'
 import type { Translator } from '../shared/i18n'
 import { usePlaybackProgress } from '../state/playbackProgressStore'
-
-type VoiceAssistantState = 'idle' | 'capturing' | 'processing'
 
 interface MiniModePageProps {
   track: MediaControlTrack
@@ -77,14 +77,13 @@ export function MiniModePage({
   const [failedArtworkUrl, setFailedArtworkUrl] = useState('')
   const [moreOpen, setMoreOpen] = useState(false)
   const [voiceAssistantOpen, setVoiceAssistantOpen] = useState(false)
-  const [voiceAssistantText, setVoiceAssistantText] = useState('')
-  const [voiceAssistantState, setVoiceAssistantState] = useState<VoiceAssistantState>('idle')
-  const [voiceAssistantNeedsPrivacySettings, setVoiceAssistantNeedsPrivacySettings] = useState(false)
+  const [voiceAssistantAvailable, setVoiceAssistantAvailable] = useState(false)
+  const [volumeTooltipActive, setVolumeTooltipActive] = useState(false)
   const isProgressSeekingRef = useRef(false)
+  const volumeTooltipTimerRef = useRef<number | null>(null)
   const moreButtonRef = useRef<HTMLButtonElement | null>(null)
   const morePanelRef = useRef<HTMLDivElement | null>(null)
-  const speechRecognitionRef = useRef<SpeechRecognition | null>(null)
-  const voiceAssistantTimerRef = useRef<number | null>(null)
+  const voiceAssistantFlyoutRef = useRef<VoiceAssistantFlyoutHandle>(null)
   const { progressSeconds, durationSeconds } = usePlaybackProgress()
   const {
     artworkUrl: effectiveArtworkUrl,
@@ -103,139 +102,17 @@ export function MiniModePage({
   const progressMax = Math.max(effectiveDurationSeconds, 0)
   const progressFill = progressMax > 0 ? (progressValue / progressMax) * 100 : 0
   const volumeValue = disabled ? 0 : Math.min(Math.max(volume, 0), 100)
+  const volumeDisplayValue = Math.round(volumeValue)
   const playTitle = isPlaying ? t('player.pause') : t('player.play')
   const volumeTitle = isMuted ? t('player.unmute') : t('player.mute')
+  const volumeIconName = getVolumeIconName(volumeValue, isMuted)
   const trackTitle = track.title || t('nowPlaying.noActiveTrack')
   const trackArtist = track.artist || t('common.artistUnknown')
-
-  const clearVoiceAssistantTimer = () => {
-    if (voiceAssistantTimerRef.current != null) {
-      window.clearTimeout(voiceAssistantTimerRef.current)
-      voiceAssistantTimerRef.current = null
-    }
-  }
-
-  const closeVoiceAssistant = () => {
-    clearVoiceAssistantTimer()
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel()
-    }
-    speechRecognitionRef.current?.stop()
-    speechRecognitionRef.current = null
-    setVoiceAssistantOpen(false)
-    setVoiceAssistantState('idle')
-    setVoiceAssistantNeedsPrivacySettings(false)
-  }
-
-  const speakVoiceAssistantMessage = (message: string, ended: () => void) => {
-    if (!('speechSynthesis' in window)) {
-      ended()
-      return
-    }
-
-    window.speechSynthesis.cancel()
-    const utterance = new SpeechSynthesisUtterance(message)
-    utterance.lang = voiceLanguage
-    utterance.onend = ended
-    window.speechSynthesis.speak(utterance)
-  }
-
-  const startVoiceRecognition = (showHint: boolean) => {
-    const SpeechRecognition = window.SpeechRecognition ?? window.webkitSpeechRecognition
-
-    if (!SpeechRecognition) {
-      setVoiceAssistantText(t('voiceAssistant.unavailable'))
-      setVoiceAssistantNeedsPrivacySettings(true)
-      return
-    }
-
-    setVoiceAssistantNeedsPrivacySettings(false)
-    const recognition = new SpeechRecognition()
-    speechRecognitionRef.current = recognition
-    recognition.lang = voiceLanguage
-    recognition.continuous = false
-    recognition.interimResults = false
-    recognition.maxAlternatives = 1
-    recognition.onsoundstart = () => {
-      setVoiceAssistantState('capturing')
-      setVoiceAssistantText(t('voiceAssistant.listening'))
-    }
-    recognition.onspeechend = () => {
-      setVoiceAssistantState('processing')
-      setVoiceAssistantText(t('voiceAssistant.processing'))
-    }
-    recognition.onerror = (event) => {
-      setVoiceAssistantState('idle')
-      if (event.error === 'aborted') {
-        return
-      }
-
-      if (event.error === 'no-speech') {
-        voiceAssistantTimerRef.current = window.setTimeout(() => {
-          startVoiceRecognition(false)
-        }, 250)
-        return
-      }
-
-      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-        setVoiceAssistantNeedsPrivacySettings(true)
-        setVoiceAssistantText(t('voiceAssistant.privacyRequired'))
-        return
-      }
-
-      setVoiceAssistantText(t('voiceAssistant.notUnderstood'))
-    }
-    recognition.onend = () => {
-      setVoiceAssistantState('idle')
-      speechRecognitionRef.current = null
-    }
-    recognition.onresult = (event) => {
-      setVoiceAssistantState('processing')
-      const transcript = event.results[event.resultIndex][0].transcript.trim()
-      if (!transcript) {
-        setVoiceAssistantState('idle')
-        voiceAssistantTimerRef.current = window.setTimeout(() => {
-          startVoiceRecognition(false)
-        }, 250)
-        return
-      }
-
-      setVoiceAssistantText(transcript)
-      void onVoiceCommand(transcript).then(({ message, shouldContinue }) => {
-        setVoiceAssistantText(message)
-        speakVoiceAssistantMessage(message, () => {
-          if (shouldContinue) {
-            voiceAssistantTimerRef.current = window.setTimeout(() => {
-              startVoiceRecognition(false)
-            }, 250)
-          } else {
-            voiceAssistantTimerRef.current = window.setTimeout(closeVoiceAssistant, 5000)
-          }
-        })
-      })
-    }
-    recognition.addEventListener('nomatch', () => {
-      setVoiceAssistantState('idle')
-      voiceAssistantTimerRef.current = window.setTimeout(() => {
-        startVoiceRecognition(false)
-      }, 250)
-    })
-
-    if (showHint) {
-      setVoiceAssistantText(getVoiceHint())
-    }
-    setVoiceAssistantState('idle')
-    recognition.start()
-  }
 
   const openVoiceAssistant = () => {
     setMoreOpen(false)
     setVoiceAssistantOpen(true)
-    startVoiceRecognition(true)
-  }
-
-  const openVoiceAssistantPrivacySettings = () => {
-    void window.smplayer?.openVoiceAssistantPrivacySettings()
+    voiceAssistantFlyoutRef.current?.open()
   }
 
   const beginProgressSeek = (event: PointerEvent<HTMLInputElement>) => {
@@ -263,6 +140,53 @@ export function MiniModePage({
     })
   }
 
+  const clearVolumeTooltipTimer = () => {
+    if (volumeTooltipTimerRef.current != null) {
+      window.clearTimeout(volumeTooltipTimerRef.current)
+      volumeTooltipTimerRef.current = null
+    }
+  }
+
+  const keepVolumeTooltipVisible = () => {
+    if (disabled) {
+      return
+    }
+
+    clearVolumeTooltipTimer()
+    setVolumeTooltipActive(true)
+  }
+
+  const showVolumeTooltip = (duration = 900) => {
+    if (disabled) {
+      return
+    }
+
+    keepVolumeTooltipVisible()
+    volumeTooltipTimerRef.current = window.setTimeout(() => {
+      setVolumeTooltipActive(false)
+      volumeTooltipTimerRef.current = null
+    }, duration)
+  }
+
+  const hideVolumeTooltip = () => {
+    clearVolumeTooltipTimer()
+    setVolumeTooltipActive(false)
+  }
+
+  const commitVolumeChange = (value: string) => {
+    onVolumeChange(Number(value))
+  }
+
+  useEffect(() => {
+    void window.smplayer?.getAppInfo().then((appInfo) => {
+      setVoiceAssistantAvailable(appInfo.platform === 'win32')
+    })
+  }, [])
+
+  useEffect(() => () => {
+    clearVolumeTooltipTimer()
+  }, [])
+
   useEffect(() => {
     setFailedArtworkUrl('')
     if (track.id != null && baseArtworkUrl) {
@@ -272,6 +196,7 @@ export function MiniModePage({
 
   useEffect(() => {
     if (!moreOpen) {
+      hideVolumeTooltip()
       return
     }
 
@@ -289,14 +214,6 @@ export function MiniModePage({
       document.removeEventListener('pointerdown', closeMoreOnOutsidePointerDown)
     }
   }, [moreOpen])
-
-  useEffect(() => () => {
-    clearVoiceAssistantTimer()
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel()
-    }
-    speechRecognitionRef.current?.stop()
-  }, [])
 
   return (
     <section
@@ -354,16 +271,18 @@ export function MiniModePage({
           <span title={trackArtist}>{trackArtist}</span>
         </div>
         <div className="mini-mode-actions">
-          <button
-            className={voiceAssistantOpen ? 'is-active' : ''}
-            type="button"
-            disabled={disabled}
-            aria-label={t('player.voiceAssistant')}
-            title={t('player.voiceAssistant')}
-            onClick={openVoiceAssistant}
-          >
-            <Icon name="voice" />
-          </button>
+          {voiceAssistantAvailable ? (
+            <button
+              className={voiceAssistantOpen ? 'is-active' : ''}
+              type="button"
+              disabled={disabled}
+              aria-label={t('player.voiceAssistant')}
+              title={t('player.voiceAssistant')}
+              onClick={openVoiceAssistant}
+            >
+              <Icon name="voice" />
+            </button>
+          ) : null}
           <button
             ref={moreButtonRef}
             type="button"
@@ -371,7 +290,7 @@ export function MiniModePage({
             aria-label={t('player.more')}
             title={t('player.more')}
             onClick={() => {
-              closeVoiceAssistant()
+              voiceAssistantFlyoutRef.current?.close()
               setMoreOpen((current) => !current)
             }}
           >
@@ -440,20 +359,57 @@ export function MiniModePage({
           </button>
           <div className="mini-mode-volume-row">
             <button type="button" onClick={onToggleMute} aria-label={volumeTitle} title={volumeTitle}>
-              <Icon name={isMuted ? 'volumeMuted' : 'volume'} />
+              <Icon name={volumeIconName} />
             </button>
-            <input
-              className="mini-mode-volume-slider"
-              type="range"
-              min="0"
-              max="100"
-              value={volumeValue}
-              style={{ '--range-progress': `${volumeValue}%` } as CSSProperties}
-              onChange={(event) => {
-                onVolumeChange(Number(event.currentTarget.value))
-              }}
-              aria-label={t('player.volume')}
-            />
+            <div
+              className={`mini-mode-volume-slider-wrap${volumeTooltipActive ? ' is-active' : ''}${disabled ? ' is-disabled' : ''}`}
+              style={{ '--volume-tooltip-left': `${volumeValue}%` } as CSSProperties}
+            >
+              <input
+                className="mini-mode-volume-slider"
+                type="range"
+                min="0"
+                max="100"
+                value={volumeValue}
+                style={{ '--range-progress': `${volumeValue}%` } as CSSProperties}
+                disabled={disabled}
+                onChange={() => {
+                  keepVolumeTooltipVisible()
+                }}
+                onInput={(event) => {
+                  commitVolumeChange(event.currentTarget.value)
+                }}
+                onPointerDown={() => {
+                  keepVolumeTooltipVisible()
+                }}
+                onPointerEnter={() => {
+                  keepVolumeTooltipVisible()
+                }}
+                onPointerLeave={() => {
+                  hideVolumeTooltip()
+                }}
+                onPointerUp={(event) => {
+                  commitVolumeChange(event.currentTarget.value)
+                  showVolumeTooltip(650)
+                }}
+                onPointerCancel={() => {
+                  hideVolumeTooltip()
+                }}
+                onLostPointerCapture={(event) => {
+                  commitVolumeChange(event.currentTarget.value)
+                  showVolumeTooltip(650)
+                }}
+                onFocus={() => {
+                  keepVolumeTooltipVisible()
+                }}
+                onBlur={() => {
+                  hideVolumeTooltip()
+                }}
+                aria-label={t('player.volume')}
+                aria-valuetext={String(volumeDisplayValue)}
+              />
+              <span className="volume-slider-tooltip" aria-hidden="true">{volumeDisplayValue}</span>
+            </div>
           </div>
           <button type="button" role="menuitem" onClick={onExitMiniMode}>
             <Icon name="miniMode" />
@@ -462,19 +418,16 @@ export function MiniModePage({
         </div>
       ) : null}
 
-      {voiceAssistantOpen ? (
-        <div className={`mini-mode-voice-popover is-${voiceAssistantState}`} role="status">
-          <span>{t(`voiceAssistant.state.${voiceAssistantState}`)}</span>
-          <p>{voiceAssistantText}</p>
-          {voiceAssistantNeedsPrivacySettings ? (
-            <button type="button" onClick={openVoiceAssistantPrivacySettings} title={t('voiceAssistant.openPrivacySettings')}>
-              {t('voiceAssistant.openPrivacySettings')}
-            </button>
-          ) : null}
-          <button type="button" onClick={closeVoiceAssistant} aria-label={t('common.close')} title={t('common.close')}>
-            <Icon name="close" />
-          </button>
-        </div>
+      {voiceAssistantAvailable ? (
+        <VoiceAssistantFlyout
+          ref={voiceAssistantFlyoutRef}
+          t={t}
+          voiceLanguage={voiceLanguage}
+          onVoiceCommand={onVoiceCommand}
+          getVoiceHint={getVoiceHint}
+          onOpenChange={setVoiceAssistantOpen}
+          className="is-mini-mode"
+        />
       ) : null}
     </section>
   )

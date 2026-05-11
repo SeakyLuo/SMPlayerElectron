@@ -14,6 +14,7 @@ import {
   randomPlaylist,
   randomRecentAdded,
   randomRecentPlayed,
+  shuffleArray,
 } from '../shared/RandomPlayHelper'
 import type { IconName } from './icons'
 
@@ -34,6 +35,11 @@ export interface MenuFlyoutItem {
   text: string
   pendingText?: string
   icon?: IconName
+  kind?: 'button' | 'volume'
+  volumeValue?: number
+  volumeMuted?: boolean
+  onVolumeChange?: (volume: number) => void
+  onToggleMute?: () => void
   disabled?: boolean
   separator?: boolean
   keepOpen?: boolean
@@ -514,6 +520,9 @@ export function getShuffleMenuItems({
   const playSongs = (sourceSongs: LibrarySong[]) => {
     onPlaySongs(randomLibrary(sourceSongs.map((song) => song.id), randomLimit))
   }
+  const playAllSongs = (sourceSongs: LibrarySong[]) => {
+    onPlaySongs(shuffleArray(sourceSongs.map((song) => song.id)))
+  }
 
   const playableFolders = folders.filter((folder) => librarySongs.some((song) => isSongDirectlyInFolder(song, folder.path)))
   const playablePlaylists = playlists.filter((playlist) => playlist.songIds.length > 0)
@@ -524,7 +533,7 @@ export function getShuffleMenuItems({
   if (songs.length > 0) {
     items.push(
       { key: 'now-playing-separator', text: '', separator: true },
-      { key: 'now-playing', text: t('common.nowPlaying'), onClick: () => playSongs(songs) },
+      { key: 'now-playing', text: t('common.nowPlaying'), onClick: () => playAllSongs(songs) },
     )
   }
 

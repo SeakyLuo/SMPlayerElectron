@@ -18,6 +18,7 @@ import { getAddToPlaylistMenuFlyoutItem, getPreferenceMenuFlyoutItem, type MenuF
 import { MusicDialog } from './MusicDialog'
 import { usePreferenceStore } from '../state/usePreferenceStore'
 import { VoiceAssistantFlyout, type VoiceAssistantFlyoutHandle, type VoiceAssistantResponse } from './VoiceAssistantFlyout'
+import { getVolumeIconName } from './volumeIcon'
 
 export type { VoiceAssistantResponse } from './VoiceAssistantFlyout'
 
@@ -93,6 +94,7 @@ interface MediaControlButtonsProps {
   onToggleRepeatOne: () => void
   onToggleFavorite: () => void
   onVoiceAssistantClick: () => void
+  voiceAssistantAvailable: boolean
   voiceAssistantActive?: boolean
   isMuted: boolean
   onMoreClick: (event: MouseEvent<HTMLButtonElement>) => void
@@ -139,6 +141,32 @@ export function getRepeatOneTitle(t: Translator, mode: PlaybackMode) {
   return mode === 'repeat-one' ? t('player.repeatOneEnabled') : t('player.repeatOneDisabled')
 }
 
+function getPlaybackModeName(t: Translator, mode: PlaybackMode) {
+  switch (mode) {
+    case 'shuffle':
+      return t('player.playbackModeShuffle')
+    case 'repeat':
+      return t('player.playbackModeRepeat')
+    case 'repeat-one':
+      return t('player.playbackModeRepeatOne')
+    default:
+      return t('player.playbackModeList')
+  }
+}
+
+function getPlaybackModeIcon(mode: PlaybackMode): NonNullable<MenuFlyoutItem['icon']> {
+  switch (mode) {
+    case 'shuffle':
+      return 'shuffle'
+    case 'repeat':
+      return 'repeat'
+    case 'repeat-one':
+      return 'repeatOne'
+    default:
+      return 'nowPlaying'
+  }
+}
+
 export const DEFAULT_ARTWORK_URL = '/monotone_bg_wide.png'
 
 export function MediaControlButtons({
@@ -168,6 +196,7 @@ export function MediaControlButtons({
   onToggleRepeatOne,
   onToggleFavorite,
   onVoiceAssistantClick,
+  voiceAssistantAvailable,
   voiceAssistantActive = false,
   isMuted,
   onMoreClick,
@@ -177,6 +206,7 @@ export function MediaControlButtons({
   const [volumeTooltipActive, setVolumeTooltipActive] = useState(false)
   const volumeTooltipTimerRef = useRef<number | null>(null)
   const volumeDisplayValue = Math.round(volumeValue)
+  const volumeIconName = getVolumeIconName(volumeValue, isMuted)
 
   const clearVolumeTooltipTimer = () => {
     if (volumeTooltipTimerRef.current != null) {
@@ -201,6 +231,19 @@ export function MediaControlButtons({
   const hideVolumeTooltip = () => {
     clearVolumeTooltipTimer()
     setVolumeTooltipActive(false)
+  }
+
+  const keepVolumeTooltipVisible = () => {
+    if (disabled) {
+      return
+    }
+
+    clearVolumeTooltipTimer()
+    setVolumeTooltipActive(true)
+  }
+
+  const commitVolumeChange = (value: string) => {
+    onVolumeChange(Number(value))
   }
 
   useEffect(() => () => {
@@ -281,7 +324,7 @@ export function MediaControlButtons({
             aria-label={volumeTitle}
             title={volumeTitle}
           >
-            <Icon name={isMuted ? 'volumeMuted' : 'volume'} />
+            <Icon name={volumeIconName} />
           </button>
           <div
             className={`volume-slider-wrap${volumeTooltipActive ? ' is-active' : ''}${disabled ? ' is-disabled' : ''}`}
@@ -295,21 +338,30 @@ export function MediaControlButtons({
               value={volumeValue}
               style={{ '--range-progress': `${volumeValue}%` } as CSSProperties}
               disabled={disabled}
-              onChange={(event) => {
-                onVolumeChange(Number(event.currentTarget.value))
-                showVolumeTooltip()
+              onChange={() => {
+                keepVolumeTooltipVisible()
+              }}
+              onInput={(event) => {
+                commitVolumeChange(event.currentTarget.value)
               }}
               onPointerDown={() => {
-                clearVolumeTooltipTimer()
-                setVolumeTooltipActive(true)
+                keepVolumeTooltipVisible()
               }}
-              onPointerUp={() => {
+              onPointerEnter={() => {
+                keepVolumeTooltipVisible()
+              }}
+              onPointerLeave={() => {
+                hideVolumeTooltip()
+              }}
+              onPointerUp={(event) => {
+                commitVolumeChange(event.currentTarget.value)
                 showVolumeTooltip(650)
               }}
               onPointerCancel={() => {
                 hideVolumeTooltip()
               }}
-              onLostPointerCapture={() => {
+              onLostPointerCapture={(event) => {
+                commitVolumeChange(event.currentTarget.value)
                 showVolumeTooltip(650)
               }}
               onFocus={() => {
@@ -365,16 +417,18 @@ export function MediaControlButtons({
           >
             <Icon name="repeatOne" />
           </button>
-          <button
-            type="button"
-            disabled={disabled}
-            className={voiceAssistantActive ? 'is-active' : ''}
-            aria-label={t('player.voiceAssistant')}
-            title={t('player.voiceAssistant')}
-            onClick={onVoiceAssistantClick}
-          >
-            <Icon name="voice" />
-          </button>
+          {voiceAssistantAvailable ? (
+            <button
+              type="button"
+              disabled={disabled}
+              className={voiceAssistantActive ? 'is-active' : ''}
+              aria-label={t('player.voiceAssistant')}
+              title={t('player.voiceAssistant')}
+              onClick={onVoiceAssistantClick}
+            >
+              <Icon name="voice" />
+            </button>
+          ) : null}
           <button type="button" disabled={disabled} aria-label={t('player.more')} title={t('player.more')} onClick={onMoreClick}>
             <Icon name="moreHorizontal" />
           </button>
@@ -425,6 +479,7 @@ export function MediaControlSurface({
   const [isProgressSeeking, setIsProgressSeeking] = useState(false)
   const [draftProgressSeconds, setDraftProgressSeconds] = useState(0)
   const [voiceAssistantOpen, setVoiceAssistantOpen] = useState(false)
+  const [voiceAssistantAvailable, setVoiceAssistantAvailable] = useState(false)
   const isProgressSeekingRef = useRef(false)
   const voiceAssistantFlyoutRef = useRef<VoiceAssistantFlyoutHandle>(null)
   const { progressSeconds, durationSeconds } = usePlaybackProgress()
@@ -434,6 +489,12 @@ export function MediaControlSurface({
   const progressMax = Math.max(effectiveDurationSeconds, 0)
   const progressFill = progressMax > 0 ? (progressValue / progressMax) * 100 : 0
   const volumeValue = disabled ? 0 : Math.min(Math.max(volume, 0), 100)
+
+  useEffect(() => {
+    void window.smplayer?.getAppInfo().then((appInfo) => {
+      setVoiceAssistantAvailable(appInfo.platform === 'win32')
+    })
+  }, [])
 
   const beginProgressSeek = (event: PointerEvent<HTMLInputElement>) => {
     event.currentTarget.setPointerCapture(event.pointerId)
@@ -489,18 +550,21 @@ export function MediaControlSurface({
         onVoiceAssistantClick={() => {
           voiceAssistantFlyoutRef.current?.open()
         }}
-        voiceAssistantActive={voiceAssistantOpen}
+        voiceAssistantAvailable={voiceAssistantAvailable}
+        voiceAssistantActive={voiceAssistantAvailable && voiceAssistantOpen}
         isMuted={isMuted}
         onMoreClick={onMoreClick}
       />
-      <VoiceAssistantFlyout
-        ref={voiceAssistantFlyoutRef}
-        t={t}
-        voiceLanguage={voiceLanguage}
-        onVoiceCommand={onVoiceCommand}
-        getVoiceHint={getVoiceHint}
-        onOpenChange={setVoiceAssistantOpen}
-      />
+      {voiceAssistantAvailable ? (
+        <VoiceAssistantFlyout
+          ref={voiceAssistantFlyoutRef}
+          t={t}
+          voiceLanguage={voiceLanguage}
+          onVoiceCommand={onVoiceCommand}
+          getVoiceHint={getVoiceHint}
+          onOpenChange={setVoiceAssistantOpen}
+        />
+      ) : null}
     </>
   )
 }
@@ -558,6 +622,7 @@ export function MediaControl({
   const [dialogMode, setDialogMode] = useState<'properties' | 'lyrics' | 'album-art' | null>(null)
   const [preferenceItem, setPreferenceItem] = useState<PreferenceItemSnapshot | null>(null)
   const [lyrics, setLyrics] = useState<LyricsSnapshot | null>(null)
+  const [isCompactPlayerMenu, setIsCompactPlayerMenu] = useState(() => window.innerWidth < 720)
   const {
     artworkUrl: effectiveArtworkUrl,
     baseArtworkUrl,
@@ -590,6 +655,17 @@ export function MediaControl({
     setMoreMenu({ x: rect.left, y: rect.top })
     void refreshPreferenceItem()
   }
+
+  useEffect(() => {
+    const updateCompactMenu = () => {
+      setIsCompactPlayerMenu(window.innerWidth < 720)
+    }
+
+    window.addEventListener('resize', updateCompactMenu)
+    return () => {
+      window.removeEventListener('resize', updateCompactMenu)
+    }
+  }, [])
 
   useEffect(() => {
     setFailedArtworkUrl('')
@@ -744,6 +820,15 @@ export function MediaControl({
               }
             },
             onToggleFavorite,
+            mode,
+            volume,
+            isMuted,
+            isCompact: isCompactPlayerMenu,
+            onVolumeChange,
+            onToggleMute,
+            onToggleShuffle,
+            onToggleRepeat,
+            onToggleRepeatOne,
             onPreferenceChanged: refreshPreferenceItem,
             onSeeArtist: (artist) => {
               if (currentSong) {
@@ -806,6 +891,15 @@ function getPlayerMoreMenuItems({
   onCreatePlaylist,
   onAddToPlaylist,
   onToggleFavorite,
+  mode,
+  volume,
+  isMuted,
+  isCompact,
+  onVolumeChange,
+  onToggleMute,
+  onToggleShuffle,
+  onToggleRepeat,
+  onToggleRepeatOne,
   onPreferenceChanged,
   onSeeArtist,
   onSeeAlbum,
@@ -825,6 +919,15 @@ function getPlayerMoreMenuItems({
   onCreatePlaylist: (name: string) => void
   onAddToPlaylist: (playlistId: number) => void
   onToggleFavorite: () => void
+  mode: PlaybackMode
+  volume: number
+  isMuted: boolean
+  isCompact: boolean
+  onVolumeChange: (volume: number) => void
+  onToggleMute: () => void
+  onToggleShuffle: () => void
+  onToggleRepeat: () => void
+  onToggleRepeatOne: () => void
   onPreferenceChanged: () => void | Promise<void>
   onSeeArtist: (artist: string) => void
   onSeeAlbum: () => void
@@ -838,6 +941,61 @@ function getPlayerMoreMenuItems({
   const items: MenuFlyoutItem[] = [
     { key: 'quick-play', text: t('nowPlaying.quickPlay'), icon: 'play', onClick: onQuickPlay },
   ]
+  const volumeValue = Math.min(Math.max(volume, 0), 100)
+
+  const setPlaybackMode = (targetMode: PlaybackMode) => {
+    if (mode === targetMode) {
+      return
+    }
+
+    if (targetMode === 'shuffle') {
+      onToggleShuffle()
+    } else if (targetMode === 'repeat') {
+      onToggleRepeat()
+    } else if (targetMode === 'repeat-one') {
+      onToggleRepeatOne()
+    } else if (mode === 'shuffle') {
+      onToggleShuffle()
+    } else if (mode === 'repeat') {
+      onToggleRepeat()
+    } else if (mode === 'repeat-one') {
+      onToggleRepeatOne()
+    }
+  }
+
+  if (isCompact) {
+    items.push(
+      {
+        key: 'playback-mode',
+        text: `${t('player.playbackMode')}: ${getPlaybackModeName(t, mode)}`,
+        icon: getPlaybackModeIcon(mode),
+        submenu: [
+          { key: 'playback-mode-list', text: getPlaybackModeName(t, 'once'), icon: 'nowPlaying', onClick: () => setPlaybackMode('once') },
+          { key: 'playback-mode-shuffle', text: getPlaybackModeName(t, 'shuffle'), icon: 'shuffle', onClick: () => setPlaybackMode('shuffle') },
+          { key: 'playback-mode-repeat', text: getPlaybackModeName(t, 'repeat'), icon: 'repeat', onClick: () => setPlaybackMode('repeat') },
+          { key: 'playback-mode-repeat-one', text: getPlaybackModeName(t, 'repeat-one'), icon: 'repeatOne', onClick: () => setPlaybackMode('repeat-one') },
+        ],
+      },
+      {
+        key: 'player-volume',
+        text: t('player.volume'),
+        icon: getVolumeIconName(volumeValue, isMuted),
+        kind: 'volume',
+        keepOpen: true,
+        volumeValue,
+        volumeMuted: isMuted,
+        onVolumeChange,
+        onToggleMute,
+      },
+      {
+        key: 'player-favorite',
+        text: song?.favorite ? t('player.unlike') : t('player.like'),
+        icon: song?.favorite ? 'heartFilled' : 'heart',
+        disabled: !song,
+        onClick: onToggleFavorite,
+      },
+    )
+  }
 
   if (!song) {
     return items
@@ -849,7 +1007,7 @@ function getPlayerMoreMenuItems({
     t,
     defaultPlaylistName: song.title,
     includeNowPlaying: false,
-    includeFavorites: !song.favorite,
+    includeFavorites: !isCompact && !song.favorite,
     onAddToNowPlaying,
     onToggleFavorite,
     onCreatePlaylist,
@@ -860,7 +1018,31 @@ function getPlayerMoreMenuItems({
     items.push(addToItem)
   }
 
+  const viewItems: MenuFlyoutItem[] = [
+    { key: 'see-artist', text: t('context.seeArtist'), icon: 'users', onClick: () => onSeeArtist(song.artist) },
+    { key: 'see-album', text: t('context.seeAlbum'), icon: 'albums', onClick: onSeeAlbum },
+    { key: 'see-music-info', text: t('context.seeMusicInfo'), icon: 'info', keepOpen: true, onClick: onSeeMusicInfo },
+    { key: 'see-lyrics', text: t('context.seeLyrics'), icon: 'lyrics', keepOpen: true, onClick: onSeeLyrics },
+    { key: 'see-album-art', text: t('context.seeAlbumArt'), icon: 'pictures', keepOpen: true, onClick: onSeeAlbumArt },
+  ]
+
   items.push(
+    getPreferenceMenuFlyoutItem({
+      type: 'song',
+      itemId: String(song.id),
+      name: song.title,
+      preferenceItem,
+      t,
+      onUpdated: onPreferenceChanged,
+    }),
+    ...(isCompact
+      ? [{
+        key: 'view',
+        text: t('context.view'),
+        icon: 'view',
+        submenu: viewItems,
+      } satisfies MenuFlyoutItem]
+      : viewItems),
     {
       key: isWindowFullScreen ? 'exit-full-screen' : 'full-screen',
       text: isWindowFullScreen ? t('nowPlaying.exitFullScreenItem') : t('nowPlaying.fullScreen'),
@@ -873,19 +1055,6 @@ function getPlayerMoreMenuItems({
       icon: 'miniMode',
       onClick: onEnterMiniMode,
     },
-    getPreferenceMenuFlyoutItem({
-      type: 'song',
-      itemId: String(song.id),
-      name: song.title,
-      preferenceItem,
-      t,
-      onUpdated: onPreferenceChanged,
-    }),
-    { key: 'see-artist', text: t('context.seeArtist'), icon: 'users', onClick: () => onSeeArtist(song.artist) },
-    { key: 'see-album', text: t('context.seeAlbum'), icon: 'albums', onClick: onSeeAlbum },
-    { key: 'see-music-info', text: t('context.seeMusicInfo'), icon: 'info', keepOpen: true, onClick: onSeeMusicInfo },
-    { key: 'see-lyrics', text: t('context.seeLyrics'), icon: 'lyrics', keepOpen: true, onClick: onSeeLyrics },
-    { key: 'see-album-art', text: t('context.seeAlbumArt'), icon: 'pictures', keepOpen: true, onClick: onSeeAlbumArt },
   )
 
   return items

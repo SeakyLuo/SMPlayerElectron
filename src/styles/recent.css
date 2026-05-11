@@ -12,6 +12,7 @@
   flex: 0 0 auto;
   gap: 34px;
   min-height: 54px;
+  margin-top: 12px;
   padding: 0 18px 0 0;
   overflow: visible;
   -webkit-app-region: drag;
@@ -118,18 +119,78 @@
   -webkit-app-region: no-drag;
 }
 
+.recent-grid-scroll-frame,
+.recent-search-scroll-frame {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  -webkit-app-region: no-drag;
+}
+
 .recent-grid-shell,
 .recent-search-list {
   flex: 1 1 auto;
+  min-width: 0;
   min-height: 0;
   overflow: auto;
-  scrollbar-gutter: stable;
+  overflow-x: hidden;
+  scrollbar-gutter: auto;
+  scrollbar-width: none;
   -webkit-app-region: no-drag;
+}
+
+.recent-grid-shell::-webkit-scrollbar,
+.recent-search-list::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .recent-grid-shell *,
 .recent-search-list * {
   -webkit-app-region: no-drag;
+}
+
+.recent-scrollbar {
+  position: absolute;
+  top: 0;
+  right: -5px;
+  bottom: 4px;
+  z-index: 2;
+  display: block;
+  width: 9px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease;
+}
+
+.recent-grid-scroll-frame.has-scrollbar:hover .recent-scrollbar,
+.recent-grid-scroll-frame.has-scrollbar:focus-within .recent-scrollbar,
+.recent-grid-scroll-frame.has-scrollbar .recent-scrollbar:hover,
+.recent-search-scroll-frame.has-scrollbar:hover .recent-scrollbar,
+.recent-search-scroll-frame.has-scrollbar:focus-within .recent-scrollbar,
+.recent-search-scroll-frame.has-scrollbar .recent-scrollbar:hover {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.recent-scrollbar-thumb {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  top: var(--recent-scrollbar-thumb-top, 0);
+  height: var(--recent-scrollbar-thumb-height, 40px);
+  border-radius: 999px;
+  background: rgba(91, 105, 122, 0.5);
+  cursor: default;
+}
+
+.recent-scrollbar-thumb:hover {
+  left: 1px;
+  right: 1px;
+  background: rgba(67, 80, 96, 0.68);
 }
 
 .recent-grid-shell {
@@ -536,38 +597,41 @@
   padding: 0;
 }
 
+.app-shell.nav-minimal .recent-scrollbar {
+  right: auto;
+  left: calc(100% + 5px);
+}
+
 .app-shell.nav-minimal .recent-grid-shell {
   padding: 6px 0 0;
-  scrollbar-gutter: auto;
 }
 
 .app-shell.nav-minimal .recent-song-grid-window {
-  row-gap: 8px;
+  row-gap: 22px;
   padding-right: 0;
 }
 
 .app-shell.nav-minimal .recent-song-tile {
-  grid-template-columns: 84px minmax(0, 1fr);
-  gap: 10px;
-  min-height: 92px;
-  padding: 2px 6px 2px 2px;
-  border-radius: 9px;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 12px;
+  min-height: 116px;
+  padding: 3px 8px 3px 3px;
+  border-radius: 12px;
 }
 
 .app-shell.nav-minimal .recent-song-artwork-wrap,
 .app-shell.nav-minimal .recent-song-artwork {
-  width: 84px;
-  height: 84px;
+  width: 110px;
+  height: 110px;
 }
 
 .app-shell.nav-minimal .recent-song-copy {
-  gap: 3px;
-  padding: 4px 0;
+  gap: 5px;
+  padding: 8px 0 10px;
 }
 
 .app-shell.nav-minimal .recent-search-list {
   padding: 2px 0 0;
-  scrollbar-gutter: auto;
 }
 
 .app-shell.nav-minimal .recent-commandbar > strong {
@@ -594,6 +658,14 @@ body.night-mode .app-shell .workspace:has(.recent-page) {
 
 body.night-mode .app-shell .recent-page {
   color: var(--night-text);
+}
+
+body.night-mode .app-shell .recent-scrollbar-thumb {
+  background: rgba(203, 213, 225, 0.38);
+}
+
+body.night-mode .app-shell .recent-scrollbar-thumb:hover {
+  background: rgba(188, 202, 220, 0.62);
 }
 
 body.night-mode .app-shell .recent-tabs {

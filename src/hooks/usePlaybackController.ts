@@ -60,7 +60,7 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
 }
 
-export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackController {
+export function usePlaybackController(snapshot: LibrarySnapshot, ready: boolean): PlaybackController {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const loadedTrackIdRef = useRef<number | null>(null)
   const pendingStartSecondsRef = useRef(0)
@@ -183,9 +183,6 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
     currentTrackIdRef,
     currentQueueIndexRef,
     progressSecondsRef,
-    volumeRef,
-    isMutedRef,
-    modeRef,
     getPlaybackSongIds,
   })
 
@@ -459,6 +456,7 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
     pendingAutoplayRef,
     volumeRef,
     isMutedRef,
+    modeRef,
     isUserSeekingRef,
     pendingSeekSecondsRef,
     durationSecondsRef,
@@ -480,8 +478,7 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
   })
 
   useEffect(() => {
-    const audio = audioRef.current
-    if (!audio) {
+    if (!ready) {
       return
     }
 
@@ -489,13 +486,24 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
 
     if (!hydratedRef.current) {
       hydratedRef.current = true
-      audio.volume = nextVolume / 100
-      audio.muted = snapshot.settings.isMuted
+      volumeRef.current = nextVolume
+      isMutedRef.current = snapshot.settings.isMuted
+      modeRef.current = snapshot.settings.mode
+      const audio = audioRef.current
+      if (audio) {
+        audio.volume = nextVolume / 100
+        audio.muted = snapshot.settings.isMuted
+      }
       startTransition(() => {
         setVolume(nextVolume)
         setIsMuted(snapshot.settings.isMuted)
         setMode(snapshot.settings.mode)
       })
+    }
+
+    const audio = audioRef.current
+    if (!audio) {
+      return
     }
 
     const playbackSongIds = snapshotQueueSongIds
@@ -550,7 +558,7 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
           ? snapshot.settings.musicProgress
           : 0,
     })
-  }, [snapshot, snapshotQueueSongIds, transitionStatus, setDurationFromPlayback, setProgressFromPlayback])
+  }, [ready, snapshot, snapshotQueueSongIds, transitionStatus, setDurationFromPlayback, setProgressFromPlayback])
 
   const playTrack = useCallback(async (trackId: number, queueSongIds?: number[], queueIndex = -1) => {
     if (queueSongIds) {
@@ -750,12 +758,14 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
       const audio = audioRef.current
       const normalizedVolume = clamp(nextVolume, 0, 100)
 
+      volumeRef.current = normalizedVolume
       setVolume(normalizedVolume)
 
       if (audio) {
         audio.volume = normalizedVolume / 100
         if (normalizedVolume > 0 && audio.muted) {
           audio.muted = false
+          isMutedRef.current = false
           setIsMuted(false)
           void persistPlaybackSettings({ volume: normalizedVolume, isMuted: false })
           return
@@ -775,6 +785,7 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
 
     const nextMuted = !audio.muted
     audio.muted = nextMuted
+    isMutedRef.current = nextMuted
     setIsMuted(nextMuted)
     void persistPlaybackSettings({ isMuted: nextMuted })
   }, [persistPlaybackSettings])
@@ -786,6 +797,7 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
     }
 
     audio.muted = muted
+    isMutedRef.current = muted
     setIsMuted(muted)
     void persistPlaybackSettings({ isMuted: muted })
   }, [persistPlaybackSettings])
@@ -800,18 +812,21 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
       setCurrentQueueIndex(shuffledCurrentIndex > -1 ? shuffledCurrentIndex : null)
       void useLibraryStore.getState().replaceNowPlaying(queueOverrideRef.current)
     }
+    modeRef.current = nextMode
     setMode(nextMode)
     void persistPlaybackSettings({ mode: nextMode })
   }, [getPlaybackSongIds, persistPlaybackSettings])
 
   const toggleRepeat = useCallback(() => {
     const nextMode = modeRef.current === 'repeat' ? 'once' : 'repeat'
+    modeRef.current = nextMode
     setMode(nextMode)
     void persistPlaybackSettings({ mode: nextMode })
   }, [persistPlaybackSettings])
 
   const toggleRepeatOne = useCallback(() => {
     const nextMode = modeRef.current === 'repeat-one' ? 'once' : 'repeat-one'
+    modeRef.current = nextMode
     setMode(nextMode)
     void persistPlaybackSettings({ mode: nextMode })
   }, [persistPlaybackSettings])
@@ -829,6 +844,7 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
       nextMode = 'once'
     }
 
+    modeRef.current = nextMode
     setMode(nextMode)
     void persistPlaybackSettings({ mode: nextMode })
   }, [persistPlaybackSettings])

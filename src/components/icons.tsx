@@ -48,8 +48,6 @@ import {
   SelectAllOffRegular,
   SelectAllOnRegular,
   SettingsRegular,
-  Speaker2Regular,
-  SpeakerMuteRegular,
   StarRegular,
   type FluentIconsProps,
 } from '@fluentui/react-icons'
@@ -335,8 +333,21 @@ const paths = {
   ],
   volume: [
     <path key="speaker" d="M4 10v4h4l5 4V6l-5 4z" />,
-    <path key="wave1" d="M16 9.5a4 4 0 0 1 0 5" />,
-    <path key="wave2" d="M18.5 7a8 8 0 0 1 0 10" />,
+    <path key="wave1" d="M15.4 10.2a3 3 0 0 1 0 3.6" />,
+    <path key="wave2" d="M17.7 8.2a6 6 0 0 1 0 7.6" />,
+    <path key="wave3" d="M20 6.2a9 9 0 0 1 0 11.6" />,
+  ],
+  volumeOff: [
+    <path key="speaker" d="M4 10v4h4l5 4V6l-5 4z" />,
+  ],
+  volumeLow: [
+    <path key="speaker" d="M4 10v4h4l5 4V6l-5 4z" />,
+    <path key="wave1" d="M15.4 10.2a3 3 0 0 1 0 3.6" />,
+  ],
+  volumeMedium: [
+    <path key="speaker" d="M4 10v4h4l5 4V6l-5 4z" />,
+    <path key="wave1" d="M15.4 10.2a3 3 0 0 1 0 3.6" />,
+    <path key="wave2" d="M17.7 8.2a6 6 0 0 1 0 7.6" />,
   ],
   volumeMuted: [
     <path key="speaker" d="M4 10v4h4l5 4V6l-5 4z" />,
@@ -408,15 +419,17 @@ const fluentIcons: Partial<Record<IconName, FluentIconComponent>> = {
   undo: ArrowUndoRegular,
   import: ArrowDownloadRegular,
   voice: MicRegular,
-  volume: Speaker2Regular,
-  volumeMuted: SpeakerMuteRegular,
   users: PeopleRegular,
   view: EyeRegular,
 }
 
 export function Icon({ name, className, ...props }: IconProps & { name: IconName }) {
   const FluentIcon = fluentIcons[name]
-  const strokeWidth = name === 'albums' || name === 'playlists' || name === 'playNext' ? 1.35 : 2.2
+  const strokeWidth = name === 'albums' || name === 'playlists' || name === 'playNext'
+    ? 1.35
+    : name.startsWith('volume')
+      ? 1.45
+      : 2.2
 
   if (FluentIcon) {
     return (

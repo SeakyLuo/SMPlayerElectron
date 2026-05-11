@@ -25,7 +25,7 @@ interface LibraryStoreState {
   setSongsFavorite: (songIds: number[], favorite: boolean) => Promise<void>
   createPlaylist: (name: string, songIds?: number[]) => Promise<void>
   deletePlaylist: (playlistId: number) => Promise<void>
-  restorePlaylist: (playlist: LibraryPlaylist) => Promise<void>
+  restorePlaylist: (playlist: LibraryPlaylist, restoreIndex: number) => Promise<void>
   renamePlaylist: (playlistId: number, name: string) => Promise<void>
   reorderPlaylists: (playlistIds: number[]) => Promise<void>
   addSongToPlaylist: (playlistId: number, songId: number) => Promise<void>
@@ -216,6 +216,28 @@ function getFavoritePlaylistId(snapshot: LibrarySnapshot) {
   return snapshot.favorites.playlistId
 }
 
+function insertCustomPlaylistFirst(playlists: LibraryPlaylist[], playlist: LibraryPlaylist) {
+  const firstCustomPlaylistIndex = playlists.findIndex((item) => !item.isBuiltIn)
+
+  if (firstCustomPlaylistIndex < 0) {
+    return [...playlists, playlist]
+  }
+
+  return [
+    ...playlists.slice(0, firstCustomPlaylistIndex),
+    playlist,
+    ...playlists.slice(firstCustomPlaylistIndex),
+  ]
+}
+
+function insertPlaylistAtIndex(playlists: LibraryPlaylist[], playlist: LibraryPlaylist, index: number) {
+  return [
+    ...playlists.slice(0, index),
+    playlist,
+    ...playlists.slice(index),
+  ]
+}
+
 export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
   snapshot: emptySnapshot,
   loading: false,
@@ -335,7 +357,7 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
       set((state) => ({
         snapshot: {
           ...state.snapshot,
-          playlists: [...state.snapshot.playlists, playlist],
+          playlists: insertCustomPlaylistFirst(state.snapshot.playlists, playlist),
         },
       }))
     } catch (error) {
@@ -361,7 +383,7 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
       set({ error: getErrorMessage(error) })
     }
   },
-  restorePlaylist: async (playlist) => {
+  restorePlaylist: async (playlist, restoreIndex) => {
     if (!window.smplayer) {
       return
     }
@@ -373,7 +395,7 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
       set((state) => ({
         snapshot: {
           ...state.snapshot,
-          playlists: [...state.snapshot.playlists, playlist],
+          playlists: insertPlaylistAtIndex(state.snapshot.playlists, playlist, restoreIndex),
         },
       }))
     } catch (error) {

@@ -397,15 +397,24 @@
 
 .now-playing-full-player-exit {
   grid-column: 1;
+  padding: 0;
   color: rgba(255, 255, 255, 0.9);
   -webkit-app-region: no-drag;
 }
 
-.now-playing-full-player-exit:hover,
-.now-playing-full-player-exit:focus-visible {
+.now-playing-full-player-bar .now-playing-full-player-exit:hover,
+.now-playing-full-player-bar .now-playing-full-player-exit:focus-visible {
   background: transparent;
   border-color: transparent;
   color: #fff;
+}
+
+body.night-mode .app-shell .now-playing-full-page .now-playing-full-player-bar .now-playing-full-player-exit:hover,
+body.night-mode .app-shell .now-playing-full-page .now-playing-full-player-bar .now-playing-full-player-exit:focus-visible,
+.now-playing-full-page .now-playing-full-player-bar .now-playing-full-player-exit:hover,
+.now-playing-full-page .now-playing-full-player-bar .now-playing-full-player-exit:focus-visible {
+  background: transparent;
+  border-color: transparent;
 }
 
 .now-playing-full-player-exit .player-artwork-shell {
@@ -455,6 +464,16 @@
 }
 
 .now-playing-full-player-bar .player-utility .favorite-toggle.is-active:hover {
+  background: rgba(255, 255, 255, 0.22);
+  color: #ff1d1d;
+}
+
+body.night-mode .app-shell .now-playing-full-player-bar .player-utility .favorite-toggle.is-active {
+  background: transparent;
+  color: #ff1d1d;
+}
+
+body.night-mode .app-shell .now-playing-full-player-bar .player-utility .favorite-toggle.is-active:hover {
   background: rgba(255, 255, 255, 0.22);
   color: #ff1d1d;
 }
@@ -525,8 +544,8 @@
   color: rgba(8, 12, 18, 0.9);
 }
 
-.now-playing-full-page.is-day .now-playing-full-player-exit:hover,
-.now-playing-full-page.is-day .now-playing-full-player-exit:focus-visible {
+.now-playing-full-page.is-day .now-playing-full-player-bar .now-playing-full-player-exit:hover,
+.now-playing-full-page.is-day .now-playing-full-player-bar .now-playing-full-player-exit:focus-visible {
   background: transparent;
   border-color: transparent;
   color: rgba(8, 12, 18, 0.9);
@@ -569,6 +588,16 @@
 .now-playing-full-page.is-day .now-playing-full-player-bar .player-utility button.is-active {
   background: rgba(var(--accent-rgb), 0.1);
   color: var(--accent-strong);
+}
+
+.now-playing-full-page.is-day .now-playing-full-player-bar .player-utility .favorite-toggle.is-active {
+  background: transparent;
+  color: #ff1d1d;
+}
+
+.now-playing-full-page.is-day .now-playing-full-player-bar .player-utility .favorite-toggle.is-active:hover {
+  background: rgba(var(--accent-rgb), 0.1);
+  color: #ff1d1d;
 }
 
 .now-playing-full-page.is-day .now-playing-full-player-bar .transport-button.primary {

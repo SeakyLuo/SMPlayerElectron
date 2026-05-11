@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useLayoutEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import clsx from 'clsx'
 
@@ -9,16 +9,19 @@ import { Icon } from './icons'
 export function AppBarPortal({ children }: { children: ReactNode }) {
   const [host, setHost] = useState<HTMLElement | null>(null)
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const updateHost = () => {
       setHost(document.getElementById(APPBAR_PAGE_ACTIONS_ID))
     }
 
     updateHost()
     window.addEventListener('resize', updateHost)
+    const observer = new MutationObserver(updateHost)
+    observer.observe(document.body, { childList: true, subtree: true })
 
     return () => {
       window.removeEventListener('resize', updateHost)
+      observer.disconnect()
     }
   }, [])
 
@@ -32,16 +35,19 @@ export function AppBarPortal({ children }: { children: ReactNode }) {
 export function AppBarBottomPortal({ children }: { children: ReactNode }) {
   const [host, setHost] = useState<HTMLElement | null>(null)
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const updateHost = () => {
       setHost(document.getElementById(APPBAR_PAGE_BOTTOM_ID))
     }
 
     updateHost()
     window.addEventListener('resize', updateHost)
+    const observer = new MutationObserver(updateHost)
+    observer.observe(document.body, { childList: true, subtree: true })
 
     return () => {
       window.removeEventListener('resize', updateHost)
+      observer.disconnect()
     }
   }, [])
 

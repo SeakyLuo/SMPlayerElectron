@@ -8,7 +8,7 @@ import { HeaderedPlaylistControl } from '../components/HeaderedPlaylistControl'
 import { Icon } from '../components/icons'
 import { LoadingState } from '../components/LoadingState'
 import { MenuFlyout } from '../components/MenuFlyout'
-import type { MenuFlyoutItem } from '../components/MenuFlyoutHelper'
+import { getPlaylistCardMenuItems } from '../components/PlaylistMenuItems'
 import { RenameDialog } from '../components/RenameDialog'
 import type { LibraryPlaylist, LibrarySnapshot, PlaylistSortCriterion, PreferenceLevel } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
@@ -431,10 +431,7 @@ export function PlaylistsPage({
         loading ? (
           <LoadingState t={t} compact />
         ) : (
-        <div className="empty-state compact">
-          <h3>{t('playlists.none')}</h3>
-          <p>{t('playlists.noneCopy')}</p>
-        </div>
+          null
         )
       ) : (
         <div className="grid-view-holder-grid">
@@ -557,47 +554,4 @@ export function PlaylistsPage({
       ) : null}
     </section>
   )
-}
-
-function getPlaylistCardMenuItems({
-  playlist,
-  playlists,
-  t,
-  onCreatePlaylistWithSongs,
-  onRequestRenamePlaylist,
-  onDeletePlaylist,
-}: {
-  playlist: LibraryPlaylist
-  playlists: LibraryPlaylist[]
-  t: Translator
-  onCreatePlaylistWithSongs: (name: string, songIds: number[]) => void
-  onRequestRenamePlaylist: (playlist: LibraryPlaylist) => void
-  onDeletePlaylist: (playlistId: number) => void
-}) {
-  return [
-    {
-      key: 'rename-playlist',
-      text: t('playlists.rename'),
-      icon: 'rename',
-      onClick: () => {
-        onRequestRenamePlaylist(playlist)
-      },
-    },
-    {
-      key: 'duplicate-playlist',
-      text: t('playlists.duplicate'),
-      icon: 'copy',
-      onClick: () => {
-        onCreatePlaylistWithSongs(getNextPlaylistName(playlist.name, playlists, t), playlist.songIds)
-      },
-    },
-    {
-      key: 'delete-playlist',
-      text: t('playlists.delete'),
-      icon: 'trash',
-      onClick: () => {
-        onDeletePlaylist(playlist.id)
-      },
-    },
-  ] satisfies MenuFlyoutItem[]
 }
