@@ -5,6 +5,8 @@ import type { LibrarySong } from '../shared/contracts'
 
 interface MediaSessionOptions {
   currentTrack: LibrarySong | null
+  unknownAlbum: string
+  unknownArtist: string
   isPlaying: boolean
   onPlay: () => void
   onPause: () => void
@@ -38,6 +40,8 @@ export function updateMediaSessionPosition(durationSeconds: number, progressSeco
 
 export function useMediaSession({
   currentTrack,
+  unknownAlbum,
+  unknownArtist,
   isPlaying,
   onPlay,
   onPause,
@@ -59,8 +63,8 @@ export function useMediaSession({
 
     navigator.mediaSession.metadata = new MediaMetadata({
       title: currentTrack.title,
-      artist: getDisplayArtists(currentTrack),
-      album: currentTrack.album || 'Unknown album',
+      artist: getDisplayArtists(currentTrack, unknownArtist),
+      album: currentTrack.album || unknownAlbum,
       artwork: currentTrack.artworkUrl
         ? [
             { src: currentTrack.artworkUrl, sizes: '96x96', type: 'image/png' },
@@ -71,7 +75,7 @@ export function useMediaSession({
           ]
         : [],
     })
-  }, [currentTrack])
+  }, [currentTrack, unknownAlbum, unknownArtist])
 
   useEffect(() => {
     if ('mediaSession' in navigator) {

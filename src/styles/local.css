@@ -70,13 +70,10 @@
   width: 100%;
   min-height: 42px;
   padding: 3px 6px;
-  border: 1px solid rgba(101, 114, 132, 0.2);
+  border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(247, 249, 252, 0.74));
-  box-shadow:
-    0 10px 28px rgba(42, 56, 74, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.92);
+  background: var(--panel);
+  box-shadow: var(--card-shadow);
   color: var(--text-strong);
   min-width: 0;
   overflow-x: auto;
@@ -112,7 +109,7 @@
 }
 
 .hidden-folders-list-button:hover {
-  background: rgba(49, 63, 84, 0.08);
+  background: var(--surface-control-hover);
   color: var(--text-strong);
 }
 
@@ -170,7 +167,7 @@
 
 .folder-chain-item:hover,
 .folder-chain-item.is-open {
-  background: rgba(49, 63, 84, 0.07);
+  background: var(--surface-control-hover);
 }
 
 .folder-chain-item.is-current .folder-chain-item-path-button {
@@ -202,18 +199,16 @@
 }
 
 .folder-chain-item-flyout {
-  position: absolute;
-  top: 36px;
-  left: 0;
+  position: fixed;
   z-index: 60;
   display: grid;
   min-width: 180px;
   max-width: min(420px, calc(100vw - 48px));
   max-height: 320px;
   padding: 6px;
-  border: 1px solid rgba(104, 117, 136, 0.2);
+  border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  background: rgba(252, 253, 255, 0.96);
+  background: var(--surface-menu);
   box-shadow: 0 18px 44px rgba(35, 49, 68, 0.18);
   backdrop-filter: blur(18px);
   overflow: auto;
@@ -271,14 +266,12 @@
   justify-content: center;
   gap: 8px;
   min-height: 40px;
-  border: 1px solid rgba(112, 124, 142, 0.2);
+  border: 1px solid var(--border-subtle);
   border-radius: 9px;
   padding: 0 14px;
-  background: rgba(255, 255, 255, 0.64);
+  background: var(--surface-control);
   color: var(--text-strong);
-  box-shadow:
-    0 8px 20px rgba(36, 50, 70, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.74);
+  box-shadow: var(--card-shadow);
   font: inherit;
   font-size: 14px;
   font-weight: 650;
@@ -289,7 +282,7 @@
 
 .local-command:hover,
 .local-command.is-active {
-  background: rgba(var(--accent-rgb), 0.1);
+  background: var(--surface-control-hover);
   color: var(--accent-strong);
 }
 
@@ -324,9 +317,9 @@
   flex: 0 0 auto;
   min-height: 48px;
   padding: 8px 12px;
-  border: 1px solid rgba(126, 139, 154, 0.18);
+  border: 1px solid var(--border-subtle);
   border-radius: 12px;
-  background: rgba(247, 249, 252, 0.82);
+  background: var(--panel);
 }
 
 .local-selection-bar strong {
@@ -342,7 +335,7 @@
   min-height: 34px;
   border: 0;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.74);
+  background: var(--surface-control);
   color: var(--text-strong);
   padding: 0 11px;
   font: inherit;
@@ -356,7 +349,7 @@
   gap: 8px;
   min-height: 34px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.74);
+  background: var(--surface-control);
   color: var(--text-strong);
   padding: 0 10px;
   font-size: 13px;
@@ -561,14 +554,14 @@
 }
 
 .local-song-quick-jump button:disabled {
-  color: rgba(91, 105, 122, 0.24);
+  color: color-mix(in srgb, var(--text-muted) 42%, transparent);
   cursor: default;
   opacity: 0.62;
 }
 
 .local-song-quick-jump button:disabled:hover {
   background: transparent;
-  color: rgba(91, 105, 122, 0.24);
+  color: color-mix(in srgb, var(--text-muted) 42%, transparent);
 }
 
 .local-table-quick-jump-row td {
@@ -600,11 +593,9 @@
   min-width: 0;
   border: 0;
   border-radius: 11px;
-  background: rgba(255, 255, 255, 0.76);
+  background: var(--surface-card);
   color: var(--text-strong);
-  box-shadow:
-    0 10px 26px rgba(48, 62, 80, 0.12),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.7);
+  box-shadow: var(--card-shadow);
   text-align: left;
   text-decoration: none;
   cursor: pointer;
@@ -721,10 +712,8 @@
 .local-song-card.is-selected,
 .local-song-card.is-current {
   transform: translateY(-1px);
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow:
-    0 16px 34px rgba(48, 62, 80, 0.18),
-    inset 0 0 0 1px rgba(var(--accent-rgb), 0.16);
+  background: var(--surface-card-hover);
+  box-shadow: var(--card-hover-shadow);
 }
 
 .local-folder-card:hover .grid-artwork-card-cover,
@@ -735,7 +724,7 @@
 .local-grid-song-card:focus-visible .local-grid-song-cover,
 .local-grid-song-card:focus-within .local-grid-song-cover,
 .local-grid-song-card.is-selected .local-grid-song-cover {
-  box-shadow: 10px 10px 20px rgba(32, 45, 63, 0.28);
+  box-shadow: var(--artwork-shadow);
 }
 
 .grid-artwork-card-cover {
@@ -749,7 +738,7 @@
   align-self: center;
   border-radius: 8px;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--surface-artwork);
   box-shadow: 10px 10px 20px rgba(32, 45, 63, 0);
   transition: box-shadow 120ms ease;
 }
@@ -787,9 +776,7 @@
 .grid-artwork-card-cover-tile-fallback {
   min-width: 0;
   min-height: 0;
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.86), rgba(var(--accent-rgb), 0.1)),
-    rgba(255, 255, 255, 0.74);
+  background: var(--surface-artwork);
 }
 
 .grid-artwork-card-cover-fallback svg {
@@ -812,10 +799,8 @@
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.82);
-  box-shadow:
-    0 8px 18px rgba(30, 42, 58, 0.16),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.62);
+  background: var(--floating-icon-bg);
+  box-shadow: var(--card-shadow);
   backdrop-filter: blur(16px) saturate(150%);
   -webkit-backdrop-filter: blur(16px) saturate(150%);
 }
@@ -852,7 +837,7 @@
   height: 160px;
   border-radius: 8px;
   object-fit: cover;
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--surface-artwork);
   box-shadow: 10px 10px 20px rgba(32, 45, 63, 0);
   transition: box-shadow 120ms ease;
 }
@@ -1023,7 +1008,7 @@
   position: absolute;
   top: 12px;
   right: 12px;
-  background: rgba(255, 255, 255, 0.82);
+  background: var(--selection-mark-bg);
 }
 
 .local-card-check.is-selected,
@@ -1058,7 +1043,7 @@
   height: 76px;
   border-radius: 7px;
   object-fit: cover;
-  background: rgba(255, 255, 255, 0.78);
+  background: var(--surface-artwork);
 }
 
 .local-song-artwork-fallback {
@@ -1275,7 +1260,7 @@
 .app-shell.nav-minimal .local-scrollbar {
   position: absolute;
   top: 4px;
-  right: 1px;
+  right: -5px;
   bottom: 4px;
   z-index: 2;
   display: block;
@@ -1325,12 +1310,10 @@
   flex-direction: column;
   gap: 0;
   margin-right: 0;
-  border: 1px solid rgba(126, 139, 154, 0.12);
+  border: 1px solid var(--border-subtle);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.72);
-  box-shadow:
-    0 10px 24px rgba(34, 48, 70, 0.07),
-    inset 0 1px 0 rgba(255, 255, 255, 0.78);
+  background: var(--panel);
+  box-shadow: var(--card-shadow);
   overflow: hidden;
 }
 
@@ -1353,7 +1336,7 @@
 }
 
 .app-shell.nav-minimal .local-folder-card-list:not(:last-child) {
-  border-bottom: 1px solid rgba(106, 119, 136, 0.11);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .app-shell.nav-minimal .local-folder-card-list.is-selected {
@@ -1363,7 +1346,7 @@
 .app-shell.nav-minimal .local-folder-card-list:not(.is-selected):hover,
 .app-shell.nav-minimal .local-folder-card-list:focus-visible,
 .app-shell.nav-minimal .local-folder-card-list:focus-within {
-  background: rgba(28, 38, 52, 0.045);
+  background: var(--surface-card-hover);
 }
 
 .app-shell.nav-minimal .local-folder-list-icon {
@@ -1500,12 +1483,10 @@
   grid-row: 1;
   margin-right: 0;
   gap: 0;
-  border: 1px solid rgba(126, 139, 154, 0.12);
+  border: 1px solid var(--border-subtle);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.72);
-  box-shadow:
-    0 10px 24px rgba(34, 48, 70, 0.07),
-    inset 0 1px 0 rgba(255, 255, 255, 0.78);
+  background: var(--panel);
+  box-shadow: var(--card-shadow);
   overflow: hidden;
 }
 
@@ -1514,7 +1495,7 @@
 }
 
 .app-shell.nav-minimal .local-compact-song-row:not(:last-child) {
-  border-bottom: 1px solid rgba(106, 119, 136, 0.11);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .app-shell.nav-minimal .local-compact-song-list .now-playing-queue-item,
@@ -1595,7 +1576,7 @@
   gap: 0 10px;
   min-height: 72px;
   padding: 8px 8px 8px 10px;
-  border-top: 1px solid rgba(114, 126, 140, 0.12);
+  border-top: 1px solid var(--border-subtle);
   border-radius: 8px;
   background: transparent;
   box-sizing: border-box;
@@ -1608,29 +1589,21 @@
   min-height: 58px;
   margin: 8px 0;
   padding: 0 14px;
-  border: 1px solid rgba(126, 139, 154, 0.13);
+  border: 1px solid var(--border-subtle);
   border-radius: 10px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(249, 251, 254, 0.74));
-  box-shadow:
-    0 6px 16px rgba(43, 57, 76, 0.07),
-    inset 0 1px 0 rgba(255, 255, 255, 0.84);
+  background: var(--panel);
+  box-shadow: var(--card-shadow);
 }
 
 .app-shell.nav-minimal .local-table-shell .music-table tbody tr.local-table-folder-row:hover {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(249, 251, 254, 0.82));
-  box-shadow:
-    0 8px 20px rgba(43, 57, 76, 0.09),
-    inset 0 0 0 1px rgba(var(--accent-rgb), 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.88);
+  background: var(--surface-card-hover);
+  box-shadow: var(--card-hover-shadow);
 }
 
 .app-shell.nav-minimal .local-table-shell .music-table tbody tr.local-table-folder-row.is-selected {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(var(--accent-rgb), 0.07));
+  background: var(--surface-card-selected);
   box-shadow:
-    0 8px 20px rgba(43, 57, 76, 0.09),
+    var(--card-shadow),
     inset 3px 0 0 var(--accent);
 }
 
@@ -1810,11 +1783,11 @@
 }
 
 .hidden-storage-item[data-row='even'] {
-  background: rgba(255, 255, 255, 0.42);
+  background: var(--surface-subtle);
 }
 
 .hidden-storage-item[data-row='odd'] {
-  background: rgba(245, 247, 250, 0.42);
+  background: var(--panel);
 }
 
 .hidden-storage-item-icon {
@@ -1842,9 +1815,9 @@
 .hidden-storage-resume-button {
   min-height: 32px;
   margin: 0 6px;
-  border: 1px solid rgba(112, 124, 142, 0.24);
+  border: 1px solid var(--border-subtle);
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--surface-control);
   color: var(--text-strong);
   padding: 0 12px;
   font: inherit;
@@ -1855,4 +1828,30 @@
 .hidden-storage-resume-button:hover {
   background: rgba(var(--accent-rgb), 0.1);
   color: var(--accent-strong);
+}
+
+body.night-mode .app-shell .workspace:has(.local-page),
+body.night-mode .app-shell .workspace:has(.hidden-folders-page) {
+  background: var(--night-shell-bg);
+}
+
+body.night-mode .app-shell .local-page,
+body.night-mode .app-shell .hidden-folders-page {
+  color: var(--night-text);
+}
+
+body.night-mode .app-shell .folder-chain-item-flyout {
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.34);
+}
+
+body.night-mode .app-shell .folder-chain-item:hover,
+body.night-mode .app-shell .folder-chain-item.is-open {
+  background: rgba(var(--accent-rgb), 0.18);
+}
+
+body.night-mode .app-shell .folder-chain-item:hover .folder-chain-item-path-button,
+body.night-mode .app-shell .folder-chain-item.is-open .folder-chain-item-path-button,
+body.night-mode .app-shell .folder-chain-item:hover .folder-chain-item-dropdown-button,
+body.night-mode .app-shell .folder-chain-item.is-open .folder-chain-item-dropdown-button {
+  color: var(--night-text);
 }

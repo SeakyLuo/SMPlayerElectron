@@ -44,7 +44,7 @@ export function GridViewMusicItemControl({
   onContextMenu,
   onDragStart,
 }: GridViewMusicItemControlProps) {
-  const artistLabel = getDisplayArtists(song)
+  const artistLabel = getDisplayArtists(song, t('common.artistUnknown'))
   const open = () => {
     if (multiSelect) {
       onToggleSelection(song.id)

@@ -508,6 +508,16 @@
   overflow-wrap: anywhere;
 }
 
+.music-table .table-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.music-table .table-link:hover {
+  color: var(--accent-strong);
+  text-decoration: none;
+}
+
 .music-table tbody tr.is-current .song-name {
   color: var(--text-strong);
 }
@@ -574,6 +584,25 @@
   fill: currentColor;
 }
 
+.library-duration-cell,
+.library-favorite-cell {
+  text-align: center;
+}
+
+.library-duration-cell .music-table-cell-content {
+  display: block;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.library-favorite-cell {
+  vertical-align: middle;
+}
+
+.library-favorite-cell .favorite-icon-button {
+  margin: 0 auto;
+}
+
 .library-content-shell.is-compact {
   flex-direction: column;
   padding: 4px;
@@ -600,7 +629,7 @@
   left: 0;
   right: 0;
   z-index: 89;
-  padding: 82px 18px 18px;
+  padding: 50px 18px 18px;
   border: 0;
   border-radius: 0;
   background: var(--minimal-toolbar-background);
@@ -821,8 +850,8 @@
 
 .library-content-shell.is-compact .library-duration-cell {
   grid-area: duration;
-  justify-content: flex-end;
-  align-self: start;
+  justify-content: center;
+  align-self: center;
   padding-top: 2px !important;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
@@ -830,7 +859,8 @@
 
 .library-content-shell.is-compact .library-favorite-cell {
   grid-area: favorite;
-  justify-content: flex-end;
+  justify-content: center;
+  align-self: center;
 }
 
 .library-content-shell.is-compact .library-play-count-cell,
@@ -889,7 +919,7 @@
   height: 30px;
 }
 
-.app-shell.night-mode {
+body.night-mode .app-shell {
   --library-night-bg: #101419;
   --library-night-panel: #171c22;
   --library-night-panel-strong: #1d232b;
@@ -900,21 +930,21 @@
   background: var(--library-night-bg);
 }
 
-.app-shell.night-mode .workspace:has(.library-page) {
+body.night-mode .app-shell .workspace:has(.library-page) {
   background:
     radial-gradient(circle at 18% 0%, rgba(var(--accent-rgb), 0.18), transparent 34%),
     linear-gradient(180deg, #11161c, #0f1318 64%, #0c1015);
 }
 
-.app-shell.night-mode .workspace:has(.library-page) .workspace-content {
+body.night-mode .app-shell .workspace:has(.library-page) .workspace-content {
   background: transparent;
 }
 
-.app-shell.night-mode .library-page {
+body.night-mode .app-shell .library-page {
   color: var(--library-night-text);
 }
 
-.app-shell.night-mode .library-content-shell {
+body.night-mode .app-shell .library-content-shell {
   border-color: var(--library-night-border);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.018)),
@@ -924,141 +954,141 @@
     0 24px 58px rgba(0, 0, 0, 0.34);
 }
 
-.app-shell.night-mode .library-quick-jump,
-.app-shell.night-mode .music-table thead th,
-.app-shell.night-mode .library-compact-sort-bar {
+body.night-mode .app-shell .library-quick-jump,
+body.night-mode .app-shell .music-table thead th,
+body.night-mode .app-shell .library-compact-sort-bar {
   background: var(--library-night-panel);
 }
 
-.app-shell.night-mode .library-quick-jump {
+body.night-mode .app-shell .library-quick-jump {
   border-right-color: var(--library-night-border);
 }
 
-.app-shell.night-mode .library-quick-jump button,
-.app-shell.night-mode .library-compact-sort-button,
-.app-shell.night-mode .music-table thead th {
+body.night-mode .app-shell .library-quick-jump button,
+body.night-mode .app-shell .library-compact-sort-button,
+body.night-mode .app-shell .music-table thead th {
   color: var(--library-night-muted);
 }
 
-.app-shell.night-mode .library-quick-jump button:hover,
-.app-shell.night-mode .library-quick-jump button.is-active,
-.app-shell.night-mode .library-compact-sort-button:hover,
-.app-shell.night-mode .library-compact-sort-button.is-sorted,
-.app-shell.night-mode .music-table thead th:hover,
-.app-shell.night-mode .music-table thead th.is-sorted {
+body.night-mode .app-shell .library-quick-jump button:hover,
+body.night-mode .app-shell .library-quick-jump button.is-active,
+body.night-mode .app-shell .library-compact-sort-button:hover,
+body.night-mode .app-shell .library-compact-sort-button.is-sorted,
+body.night-mode .app-shell .music-table thead th:hover,
+body.night-mode .app-shell .music-table thead th.is-sorted {
   background: rgba(var(--accent-rgb), 0.16);
   color: #fff;
 }
 
-.app-shell.night-mode .library-quick-jump button:disabled,
-.app-shell.night-mode .library-quick-jump button:disabled:hover,
-.app-shell.night-mode .library-quick-jump-grid button:disabled,
-.app-shell.night-mode .library-quick-jump-grid button:disabled:hover {
+body.night-mode .app-shell .library-quick-jump button:disabled,
+body.night-mode .app-shell .library-quick-jump button:disabled:hover,
+body.night-mode .app-shell .library-quick-jump-grid button:disabled,
+body.night-mode .app-shell .library-quick-jump-grid button:disabled:hover {
   background: transparent;
   color: rgba(203, 213, 225, 0.24);
 }
 
-.app-shell.night-mode .music-table tbody td {
+body.night-mode .app-shell .music-table tbody td {
   border-top-color: var(--library-night-border);
   color: var(--library-night-muted);
 }
 
-.app-shell.night-mode .music-table tbody tr:hover td {
+body.night-mode .app-shell .music-table tbody tr:hover td {
   background: rgba(var(--accent-rgb), 0.12);
 }
 
-.app-shell.night-mode .music-table tbody tr.is-selected td {
+body.night-mode .app-shell .music-table tbody tr.is-selected td {
   background: rgba(var(--accent-rgb), 0.18);
   box-shadow: inset 0 1px 0 rgba(var(--accent-rgb), 0.36), inset 0 -1px 0 rgba(var(--accent-rgb), 0.36);
 }
 
-.app-shell.night-mode .music-table tbody tr.is-selected td:first-child {
+body.night-mode .app-shell .music-table tbody tr.is-selected td:first-child {
   box-shadow:
     inset 3px 0 0 var(--accent),
     inset 0 1px 0 rgba(var(--accent-rgb), 0.36),
     inset 0 -1px 0 rgba(var(--accent-rgb), 0.36);
 }
 
-.app-shell.night-mode .music-table tbody tr.is-selected td:last-child {
+body.night-mode .app-shell .music-table tbody tr.is-selected td:last-child {
   box-shadow:
     inset -1px 0 0 rgba(var(--accent-rgb), 0.36),
     inset 0 1px 0 rgba(var(--accent-rgb), 0.36),
     inset 0 -1px 0 rgba(var(--accent-rgb), 0.36);
 }
 
-.app-shell.night-mode .music-table tbody tr.is-current td,
-.app-shell.night-mode .song-name,
-.app-shell.night-mode .music-table tbody tr.is-current .song-name {
+body.night-mode .app-shell .music-table tbody tr.is-current td,
+body.night-mode .app-shell .song-name,
+body.night-mode .app-shell .music-table tbody tr.is-current .song-name {
   color: var(--library-night-text);
 }
 
-.app-shell.night-mode .music-table-cell-content,
-.app-shell.night-mode .library-content-shell.is-compact .library-artist-cell,
-.app-shell.night-mode .library-content-shell.is-compact .library-album-cell,
-.app-shell.night-mode .library-content-shell.is-compact .library-duration-cell {
+body.night-mode .app-shell .music-table-cell-content,
+body.night-mode .app-shell .library-content-shell.is-compact .library-artist-cell,
+body.night-mode .app-shell .library-content-shell.is-compact .library-album-cell,
+body.night-mode .app-shell .library-content-shell.is-compact .library-duration-cell {
   color: var(--library-night-muted);
 }
 
-.app-shell.night-mode .table-link {
+body.night-mode .app-shell .table-link {
   color: color-mix(in srgb, var(--accent) 66%, white 34%);
 }
 
-.app-shell.night-mode .library-row-artwork {
+body.night-mode .app-shell .library-row-artwork {
   background: rgba(255, 255, 255, 0.08);
 }
 
-.app-shell.night-mode .favorite-icon-button:hover,
-.app-shell.night-mode .favorite-pill:hover {
+body.night-mode .app-shell .favorite-icon-button:hover,
+body.night-mode .app-shell .favorite-pill:hover {
   background: rgba(255, 76, 92, 0.14);
 }
 
-.app-shell.night-mode .library-content-shell.is-compact .music-table tbody tr:not(.virtual-spacer-row) {
+body.night-mode .app-shell .library-content-shell.is-compact .music-table tbody tr:not(.virtual-spacer-row) {
   border-top-color: var(--library-night-border);
 }
 
-.app-shell.night-mode .library-content-shell.is-compact .music-table tbody tr:not(.virtual-spacer-row):hover,
-.app-shell.night-mode .library-content-shell.is-compact .music-table tbody tr.is-selected {
+body.night-mode .app-shell .library-content-shell.is-compact .music-table tbody tr:not(.virtual-spacer-row):hover,
+body.night-mode .app-shell .library-content-shell.is-compact .music-table tbody tr.is-selected {
   background: rgba(var(--accent-rgb), 0.16);
 }
 
-.app-shell.night-mode .library-quick-jump-panel {
+body.night-mode .app-shell .library-quick-jump-panel {
   background: rgba(16, 20, 25, 0.96);
   box-shadow: 0 18px 36px rgba(0, 0, 0, 0.36);
 }
 
-.app-shell.night-mode .library-quick-jump-panel-header strong,
-.app-shell.night-mode .library-quick-jump-panel-header button {
+body.night-mode .app-shell .library-quick-jump-panel-header strong,
+body.night-mode .app-shell .library-quick-jump-panel-header button {
   color: var(--library-night-text);
 }
 
-.app-shell.night-mode .library-quick-jump-panel-header button:hover,
-.app-shell.night-mode .library-quick-jump-panel-header button:focus-visible {
+body.night-mode .app-shell .library-quick-jump-panel-header button:hover,
+body.night-mode .app-shell .library-quick-jump-panel-header button:focus-visible {
   background: rgba(255, 255, 255, 0.08);
 }
 
-.app-shell.night-mode .library-quick-jump-grid button {
+body.night-mode .app-shell .library-quick-jump-grid button {
   border-color: var(--library-night-border);
   background: var(--library-night-panel-strong);
   color: var(--library-night-muted);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
-.app-shell.night-mode .library-quick-jump-grid button:hover,
-.app-shell.night-mode .library-quick-jump-grid button:focus-visible,
-.app-shell.night-mode .library-quick-jump-grid button.is-active {
+body.night-mode .app-shell .library-quick-jump-grid button:hover,
+body.night-mode .app-shell .library-quick-jump-grid button:focus-visible,
+body.night-mode .app-shell .library-quick-jump-grid button.is-active {
   border-color: rgba(var(--accent-rgb), 0.34);
   background: rgba(var(--accent-rgb), 0.18);
   color: #fff;
 }
 
-.app-shell.night-mode .library-page .empty-state,
-.app-shell.night-mode .library-page .loading-state,
-.app-shell.night-mode .library-page .error-banner {
+body.night-mode .app-shell .library-page .empty-state,
+body.night-mode .app-shell .library-page .loading-state,
+body.night-mode .app-shell .library-page .error-banner {
   border-color: var(--library-night-border);
   background: rgba(23, 28, 34, 0.86);
   color: var(--library-night-text);
 }
 
-.app-shell.night-mode .library-page .empty-state p {
+body.night-mode .app-shell .library-page .empty-state p {
   color: var(--library-night-muted);
 }

@@ -37,7 +37,7 @@ export function MusicAlbumArtControl({
         {showBusy ? <div className="music-info-save-progress SaveProgress" /> : null}
       </CommandBar>
       <div className="song-dialog-body song-dialog-artwork AlbumArtControl AlbumArtController AlbumArtControlPanel">
-        <AlbumArtControl title={song.title} artworkUrl={artworkUrl} className="AlbumArt" fallbackClassName="NoAlbumArtTextBlock" fallbackText={t('song.noAlbumArt')} />
+        <AlbumArtControl title={song.title} artworkUrl={artworkUrl} className="AlbumArt" fallbackClassName="NoAlbumArtTextBlock" fallbackArtwork={false} fallbackText={t('song.noAlbumArt')} />
         {showDeleteConfirm ? (
           <div className="song-dialog-warning RemoveAlbumArtWarningPanel">
             <p className="RemoveAlbumArtWarningTextBlock">{t('song.removeAlbumArt', { title: song.title })}</p>

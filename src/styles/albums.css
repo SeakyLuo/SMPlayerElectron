@@ -400,6 +400,18 @@
   gap: 4px;
 }
 
+.albums-grid-scroll-frame {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.albums-grid-scrollbar {
+  display: none;
+}
+
 .albums-quick-jump {
   display: grid;
   align-self: stretch;
@@ -489,63 +501,139 @@
   background: rgba(91, 105, 122, 0.42);
 }
 
-.app-shell.night-mode .workspace:has(.albums-page) {
+.app-shell.nav-minimal .albums-page {
+  padding: 6px 14px 0 14px;
+}
+
+.app-shell.nav-minimal .albums-toolbar {
+  display: none;
+}
+
+.app-shell.nav-minimal .albums-progress {
+  margin: 0 0 4px;
+}
+
+.app-shell.nav-minimal .albums-grid-shell {
+  gap: 4px;
+}
+
+.app-shell.nav-minimal .albums-quick-jump {
+  padding: 2px 0 calc(var(--player-height) + 18px);
+}
+
+.app-shell.nav-minimal .albums-grid-scroll-frame {
+  overflow: visible;
+}
+
+.app-shell.nav-minimal .albums-grid-scroll-frame .albums-grid {
+  height: 100%;
+  padding: 8px 0 calc(var(--player-height) + 18px) 14px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: auto;
+  scrollbar-width: none;
+}
+
+.app-shell.nav-minimal .albums-grid-scroll-frame .albums-grid::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.app-shell.nav-minimal .albums-grid-scrollbar {
+  position: absolute;
+  top: 0;
+  right: -5px;
+  bottom: 4px;
+  z-index: 2;
+  display: block;
+  width: 9px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease;
+}
+
+.app-shell.nav-minimal .albums-grid-scroll-frame.has-scrollbar:hover .albums-grid-scrollbar,
+.app-shell.nav-minimal .albums-grid-scroll-frame.has-scrollbar:focus-within .albums-grid-scrollbar,
+.app-shell.nav-minimal .albums-grid-scroll-frame.has-scrollbar .albums-grid-scrollbar:hover {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.app-shell.nav-minimal .albums-grid-scrollbar-thumb {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  top: var(--albums-grid-scrollbar-thumb-top, 0);
+  height: var(--albums-grid-scrollbar-thumb-height, 40px);
+  border-radius: 999px;
+  background: rgba(91, 105, 122, 0.5);
+  cursor: default;
+}
+
+.app-shell.nav-minimal .albums-grid-scrollbar-thumb:hover {
+  left: 1px;
+  right: 1px;
+  background: rgba(67, 80, 96, 0.68);
+}
+
+body.night-mode .app-shell .workspace:has(.albums-page) {
   background: var(--night-shell-bg);
 }
 
-.app-shell.night-mode .albums-command,
-.app-shell.night-mode .albums-sort-trigger {
+body.night-mode .app-shell .albums-command,
+body.night-mode .app-shell .albums-sort-trigger {
   border-color: var(--night-border);
   background: rgba(255, 255, 255, 0.055);
   color: var(--night-text);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055);
 }
 
-.app-shell.night-mode .albums-command.is-active {
+body.night-mode .app-shell .albums-command.is-active {
   border-color: rgba(var(--accent-rgb), 0.38);
   background: rgba(var(--accent-rgb), 0.18);
   color: color-mix(in srgb, var(--accent) 72%, #f5fbff 28%);
 }
 
-.app-shell.night-mode .albums-sort-trigger:hover,
-.app-shell.night-mode .albums-command:hover,
-.app-shell.night-mode .albums-sort-trigger[aria-expanded='true'] {
+body.night-mode .app-shell .albums-sort-trigger:hover,
+body.night-mode .app-shell .albums-command:hover,
+body.night-mode .app-shell .albums-sort-trigger[aria-expanded='true'] {
   background: rgba(255, 255, 255, 0.09);
 }
 
-.app-shell.night-mode .albums-sort-trigger svg:last-child,
-.app-shell.night-mode .albums-quick-jump button {
+body.night-mode .app-shell .albums-sort-trigger svg:last-child,
+body.night-mode .app-shell .albums-quick-jump button {
   color: var(--night-muted);
 }
 
-.app-shell.night-mode .albums-sort-options {
+body.night-mode .app-shell .albums-sort-options {
   border-color: var(--night-border);
   background: rgba(24, 30, 38, 0.98);
   box-shadow: 0 18px 44px rgba(0, 0, 0, 0.36);
 }
 
-.app-shell.night-mode .albums-sort-options button {
+body.night-mode .app-shell .albums-sort-options button {
   color: var(--night-text);
 }
 
-.app-shell.night-mode .albums-sort-options button:hover,
-.app-shell.night-mode .albums-quick-jump button:hover,
-.app-shell.night-mode .albums-quick-jump button.is-active {
+body.night-mode .app-shell .albums-sort-options button:hover,
+body.night-mode .app-shell .albums-quick-jump button:hover,
+body.night-mode .app-shell .albums-quick-jump button.is-active {
   background: rgba(var(--accent-rgb), 0.18);
   color: color-mix(in srgb, var(--accent) 72%, #f5fbff 28%);
 }
 
-.app-shell.night-mode .albums-quick-jump button:disabled,
-.app-shell.night-mode .albums-quick-jump button:disabled:hover {
+body.night-mode .app-shell .albums-quick-jump button:disabled,
+body.night-mode .app-shell .albums-quick-jump button:disabled:hover {
   background: transparent;
   color: rgba(222, 231, 242, 0.25);
 }
 
-.app-shell.night-mode .albums-quick-jump:hover::-webkit-scrollbar-thumb {
+body.night-mode .app-shell .albums-quick-jump:hover::-webkit-scrollbar-thumb {
   background: rgba(208, 219, 232, 0.36);
 }
 
-.app-shell.night-mode .multi-select-command-bar {
+body.night-mode .app-shell .multi-select-command-bar {
   border-color: rgba(255, 255, 255, 0.09);
   background:
     linear-gradient(180deg, rgba(31, 38, 48, 0.92), rgba(19, 24, 31, 0.84)),
@@ -555,24 +643,58 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
-.app-shell.night-mode .multi-select-command-count {
+body.night-mode .app-shell .multi-select-command-count {
   color: color-mix(in srgb, var(--accent) 72%, #f5fbff 28%);
 }
 
-.app-shell.night-mode .multi-select-command-separator {
+body.night-mode .app-shell .multi-select-command-separator {
   background: var(--night-border);
 }
 
-.app-shell.night-mode .multi-select-command-bar button,
-.app-shell.night-mode .multi-select-command-select {
+body.night-mode .app-shell .multi-select-command-bar button,
+body.night-mode .app-shell .multi-select-command-select {
   border-color: var(--night-border);
   background: rgba(255, 255, 255, 0.065);
   color: var(--night-text);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055);
 }
 
-.app-shell.night-mode .multi-select-command-bar button:hover:not(:disabled),
-.app-shell.night-mode .multi-select-command-select:hover:not(.is-disabled) {
+body.night-mode .app-shell .multi-select-command-bar button:hover:not(:disabled),
+body.night-mode .app-shell .multi-select-command-select:hover:not(.is-disabled) {
+  border-color: rgba(var(--accent-rgb), 0.34);
+  background: rgba(var(--accent-rgb), 0.16);
+  color: color-mix(in srgb, var(--accent) 72%, #f5fbff 28%);
+  box-shadow: none;
+}
+
+body.night-mode .multi-select-command-bar {
+  border-color: rgba(255, 255, 255, 0.09);
+  background:
+    linear-gradient(180deg, rgba(31, 38, 48, 0.92), rgba(19, 24, 31, 0.84)),
+    rgba(18, 24, 31, 0.88);
+  box-shadow:
+    0 -16px 44px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+body.night-mode .multi-select-command-count {
+  color: color-mix(in srgb, var(--accent) 72%, #f5fbff 28%);
+}
+
+body.night-mode .multi-select-command-separator {
+  background: var(--night-border);
+}
+
+body.night-mode .multi-select-command-bar button,
+body.night-mode .multi-select-command-select {
+  border-color: var(--night-border);
+  background: rgba(255, 255, 255, 0.065);
+  color: var(--night-text);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055);
+}
+
+body.night-mode .multi-select-command-bar button:hover:not(:disabled),
+body.night-mode .multi-select-command-select:hover:not(.is-disabled) {
   border-color: rgba(var(--accent-rgb), 0.34);
   background: rgba(var(--accent-rgb), 0.16);
   color: color-mix(in srgb, var(--accent) 72%, #f5fbff 28%);

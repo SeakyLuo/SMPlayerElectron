@@ -1,6 +1,5 @@
 @media (max-width: 1200px) {
   .summary-grid,
-  .collection-grid,
   .settings-runtime-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -55,7 +54,6 @@
   }
 
   .summary-grid,
-  .collection-grid,
   .settings-metrics,
   .settings-board,
   .settings-runtime-grid {
@@ -112,14 +110,9 @@
   .settings-toggle-row,
   .settings-input-row,
   .playlist-detail-header,
-  .detail-hero,
   .now-playing-hero {
     flex-direction: column;
     align-items: flex-start;
-  }
-
-  .detail-hero .page-actions {
-    margin-left: 0;
   }
 
   .now-playing-hero {
@@ -322,5 +315,77 @@
 
 .app-shell.nav-minimal .albums-grid-window {
   row-gap: 2px;
+}
+
+.app-shell.nav-minimal .workspace-header .appbar-icon-button,
+.app-shell.nav-minimal .workspace-header .appbar-quick-jump-button,
+.app-shell.nav-minimal .workspace-header .search-appbar-multi-select-button,
+.app-shell.nav-minimal .workspace-header .appbar-commandbar .uwp-commandbar-button,
+.app-shell.nav-minimal .workspace-header .appbar-commandbar .albums-sort-trigger {
+  border-color: transparent;
+  background: transparent;
+  color: #111827;
+  box-shadow: none;
+}
+
+.app-shell.nav-minimal .workspace-header .appbar-icon-button:hover,
+.app-shell.nav-minimal .workspace-header .appbar-icon-button:focus-visible,
+.app-shell.nav-minimal .workspace-header .appbar-quick-jump-button:hover,
+.app-shell.nav-minimal .workspace-header .appbar-quick-jump-button:focus-visible,
+.app-shell.nav-minimal .workspace-header .appbar-quick-jump-button.is-open,
+.app-shell.nav-minimal .workspace-header .search-appbar-multi-select-button:hover,
+.app-shell.nav-minimal .workspace-header .search-appbar-multi-select-button:focus-visible,
+.app-shell.nav-minimal .workspace-header .search-appbar-multi-select-button.is-active,
+.app-shell.nav-minimal .workspace-header .appbar-commandbar .uwp-commandbar-button:hover,
+.app-shell.nav-minimal .workspace-header .appbar-commandbar .uwp-commandbar-button:focus-visible,
+.app-shell.nav-minimal .workspace-header .appbar-commandbar .uwp-commandbar-button[aria-expanded='true'],
+.app-shell.nav-minimal .workspace-header .appbar-commandbar .albums-sort-trigger:hover,
+.app-shell.nav-minimal .workspace-header .appbar-commandbar .albums-sort-trigger:focus-visible,
+.app-shell.nav-minimal .workspace-header .appbar-commandbar .albums-sort-trigger[aria-expanded='true'] {
+  background: rgba(12, 22, 35, 0.06);
+  color: #0f172a;
+  box-shadow: none;
+}
+
+.app-shell.nav-minimal .workspace-header .appbar-commandbar .uwp-commandbar-button:disabled {
+  background: transparent;
+  color: rgba(17, 24, 39, 0.42);
+  box-shadow: none;
+}
+
+body.night-mode .app-shell.nav-minimal .workspace-header .appbar-icon-button,
+body.night-mode .app-shell.nav-minimal .workspace-header .appbar-quick-jump-button,
+body.night-mode .app-shell.nav-minimal .workspace-header .search-appbar-multi-select-button,
+body.night-mode .app-shell.nav-minimal .workspace-header .appbar-commandbar .uwp-commandbar-button,
+body.night-mode .app-shell.nav-minimal .workspace-header .appbar-commandbar .albums-sort-trigger {
+  border-color: transparent;
+  background: transparent;
+  color: var(--night-text);
+  box-shadow: none;
+}
+
+body.night-mode .app-shell.nav-minimal .workspace-header .appbar-icon-button:hover,
+body.night-mode .app-shell.nav-minimal .workspace-header .appbar-icon-button:focus-visible,
+body.night-mode .app-shell.nav-minimal .workspace-header .appbar-quick-jump-button:hover,
+body.night-mode .app-shell.nav-minimal .workspace-header .appbar-quick-jump-button:focus-visible,
+body.night-mode .app-shell.nav-minimal .workspace-header .appbar-quick-jump-button.is-open,
+body.night-mode .app-shell.nav-minimal .workspace-header .search-appbar-multi-select-button:hover,
+body.night-mode .app-shell.nav-minimal .workspace-header .search-appbar-multi-select-button:focus-visible,
+body.night-mode .app-shell.nav-minimal .workspace-header .search-appbar-multi-select-button.is-active,
+body.night-mode .app-shell.nav-minimal .workspace-header .appbar-commandbar .uwp-commandbar-button:hover,
+body.night-mode .app-shell.nav-minimal .workspace-header .appbar-commandbar .uwp-commandbar-button:focus-visible,
+body.night-mode .app-shell.nav-minimal .workspace-header .appbar-commandbar .uwp-commandbar-button[aria-expanded='true'],
+body.night-mode .app-shell.nav-minimal .workspace-header .appbar-commandbar .albums-sort-trigger:hover,
+body.night-mode .app-shell.nav-minimal .workspace-header .appbar-commandbar .albums-sort-trigger:focus-visible,
+body.night-mode .app-shell.nav-minimal .workspace-header .appbar-commandbar .albums-sort-trigger[aria-expanded='true'] {
+  background: rgba(var(--accent-rgb), 0.16);
+  color: color-mix(in srgb, var(--accent) 72%, #f5fbff 28%);
+  box-shadow: none;
+}
+
+body.night-mode .app-shell.nav-minimal .workspace-header .appbar-commandbar .uwp-commandbar-button:disabled {
+  background: transparent;
+  color: var(--night-subtle);
+  box-shadow: none;
 }
 

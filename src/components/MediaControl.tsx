@@ -17,6 +17,9 @@ import { MenuFlyout } from './MenuFlyout'
 import { getAddToPlaylistMenuFlyoutItem, getPreferenceMenuFlyoutItem, type MenuFlyoutItem, type MenuFlyoutPosition } from './MenuFlyoutHelper'
 import { MusicDialog } from './MusicDialog'
 import { usePreferenceStore } from '../state/usePreferenceStore'
+import { VoiceAssistantFlyout, type VoiceAssistantFlyoutHandle, type VoiceAssistantResponse } from './VoiceAssistantFlyout'
+
+export type { VoiceAssistantResponse } from './VoiceAssistantFlyout'
 
 export interface MediaControlTrack {
   id: number | null
@@ -54,7 +57,6 @@ interface MediaControlProps {
   onPlayTrack: (trackId: number, queueSongIds: number[]) => void
   onVoiceCommand: (text: string) => Promise<VoiceAssistantResponse>
   getVoiceHint: () => string
-  getVoiceHelpText: () => string
   voiceLanguage: string
   onOpenNowPlaying: () => void
   isWindowFullScreen: boolean
@@ -63,13 +65,6 @@ interface MediaControlProps {
   onArtworkResolved: (trackId: number, artworkUrl: string) => void
   onSaved: () => void | Promise<void>
 }
-
-export interface VoiceAssistantResponse {
-  message: string
-  shouldContinue: boolean
-}
-
-type VoiceAssistantState = 'idle' | 'capturing' | 'processing'
 
 interface MediaControlButtonsProps {
   trackId: number | null
@@ -128,7 +123,6 @@ interface MediaControlSurfaceProps {
   onToggleFavorite: () => void
   onVoiceCommand: (text: string) => Promise<VoiceAssistantResponse>
   getVoiceHint: () => string
-  getVoiceHelpText: () => string
   voiceLanguage: string
   onMoreClick: (event: MouseEvent<HTMLButtonElement>) => void
 }
@@ -425,20 +419,14 @@ export function MediaControlSurface({
   onToggleFavorite,
   onVoiceCommand,
   getVoiceHint,
-  getVoiceHelpText,
   voiceLanguage,
   onMoreClick,
 }: MediaControlSurfaceProps) {
   const [isProgressSeeking, setIsProgressSeeking] = useState(false)
   const [draftProgressSeconds, setDraftProgressSeconds] = useState(0)
   const [voiceAssistantOpen, setVoiceAssistantOpen] = useState(false)
-  const [voiceAssistantText, setVoiceAssistantText] = useState('')
-  const [voiceAssistantState, setVoiceAssistantState] = useState<VoiceAssistantState>('idle')
-  const [voiceAssistantNeedsPrivacySettings, setVoiceAssistantNeedsPrivacySettings] = useState(false)
-  const [voiceAssistantHelpOpen, setVoiceAssistantHelpOpen] = useState(false)
   const isProgressSeekingRef = useRef(false)
-  const speechRecognitionRef = useRef<SpeechRecognition | null>(null)
-  const voiceAssistantTimerRef = useRef<number | null>(null)
+  const voiceAssistantFlyoutRef = useRef<VoiceAssistantFlyoutHandle>(null)
   const { progressSeconds, durationSeconds } = usePlaybackProgress()
   const effectiveDurationSeconds = durationSeconds || currentSong?.duration || 0
   const displayProgressSeconds = isProgressSeeking ? draftProgressSeconds : progressSeconds
@@ -446,119 +434,6 @@ export function MediaControlSurface({
   const progressMax = Math.max(effectiveDurationSeconds, 0)
   const progressFill = progressMax > 0 ? (progressValue / progressMax) * 100 : 0
   const volumeValue = disabled ? 0 : Math.min(Math.max(volume, 0), 100)
-  const voiceAssistantStateLabel = t(`voiceAssistant.state.${voiceAssistantState}`)
-
-  const clearVoiceAssistantTimer = () => {
-    if (voiceAssistantTimerRef.current != null) {
-      window.clearTimeout(voiceAssistantTimerRef.current)
-      voiceAssistantTimerRef.current = null
-    }
-  }
-
-  const closeVoiceAssistant = () => {
-    clearVoiceAssistantTimer()
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel()
-    }
-    speechRecognitionRef.current?.stop()
-    speechRecognitionRef.current = null
-    setVoiceAssistantOpen(false)
-    setVoiceAssistantState('idle')
-    setVoiceAssistantNeedsPrivacySettings(false)
-    setVoiceAssistantHelpOpen(false)
-  }
-
-  const speakVoiceAssistantMessage = (message: string, ended: () => void) => {
-    if (!('speechSynthesis' in window)) {
-      ended()
-      return
-    }
-
-    window.speechSynthesis.cancel()
-    const utterance = new SpeechSynthesisUtterance(message)
-    utterance.lang = voiceLanguage
-    utterance.onend = ended
-    window.speechSynthesis.speak(utterance)
-  }
-
-  const startVoiceRecognition = (showHint: boolean) => {
-    const SpeechRecognition = window.SpeechRecognition ?? window.webkitSpeechRecognition
-
-    if (!SpeechRecognition) {
-      setVoiceAssistantText(t('voiceAssistant.unavailable'))
-      setVoiceAssistantNeedsPrivacySettings(true)
-      return
-    }
-
-    setVoiceAssistantNeedsPrivacySettings(false)
-    const recognition = new SpeechRecognition()
-    speechRecognitionRef.current = recognition
-    recognition.lang = voiceLanguage
-    recognition.continuous = false
-    recognition.interimResults = false
-    recognition.maxAlternatives = 1
-    recognition.onsoundstart = () => {
-      setVoiceAssistantState('capturing')
-      setVoiceAssistantText(t('voiceAssistant.listening'))
-    }
-    recognition.onspeechend = () => {
-      setVoiceAssistantState('processing')
-      setVoiceAssistantText(t('voiceAssistant.processing'))
-    }
-    recognition.onerror = (event) => {
-      setVoiceAssistantState('idle')
-      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-        setVoiceAssistantNeedsPrivacySettings(true)
-        setVoiceAssistantText(t('voiceAssistant.privacyRequired'))
-        return
-      }
-
-      setVoiceAssistantText(t('voiceAssistant.notUnderstood'))
-    }
-    recognition.onend = () => {
-      setVoiceAssistantState('idle')
-      speechRecognitionRef.current = null
-    }
-    recognition.onresult = (event) => {
-      setVoiceAssistantState('processing')
-      const transcript = event.results[event.resultIndex][0].transcript.trim()
-      setVoiceAssistantText(transcript)
-      void onVoiceCommand(transcript).then(({ message, shouldContinue }) => {
-        setVoiceAssistantText(message)
-        speakVoiceAssistantMessage(message, () => {
-          if (shouldContinue) {
-            voiceAssistantTimerRef.current = window.setTimeout(() => {
-              startVoiceRecognition(false)
-            }, 250)
-          } else {
-            voiceAssistantTimerRef.current = window.setTimeout(closeVoiceAssistant, 5000)
-          }
-        })
-      })
-    }
-
-    if (showHint) {
-      setVoiceAssistantText(getVoiceHint())
-    }
-    setVoiceAssistantState('idle')
-    recognition.start()
-  }
-
-  const openVoiceAssistant = () => {
-    setVoiceAssistantOpen(true)
-    startVoiceRecognition(true)
-  }
-
-  const showVoiceAssistantHelp = () => {
-    const message = getVoiceHelpText()
-    setVoiceAssistantHelpOpen(true)
-    setVoiceAssistantText(message)
-    speakVoiceAssistantMessage(message, () => {})
-  }
-
-  const openVoiceAssistantPrivacySettings = () => {
-    void window.smplayer?.openVoiceAssistantPrivacySettings()
-  }
 
   const beginProgressSeek = (event: PointerEvent<HTMLInputElement>) => {
     event.currentTarget.setPointerCapture(event.pointerId)
@@ -578,14 +453,6 @@ export function MediaControlSurface({
     onEndSeek()
     setIsProgressSeeking(false)
   }
-
-  useEffect(() => () => {
-    clearVoiceAssistantTimer()
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel()
-    }
-    speechRecognitionRef.current?.stop()
-  }, [])
 
   return (
     <>
@@ -619,78 +486,21 @@ export function MediaControlSurface({
         onToggleRepeat={onToggleRepeat}
         onToggleRepeatOne={onToggleRepeatOne}
         onToggleFavorite={onToggleFavorite}
-        onVoiceAssistantClick={openVoiceAssistant}
+        onVoiceAssistantClick={() => {
+          voiceAssistantFlyoutRef.current?.open()
+        }}
         voiceAssistantActive={voiceAssistantOpen}
         isMuted={isMuted}
         onMoreClick={onMoreClick}
       />
-      {voiceAssistantOpen ? (
-        <div className={`voice-assistant-popover is-${voiceAssistantState}`} role="status">
-          <div className="voice-assistant-state">{voiceAssistantStateLabel}</div>
-          <div className="voice-assistant-copy">{voiceAssistantText}</div>
-          <button
-            type="button"
-            className="voice-assistant-help-button"
-            onClick={showVoiceAssistantHelp}
-            title={t('voiceAssistant.getHelp')}
-          >
-            {t('voiceAssistant.getHelp')}
-          </button>
-          {voiceAssistantNeedsPrivacySettings ? (
-            <button
-              type="button"
-              className="voice-assistant-help-button"
-              onClick={openVoiceAssistantPrivacySettings}
-              title={t('voiceAssistant.openPrivacySettings')}
-            >
-              {t('voiceAssistant.openPrivacySettings')}
-            </button>
-          ) : null}
-          <button type="button" onClick={closeVoiceAssistant} aria-label={t('common.close')} title={t('common.close')}>
-            <Icon name="close" />
-          </button>
-          {voiceAssistantState !== 'idle' ? <div className="voice-assistant-progress" aria-hidden="true" /> : null}
-        </div>
-      ) : null}
-      {voiceAssistantHelpOpen ? (
-        <div className="voice-assistant-help-dialog" role="dialog" aria-modal="true" aria-labelledby="voice-assistant-help-title">
-          <div className="voice-assistant-help-panel">
-            <div className="voice-assistant-help-header">
-              <h2 id="voice-assistant-help-title">{t('voiceAssistant.helpTitle')}</h2>
-              <button type="button" onClick={() => setVoiceAssistantHelpOpen(false)} aria-label={t('common.close')} title={t('common.close')}>
-                <Icon name="close" />
-              </button>
-            </div>
-            <div className="voice-assistant-help-body">
-              <h3>{t('voiceAssistant.supportedCommands')}</h3>
-              <div className="voice-assistant-command-list">
-                <span>{t('voiceAssistant.command.play')}</span>
-                <p>{t('voiceAssistant.command.play1')}</p>
-                <span />
-                <p>{t('voiceAssistant.command.play2')}</p>
-                <span />
-                <p>{t('voiceAssistant.command.play3')}</p>
-                <span>{t('voiceAssistant.command.playControl')}</span>
-                <p>{t('voiceAssistant.command.playControl1')}</p>
-                <span>{t('voiceAssistant.command.volume')}</span>
-                <p>{t('voiceAssistant.command.volume1')}</p>
-                <span />
-                <p>{t('voiceAssistant.command.volume2')}</p>
-                <span>{t('voiceAssistant.command.search')}</span>
-                <p>{t('voiceAssistant.command.search1')}</p>
-                <span>{t('voiceAssistant.command.help')}</span>
-                <p>{t('voiceAssistant.command.help1')}</p>
-              </div>
-              <h3>{t('voiceAssistant.notice')}</h3>
-              <ol>
-                <li>{t('voiceAssistant.noticeSmartness')}</li>
-                <li>{t('voiceAssistant.noticeCommandIntro')}</li>
-                <li>{t('voiceAssistant.noticeExample')}</li>
-              </ol>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <VoiceAssistantFlyout
+        ref={voiceAssistantFlyoutRef}
+        t={t}
+        voiceLanguage={voiceLanguage}
+        onVoiceCommand={onVoiceCommand}
+        getVoiceHint={getVoiceHint}
+        onOpenChange={setVoiceAssistantOpen}
+      />
     </>
   )
 }
@@ -722,7 +532,6 @@ export function MediaControl({
   onPlayTrack,
   onVoiceCommand,
   getVoiceHint,
-  getVoiceHelpText,
   voiceLanguage,
   onOpenNowPlaying,
   isWindowFullScreen,
@@ -895,7 +704,6 @@ export function MediaControl({
         onToggleFavorite={onToggleFavorite}
         onVoiceCommand={onVoiceCommand}
         getVoiceHint={getVoiceHint}
-        getVoiceHelpText={getVoiceHelpText}
         voiceLanguage={voiceLanguage}
         isMuted={isMuted}
         onMoreClick={openMoreMenu}

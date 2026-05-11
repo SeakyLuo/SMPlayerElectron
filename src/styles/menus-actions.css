@@ -197,3 +197,91 @@
   color: var(--text-strong);
   font: inherit;
 }
+
+body.night-mode .app-shell .library-context-menu,
+body.night-mode .app-shell .library-context-submenu-panel {
+  border-color: var(--night-border);
+  background: rgba(24, 30, 38, 0.98);
+  color: #fff;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.36);
+  scrollbar-color: rgba(208, 219, 232, 0.36) transparent;
+}
+
+body.night-mode .app-shell .library-context-menu button,
+body.night-mode .app-shell .library-context-submenu > span {
+  color: #fff;
+}
+
+body.night-mode .app-shell .library-context-menu button:hover,
+body.night-mode .app-shell .library-context-submenu:hover > span {
+  background: rgba(var(--accent-rgb), 0.18);
+  color: #fff;
+}
+
+body.night-mode .app-shell .library-context-menu button:disabled {
+  color: var(--night-muted);
+}
+
+body.night-mode .app-shell .library-context-menu button:disabled:hover {
+  background: transparent;
+  color: inherit;
+}
+
+body.night-mode .app-shell .library-context-menu-separator {
+  background: var(--night-border);
+}
+
+body.night-mode .app-shell .table-action-button.subtle {
+  background: rgba(255, 255, 255, 0.065);
+  color: var(--night-text);
+}
+
+body.night-mode .app-shell .table-action-button.subtle:hover,
+body.night-mode .app-shell .table-action-button.is-selected {
+  background: rgba(var(--accent-rgb), 0.16);
+  color: color-mix(in srgb, var(--accent) 72%, #f5fbff 28%);
+}
+
+body.night-mode .app-shell .playlist-rename-form input {
+  border-color: var(--night-border);
+  background: rgba(255, 255, 255, 0.065);
+  color: var(--night-text);
+}
+
+body.night-mode .library-context-menu,
+body.night-mode .library-context-submenu-panel {
+  border-color: var(--night-border);
+  background: rgba(24, 30, 38, 0.98);
+  color: #fff;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.36);
+  scrollbar-color: rgba(208, 219, 232, 0.36) transparent;
+}
+
+body.night-mode .library-context-menu button,
+body.night-mode .library-context-submenu > span {
+  color: #fff;
+}
+
+body.night-mode .library-context-menu svg,
+body.night-mode .library-context-submenu svg {
+  color: currentColor;
+}
+
+body.night-mode .library-context-menu button:hover,
+body.night-mode .library-context-submenu:hover > span {
+  background: rgba(var(--accent-rgb), 0.18);
+  color: #fff;
+}
+
+body.night-mode .library-context-menu button:disabled {
+  color: var(--night-muted);
+}
+
+body.night-mode .library-context-menu button:disabled:hover {
+  background: transparent;
+  color: inherit;
+}
+
+body.night-mode .library-context-menu-separator {
+  background: var(--night-border);
+}

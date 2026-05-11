@@ -578,7 +578,7 @@ function getPlaylistCardMenuItems({
     {
       key: 'rename-playlist',
       text: t('playlists.rename'),
-      icon: 'settings',
+      icon: 'rename',
       onClick: () => {
         onRequestRenamePlaylist(playlist)
       },

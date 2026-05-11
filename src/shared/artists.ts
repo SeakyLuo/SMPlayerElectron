@@ -22,14 +22,14 @@ export function normalizeArtists(values: Array<string | null | undefined>) {
   return artists
 }
 
-export function getSongArtists(song: Pick<LibrarySong, 'artist' | 'artists'>) {
+export function getSongArtists(song: Pick<LibrarySong, 'artist' | 'artists'>, unknownArtist = UNKNOWN_ARTIST) {
   const artists = song.artists.length > 0 ? song.artists : normalizeArtists([song.artist])
-  return artists.length > 0 ? artists : [UNKNOWN_ARTIST]
+  return artists.length > 0 ? artists : [unknownArtist]
 }
 
-export function getDisplayArtists(song: Pick<LibrarySong, 'artist' | 'artists'>) {
-  const artists = getSongArtists(song)
-  return artists.length > 0 ? artists.join(', ') : UNKNOWN_ARTIST
+export function getDisplayArtists(song: Pick<LibrarySong, 'artist' | 'artists'>, unknownArtist = UNKNOWN_ARTIST) {
+  const artists = getSongArtists(song, unknownArtist)
+  return artists.length > 0 ? artists.join(', ') : unknownArtist
 }
 
 function splitArtistValue(value: string | null | undefined) {

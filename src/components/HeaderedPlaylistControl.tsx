@@ -67,6 +67,50 @@ interface HeaderedPlaylistControlProps {
 
 const sortOptions: MusicLibrarySortCriterion[] = ['title', 'artist', 'album', 'duration', 'play-count', 'date-added']
 
+function parseArtworkRgb(value: string) {
+  const [red, green, blue] = value.split(',').map((part) => Number(part.trim()))
+  return { red: red!, green: green!, blue: blue! }
+}
+
+function mixArtworkColorRgbs(colors: string[]) {
+  const total = colors.reduce(
+    (current, color) => {
+      const rgb = parseArtworkRgb(color)
+      return {
+        red: current.red + rgb.red,
+        green: current.green + rgb.green,
+        blue: current.blue + rgb.blue,
+      }
+    },
+    { red: 0, green: 0, blue: 0 },
+  )
+
+  return [
+    Math.round(total.red / colors.length),
+    Math.round(total.green / colors.length),
+    Math.round(total.blue / colors.length),
+  ].join(', ')
+}
+
+async function extractHeaderArtworkColorRgb(artworkUrls: string[]) {
+  if (artworkUrls.length === 0) {
+    return getDefaultArtworkColorRgb()
+  }
+
+  const colorResults = await Promise.allSettled(
+    artworkUrls.slice(0, 4).map((nextArtworkUrl) => extractArtworkColorRgb(nextArtworkUrl)),
+  )
+  const colors: string[] = []
+
+  for (const result of colorResults) {
+    if (result.status === 'fulfilled') {
+      colors.push(result.value)
+    }
+  }
+
+  return colors.length === 0 ? getDefaultArtworkColorRgb() : mixArtworkColorRgbs(colors)
+}
+
 export function HeaderedPlaylistControl({
   type,
   title,
@@ -177,12 +221,14 @@ export function HeaderedPlaylistControl({
   const headerArtworkUrls = type === 'album'
     ? artworkUrl ? [artworkUrl] : []
     : getPlaylistArtworkDisplayUrls(resolvedPlaylistArtworkUrls)
-  const headerArtworkUrl = headerArtworkUrls[0] ?? ''
+  const headerArtworkColorSignature = headerArtworkUrls.slice(0, 4).join('\n')
 
   useEffect(() => {
     let isDisposed = false
 
-    extractArtworkColorRgb(headerArtworkUrl)
+    const headerArtworkColorUrls = headerArtworkColorSignature ? headerArtworkColorSignature.split('\n') : []
+
+    extractHeaderArtworkColorRgb(headerArtworkColorUrls)
       .then((nextColor) => {
         if (!isDisposed) {
           setCoverColorRgb(nextColor)
@@ -197,15 +243,20 @@ export function HeaderedPlaylistControl({
     return () => {
       isDisposed = true
     }
-  }, [headerArtworkUrl])
+  }, [headerArtworkColorSignature])
 
   useEffect(() => {
+    const control = controlRef.current as HTMLElement
+    const appShell = control.closest('.app-shell') as HTMLElement
+
     document.documentElement.style.setProperty('--immersive-header-cover-rgb', coverColorRgb)
+    appShell.style.setProperty('--immersive-header-cover-rgb', coverColorRgb)
 
     return () => {
       document.documentElement.style.removeProperty('--immersive-header-cover-rgb')
+      appShell.style.removeProperty('--immersive-header-cover-rgb')
     }
-  }, [coverColorRgb])
+  }, [controlRef, coverColorRgb])
 
   useEffect(() => {
     setOrderedSongIds(null)
@@ -974,6 +1025,7 @@ function useHeaderedPlaylistScroll(
   useEffect(() => {
     const control = controlRef.current as HTMLElement
     const scrollContainer = control.closest('.workspace-content') as HTMLElement
+    const appShell = control.closest('.app-shell') as HTMLElement
     scrollContainerRef.current = scrollContainer
     let animationFrame = 0
 
@@ -984,6 +1036,14 @@ function useHeaderedPlaylistScroll(
       const isNarrow = window.matchMedia('(max-width: 720px)').matches
       const collapseDistance = isNarrow ? 136 : 210
       const collapseProgress = Math.min(scrollTop / collapseDistance, 1)
+      const topbarCoverAlphaStart = (0.24 * collapseProgress).toFixed(3)
+      const topbarCoverAlphaEnd = (0.14 * collapseProgress).toFixed(3)
+      const topbarSurfaceAlpha = (0.2 * collapseProgress).toFixed(3)
+      const topbarShadowAlpha = (0.05 * collapseProgress).toFixed(3)
+      const topbarBlur = `${Math.round(18 * collapseProgress)}px`
+      const heroCoverAlpha = (0.22 * collapseProgress).toFixed(3)
+      const heroSurfaceAlpha = (0.9 * collapseProgress).toFixed(3)
+      const heroBlur = `${Math.round(18 * collapseProgress)}px`
       const isCollapsed = headerCollapsedRef.current
         ? scrollTop > (isNarrow ? 76 : 186)
         : scrollTop >= (isNarrow ? 112 : 224)
@@ -1032,6 +1092,16 @@ function useHeaderedPlaylistScroll(
         : 0
 
       control.style.setProperty('--header-collapse-progress', String(collapseProgress))
+      control.style.setProperty('--header-hero-cover-alpha', heroCoverAlpha)
+      control.style.setProperty('--header-hero-surface-alpha', heroSurfaceAlpha)
+      control.style.setProperty('--header-hero-blur', heroBlur)
+      document.documentElement.style.setProperty('--immersive-header-collapse-progress', String(collapseProgress))
+      appShell.style.setProperty('--immersive-header-collapse-progress', String(collapseProgress))
+      appShell.style.setProperty('--immersive-topbar-cover-alpha-start', topbarCoverAlphaStart)
+      appShell.style.setProperty('--immersive-topbar-cover-alpha-end', topbarCoverAlphaEnd)
+      appShell.style.setProperty('--immersive-topbar-surface-alpha', topbarSurfaceAlpha)
+      appShell.style.setProperty('--immersive-topbar-shadow-alpha', topbarShadowAlpha)
+      appShell.style.setProperty('--immersive-topbar-blur', topbarBlur)
       control.style.setProperty('--header-hero-height', `${heroHeight}px`)
       control.style.setProperty('--header-hero-padding-top', `${heroPaddingTop}px`)
       control.style.setProperty('--header-cover-size', `${coverSize}px`)
@@ -1068,6 +1138,13 @@ function useHeaderedPlaylistScroll(
         window.cancelAnimationFrame(animationFrame)
       }
       control.classList.remove('is-header-collapsed')
+      document.documentElement.style.removeProperty('--immersive-header-collapse-progress')
+      appShell.style.removeProperty('--immersive-header-collapse-progress')
+      appShell.style.removeProperty('--immersive-topbar-cover-alpha-start')
+      appShell.style.removeProperty('--immersive-topbar-cover-alpha-end')
+      appShell.style.removeProperty('--immersive-topbar-surface-alpha')
+      appShell.style.removeProperty('--immersive-topbar-shadow-alpha')
+      appShell.style.removeProperty('--immersive-topbar-blur')
       setIsHeaderCollapsed(false)
       if (appBarTitleRef.current) {
         appBarTitleRef.current = ''
@@ -1199,7 +1276,7 @@ function getHeaderPlaylistInfo(songs: LibrarySong[], t: Translator) {
 function getAlbumPreferenceDisplayName(albumName: string, songs: LibrarySong[], t: Translator) {
   const albumTitle = albumName || t('common.albumUnknown')
   const firstSong = songs[0]
-  const artist = firstSong ? getDisplayArtists(firstSong) : t('common.artistUnknown')
+  const artist = firstSong ? getDisplayArtists(firstSong, t('common.artistUnknown')) : t('common.artistUnknown')
   return `${albumTitle} - ${artist}`
 }
 

@@ -13,7 +13,6 @@
 @import './styles/playlist-control.css';
 @import './styles/menus-actions.css';
 @import './styles/song-dialog.css';
-@import './styles/collection.css';
 @import './styles/search.css';
 @import './styles/local.css';
 @import './styles/remote.css';
@@ -23,7 +22,6 @@
 @import './styles/now-playing.css';
 @import './styles/now-playing-full.css';
 @import './styles/mini-mode.css';
-@import './styles/detail.css';
 @import './styles/settings.css';
 @import './styles/preferences.css';
 @import './styles/lyrics-settings.css';

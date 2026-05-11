@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import clsx from 'clsx'
 import { useNavigate } from 'react-router-dom'
 
@@ -83,6 +83,8 @@ export function AlbumsPage({
   const [addToMenu, setAddToMenu] = useState<(MenuFlyoutPosition & { songIds: number[]; defaultPlaylistName: string }) | null>(null)
   const [albumArtPreview, setAlbumArtPreview] = useState<AlbumView | null>(null)
   const [albumPreferenceItems, setAlbumPreferenceItems] = useState<Map<string, PreferenceItemSnapshot>>(new Map())
+  const albumGridScrollFrameRef = useRef<HTMLDivElement | null>(null)
+  const albumGridScrollbarTrackRef = useRef<HTMLDivElement | null>(null)
   const albumGridRef = useRef<HTMLDivElement | null>(null)
   const [albumScrollTop, setAlbumScrollTop] = useState(0)
   const [albumViewportHeight, setAlbumViewportHeight] = useState(640)
@@ -224,6 +226,75 @@ export function AlbumsPage({
       resizeObserver.disconnect()
     }
   }, [])
+
+  useLayoutEffect(() => {
+    const scrollFrame = albumGridScrollFrameRef.current
+    const scrollContainer = albumGridRef.current
+    if (!scrollFrame || !scrollContainer) {
+      return
+    }
+
+    let animationFrame = 0
+    const updateScrollbar = () => {
+      const maxScrollTop = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight)
+      const trackHeight = scrollContainer.clientHeight
+      const thumbHeight = maxScrollTop > 0
+        ? Math.max(38, Math.round((trackHeight / scrollContainer.scrollHeight) * trackHeight))
+        : trackHeight
+      const thumbTop = maxScrollTop > 0
+        ? Math.round((scrollContainer.scrollTop / maxScrollTop) * Math.max(0, trackHeight - thumbHeight))
+        : 0
+
+      scrollFrame.style.setProperty('--albums-grid-scrollbar-thumb-height', `${thumbHeight}px`)
+      scrollFrame.style.setProperty('--albums-grid-scrollbar-thumb-top', `${thumbTop}px`)
+      scrollFrame.classList.toggle('has-scrollbar', isCompactAlbumLayout && maxScrollTop > 1)
+    }
+    const scheduleUpdate = () => {
+      window.cancelAnimationFrame(animationFrame)
+      animationFrame = window.requestAnimationFrame(updateScrollbar)
+    }
+
+    updateScrollbar()
+    scrollContainer.addEventListener('scroll', scheduleUpdate, { passive: true })
+    const resizeObserver = new ResizeObserver(scheduleUpdate)
+    resizeObserver.observe(scrollFrame)
+    resizeObserver.observe(scrollContainer)
+    window.addEventListener('resize', scheduleUpdate)
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame)
+      scrollContainer.removeEventListener('scroll', scheduleUpdate)
+      resizeObserver.disconnect()
+      window.removeEventListener('resize', scheduleUpdate)
+    }
+  }, [albumListHeight, isCompactAlbumLayout])
+
+  const onAlbumGridScrollbarPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const scrollContainer = albumGridRef.current
+    const scrollFrame = albumGridScrollFrameRef.current
+    const scrollbarTrack = albumGridScrollbarTrackRef.current
+    if (!scrollContainer || !scrollFrame || !scrollbarTrack) {
+      return
+    }
+
+    event.preventDefault()
+    const maxScrollTop = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight)
+    const thumbHeight = Number.parseFloat(getComputedStyle(scrollFrame).getPropertyValue('--albums-grid-scrollbar-thumb-height'))
+    const trackRange = Math.max(1, scrollbarTrack.clientHeight - thumbHeight)
+    const scrollPerPixel = maxScrollTop / trackRange
+    const startY = event.clientY
+    const startScrollTop = scrollContainer.scrollTop
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      scrollContainer.scrollTop = startScrollTop + (moveEvent.clientY - startY) * scrollPerPixel
+    }
+    const onPointerUp = () => {
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', onPointerUp)
+    }
+
+    window.addEventListener('pointermove', onPointerMove)
+    window.addEventListener('pointerup', onPointerUp)
+  }
 
   useEffect(() => {
     const compactQuery = window.matchMedia(ALBUM_COMPACT_QUERY)
@@ -492,48 +563,53 @@ export function AlbumsPage({
               )
             })}
           </nav>
-          <div
-            className="albums-grid"
-            ref={albumGridRef}
-            onScroll={(event) => {
-              setAlbumScrollTop(event.currentTarget.scrollTop)
-            }}
-          >
-            <div className="albums-grid-virtual" style={{ height: albumListHeight }}>
-              <div
-                className="albums-grid-window"
-                style={{
-                  columnGap: `${ALBUM_COLUMN_GAP}px`,
-                  gridTemplateColumns: `repeat(${albumColumns}, ${ALBUM_TILE_TRACK_WIDTH}px)`,
-                  transform: `translateY(${albumWindowTop}px)`,
-                }}
-              >
-                {renderedAlbums.map((album) => (
-                  <AlbumTile
-                    album={album}
-                    key={album.name}
-                    multiSelect={multiSelect}
-                    selected={selectedAlbumNames.has(album.name)}
-                    t={t}
-                    onOpenAlbum={() => {
-                      navigate(getAlbumRoute(routeBase, album.name))
-                    }}
-                    onPlayAlbum={() => {
-                      onPlayTrack(album.songs[0].id, album.songs.map((song) => song.id))
-                    }}
-                    onAddAlbum={(position) => {
-                      setAlbumContextMenu(null)
-                      setAddToMenu({ ...position, songIds: album.songs.map((song) => song.id), defaultPlaylistName: album.name })
-                    }}
-                    onToggleSelection={() => {
-                      toggleAlbumSelection(album.name)
-                    }}
-                    onOpenContextMenu={(position) => {
-                      setAlbumContextMenu({ ...position, album })
-                    }}
-                  />
-                ))}
+          <div className="albums-grid-scroll-frame" ref={albumGridScrollFrameRef}>
+            <div
+              className="albums-grid"
+              ref={albumGridRef}
+              onScroll={(event) => {
+                setAlbumScrollTop(event.currentTarget.scrollTop)
+              }}
+            >
+              <div className="albums-grid-virtual" style={{ height: albumListHeight }}>
+                <div
+                  className="albums-grid-window"
+                  style={{
+                    columnGap: `${ALBUM_COLUMN_GAP}px`,
+                    gridTemplateColumns: `repeat(${albumColumns}, ${ALBUM_TILE_TRACK_WIDTH}px)`,
+                    transform: `translateY(${albumWindowTop}px)`,
+                  }}
+                >
+                  {renderedAlbums.map((album) => (
+                    <AlbumTile
+                      album={album}
+                      key={album.name}
+                      multiSelect={multiSelect}
+                      selected={selectedAlbumNames.has(album.name)}
+                      t={t}
+                      onOpenAlbum={() => {
+                        navigate(getAlbumRoute(routeBase, album.name))
+                      }}
+                      onPlayAlbum={() => {
+                        onPlayTrack(album.songs[0].id, album.songs.map((song) => song.id))
+                      }}
+                      onAddAlbum={(position) => {
+                        setAlbumContextMenu(null)
+                        setAddToMenu({ ...position, songIds: album.songs.map((song) => song.id), defaultPlaylistName: album.name })
+                      }}
+                      onToggleSelection={() => {
+                        toggleAlbumSelection(album.name)
+                      }}
+                      onOpenContextMenu={(position) => {
+                        setAlbumContextMenu({ ...position, album })
+                      }}
+                    />
+                  ))}
+                </div>
               </div>
+            </div>
+            <div className="albums-grid-scrollbar" ref={albumGridScrollbarTrackRef} aria-hidden="true">
+              <div className="albums-grid-scrollbar-thumb" onPointerDown={onAlbumGridScrollbarPointerDown} />
             </div>
           </div>
         </div>
@@ -762,7 +838,7 @@ function buildAlbumViews(songs: LibrarySong[], t: Translator): AlbumView[] {
 
   return [...groups.entries()].map(([name, albumSongs]) => ({
     name,
-    artists: getAlbumArtists(albumSongs),
+    artists: getAlbumArtists(albumSongs, t),
     artist: getAlbumArtistLabel(albumSongs, t),
     songs: albumSongs.slice().sort((left, right) => compareLocalText(left.title, right.title)),
     artworkUrl: albumSongs.find((song) => song.artworkUrl)?.artworkUrl ?? '',
@@ -771,11 +847,11 @@ function buildAlbumViews(songs: LibrarySong[], t: Translator): AlbumView[] {
   }))
 }
 
-function getAlbumArtists(songs: LibrarySong[]) {
+function getAlbumArtists(songs: LibrarySong[], t: Translator) {
   const artistCounts = new Map<string, number>()
 
   for (const song of songs) {
-    for (const artist of getSongArtists(song)) {
+    for (const artist of getSongArtists(song, t('common.artistUnknown'))) {
       artistCounts.set(artist, (artistCounts.get(artist) ?? 0) + 1)
     }
   }
@@ -792,7 +868,7 @@ function getAlbumArtists(songs: LibrarySong[]) {
 }
 
 function getAlbumArtistLabel(songs: LibrarySong[], t: Translator) {
-  const artists = getAlbumArtists(songs)
+  const artists = getAlbumArtists(songs, t)
 
   if (artists.length >= 3) {
     return t('albums.artistsAndMore', { first: artists[0], second: artists[1], count: artists.length })

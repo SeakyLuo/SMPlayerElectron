@@ -1,3 +1,13 @@
+:root {
+  --immersive-header-collapse-progress: 0;
+}
+
+.app-shell,
+:root {
+  --top-titlebar-back-hover-background: rgba(17, 24, 39, 0.07);
+  --top-titlebar-back-icon-size: 18px;
+}
+
 .app-shell {
   position: relative;
   --player-height: 120px;
@@ -6,6 +16,20 @@
   --sidebar-width: 320px;
   --sidebar-collapsed-item-size: 40px;
   --minimal-toolbar-background: #f8fbfe;
+  --immersive-toolbar-background:
+    radial-gradient(circle at 20% 22%, rgba(var(--immersive-header-cover-rgb, 91, 135, 182), 0.32), transparent 40%),
+    radial-gradient(circle at 78% 10%, rgba(var(--immersive-header-cover-rgb, 91, 135, 182), 0.16), transparent 48%),
+    rgba(246, 249, 252, 0.98);
+  --immersive-topbar-cover-alpha-start: 0;
+  --immersive-topbar-cover-alpha-end: 0;
+  --immersive-topbar-surface-alpha: 0;
+  --immersive-topbar-blur: 0px;
+  --immersive-topbar-shadow-alpha: 0;
+  --immersive-topbar-background:
+    linear-gradient(180deg, rgba(var(--immersive-header-cover-rgb, 91, 135, 182), var(--immersive-topbar-cover-alpha-start)), rgba(var(--immersive-header-cover-rgb, 91, 135, 182), var(--immersive-topbar-cover-alpha-end))),
+    rgba(246, 249, 252, var(--immersive-topbar-surface-alpha));
+  --immersive-topbar-filter: blur(var(--immersive-topbar-blur)) saturate(150%);
+  --immersive-topbar-shadow: 0 1px 0 rgba(17, 24, 39, var(--immersive-topbar-shadow-alpha));
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   height: 100vh;
@@ -18,15 +42,30 @@
   transition: grid-template-columns 180ms cubic-bezier(0.2, 0, 0, 1);
 }
 
-.app-shell.night-mode {
+body.night-mode {
   --minimal-toolbar-background: #101419;
+  --top-titlebar-back-hover-background: rgba(255, 255, 255, 0.08);
   --night-shell-bg: #0f1318;
   --night-panel: #171c22;
   --night-panel-strong: #1d232b;
   --night-border: rgba(214, 224, 236, 0.12);
-  --night-text: rgba(246, 249, 252, 0.94);
-  --night-muted: rgba(203, 213, 225, 0.68);
-  --night-subtle: rgba(203, 213, 225, 0.46);
+  --night-text: var(--text-strong);
+  --night-muted: var(--text-muted);
+  --night-subtle: var(--text-subtle);
+  background: #101419;
+}
+
+body.night-mode .app-shell {
+  --minimal-toolbar-background: #101419;
+  --top-titlebar-back-hover-background: rgba(255, 255, 255, 0.08);
+  --immersive-toolbar-background:
+    radial-gradient(circle at 20% 22%, rgba(var(--immersive-header-cover-rgb, 91, 135, 182), 0.2), transparent 40%),
+    radial-gradient(circle at 78% 10%, rgba(var(--immersive-header-cover-rgb, 91, 135, 182), 0.1), transparent 48%),
+    var(--night-shell-bg);
+  --immersive-topbar-background:
+    linear-gradient(180deg, rgba(var(--immersive-header-cover-rgb, 91, 135, 182), var(--immersive-topbar-cover-alpha-start)), rgba(var(--immersive-header-cover-rgb, 91, 135, 182), var(--immersive-topbar-cover-alpha-end))),
+    rgba(16, 20, 25, var(--immersive-topbar-surface-alpha));
+  --immersive-topbar-shadow: 0 1px 0 rgba(255, 255, 255, var(--immersive-topbar-shadow-alpha));
   background: var(--night-shell-bg);
   color: var(--night-text);
 }
@@ -46,15 +85,8 @@
   -webkit-backdrop-filter: blur(28px);
 }
 
-.app-shell.nav-minimal:has(.workspace.is-immersive-route)::before {
-  height: 430px;
-  background:
-    linear-gradient(180deg, rgba(var(--immersive-header-cover-rgb, 91, 135, 182), 0.18), rgba(var(--immersive-header-cover-rgb, 91, 135, 182), 0.1) 52%, rgba(248, 251, 254, 0) 100%),
-    radial-gradient(circle at 50% 12%, rgba(var(--immersive-header-cover-rgb, 91, 135, 182), 0.2), transparent 54%),
-    rgba(248, 251, 254, 0.82);
-  box-shadow: none;
-  backdrop-filter: blur(34px) saturate(126%);
-  -webkit-backdrop-filter: blur(34px) saturate(126%);
+.app-shell.nav-minimal.is-headered-playlist-route::before {
+  content: none;
 }
 
 .app-shell.nav-collapsed {
@@ -84,7 +116,7 @@
   -webkit-backdrop-filter: blur(28px);
 }
 
-.app-shell.night-mode.nav-overlay-open .sidebar {
+body.night-mode .app-shell.nav-overlay-open .sidebar {
   background: rgba(16, 20, 25, 0.96);
   box-shadow: 18px 0 48px rgba(0, 0, 0, 0.36);
 }
@@ -94,6 +126,10 @@
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: 32px minmax(0, 1fr);
   background: var(--minimal-toolbar-background);
+}
+
+.app-shell.nav-minimal.is-headered-playlist-route {
+  background: transparent;
 }
 
 .minimal-titlebar {
@@ -116,18 +152,41 @@
   app-region: drag;
 }
 
-.app-shell.night-mode.nav-minimal .minimal-titlebar {
+body.night-mode .app-shell.nav-minimal .minimal-titlebar {
   color: var(--night-text);
 }
 
-.app-shell.nav-minimal:has(.workspace.is-immersive-route) .minimal-titlebar {
-  background: transparent;
-  color: #111827;
+.app-shell.nav-minimal.is-headered-playlist-route .minimal-titlebar {
+  background: var(--immersive-topbar-background);
+  background-repeat: no-repeat;
+  background-origin: border-box;
+  background-clip: border-box;
+  background-size: 100% 72px;
+  background-position: 0 0;
+  color: #fff;
+  box-shadow: none;
+  backdrop-filter: var(--immersive-topbar-filter);
+  -webkit-backdrop-filter: var(--immersive-topbar-filter);
 }
 
-.app-shell.nav-minimal:has(.workspace.is-immersive-route) .minimal-titlebar-back-button:hover,
-.app-shell.nav-minimal:has(.workspace.is-immersive-route) .minimal-titlebar-back-button:focus-visible {
-  background: rgba(17, 24, 39, 0.07);
+body.night-mode .app-shell.nav-minimal.is-headered-playlist-route .minimal-titlebar {
+  background: var(--immersive-topbar-background);
+  background-repeat: no-repeat;
+  background-origin: border-box;
+  background-clip: border-box;
+  background-size: 100% 72px;
+  background-position: 0 0;
+  color: var(--night-text);
+}
+
+.app-shell.nav-minimal.is-headered-playlist-route .minimal-titlebar-back-button:hover,
+.app-shell.nav-minimal.is-headered-playlist-route .minimal-titlebar-back-button:focus-visible {
+  background: var(--top-titlebar-back-hover-background);
+}
+
+body.night-mode .app-shell.nav-minimal.is-headered-playlist-route .minimal-titlebar-back-button:hover,
+body.night-mode .app-shell.nav-minimal.is-headered-playlist-route .minimal-titlebar-back-button:focus-visible {
+  background: var(--top-titlebar-back-hover-background);
 }
 
 .minimal-titlebar-back-button {
@@ -146,18 +205,18 @@
 
 .minimal-titlebar-back-button:hover,
 .minimal-titlebar-back-button:focus-visible {
-  background: rgba(17, 24, 39, 0.07);
+  background: var(--top-titlebar-back-hover-background);
   outline: none;
 }
 
-.app-shell.night-mode .minimal-titlebar-back-button:hover,
-.app-shell.night-mode .minimal-titlebar-back-button:focus-visible {
-  background: rgba(255, 255, 255, 0.08);
+body.night-mode .app-shell .minimal-titlebar-back-button:hover,
+body.night-mode .app-shell .minimal-titlebar-back-button:focus-visible {
+  background: var(--top-titlebar-back-hover-background);
 }
 
 .minimal-titlebar-back-button svg {
-  width: 16px;
-  height: 16px;
+  width: var(--top-titlebar-back-icon-size);
+  height: var(--top-titlebar-back-icon-size);
 }
 
 .minimal-titlebar-title {
@@ -233,7 +292,7 @@
   transition: none;
 }
 
-.app-shell.night-mode.nav-minimal.nav-minimal-open .sidebar {
+body.night-mode .app-shell.nav-minimal.nav-minimal-open .sidebar {
   background: rgba(16, 20, 25, 0.96);
   box-shadow: 18px 0 42px rgba(0, 0, 0, 0.38);
 }

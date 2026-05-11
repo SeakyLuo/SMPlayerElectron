@@ -42,7 +42,7 @@
   flex: 0 0 auto;
   min-height: 30px;
   padding: 0 13px;
-  border: 1px solid rgba(118, 132, 153, 0.22);
+  border: 1px solid var(--border-control);
   border-radius: 999px;
   background: transparent;
   color: var(--text-strong);
@@ -77,9 +77,9 @@
   gap: 8px;
   min-height: 36px;
   padding: 0 14px;
-  border: 1px solid rgba(118, 132, 153, 0.22);
+  border: 1px solid var(--border-control);
   border-radius: 9px;
-  background: rgba(255, 255, 255, 0.58);
+  background: var(--surface-control);
   color: var(--text-strong);
   box-shadow: 0 8px 18px rgba(72, 88, 112, 0.08);
   font: inherit;
@@ -167,9 +167,9 @@
   gap: 6px;
   min-height: 36px;
   padding: 0 12px;
-  border: 1px solid rgba(118, 132, 153, 0.18);
+  border: 1px solid var(--border-subtle);
   border-radius: 9px;
-  background: rgba(255, 255, 255, 0.58);
+  background: var(--surface-control);
   color: var(--text-strong);
   box-shadow: 0 8px 18px rgba(72, 88, 112, 0.08);
   font: inherit;
@@ -207,10 +207,10 @@
   flex-direction: column;
   min-width: 148px;
   padding: 6px;
-  border: 1px solid rgba(126, 139, 154, 0.16);
+  border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  background: rgba(250, 251, 253, 0.98);
-  box-shadow: 0 18px 36px rgba(46, 59, 74, 0.16);
+  background: var(--surface-menu);
+  box-shadow: var(--panel-shadow);
 }
 
 .search-sort-menu button {
@@ -251,10 +251,10 @@
   min-width: 0;
   min-height: 86px;
   padding: 11px 14px;
-  border: 1px solid rgba(118, 132, 153, 0.18);
+  border: 1px solid var(--border-subtle);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.58);
-  box-shadow: 0 14px 30px rgba(72, 88, 112, 0.08);
+  background: var(--panel);
+  box-shadow: var(--card-shadow);
   color: inherit;
   text-decoration: none;
   transition: transform 120ms ease, background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
@@ -262,7 +262,7 @@
 
 .search-result-card:hover {
   transform: translateY(-1px);
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--surface-card-hover);
   border-color: rgba(var(--accent-rgb), 0.18);
   box-shadow: 0 18px 34px rgba(72, 88, 112, 0.12);
   color: var(--accent-strong);
@@ -273,7 +273,7 @@
 }
 
 .search-result-card.is-selected {
-  background: rgba(var(--accent-rgb), 0.12);
+  background: var(--surface-card-selected);
   border-color: rgba(var(--accent-rgb), 0.42);
   box-shadow: 0 14px 30px rgba(var(--accent-rgb), 0.16);
 }
@@ -288,7 +288,7 @@
   height: 23px;
   border: 1px solid rgba(118, 132, 153, 0.32);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.82);
+  background: var(--selection-mark-bg);
   color: #fff;
   box-shadow: 0 8px 18px rgba(72, 88, 112, 0.12);
 }
@@ -309,7 +309,7 @@
   height: 64px;
   border-radius: 8px;
   object-fit: cover;
-  background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.12), rgba(129, 139, 152, 0.16));
+  background: var(--surface-artwork);
 }
 
 .search-card-artwork-fallback {
@@ -407,7 +407,7 @@
   border: 0;
   border-radius: 10px;
   background: transparent;
-  color: #111827;
+  color: var(--text-strong);
   box-shadow: none;
   font-size: 14px;
   font-weight: 720;
@@ -415,8 +415,8 @@
 
 .app-shell.nav-minimal .search-appbar-multi-select-button:hover,
 .app-shell.nav-minimal .search-appbar-multi-select-button.is-active {
-  background: rgba(17, 24, 39, 0.07);
-  color: #0f172a;
+  background: var(--surface-control-hover);
+  color: var(--accent-strong);
 }
 
 .app-shell.nav-minimal .search-result-tabs {
@@ -446,10 +446,10 @@
 .app-shell.nav-minimal .search-result-tabs button {
   min-height: 34px;
   padding: 0 12px;
-  border-color: rgba(83, 99, 121, 0.14);
+  border-color: var(--border-subtle);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.5);
-  color: #1f2937;
+  background: var(--surface-control);
+  color: var(--text-strong);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42);
   font-size: 13px;
   font-weight: 720;
@@ -458,7 +458,7 @@
 
 .app-shell.nav-minimal .search-result-tabs button.is-active {
   border-color: rgba(var(--accent-rgb), 0.22);
-  background: rgba(var(--accent-rgb), 0.12);
+  background: var(--surface-control-hover);
   color: var(--accent-strong);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.46);
 }
@@ -466,4 +466,135 @@
 .app-shell.nav-minimal .search-result-tabs button strong {
   font-size: 12px;
   font-weight: 760;
+}
+
+body.night-mode .app-shell .workspace:has(.search-page) {
+  background: var(--night-shell-bg);
+}
+
+body.night-mode .app-shell .search-page {
+  color: var(--night-text);
+}
+
+body.night-mode .app-shell .search-directory-context,
+body.night-mode .app-shell .search-loading-state,
+body.night-mode .app-shell .search-result-card span {
+  color: var(--night-muted);
+}
+
+body.night-mode .app-shell .search-loading-state strong,
+body.night-mode .app-shell .search-section-header h2,
+body.night-mode .app-shell .search-result-card strong {
+  color: var(--night-text);
+}
+
+body.night-mode .app-shell .search-result-tabs button,
+body.night-mode .app-shell .search-multi-select-button,
+body.night-mode .app-shell .search-section-actions > button,
+body.night-mode .app-shell .search-sort-trigger {
+  border-color: var(--night-border);
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--night-text);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055);
+}
+
+body.night-mode .app-shell .search-result-tabs button:hover:not(:disabled),
+body.night-mode .app-shell .search-multi-select-button:hover,
+body.night-mode .app-shell .search-multi-select-button.is-active,
+body.night-mode .app-shell .search-section-actions > button:hover:not(:disabled),
+body.night-mode .app-shell .search-sort-trigger:hover,
+body.night-mode .app-shell .search-sort-trigger[aria-expanded='true'] {
+  border-color: rgba(var(--accent-rgb), 0.34);
+  background: rgba(var(--accent-rgb), 0.16);
+  color: color-mix(in srgb, var(--accent) 72%, #f5fbff 28%);
+  box-shadow: none;
+}
+
+body.night-mode .app-shell .search-result-tabs button.is-active {
+  border-color: rgba(var(--accent-rgb), 0.38);
+  background: rgba(var(--accent-rgb), 0.22);
+  color: color-mix(in srgb, var(--accent) 72%, #f5fbff 28%);
+  box-shadow: none;
+}
+
+body.night-mode .app-shell .search-sort-menu {
+  border-color: var(--night-border);
+  background: rgba(24, 30, 38, 0.98);
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.34);
+}
+
+body.night-mode .app-shell .search-sort-menu button {
+  color: var(--night-text);
+}
+
+body.night-mode .app-shell .search-sort-menu button:hover,
+body.night-mode .app-shell .search-sort-menu button.is-active {
+  background: rgba(var(--accent-rgb), 0.18);
+  color: color-mix(in srgb, var(--accent) 72%, #f5fbff 28%);
+}
+
+body.night-mode .app-shell .search-result-card {
+  border-color: var(--night-border);
+  background: rgba(255, 255, 255, 0.045);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.18);
+}
+
+body.night-mode .app-shell .search-result-card:hover {
+  border-color: rgba(var(--accent-rgb), 0.28);
+  background: rgba(var(--accent-rgb), 0.13);
+  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.24);
+  color: color-mix(in srgb, var(--accent) 72%, #f5fbff 28%);
+}
+
+body.night-mode .app-shell .search-result-card.is-selected {
+  border-color: rgba(var(--accent-rgb), 0.42);
+  background: rgba(var(--accent-rgb), 0.18);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.2);
+}
+
+body.night-mode .app-shell .search-result-card-check {
+  border-color: rgba(220, 230, 242, 0.42);
+  background: rgba(12, 16, 22, 0.72);
+  box-shadow: none;
+}
+
+body.night-mode .app-shell .search-result-card-check.is-selected {
+  border-color: transparent;
+  background: var(--accent);
+}
+
+body.night-mode .app-shell .search-card-artwork {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+body.night-mode .app-shell .search-card-artwork-fallback {
+  color: var(--night-muted);
+}
+
+body.night-mode .app-shell .search-page .empty-state {
+  border-color: var(--night-border);
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--night-text);
+}
+
+body.night-mode .app-shell .search-page .empty-state p {
+  color: var(--night-muted);
+}
+
+body.night-mode .app-shell.nav-minimal .search-appbar-multi-select-button,
+body.night-mode .app-shell.nav-minimal .search-result-tabs button {
+  border-color: var(--night-border);
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--night-text);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055);
+}
+
+body.night-mode .app-shell.nav-minimal .search-appbar-multi-select-button:hover,
+body.night-mode .app-shell.nav-minimal .search-appbar-multi-select-button.is-active,
+body.night-mode .app-shell.nav-minimal .search-result-tabs button:hover:not(:disabled),
+body.night-mode .app-shell.nav-minimal .search-result-tabs button.is-active {
+  border-color: rgba(var(--accent-rgb), 0.34);
+  background: rgba(var(--accent-rgb), 0.16);
+  color: color-mix(in srgb, var(--accent) 72%, #f5fbff 28%);
+  box-shadow: none;
 }

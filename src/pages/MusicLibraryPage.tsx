@@ -149,8 +149,8 @@ export function MusicLibraryPage({
   const customPlaylists = snapshot.playlists.filter((playlist) => !playlist.isBuiltIn)
   const favoriteSongIdSet = useMemo(() => new Set(snapshot.favorites.songIds), [snapshot.favorites.songIds])
   const quickJumpMap = useMemo(
-    () => buildQuickJumpMap(visibleSongs, quickJumpColumn),
-    [quickJumpColumn, visibleSongs],
+    () => buildQuickJumpMap(visibleSongs, quickJumpColumn, t),
+    [quickJumpColumn, t, visibleSongs],
   )
   const quickJumpKeys = sortState.direction === 'descending'
     ? QUICK_JUMP_KEYS.slice().reverse()
@@ -167,6 +167,7 @@ export function MusicLibraryPage({
   const activeQuickJumpKey = getQuickJumpBucket(
     visibleSongs[Math.min(visibleSongs.length - 1, Math.max(0, Math.floor(scrollTop / virtualRowHeight)))],
     quickJumpColumn,
+    t,
   )
 
   useEffect(() => {
@@ -333,19 +334,6 @@ export function MusicLibraryPage({
         <>
           {isCompactLayout && quickJumpPanelOpen ? (
             <div className="library-quick-jump-panel" role="dialog" aria-label="#-Z">
-              <div className="library-quick-jump-panel-header">
-                <strong>#-Z</strong>
-                <button
-                  type="button"
-                  aria-label={t('common.close')}
-                  title={t('common.close')}
-                  onClick={() => {
-                    setQuickJumpPanelOpen(false)
-                  }}
-                >
-                  <Icon name="close" />
-                </button>
-              </div>
               <div className="library-quick-jump-grid">
                 {quickJumpKeys.map((key) => {
                   const enabled = quickJumpMap.has(key)
@@ -470,8 +458,8 @@ export function MusicLibraryPage({
               ) : null}
               {renderedSongs.map((song) => {
                 const isCurrent = song.id === selectedTrackId
-                const artistLabel = getDisplayArtists(song)
-                const artists = getSongArtists(song)
+                const artistLabel = getDisplayArtists(song, t('common.artistUnknown'))
+                const artists = getSongArtists(song, t('common.artistUnknown'))
                 const albumLabel = song.album || t('common.albumUnknown')
                 const durationLabel = formatDuration(song.duration)
                 const playCountLabel = song.playCount ? String(song.playCount) : ''
@@ -920,11 +908,11 @@ function getLibraryQuickJumpBasisName(column: LibrarySortColumn, t: Translator) 
   }
 }
 
-function buildQuickJumpMap(songs: LibrarySong[], column: LibrarySortColumn) {
+function buildQuickJumpMap(songs: LibrarySong[], column: LibrarySortColumn, t: Translator) {
   const indexes = new Map<string, number>()
 
   songs.forEach((song, index) => {
-    const bucket = getQuickJumpBucket(song, column)
+    const bucket = getQuickJumpBucket(song, column, t)
     if (!indexes.has(bucket)) {
       indexes.set(bucket, index)
     }
@@ -933,24 +921,24 @@ function buildQuickJumpMap(songs: LibrarySong[], column: LibrarySortColumn) {
   return indexes
 }
 
-function getQuickJumpBucket(song: LibrarySong | undefined, column: LibrarySortColumn) {
-  return getLocalTextQuickJumpBucket(getQuickJumpValue(song, column))
+function getQuickJumpBucket(song: LibrarySong | undefined, column: LibrarySortColumn, t: Translator) {
+  return getLocalTextQuickJumpBucket(getQuickJumpValue(song, column, t))
 }
 
-function getQuickJumpValue(song: LibrarySong | undefined, column: LibrarySortColumn) {
+function getQuickJumpValue(song: LibrarySong | undefined, column: LibrarySortColumn, t: Translator) {
   if (!song) {
     return ''
   }
 
   switch (column) {
     case 'artist':
-      return getDisplayArtists(song)
+      return getDisplayArtists(song, t('common.artistUnknown'))
     case 'album':
-      return song.album
+      return song.album || t('common.albumUnknown')
     case 'duration':
       return formatDuration(song.duration)
     case 'favorite':
-      return song.favorite ? 'Favorite' : ''
+      return song.favorite ? t('common.favorite') : ''
     case 'playCount':
       return String(song.playCount)
     case 'dateAdded':

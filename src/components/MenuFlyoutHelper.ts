@@ -315,7 +315,7 @@ export function getMusicMenuFlyoutItems({
   )
 
   if (currentIndex !== -1 && currentIndex !== songIndex && currentIndex !== songIndex - 1) {
-    items.push({ key: 'play-next', text: t('context.playNext'), icon: 'next', onClick: onPlayNext })
+    items.push({ key: 'play-next', text: t('context.playNext'), icon: 'playNext', onClick: onPlayNext })
   }
 
   const addToItem = getAddToPlaylistMenuFlyoutItem({

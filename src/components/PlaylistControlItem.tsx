@@ -71,7 +71,7 @@ export function PlaylistControlItem({
   onDrop,
   onDragEnd,
 }: PlaylistControlItemProps) {
-  const artists = getSongArtists(song)
+  const artists = getSongArtists(song, t('common.artistUnknown'))
   const artistLabel = artists.join(', ')
   const { artworkUrl, refreshArtwork } = useSongArtwork(song.id, song.artworkUrl)
   const open = () => {
@@ -224,7 +224,7 @@ export function PlaylistControlItem({
               onPlayNextClick(song)
             }}
           >
-            <Icon name="next" />
+            <Icon name="playNext" />
           </button>
         ) : null}
         {onRemoveFromListClick ? (

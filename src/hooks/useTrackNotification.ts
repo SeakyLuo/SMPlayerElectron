@@ -2,8 +2,9 @@ import { useEffect, useRef } from 'react'
 
 import { getDisplayArtists } from '../shared/artists'
 import type { LibrarySong } from '../shared/contracts'
+import type { Translator } from '../shared/i18n'
 
-export function useTrackNotification(currentTrack: LibrarySong | null) {
+export function useTrackNotification(currentTrack: LibrarySong | null, t: Translator) {
   const lastNotifiedTrackIdRef = useRef<number | null>(null)
 
   useEffect(() => {
@@ -24,8 +25,8 @@ export function useTrackNotification(currentTrack: LibrarySong | null) {
     void window.smplayer.showTrackNotification({
       songId: currentTrack.id,
       title: currentTrack.title,
-      artist: getDisplayArtists(currentTrack),
-      album: currentTrack.album || 'Unknown album',
+      artist: getDisplayArtists(currentTrack, t('common.artistUnknown')),
+      album: currentTrack.album || t('common.albumUnknown'),
     })
-  }, [currentTrack])
+  }, [currentTrack, t])
 }

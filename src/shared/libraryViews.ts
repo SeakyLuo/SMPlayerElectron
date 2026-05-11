@@ -114,7 +114,7 @@ export function buildArtistCards(songs: LibrarySong[], t?: Translator) {
   >()
 
   for (const song of songs) {
-    for (const artist of getSongArtists(song)) {
+    for (const artist of getSongArtists(song, t?.('common.artistUnknown'))) {
       const current =
         groups.get(artist) ?? { count: 0, duration: 0, albums: new Set<string>(), artworkUrl: '' }
 
@@ -172,7 +172,7 @@ export function buildAlbumCards(songs: LibrarySong[], t?: Translator) {
 
     current.count += 1
     current.duration += song.duration
-    for (const artist of getSongArtists(song)) {
+    for (const artist of getSongArtists(song, t?.('common.artistUnknown'))) {
       current.artists.add(artist)
     }
     if (!current.artworkUrl && song.artworkUrl) {
@@ -246,7 +246,7 @@ export function buildFolderCards(songs: LibrarySong[], rootPath: string) {
 export function buildRecentCards(recentSongs: RecentLibrarySong[], t?: Translator) {
   return recentSongs.slice(0, CARD_LIMIT).map((song) => ({
     title: song.title,
-    subtitle: `${getDisplayArtists(song)} - ${formatDuration(song.duration)}`,
+    subtitle: `${getDisplayArtists(song, t?.('common.artistUnknown'))} - ${formatDuration(song.duration)}`,
     artworkUrl: song.artworkUrl,
     detail: `${t?.('cards.played', {
       time: formatPlayedAt(song.playedAt, t),
@@ -267,7 +267,7 @@ export function buildFavoriteCards(songs: LibrarySong[], t?: Translator) {
     .slice(0, CARD_LIMIT)
     .map((song) => ({
       title: song.title,
-      subtitle: `${getDisplayArtists(song)} - ${formatDuration(song.duration)}`,
+      subtitle: `${getDisplayArtists(song, t?.('common.artistUnknown'))} - ${formatDuration(song.duration)}`,
       artworkUrl: song.artworkUrl,
       detail: t
         ? t('cards.playedTimes', {

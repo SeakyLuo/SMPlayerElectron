@@ -85,8 +85,10 @@ export function AlbumArtworkDialog({
             {t('context.seeAlbumArt')}
           </button>
           <button type="button" className="song-dialog-icon-button" onClick={onClose} aria-label={t('common.close')}>
-            <Icon name="close" />
+            <Icon name="arrowLeft" className="dialog-back-icon" />
+            <Icon name="close" className="dialog-close-icon" />
           </button>
+          <span className="dialog-titlebar-title">{t('app.shell')}</span>
         </nav>
         {statusMessage ? <p className="song-dialog-status">{statusMessage}</p> : null}
         <div className="song-dialog-body song-dialog-artwork">

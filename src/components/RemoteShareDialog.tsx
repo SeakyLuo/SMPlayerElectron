@@ -97,8 +97,10 @@ export function RemoteShareDialog({
             <p>{t('remoteShare.description')}</p>
           </div>
           <button type="button" aria-label={t('common.close')} onClick={onClose}>
-            <Icon name="close" />
+            <Icon name="arrowLeft" className="dialog-back-icon" />
+            <Icon name="close" className="dialog-close-icon" />
           </button>
+          <span className="dialog-titlebar-title">{t('app.shell')}</span>
         </header>
 
         {status ? (

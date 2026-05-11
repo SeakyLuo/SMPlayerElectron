@@ -6,7 +6,7 @@ import { AppBarPortal } from '../components/AppBarPortal'
 import { requestConfirmDialog } from '../components/dialogService'
 import { LoadingState } from '../components/LoadingState'
 import { MenuFlyout } from '../components/MenuFlyout'
-import { getAddToPlaylistMenuFlyoutItem, getMusicMenuFlyoutItems, getShuffleMenuItems } from '../components/MenuFlyoutHelper'
+import { getAddToPlaylistMenuFlyoutItem, getMusicMenuFlyoutItems, getShuffleMenuItems, type MenuFlyoutItem, type MenuFlyoutPosition } from '../components/MenuFlyoutHelper'
 import { MultiSelectCommandBar } from '../components/MultiSelectCommandBar'
 import { MusicDialog } from '../components/MusicDialog'
 import { PlaylistControlItem } from '../components/PlaylistControlItem'
@@ -91,14 +91,13 @@ export function NowPlayingPage({
 }: NowPlayingPageProps) {
   const [multiSelect, setMultiSelect] = useState(false)
   const [selectedQueueIndexes, setSelectedQueueIndexes] = useState<Set<number>>(new Set())
-  const [randomMenuOpen, setRandomMenuOpen] = useState(false)
+  const [randomMenuPosition, setRandomMenuPosition] = useState<MenuFlyoutPosition | null>(null)
   const [songMenu, setSongMenu] = useState<NowPlayingSongMenuState | null>(null)
   const [addToMenu, setAddToMenu] = useState<NowPlayingAddToMenuState | null>(null)
   const [songDialog, setSongDialog] = useState<{ song: LibrarySong; mode: 'properties' | 'lyrics' | 'album-art' } | null>(null)
   const [songPreferenceItem, setSongPreferenceItem] = useState<PreferenceItemSnapshot | null>(null)
   const [isCompactQueueLayout, setIsCompactQueueLayout] = useState(() => window.matchMedia(NOW_PLAYING_COMPACT_QUERY).matches)
   const listShellRef = useRef<HTMLElement | null>(null)
-  const randomMenuRefs = useRef(new Set<HTMLDivElement>())
   const currentRowRef = useRef<HTMLDivElement | null>(null)
   const createPlaylist = useLibraryStore((state) => state.createPlaylist)
   const folders = useLibraryStore((state) => state.snapshot.folders)
@@ -222,7 +221,7 @@ export function NowPlayingPage({
   const bottomSpacerHeight = (visibleEntries.length - endIndex) * rowHeight
   const randomActions = useMemo(
     () => {
-      if (!randomMenuOpen) {
+      if (!randomMenuPosition) {
         return []
       }
 
@@ -241,7 +240,7 @@ export function NowPlayingPage({
         },
       })
     },
-    [folders, librarySongs, onPlayTrack, onReplaceQueue, playQuick, playlists, randomMenuOpen, recentSongs, songs, t],
+    [folders, librarySongs, onPlayTrack, onReplaceQueue, playQuick, playlists, randomMenuPosition, recentSongs, songs, t],
   )
   const addToMenuItem = addToMenu
     ? getAddToPlaylistMenuFlyoutItem({
@@ -360,6 +359,38 @@ export function NowPlayingPage({
     })
   }
 
+  const addQueueToFavorites = () => {
+    const nextFavoriteSongIds = queueSongIds.filter((songId) => !favoriteSongIdSet.has(songId))
+    onAddSongsToPlaylist(favoritePlaylistId, nextFavoriteSongIds)
+    showUndo(
+      nextFavoriteSongIds.length === 1
+        ? t('notification.songAddedTo', {
+            title: songs.find((song) => song.id === nextFavoriteSongIds[0])!.title,
+            target: t('common.myFavorites'),
+          })
+        : t('notification.songsAddedTo', { count: nextFavoriteSongIds.length, target: t('common.myFavorites') }),
+      () => removeSongsFromPlaylist(favoritePlaylistId, nextFavoriteSongIds),
+    )
+  }
+
+  const createPlaylistFromQueue = (name: string) => {
+    void createPlaylist(name, queueSongIds)
+  }
+
+  const addQueueToPlaylist = (playlistId: number) => {
+    const targetPlaylist = playlists.find((playlist) => playlist.id === playlistId)!
+    onAddSongsToPlaylist(playlistId, queueSongIds)
+    showUndo(
+      queueSongIds.length === 1
+        ? t('notification.songAddedTo', {
+            title: songs.find((song) => song.id === queueSongIds[0])!.title,
+            target: targetPlaylist.name,
+          })
+        : t('notification.songsAddedTo', { count: queueSongIds.length, target: targetPlaylist.name }),
+      () => removeSongsFromPlaylist(playlistId, queueSongIds),
+    )
+  }
+
   const toggleMultiSelect = () => {
     setMultiSelect((current) => {
       if (current) {
@@ -369,45 +400,50 @@ export function NowPlayingPage({
     })
   }
 
-  const nowPlayingOverflowItems = [
-    {
-      key: 'locate-current',
-      text: t('nowPlaying.locateCurrent'),
-      icon: 'nowPlaying' as const,
-      disabled: !canUseQueueCommands || !currentSong,
-      onClick: locateCurrent,
+  const addToPlaylistOverflowItem = getAddToPlaylistMenuFlyoutItem({
+    playlists: customPlaylists,
+    songIds: queueSongIds,
+    t,
+    defaultPlaylistName: defaultNewPlaylistName,
+    currentPlaylistName: t('common.nowPlaying'),
+    includeFavorites: queueSongIds.some((songId) => !favoriteSongIdSet.has(songId)),
+    onToggleFavorite: addQueueToFavorites,
+    onCreatePlaylist: createPlaylistFromQueue,
+    onAddToPlaylist: addQueueToPlaylist,
+  })
+  const locateCurrentOverflowItem: MenuFlyoutItem = {
+    key: 'locate-current',
+    text: t('nowPlaying.locateCurrent'),
+    icon: 'songs' as const,
+    disabled: !canUseQueueCommands || !currentSong,
+    onClick: () => {
+      locateCurrent()
     },
-    {
-      key: 'add-to-playlist',
-      text: t('context.addToPlaylist'),
-      icon: 'plus' as const,
-      disabled: !canUseQueueCommands,
-      onClick: () => {
-        openAddToMenu(window.innerWidth - 232, 44)
-      },
-    },
-    {
-      key: 'clear-queue',
-      text: t('nowPlaying.clearQueue'),
-      icon: 'close' as const,
-      disabled: !canUseQueueCommands,
-      onClick: onClearQueue,
-    },
-    {
-      key: 'play-mode',
-      text: t('nowPlaying.playMode'),
-      icon: 'albums' as const,
-      disabled: !canUseQueueCommands || !currentSong,
-      onClick: onOpenImmersiveMode,
-    },
-    {
-      key: 'multi-select',
-      text: t('albums.multiSelect'),
-      icon: 'multiSelect' as const,
-      disabled: !canUseQueueCommands,
-      onClick: toggleMultiSelect,
-    },
-  ]
+  }
+  const clearQueueOverflowItem: MenuFlyoutItem = {
+    key: 'clear-queue',
+    text: t('nowPlaying.clearQueue'),
+    icon: 'close' as const,
+    disabled: !canUseQueueCommands,
+    onClick: onClearQueue,
+  }
+  const playModeOverflowItem: MenuFlyoutItem = {
+    key: 'play-mode',
+    text: t('nowPlaying.playMode'),
+    icon: 'fullscreen' as const,
+    disabled: !canUseQueueCommands || !currentSong,
+    onClick: onOpenImmersiveMode,
+  }
+  const multiSelectOverflowItem: MenuFlyoutItem = {
+    key: 'multi-select',
+    text: t('albums.multiSelect'),
+    icon: 'multiSelect' as const,
+    disabled: !canUseQueueCommands,
+    onClick: toggleMultiSelect,
+  }
+  const nowPlayingOverflowItems: MenuFlyoutItem[] = addToPlaylistOverflowItem
+    ? [locateCurrentOverflowItem, addToPlaylistOverflowItem, clearQueueOverflowItem, playModeOverflowItem, multiSelectOverflowItem]
+    : [locateCurrentOverflowItem, clearQueueOverflowItem, playModeOverflowItem, multiSelectOverflowItem]
 
   const renderPrimaryNowPlayingCommands = (variant: 'page' | 'appbar') => (
     <>
@@ -419,62 +455,23 @@ export function NowPlayingPage({
           void playQuick()
         }}
       />
-      <div
-        className="now-playing-random-menu"
-        ref={(element) => {
-          if (element) {
-            randomMenuRefs.current.add(element)
-          }
+      <CommandBarButton
+        icon="shuffle"
+        label={t('nowPlaying.randomPlay')}
+        disabled={!canUseLibraryCommands}
+        ariaHasPopup="menu"
+        ariaExpanded={randomMenuPosition != null}
+        onClick={(event) => {
+          const rect = event.currentTarget.getBoundingClientRect()
+          setRandomMenuPosition({ x: rect.left, y: rect.bottom + 4 })
         }}
-      >
-        <CommandBarButton
-          icon="shuffle"
-          label={t('nowPlaying.randomPlay')}
-          disabled={!canUseLibraryCommands}
-          ariaHasPopup="menu"
-          ariaExpanded={randomMenuOpen}
-          onPointerDown={(event) => {
-            event.stopPropagation()
-          }}
-          onClick={() => {
-            setRandomMenuOpen((current) => !current)
-          }}
-        />
-        {randomMenuOpen ? (
-          <>
-            <div className="dropdown-dismiss-layer" onPointerDown={() => setRandomMenuOpen(false)} />
-            <div
-              className="now-playing-random-options"
-              role="menu"
-              onPointerDown={(event) => {
-                event.stopPropagation()
-              }}
-            >
-              {randomActions.map((action) => (
-                action.separator ? (
-                  <div className="now-playing-random-options-separator" key={action.key} role="separator" />
-                ) : (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    key={action.key}
-                    disabled={action.disabled}
-                    onClick={() => {
-                      void action.onClick?.()
-                      setRandomMenuOpen(false)
-                    }}
-                  >
-                    {action.text}
-                  </button>
-                )
-              ))}
-            </div>
-          </>
-        ) : null}
-      </div>
+        onOverflowClick={(position) => {
+          setRandomMenuPosition(position)
+        }}
+      />
       {variant === 'page' && canUseQueueCommands ? (
         <CommandBarButton
-          icon="nowPlaying"
+          icon="songs"
           label={t('nowPlaying.locateCurrent')}
           disabled={!currentSong}
           onClick={locateCurrent}
@@ -497,7 +494,7 @@ export function NowPlayingPage({
             onClick={onClearQueue}
           />
           <CommandBarButton
-            icon="albums"
+            icon="fullscreen"
             label={t('nowPlaying.playMode')}
             disabled={!currentSong}
             onClick={onOpenImmersiveMode}
@@ -512,27 +509,6 @@ export function NowPlayingPage({
       ) : null}
     </>
   )
-
-  useEffect(() => {
-    if (!randomMenuOpen) {
-      return
-    }
-
-    const closeRandomMenu = (event: PointerEvent) => {
-      const target = event.target
-      if (target instanceof Node && [...randomMenuRefs.current].some((element) => element.contains(target))) {
-        return
-      }
-
-      setRandomMenuOpen(false)
-    }
-
-    document.addEventListener('pointerdown', closeRandomMenu, true)
-
-    return () => {
-      document.removeEventListener('pointerdown', closeRandomMenu, true)
-    }
-  }, [randomMenuOpen])
 
   useEffect(() => {
     const listShell = listShellRef.current
@@ -573,6 +549,16 @@ export function NowPlayingPage({
         {renderPrimaryNowPlayingCommands('page')}
       </CommandBar>
 
+      {randomMenuPosition ? (
+        <MenuFlyout
+          position={randomMenuPosition}
+          items={randomActions}
+          onClose={() => {
+            setRandomMenuPosition(null)
+          }}
+        />
+      ) : null}
+
       {error ? <div className="error-banner">{error}</div> : null}
 
       <section
@@ -585,15 +571,13 @@ export function NowPlayingPage({
         {visibleSongs.length === 0 ? (
           loading ? (
             <LoadingState t={t} compact />
+          ) : songs.length > 0 ? (
+            <div className="empty-state compact">
+              <h3>{t('nowPlaying.noQueueMatch', { query: searchQuery })}</h3>
+              <p>{t('nowPlaying.queueSearchHelp')}</p>
+            </div>
           ) : (
-          <div className="empty-state compact">
-            <h3>
-              {songs.length > 0
-                ? t('nowPlaying.noQueueMatch', { query: searchQuery })
-                : t('nowPlaying.queueEmpty')}
-            </h3>
-            <p>{songs.length > 0 ? t('nowPlaying.queueSearchHelp') : t('nowPlaying.queueEmptyHelp')}</p>
-          </div>
+            null
           )
         ) : (
           <div className="now-playing-playlist-control" style={{ minHeight: listHeight }}>

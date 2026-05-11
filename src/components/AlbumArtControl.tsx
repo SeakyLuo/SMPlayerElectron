@@ -8,10 +8,11 @@ interface AlbumArtControlProps {
   songId?: number
   className?: string
   fallbackClassName?: string
+  fallbackArtwork?: boolean
   fallbackText?: string
 }
 
-export function AlbumArtControl({ title, artworkUrl, songId, className, fallbackClassName, fallbackText }: AlbumArtControlProps) {
+export function AlbumArtControl({ title, artworkUrl, songId, className, fallbackClassName, fallbackArtwork = true, fallbackText }: AlbumArtControlProps) {
   const { artworkUrl: effectiveArtworkUrl, refreshArtwork } = useSongArtwork(songId, artworkUrl)
 
   return (
@@ -22,7 +23,7 @@ export function AlbumArtControl({ title, artworkUrl, songId, className, fallback
       onError={refreshArtwork}
       renderFallback={() => (
         <div className={`album-art-control album-art-control-fallback${className ? ` ${className}` : ''}${fallbackClassName ? ` ${fallbackClassName}` : ''}`} aria-hidden="true">
-          <DefaultAlbumArtwork className="album-art-control-fallback-image" />
+          {fallbackArtwork ? <DefaultAlbumArtwork className="album-art-control-fallback-image" /> : null}
           {fallbackText ? <span>{fallbackText}</span> : null}
         </div>
       )}

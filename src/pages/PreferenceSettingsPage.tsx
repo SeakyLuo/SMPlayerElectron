@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react'
+﻿import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 
 import { createPortal } from 'react-dom'
 
@@ -44,6 +44,9 @@ export function PreferenceSettingsPage({ t, onClose }: PreferenceSettingsPagePro
   const removePreferenceItem = usePreferenceStore((state) => state.removeItem)
   const clearInvalidPreferenceItems = usePreferenceStore((state) => state.clearInvalidItems)
   const [expandedSections, setExpandedSections] = useState<Set<PreferenceSectionKey>>(new Set())
+  const preferencePageRef = useRef<HTMLDivElement | null>(null)
+  const preferenceScrollFrameRef = useRef<HTMLDivElement | null>(null)
+  const preferenceScrollbarTrackRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -88,6 +91,75 @@ export function PreferenceSettingsPage({ t, onClose }: PreferenceSettingsPagePro
     })
   }
 
+  useLayoutEffect(() => {
+    const scrollFrame = preferenceScrollFrameRef.current
+    const scrollContainer = preferencePageRef.current
+    if (!scrollFrame || !scrollContainer) {
+      return
+    }
+
+    let animationFrame = 0
+    const updateScrollbar = () => {
+      const maxScrollTop = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight)
+      const trackHeight = scrollContainer.clientHeight
+      const thumbHeight = maxScrollTop > 0
+        ? Math.max(38, Math.round((trackHeight / scrollContainer.scrollHeight) * trackHeight))
+        : trackHeight
+      const thumbTop = maxScrollTop > 0
+        ? Math.round((scrollContainer.scrollTop / maxScrollTop) * Math.max(0, trackHeight - thumbHeight))
+        : 0
+
+      scrollFrame.style.setProperty('--preference-scrollbar-thumb-height', `${thumbHeight}px`)
+      scrollFrame.style.setProperty('--preference-scrollbar-thumb-top', `${thumbTop}px`)
+      scrollFrame.classList.toggle('has-scrollbar', maxScrollTop > 1)
+    }
+    const scheduleUpdate = () => {
+      window.cancelAnimationFrame(animationFrame)
+      animationFrame = window.requestAnimationFrame(updateScrollbar)
+    }
+
+    updateScrollbar()
+    scrollContainer.addEventListener('scroll', scheduleUpdate, { passive: true })
+    const resizeObserver = new ResizeObserver(scheduleUpdate)
+    resizeObserver.observe(scrollFrame)
+    resizeObserver.observe(scrollContainer)
+    window.addEventListener('resize', scheduleUpdate)
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame)
+      scrollContainer.removeEventListener('scroll', scheduleUpdate)
+      resizeObserver.disconnect()
+      window.removeEventListener('resize', scheduleUpdate)
+    }
+  }, [snapshot, expandedSections])
+
+  const onPreferenceScrollbarPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const scrollContainer = preferencePageRef.current
+    const scrollFrame = preferenceScrollFrameRef.current
+    const scrollbarTrack = preferenceScrollbarTrackRef.current
+    if (!scrollContainer || !scrollFrame || !scrollbarTrack) {
+      return
+    }
+
+    event.preventDefault()
+    const maxScrollTop = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight)
+    const thumbHeight = Number.parseFloat(getComputedStyle(scrollFrame).getPropertyValue('--preference-scrollbar-thumb-height'))
+    const trackRange = Math.max(1, scrollbarTrack.clientHeight - thumbHeight)
+    const scrollPerPixel = maxScrollTop / trackRange
+    const startY = event.clientY
+    const startScrollTop = scrollContainer.scrollTop
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      scrollContainer.scrollTop = startScrollTop + (moveEvent.clientY - startY) * scrollPerPixel
+    }
+    const onPointerUp = () => {
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', onPointerUp)
+    }
+
+    window.addEventListener('pointermove', onPointerMove)
+    window.addEventListener('pointerup', onPointerUp)
+  }
+
   if (!snapshot) {
     return createPortal(
       <div
@@ -103,8 +175,10 @@ export function PreferenceSettingsPage({ t, onClose }: PreferenceSettingsPagePro
           <header>
             <h2>{t('settings.preferenceSettings')}</h2>
             <button type="button" onClick={onClose} aria-label={t('common.close')}>
-              <Icon name="close" />
+              <Icon name="arrowLeft" className="dialog-back-icon" />
+              <Icon name="close" className="dialog-close-icon" />
             </button>
+            <span className="dialog-titlebar-title">{t('app.shell')}</span>
           </header>
           <div className="preference-loading">{error || t('preferences.loading')}</div>
         </section>
@@ -127,10 +201,13 @@ export function PreferenceSettingsPage({ t, onClose }: PreferenceSettingsPagePro
         <header>
           <h2>{t('settings.preferenceSettings')}</h2>
           <button type="button" onClick={onClose} aria-label={t('common.close')}>
-            <Icon name="close" />
+            <Icon name="arrowLeft" className="dialog-back-icon" />
+            <Icon name="close" className="dialog-close-icon" />
           </button>
+          <span className="dialog-titlebar-title">{t('app.shell')}</span>
         </header>
-        <div className="preference-page">
+        <div className="preference-scroll-frame" ref={preferenceScrollFrameRef}>
+          <div className="preference-page" ref={preferencePageRef}>
           <div className="preference-info">
             <span aria-hidden="true">i</span>
             <p>{t('preferences.info')}</p>
@@ -219,6 +296,10 @@ export function PreferenceSettingsPage({ t, onClose }: PreferenceSettingsPagePro
               onUpdateItem={updateItem}
             />
           </section>
+          </div>
+          <div className="preference-scrollbar" ref={preferenceScrollbarTrackRef} aria-hidden="true">
+            <div className="preference-scrollbar-thumb" onPointerDown={onPreferenceScrollbarPointerDown} />
+          </div>
         </div>
       </section>
     </div>,
@@ -264,17 +345,18 @@ function PreferenceSection({
           <span>{items.length}/{limit}</span>
         </div>
         <div className="preference-section-actions">
-          <label className="preference-section-switch">
-            <input
-              type="checkbox"
-              checked={enabled}
-              onChange={(event) => {
-                void onToggleEnabled(section, event.currentTarget.checked)
-              }}
-            />
+          <button
+            type="button"
+            className="preference-section-switch"
+            role="switch"
+            aria-checked={enabled}
+            onClick={() => {
+              void onToggleEnabled(section, !enabled)
+            }}
+          >
             <span aria-hidden="true" />
             <em>{enabled ? t('preferences.enabled') : t('preferences.disabled')}</em>
-          </label>
+          </button>
           <span className="preference-header-spacer" aria-hidden="true" />
           {items.length > 5 ? (
             <button className="preference-expand-button" type="button" onClick={() => onToggleExpanded(section)}>
@@ -341,17 +423,18 @@ function PreferenceItems({
             ) : (
               <span aria-hidden="true" />
             )}
-            <label className="preference-item-switch">
-              <input
-                type="checkbox"
-                checked={item.isEnabled}
-                onChange={(event) => {
-                  void onUpdateItem(item, { isEnabled: event.currentTarget.checked })
-                }}
-              />
+            <button
+              type="button"
+              className="preference-item-switch"
+              role="switch"
+              aria-checked={item.isEnabled}
+              onClick={() => {
+                void onUpdateItem(item, { isEnabled: !item.isEnabled })
+              }}
+            >
               <span aria-hidden="true" />
               <em>{item.isEnabled ? t('preferences.enabled') : t('preferences.disabled')}</em>
-            </label>
+            </button>
             <PreferenceLevelSelect
               value={item.level}
               t={t}

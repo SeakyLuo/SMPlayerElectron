@@ -565,12 +565,10 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
       setCurrentQueueIndex(nextQueueIndex > -1 ? nextQueueIndex : null)
       await persistPlaybackSettings({
         lastMusicIndex: nextQueueIndex,
-        musicProgress: 0,
+        musicProgress: audio.currentTime,
       })
 
       transitionStatus({ type: 'play-requested' })
-      audio.currentTime = 0
-      setProgressFromPlayback(0)
       try {
         await audio.play()
       } catch {
@@ -580,7 +578,7 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
     }
 
     await loadTrackRef.current(trackId, { autoplay: true, queueIndex, startAt: 0 })
-  }, [getPlaybackSongIds, persistPlaybackSettings, recoverFromPlaybackFailure, setProgressFromPlayback, transitionStatus])
+  }, [getPlaybackSongIds, persistPlaybackSettings, recoverFromPlaybackFailure, transitionStatus])
 
   const playCurrent = useCallback(async () => {
     const audio = audioRef.current
@@ -839,6 +837,8 @@ export function usePlaybackController(snapshot: LibrarySnapshot): PlaybackContro
 
   useMediaSession({
     currentTrack,
+    unknownAlbum: createTranslator(snapshot.settings.preferredLanguage)('common.albumUnknown'),
+    unknownArtist: createTranslator(snapshot.settings.preferredLanguage)('common.artistUnknown'),
     isPlaying,
     onPlay: () => {
       void playCurrent()

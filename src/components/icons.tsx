@@ -222,6 +222,11 @@ const paths = {
     <path key="left" d="M8 5v14" />,
     <path key="right" d="M16 5v14" />,
   ],
+  playNext: [
+    <path key="line" d="M6 5.5h12" />,
+    <path key="stem" d="M12 18.5v-10" />,
+    <path key="head" d="m7.8 12.6 4.2-4.2 4.2 4.2" />,
+  ],
   previous: [
     <path key="bar" d="M6 5v14" />,
     <path key="play" d="m16 5-8 7 8 7z" />,
@@ -411,7 +416,7 @@ const fluentIcons: Partial<Record<IconName, FluentIconComponent>> = {
 
 export function Icon({ name, className, ...props }: IconProps & { name: IconName }) {
   const FluentIcon = fluentIcons[name]
-  const strokeWidth = name === 'albums' || name === 'playlists' ? 1.35 : 2.2
+  const strokeWidth = name === 'albums' || name === 'playlists' || name === 'playNext' ? 1.35 : 2.2
 
   if (FluentIcon) {
     return (

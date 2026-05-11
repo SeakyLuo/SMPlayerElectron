@@ -192,7 +192,9 @@ const feedbackEmailSubject = 'Feedback about Simple Melody Player'
 const audioDialogExtensions = [...AUDIO_EXTENSIONS].map((extension) => extension.slice(1))
 const legacyUwpPackageIdentityName = '23778SeakyTheLoner.SMPlayer'
 const appWindowBackgroundColor = '#f6f8fb'
+const nightAppWindowBackgroundColor = '#101419'
 const titleBarOverlayColor = '#00000000'
+const nightTitleBarOverlayColor = '#00000000'
 const defaultTitleBarSymbolColor = '#111111'
 const immersiveTitleBarSymbolColor = '#ffffff'
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
@@ -411,6 +413,36 @@ function resolveStartupRoute(lastPage: string) {
   return restorableRoutes.has(route) ? route : '/songs'
 }
 
+function settingsTimeToMinute(value: string) {
+  const [hour, minute] = value.split(':').map(Number)
+  return hour * 60 + minute
+}
+
+function isClockMinuteInRange(current: number, start: number, end: number) {
+  if (start < end) {
+    return current >= start && current < end
+  }
+
+  return current >= start || current < end
+}
+
+function getClockMinute() {
+  const now = new Date()
+  return now.getHours() * 60 + now.getMinutes()
+}
+
+function getStartupNightModeActive() {
+  const settings = dataStore!.getSettingsSnapshot()
+  return settings.nightMode === 'on' || (
+    settings.nightMode === 'auto' &&
+    isClockMinuteInRange(
+      getClockMinute(),
+      settingsTimeToMinute(settings.nightModeStartTime),
+      settingsTimeToMinute(settings.nightModeEndTime),
+    )
+  )
+}
+
 async function openVoiceAssistantPrivacySettings() {
   if (process.platform === 'win32') {
     await shell.openExternal('ms-settings:privacy-speech')
@@ -424,6 +456,7 @@ async function openVoiceAssistantPrivacySettings() {
 }
 
 async function createWindow() {
+  const startupNightModeActive = getStartupNightModeActive()
   mainWindow = new BrowserWindow({
     width: 1460,
     height: 940,
@@ -431,13 +464,13 @@ async function createWindow() {
     minHeight: defaultWindowMinimumSize.height,
     show: false,
     autoHideMenuBar: true,
-    backgroundColor: appWindowBackgroundColor,
+    backgroundColor: startupNightModeActive ? nightAppWindowBackgroundColor : appWindowBackgroundColor,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
     titleBarOverlay:
       process.platform === 'win32'
         ? {
-            color: titleBarOverlayColor,
-            symbolColor: defaultTitleBarSymbolColor,
+            color: startupNightModeActive ? nightTitleBarOverlayColor : titleBarOverlayColor,
+            symbolColor: startupNightModeActive ? immersiveTitleBarSymbolColor : defaultTitleBarSymbolColor,
             height: 32,
           }
         : undefined,
@@ -449,6 +482,9 @@ async function createWindow() {
     webPreferences: {
       contextIsolation: true,
       preload: join(__dirname, 'preload.mjs'),
+      additionalArguments: [
+        `--smplayer-startup-night-mode=${startupNightModeActive ? '1' : '0'}`,
+      ],
     },
   })
 
@@ -706,6 +742,7 @@ function registerMediaProtocols() {
       headers: request.headers,
     })
     const headers = new Headers(response.headers)
+    headers.set('access-control-allow-origin', '*')
     headers.set('cache-control', 'public, max-age=31536000, immutable')
 
     return new Response(response.body, {
@@ -1062,9 +1099,10 @@ app.whenReady().then(async () => {
     stopWindowDrag()
   })
   ipcMain.handle('window:set-controls-light', (_event, light: boolean) => {
+    mainWindow!.setBackgroundColor(light ? nightAppWindowBackgroundColor : appWindowBackgroundColor)
     if (process.platform === 'win32') {
       mainWindow!.setTitleBarOverlay({
-        color: titleBarOverlayColor,
+        color: light ? nightTitleBarOverlayColor : titleBarOverlayColor,
         symbolColor: light ? immersiveTitleBarSymbolColor : defaultTitleBarSymbolColor,
         height: 32,
       })
