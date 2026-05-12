@@ -44,7 +44,18 @@ if (startupNightModeActive) {
 
 const api: SmplayerApi = {
   getAppInfo: () => ipcRenderer.invoke('app:get-info'),
-  getLibrarySnapshot: () => ipcRenderer.invoke('library:get-snapshot'),
+  getLibrarySettings: () => ipcRenderer.invoke('library:get-settings'),
+  getLibraryCounts: () => ipcRenderer.invoke('library:get-counts'),
+  getLibrarySongs: () => ipcRenderer.invoke('library:get-songs'),
+  getLibraryFolders: () => ipcRenderer.invoke('library:get-folders'),
+  getRecentSongs: () => ipcRenderer.invoke('library:get-recent-songs'),
+  getRecentPlaylists: () => ipcRenderer.invoke('library:get-recent-playlists'),
+  getRecentAlbums: () => ipcRenderer.invoke('library:get-recent-albums'),
+  getRecentArtists: () => ipcRenderer.invoke('library:get-recent-artists'),
+  getLibraryPlaylists: () => ipcRenderer.invoke('library:get-playlists'),
+  getLibraryFavorites: () => ipcRenderer.invoke('library:get-favorites'),
+  getNowPlaying: () => ipcRenderer.invoke('library:get-now-playing'),
+  getSearch: () => ipcRenderer.invoke('library:get-search'),
   getPreferenceSettings: () => ipcRenderer.invoke('preferences:get-settings'),
   getSongProperties: (songId) => ipcRenderer.invoke('library:get-song-properties', songId),
   updateSongProperties: (songId, update) => ipcRenderer.invoke('library:update-song-properties', songId, update),
@@ -104,7 +115,20 @@ const api: SmplayerApi = {
   deleteRemoteHost: (hostId) => ipcRenderer.invoke('remote-hosts:delete', hostId),
   pickLibraryRoot: () => ipcRenderer.invoke('library:pick-root'),
   scanLibrary: (rootPath?: string) => ipcRenderer.invoke('library:scan', rootPath),
-  scanLocalFolder: (folderPath) => ipcRenderer.invoke('library:scan-folder', folderPath),
+  prepareScanLocalFolder: (folderPath) => ipcRenderer.invoke('library:prepare-scan-folder', folderPath),
+  scanLocalFolder: (folderPath, operationId, progressMax) => ipcRenderer.invoke('library:scan-folder', folderPath, operationId, progressMax),
+  cancelScanLocalFolder: (operationId) => ipcRenderer.invoke('library:cancel-scan-folder', operationId),
+  onScanLocalFolderProgress: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, progress: Parameters<typeof callback>[0]) => {
+      callback(progress)
+    }
+
+    ipcRenderer.on('library:scan-folder-progress', listener)
+
+    return () => {
+      ipcRenderer.removeListener('library:scan-folder-progress', listener)
+    }
+  },
   takePendingOpenFiles: () => ipcRenderer.invoke('app:take-pending-open-files'),
   exportData: () => ipcRenderer.invoke('data:export'),
   importData: () => ipcRenderer.invoke('data:import'),
@@ -163,6 +187,9 @@ const api: SmplayerApi = {
   removeRecentSearches: (entryIds) => ipcRenderer.invoke('search:remove-recents', entryIds),
   restoreRecentSearch: (entry) => ipcRenderer.invoke('search:restore-recent', entry),
   clearRecentSearches: () => ipcRenderer.invoke('search:clear-recent'),
+  recordRecentPlaylistPlayed: (playlistId) => ipcRenderer.invoke('recent-played:record-playlist', playlistId),
+  recordRecentAlbumPlayed: (album) => ipcRenderer.invoke('recent-played:record-album', album),
+  recordRecentArtistPlayed: (artist) => ipcRenderer.invoke('recent-played:record-artist', artist),
   removeRecentPlayed: (songIds) => ipcRenderer.invoke('recent-played:remove', songIds),
   restoreRecentPlayed: (songIds) => ipcRenderer.invoke('recent-played:restore', songIds),
   clearRecentPlayed: () => ipcRenderer.invoke('recent-played:clear'),

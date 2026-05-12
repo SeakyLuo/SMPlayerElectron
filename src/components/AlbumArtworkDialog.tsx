@@ -2,13 +2,13 @@ import { useState } from 'react'
 import { createPortal } from 'react-dom'
 
 import type { Translator } from '../shared/i18n'
-import { AlbumArtControl } from './AlbumArtControl'
-import { CommandBar, CommandBarButton } from './CommandBar'
 import { Icon } from './icons'
+import { AlbumArtEditorControl } from './MusicAlbumArtControl'
 
 interface AlbumArtworkDialogProps {
   albumName: string
   artworkUrl: string
+  songId: number
   t: Translator
   onClose: () => void
   onSaved: () => void
@@ -17,6 +17,7 @@ interface AlbumArtworkDialogProps {
 export function AlbumArtworkDialog({
   albumName,
   artworkUrl,
+  songId,
   t,
   onClose,
   onSaved,
@@ -28,16 +29,43 @@ export function AlbumArtworkDialog({
   const [statusMessage, setStatusMessage] = useState('')
 
   const changeArtwork = async () => {
-    const result = await window.smplayer?.pickAlbumArtworkSource()
-    if (result && !result.canceled) {
-      setCurrentArtworkUrl(result.artworkUrl)
-      setArtworkSourcePath(result.sourcePath)
-      setShowDeleteConfirm(false)
-      setStatusMessage('')
+    if (saving) {
+      setStatusMessage(t('song.processingRequest'))
+      return
+    }
+
+    setSaving(true)
+    try {
+      const result = await window.smplayer?.pickAlbumArtworkSource()
+      if (result && !result.canceled) {
+        if (result.error === 'error') {
+          setStatusMessage(t('song.updateFailed'))
+          return
+        }
+
+        if (result.error === 'no-artwork') {
+          setStatusMessage(t('song.musicNoAlbumArt', { title: result.sourceName }))
+          return
+        }
+
+        setCurrentArtworkUrl(result.artworkUrl)
+        setArtworkSourcePath(result.sourcePath)
+        setShowDeleteConfirm(false)
+        setStatusMessage('')
+      }
+    } catch {
+      setStatusMessage(t('song.updateFailed'))
+    } finally {
+      setSaving(false)
     }
   }
 
   const saveArtwork = async () => {
+    if (saving) {
+      setStatusMessage(t('song.processingRequest'))
+      return
+    }
+
     if (!artworkSourcePath) {
       setStatusMessage('')
       return
@@ -47,65 +75,73 @@ export function AlbumArtworkDialog({
     try {
       await window.smplayer?.saveAlbumArtwork(albumName, artworkSourcePath)
       setArtworkSourcePath('')
-      setStatusMessage(t('common.saved'))
+      setStatusMessage(t('song.albumArtSaved'))
       onSaved()
+    } catch {
+      setStatusMessage(t('song.updateFailed'))
     } finally {
       setSaving(false)
     }
   }
 
   const deleteArtwork = async () => {
+    if (saving) {
+      setStatusMessage(t('song.processingRequest'))
+      return
+    }
+
     setSaving(true)
     try {
       await window.smplayer?.deleteAlbumArtwork(albumName)
       setCurrentArtworkUrl('')
       setArtworkSourcePath('')
       setShowDeleteConfirm(false)
-      setStatusMessage(t('common.saved'))
+      setStatusMessage(t('song.albumArtDeleted'))
       onSaved()
+    } catch {
+      setStatusMessage(t('song.updateFailed'))
     } finally {
       setSaving(false)
     }
   }
 
   return createPortal(
-    <div className="song-dialog-overlay">
+    <div className="song-dialog-overlay music-dialog-overlay AlbumDialogOverlay">
       <section
-        className="song-dialog album-artwork-dialog"
+        className="song-dialog album-artwork-dialog ContentDialog AlbumDialog"
         role="dialog"
         aria-modal="true"
-        aria-label={t('context.seeAlbumArt')}
+        aria-label={t('song.albumArt')}
         onMouseDown={(event) => {
           event.stopPropagation()
         }}
       >
-        <nav className="song-dialog-tabs" aria-label={t('context.seeAlbumArt')}>
-          <button type="button" className="is-active">
+        <nav className="song-dialog-tabs music-dialog-pivot AlbumDialogPivot" aria-label={t('song.albumArt')}>
+          <button type="button" className="AlbumArtItem AlbumArtPivotItem is-active">
             <Icon name="albums" />
-            {t('context.seeAlbumArt')}
+            {t('song.albumArt')}
           </button>
-          <button type="button" className="song-dialog-icon-button" onClick={onClose} aria-label={t('common.close')}>
+          <button type="button" className="song-dialog-icon-button music-dialog-close-button CloseButton" onClick={onClose} aria-label={t('common.close')}>
             <Icon name="arrowLeft" className="dialog-back-icon" />
             <Icon name="close" className="dialog-close-icon" />
           </button>
           <span className="dialog-titlebar-title">{t('app.shell')}</span>
         </nav>
         {statusMessage ? <p className="song-dialog-status">{statusMessage}</p> : null}
-        <div className="song-dialog-body song-dialog-artwork">
-          <CommandBar className="song-dialog-commandbar" overflowLabel={t('player.more')}>
-            <CommandBarButton icon="albums" label={t('song.changeArtwork')} disabled={saving} onClick={() => void changeArtwork()} />
-            <CommandBarButton icon="save" label={t('settings.save')} className="song-dialog-primary-button" disabled={saving} onClick={() => void saveArtwork()} />
-            <CommandBarButton icon="trash" label={t('playlists.delete')} disabled={saving} onClick={() => setShowDeleteConfirm(true)} />
-          </CommandBar>
-          <AlbumArtControl title={albumName} artworkUrl={currentArtworkUrl} />
-          {showDeleteConfirm ? (
-            <div className="song-dialog-warning">
-              <p>{t('song.deleteArtworkConfirm')}</p>
-              <button type="button" disabled={saving} onClick={() => void deleteArtwork()}>{t('common.yes')}</button>
-              <button type="button" disabled={saving} onClick={() => setShowDeleteConfirm(false)}>{t('common.cancel')}</button>
-            </div>
-          ) : null}
-        </div>
+        <AlbumArtEditorControl
+          title={albumName}
+          t={t}
+          saving={saving}
+          showBusy={saving}
+          artworkUrl={currentArtworkUrl}
+          songId={songId}
+          showDeleteConfirm={showDeleteConfirm}
+          onChangeArtwork={() => void changeArtwork()}
+          onSaveArtwork={() => void saveArtwork()}
+          onRequestDelete={() => setShowDeleteConfirm(true)}
+          onConfirmDelete={() => void deleteArtwork()}
+          onCancelDelete={() => setShowDeleteConfirm(false)}
+        />
       </section>
     </div>,
     document.body,

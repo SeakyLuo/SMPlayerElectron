@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import clsx from 'clsx'
 import { useRef } from 'react'
 import { Link } from 'react-router-dom'
@@ -11,7 +11,7 @@ import { LoadingState } from '../components/LoadingState'
 import { MenuFlyout } from '../components/MenuFlyout'
 import { getAddToPlaylistMenuFlyoutItem, type MenuFlyoutItem, type MenuFlyoutPosition } from '../components/MenuFlyoutHelper'
 import { MusicMenuFlyout, type MusicMenuFlyoutState } from '../components/MusicMenuFlyout'
-import type { AppSettingsUpdate, LibrarySnapshot, LibrarySong, MusicLibrarySortCriterion } from '../shared/contracts'
+import type { AppSettingsUpdate, MusicData, LibrarySong, MusicLibrarySortCriterion } from '../shared/contracts'
 import { getDisplayArtists, getSongArtists } from '../shared/artists'
 import { formatDuration } from '../shared/formatters'
 import type { Translator } from '../shared/i18n'
@@ -21,7 +21,7 @@ import { useSongArtwork } from '../hooks/useSongArtwork'
 import { useCustomScrollbar } from '../hooks/useCustomScrollbar'
 
 interface MusicLibraryPageProps {
-  snapshot: LibrarySnapshot
+  snapshot: MusicData
   t: Translator
   songs: LibrarySong[]
   loading: boolean

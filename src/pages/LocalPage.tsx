@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
 import { CommandBar, CommandBarButton } from '../components/CommandBar'
@@ -16,9 +16,10 @@ import { PlaylistControlItem } from '../components/PlaylistControlItem'
 import { RemoveDialog } from '../components/RemoveDialog'
 import { useFolderPreferenceMenuItem } from '../hooks/useFolderPreferenceMenuItem'
 import { useCustomScrollbar } from '../hooks/useCustomScrollbar'
-import type { LibraryFolder, LibraryPlaylist, LibrarySong, LocalFolderSortCriterion, ScanLibraryResult } from '../shared/contracts'
+import type { LibraryFolder, LibraryPlaylist, LibrarySong, LocalFolderSortCriterion, ScanLibraryProgress, ScanLibraryResult } from '../shared/contracts'
 import { getSongArtists } from '../shared/artists'
 import type { Translator } from '../shared/i18n'
+import { PlaybackCommands } from '../shared/PlaybackCommands'
 import { getQuickJumpTooltip } from '../shared/quickJumpTooltip'
 import { getLocalTextQuickJumpBucket, LOCAL_TEXT_QUICK_JUMP_KEYS } from '../shared/textCompare'
 import { useLibraryStore } from '../state/useLibraryStore'
@@ -55,10 +56,12 @@ interface LocalPageProps {
   isPlaying: boolean
   loading: boolean
   scanning: boolean
+  scanProgress: ScanLibraryProgress | null
   error: string | null
   onPickLibraryRoot: () => void
   onOpenFolder: (targetRelativePath: string) => void
   onRefreshFolder: (folderPath: string) => void | ScanLibraryResult | null | Promise<ScanLibraryResult | null | void>
+  onCancelRefreshFolder: () => void
   onPlayTrack: (trackId: number, queueSongIds: number[]) => void
   onMoveToMusicOrPlay: (songId: number) => void
   onTogglePlayPause: () => void
@@ -172,7 +175,9 @@ function hasRefreshResultChanges(result: ScanLibraryResult) {
 function getUpdateResultFileTitle(filePath: string, folderPath: string) {
   const normalizedFilePath = normalizePath(filePath)
   const normalizedFolderPath = normalizePath(folderPath)
-  const relativePath = normalizedFilePath.startsWith(`${normalizedFolderPath}/`)
+  const filePathKey = normalizedFilePath.toLocaleLowerCase()
+  const folderPathKey = normalizedFolderPath.toLocaleLowerCase()
+  const relativePath = filePathKey.startsWith(`${folderPathKey}/`)
     ? normalizedFilePath.slice(normalizedFolderPath.length + 1)
     : normalizedFilePath
   const extensionIndex = relativePath.lastIndexOf('.')
@@ -217,6 +222,20 @@ function getRefreshFolderErrorMessage(error: string, t: Translator) {
   return error
 }
 
+function getRefreshProgressMessage(progress: ScanLibraryProgress | null, t: Translator) {
+  if (!progress) {
+    return t('local.updateFolderLoading')
+  }
+
+  if (progress.stage === 'updating') {
+    return t('local.updateFolderUpdatingLibrary')
+  }
+
+  return progress.folderName
+    ? t('local.updateFolderChecking', { name: progress.folderName })
+    : t('local.updateFolderLoading')
+}
+
 function scrollCurrentFolderToTop() {
   document.querySelector<HTMLElement>('.local-scroll-shell, .local-table-shell')?.scrollTo({
     top: 0,
@@ -229,6 +248,7 @@ function FolderUpdateResultDialog({
   folder,
   songs,
   selectedTrackId,
+  songMenuOpen,
   onPlaySong,
   onOpenSongMenu,
   onClose,
@@ -238,22 +258,41 @@ function FolderUpdateResultDialog({
   folder: FolderNode
   songs: LibrarySong[]
   selectedTrackId: number | null
+  songMenuOpen: boolean
   onPlaySong: (songId: number) => void
   onOpenSongMenu: (song: LibrarySong, x: number, y: number) => void
   onClose: () => void
 }) {
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null)
   const groups = [
     { key: 'added', label: t('local.refreshAddedGroup', { count: result.filesAdded.length }), items: getUpdateResultFileItems(result.filesAdded, folder.path), playable: true },
     { key: 'removed', label: t('local.refreshRemovedGroup', { count: result.filesRemoved.length }), items: getUpdateResultFileItems(result.filesRemoved, folder.path), playable: false },
     { key: 'moved', label: t('local.refreshMovedGroup', { count: result.filesMoved.length }), items: getUpdateResultFileItems(result.filesMoved, folder.path), playable: true },
   ].filter((group) => group.items.length > 0)
 
+  useEffect(() => {
+    closeButtonRef.current?.focus()
+  }, [])
+
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !songMenuOpen) {
+        onClose()
+      }
+    }
+
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [onClose, songMenuOpen])
+
   return (
-    <div className="input-dialog-overlay folder-update-result-overlay" role="presentation">
-      <section className="input-dialog folder-update-result-dialog" role="dialog" aria-modal="true" aria-labelledby="folder-update-result-title">
+    <div className="folder-update-result-overlay" role="presentation">
+      <section className="folder-update-result-dialog" role="dialog" aria-modal="true" aria-labelledby="folder-update-result-title">
         <div className="folder-update-result-header">
           <h3 id="folder-update-result-title">{t('local.updateResultOfFolder', { name: folder.name })}</h3>
-          <button type="button" className="folder-update-result-close" aria-label={t('common.close')} title={t('common.close')} onClick={onClose}>
+          <button ref={closeButtonRef} type="button" className="folder-update-result-close" aria-label={t('common.close')} title={t('common.close')} onClick={onClose}>
             <Icon name="close" />
           </button>
         </div>
@@ -730,10 +769,12 @@ export function LocalPage({
   isPlaying,
   loading,
   scanning,
+  scanProgress,
   error,
   onPickLibraryRoot,
   onOpenFolder,
   onRefreshFolder,
+  onCancelRefreshFolder,
   onPlayTrack,
   onMoveToMusicOrPlay,
   onTogglePlayPause,
@@ -767,6 +808,7 @@ export function LocalPage({
   const [localNotification, setLocalNotification] = useState('')
   const [folderUpdateResultDialog, setFolderUpdateResultDialog] = useState<FolderUpdateResultDialogState | null>(null)
   const [folderUpdateResultSongMenu, setFolderUpdateResultSongMenu] = useState<FolderUpdateResultSongMenuState | null>(null)
+  const refreshFolderRunningRef = useRef(false)
   const [foldersExpanded, setFoldersExpanded] = useState(true)
   const [songsExpanded, setSongsExpanded] = useState(true)
   const [isCompactLayout, setIsCompactLayout] = useState(() => window.innerWidth < LOCAL_COMPACT_BREAKPOINT)
@@ -1279,30 +1321,39 @@ export function LocalPage({
   }
 
   const refreshFolderWithResult = async (folder: FolderNode) => {
-    setLocalNotification('')
-    setFolderMenu(null)
-    setFolderUpdateResultDialog(null)
-    setFolderUpdateResultSongMenu(null)
-    const result = await onRefreshFolder(folder.path)
-    if (result) {
-      if (hasRefreshResultChanges(result)) {
-        showUndoableNotification(
-          getRefreshResultMessage(result, t),
-          t('common.detail'),
-          () => {
-            setFolderUpdateResultDialog({ folder, result })
-          },
-          10000,
-        )
+    if (scanning || refreshFolderRunningRef.current) {
+      return
+    }
+
+    refreshFolderRunningRef.current = true
+    try {
+      setLocalNotification('')
+      setFolderMenu(null)
+      setFolderUpdateResultDialog(null)
+      setFolderUpdateResultSongMenu(null)
+      const result = await onRefreshFolder(folder.path)
+      if (result) {
+        if (hasRefreshResultChanges(result)) {
+          showUndoableNotification(
+            getRefreshResultMessage(result, t),
+            t('common.detail'),
+            () => {
+              setFolderUpdateResultDialog({ folder, result })
+            },
+            10000,
+          )
+        } else {
+          showNotification(getRefreshResultMessage(result, t), 2000)
+        }
       } else {
-        showNotification(getRefreshResultMessage(result, t), 2000)
+        const refreshError = useLibraryStore.getState().error
+        if (refreshError) {
+          showNotification(getRefreshFolderErrorMessage(refreshError, t), 2000)
+          clearLibraryError()
+        }
       }
-    } else {
-      const refreshError = useLibraryStore.getState().error
-      if (refreshError) {
-        showNotification(getRefreshFolderErrorMessage(refreshError, t), 2000)
-        clearLibraryError()
-      }
+    } finally {
+      refreshFolderRunningRef.current = false
     }
   }
 
@@ -1392,10 +1443,6 @@ export function LocalPage({
             <Icon name="folder" />
             {t('library.chooseFolder')}
           </button>
-          <Link className="local-command" to="/settings">
-            <Icon name="settings" />
-            {t('local.goToSettings')}
-          </Link>
           </div>
         )}
       </section>
@@ -1430,6 +1477,11 @@ export function LocalPage({
     { key: 'toolbar-sort-artist', text: t('local.sortByArtist'), icon: sortMode === 'artist' ? 'check' : undefined, onClick: () => updateSortMode('artist') },
     { key: 'toolbar-sort-album', text: t('local.sortByAlbum'), icon: sortMode === 'album' ? 'check' : undefined, onClick: () => updateSortMode('album') },
   ]
+  const refreshProgressRatio = scanProgress
+    ? Math.min(1, scanProgress.progress / scanProgress.max)
+    : 0
+  const refreshProgressAngle = `${refreshProgressRatio * 360}deg`
+  const refreshProgressPercent = Math.round(refreshProgressRatio * 100)
 
   return (
     <section className="page-panel local-page">
@@ -1492,6 +1544,16 @@ export function LocalPage({
               setLocalNotification('')
             }}
           />
+          {multiSelect ? (
+            <CommandBarButton
+              icon="trash"
+              label={t('context.deleteFromDisk')}
+              disabled={selectedLocalItemCount === 0}
+              onClick={() => {
+                void deleteSelectedItems()
+              }}
+            />
+          ) : null}
         </CommandBar>
       </div>
 
@@ -1500,8 +1562,19 @@ export function LocalPage({
       {localNotification ? <div className="root-banner">{localNotification}</div> : null}
       {scanning ? (
         <div className="local-refresh-overlay" role="status" aria-live="polite">
-          <LoadingState t={t} />
-          <p>{t('local.updateFolderLoading')}</p>
+          <span
+            className="local-refresh-progress-ring"
+            style={{ '--local-refresh-progress-angle': refreshProgressAngle } as CSSProperties}
+            aria-hidden="true"
+          >
+            <span className="local-refresh-progress-value">{refreshProgressPercent}%</span>
+          </span>
+          <p>{getRefreshProgressMessage(scanProgress, t)}</p>
+          {scanProgress?.canCancel ? (
+            <button type="button" className="local-refresh-stop-button" onClick={onCancelRefreshFolder}>
+              {t('common.pause')}
+            </button>
+          ) : null}
         </div>
       ) : null}
 
@@ -1522,7 +1595,7 @@ export function LocalPage({
         onRemove={() => {
           void deleteSelectedItems()
         }}
-        removeLabel={t('playlists.delete')}
+        removeLabel={t('context.deleteFromDisk')}
         extraActions={[
           {
             key: 'move-to-folder',
@@ -2345,7 +2418,10 @@ export function LocalPage({
           folder={folderUpdateResultDialog.folder}
           songs={songs}
           selectedTrackId={selectedTrackId}
-          onPlaySong={onMoveToMusicOrPlay}
+          songMenuOpen={folderUpdateResultSongMenu != null}
+          onPlaySong={(songId) => {
+            void PlaybackCommands.addNextAndPlay(songId)
+          }}
           onOpenSongMenu={(song, x, y) => {
             setFolderUpdateResultSongMenu({ song, x, y })
           }}

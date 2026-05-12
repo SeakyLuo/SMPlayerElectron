@@ -118,6 +118,19 @@ body.night-mode .app-shell .player-track:focus-visible {
   object-fit: cover;
 }
 
+.default-album-artwork.artwork-image {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.default-album-artwork-logo {
+  display: block;
+  width: 68%;
+  height: 68%;
+  object-fit: contain;
+}
+
 .player-artwork-overlay {
   position: absolute;
   inset: 0;

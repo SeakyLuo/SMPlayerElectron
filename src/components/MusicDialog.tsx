@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { createPortal } from 'react-dom'
 
 import { normalizeArtists } from '../shared/artists'
@@ -6,6 +6,7 @@ import type { LibrarySong, LyricsSnapshot, SongPropertiesSnapshot } from '../sha
 import type { Translator } from '../shared/i18n'
 import { hasLyricsTimestamps, mergePlainLyricsWithTimedRaw, stripLyricsTimestamps } from '../shared/lyrics'
 import { useLibraryStore } from '../state/useLibraryStore'
+import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
 import { useMusicDialogShortcuts } from '../hooks/useMusicDialogShortcuts'
 import { requestConfirmDialog } from './dialogService'
 import { Icon } from './icons'
@@ -57,6 +58,8 @@ export function MusicDialog({
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [statusMessage, setStatusMessage] = useState('')
+  const showButtonedNotification = useUndoableNotificationStore((state) => state.show)
+  const showNotificationButtons = useUndoableNotificationStore((state) => state.showButtons)
   const dialogRef = useRef<HTMLElement | null>(null)
   const dialogScrollbarTrackRef = useRef<HTMLDivElement | null>(null)
   const lyricsScrollbarTrackRef = useRef<HTMLDivElement | null>(null)
@@ -83,29 +86,82 @@ export function MusicDialog({
   const playQueue = useMemo(() => {
     return queueSongIds.includes(song.id) ? queueSongIds : [...queueSongIds, song.id]
   }, [queueSongIds, song.id])
-  const getCurrentTrackTitle = () => {
+  const getCurrentTrackTitle = useCallback(() => {
     if (currentTrackId == null) {
       return ''
     }
 
     return useLibraryStore.getState().snapshot.songs.find((item) => item.id === currentTrackId)?.title ?? song.title
-  }
+  }, [currentTrackId, song.title])
+  const saveLyricsSnapshot = useCallback(async (
+    snapshot: PendingLyricsSnapshot,
+    refreshLatestLyrics = false,
+  ) => {
+    setSaving(true)
+    try {
+      await window.smplayer?.saveSongLyrics(snapshot.songId, snapshot.lyrics)
+      if (snapshot.songId === song.id) {
+        setLyricsRawText(snapshot.lyrics)
+        setOriginalLyricsText(snapshot.lyrics)
+        setLyrics((current) => current ? { ...current, rawText: snapshot.lyrics } : current)
+        setPendingLyricsSave(null)
+        onSaved?.()
+      }
+      setPendingSwitchLyrics((current) => current?.songId === snapshot.songId ? null : current)
+      if (refreshLatestLyrics) {
+        const currentTitle = getCurrentTrackTitle() || song.title
+        setStatusMessage(t('song.lyricsUpdatedAndRefreshed', { savedTitle: snapshot.title, currentTitle }))
+      } else {
+        setStatusMessage(t('song.lyricsUpdated', { title: snapshot.title }))
+      }
+    } catch {
+      setStatusMessage(t('song.updateFailed'))
+    } finally {
+      setSaving(false)
+    }
+  }, [getCurrentTrackTitle, onSaved, song.id, song.title, t])
+  const showSaveLyricsLaterNotification = useCallback((snapshot: PendingLyricsSnapshot) => {
+    showButtonedNotification(
+      t('song.saveLyricsLater', { title: snapshot.title }),
+      t('song.saveImmediately'),
+      () => {
+        void saveLyricsSnapshot(snapshot)
+      },
+    )
+  }, [saveLyricsSnapshot, showButtonedNotification, t])
+  const showPendingSwitchLyricsNotification = useCallback((snapshot: PendingLyricsSnapshot) => {
+    showNotificationButtons(
+      t('song.pendingSaveLyrics', { title: snapshot.title }),
+      [
+        {
+          text: t('song.saveImmediately'),
+          action: () => {
+            void saveLyricsSnapshot(snapshot, true)
+          },
+        },
+        {
+          text: t('song.discardChanges'),
+          action: () => {
+            if (snapshot.songId === song.id) {
+              setLyricsRawText(originalLyricsText)
+              setLyricsText(showLyricsTimestamps ? originalLyricsText : stripLyricsTimestamps(originalLyricsText))
+            }
+            setPendingSwitchLyrics(null)
+            setStatusMessage('')
+          },
+        },
+      ],
+    )
+  }, [originalLyricsText, saveLyricsSnapshot, showLyricsTimestamps, showNotificationButtons, song.id, t])
+  const showPendingSwitchLyricsNotificationRef = useRef(showPendingSwitchLyricsNotification)
 
   useEffect(() => {
     setActiveMode(mode)
   }, [mode])
 
   useEffect(() => {
-    latestLyricsRef.current = {
-      activeMode,
-      dirty: lyricsDirty,
-      lyrics: currentLyricsRawText,
-      originalLyrics: originalLyricsText,
-      pendingDelayedSave: pendingLyricsSave != null,
-      songId: song.id,
-      title: song.title,
-    }
-  })
+    showPendingSwitchLyricsNotificationRef.current = showPendingSwitchLyricsNotification
+  }, [showPendingSwitchLyricsNotification])
 
   useEffect(() => {
     let canceled = false
@@ -136,14 +192,17 @@ export function MusicDialog({
       previous.dirty &&
       !previous.pendingDelayedSave
     ) {
-      setPendingSwitchLyrics({
+      const pending = {
         songId: previous.songId,
         title: previous.title,
         lyrics: previous.lyrics,
-      })
-      setStatusMessage(t('song.pendingSaveLyrics', { title: previous.title }))
+      }
+      setPendingSwitchLyrics(pending)
+      showPendingSwitchLyricsNotificationRef.current(pending)
     }
+  }, [song.id])
 
+  useEffect(() => {
     let canceled = false
     void window.smplayer?.getLyrics(song.id, 'auto')
       .then((snapshot) => {
@@ -186,14 +245,27 @@ export function MusicDialog({
       latest.dirty &&
       !latest.pendingDelayedSave
     ) {
-      setPendingSwitchLyrics({
+      const pending = {
         songId: latest.songId,
         title: latest.title,
         lyrics: latest.lyrics,
-      })
-      setStatusMessage(t('song.pendingSaveLyrics', { title: latest.title }))
+      }
+      setPendingSwitchLyrics(pending)
+      showPendingSwitchLyricsNotificationRef.current(pending)
     }
-  }, [currentTrackId, t])
+  }, [currentTrackId])
+
+  useEffect(() => {
+    latestLyricsRef.current = {
+      activeMode,
+      dirty: lyricsDirty,
+      lyrics: currentLyricsRawText,
+      originalLyrics: originalLyricsText,
+      pendingDelayedSave: pendingLyricsSave != null,
+      songId: song.id,
+      title: song.title,
+    }
+  })
 
   useEffect(() => {
     if (!pendingLyricsSave || currentTrackId === pendingLyricsSave.songId) {
@@ -201,26 +273,13 @@ export function MusicDialog({
     }
 
     const timeoutId = window.setTimeout(() => {
-      void window.smplayer?.saveSongLyrics(pendingLyricsSave.songId, pendingLyricsSave.lyrics).then(async () => {
-        const currentTitle = getCurrentTrackTitle()
-        if (pendingLyricsSave.songId === song.id) {
-          setLyricsRawText(pendingLyricsSave.lyrics)
-          setOriginalLyricsText(pendingLyricsSave.lyrics)
-          setLyrics((current) => current ? { ...current, rawText: pendingLyricsSave.lyrics } : current)
-        }
-        setPendingLyricsSave(null)
-        setStatusMessage(
-          currentTrackId == null
-            ? t('song.lyricsUpdated', { title: pendingLyricsSave.title })
-            : t('song.lyricsUpdatedAndRefreshed', { savedTitle: pendingLyricsSave.title, currentTitle }),
-        )
-      })
+      void saveLyricsSnapshot(pendingLyricsSave, currentTrackId != null)
     }, 3000)
 
     return () => {
       window.clearTimeout(timeoutId)
     }
-  }, [currentTrackId, pendingLyricsSave, song.id, song.title, t])
+  }, [currentTrackId, pendingLyricsSave, saveLyricsSnapshot])
 
   const updateProperty = (key: keyof SongPropertiesSnapshot, value: string) => {
     setProperties((current) => current ? { ...current, [key]: value } : current)
@@ -407,8 +466,9 @@ export function MusicDialog({
     }
 
     if (isCurrentSong && !useLibraryStore.getState().snapshot.settings.saveLyricsImmediately) {
-      setPendingLyricsSave({ songId: song.id, title: song.title, lyrics: currentLyricsRawText })
-      setStatusMessage(t('song.saveLyricsLater', { title: song.title }))
+      const pending = { songId: song.id, title: song.title, lyrics: currentLyricsRawText }
+      setPendingLyricsSave(pending)
+      showSaveLyricsLaterNotification(pending)
       return
     }
 
@@ -419,39 +479,10 @@ export function MusicDialog({
     override?: { songId: number; title: string; lyrics: string },
     refreshLatestLyrics = false,
   ) => {
-    setSaving(true)
-    const targetSongId = override?.songId ?? song.id
-    const targetTitle = override?.title ?? song.title
-    const targetLyrics = override?.lyrics ?? currentLyricsRawText
-    try {
-      await window.smplayer?.saveSongLyrics(targetSongId, targetLyrics)
-      if (targetSongId === song.id) {
-        setLyricsRawText(targetLyrics)
-        setOriginalLyricsText(targetLyrics)
-        setLyrics((current) => current ? { ...current, rawText: targetLyrics } : current)
-        setPendingLyricsSave(null)
-        onSaved?.()
-      }
-      setPendingSwitchLyrics((current) => current?.songId === targetSongId ? null : current)
-      if (refreshLatestLyrics) {
-        const currentTitle = getCurrentTrackTitle() || song.title
-        setStatusMessage(t('song.lyricsUpdatedAndRefreshed', { savedTitle: targetTitle, currentTitle }))
-      } else {
-        setStatusMessage(t('song.lyricsUpdated', { title: targetTitle }))
-      }
-    } catch {
-      setStatusMessage(t('song.updateFailed'))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const discardPendingSwitchLyrics = () => {
-    if (pendingSwitchLyrics?.songId === song.id) {
-      updateLyricsEditorRawText(originalLyricsText)
-    }
-    setPendingSwitchLyrics(null)
-    setStatusMessage('')
+    await saveLyricsSnapshot(
+      override ?? { songId: song.id, title: song.title, lyrics: currentLyricsRawText },
+      refreshLatestLyrics,
+    )
   }
 
   const searchLyrics = async () => {
@@ -840,8 +871,6 @@ export function MusicDialog({
             lyricsTextAreaRef={lyricsTextAreaRef}
             lyricsCanToggleTimestamps={lyricsCanToggleTimestamps}
             showLyricsTimestamps={showLyricsTimestamps}
-            pendingLyricsSave={pendingLyricsSave}
-            pendingSwitchLyrics={pendingSwitchLyrics}
             onSearch={() => void searchLyrics()}
             onImport={() => void importLyrics()}
             onSave={() => void saveLyrics()}
@@ -855,9 +884,6 @@ export function MusicDialog({
               setPendingLyricsSave(null)
               setStatusMessage('')
             }}
-            onSavePending={(pending) => void saveLyricsImmediately(pending)}
-            onSavePendingSwitch={(pending) => void saveLyricsImmediately(pending, true)}
-            onDiscardPendingSwitch={discardPendingSwitchLyrics}
           />
         ) : null}
         {activeMode === 'album-art' ? (

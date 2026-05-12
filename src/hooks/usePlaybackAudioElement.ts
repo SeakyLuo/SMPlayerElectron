@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 
-import type { LibrarySnapshot, PlaybackMode } from '../shared/contracts'
+import type { MusicData, PlaybackMode } from '../shared/contracts'
 import type { PlaybackTransition } from './playbackStateMachine'
 
 interface MutableRef<T> {
@@ -9,7 +9,7 @@ interface MutableRef<T> {
 
 interface PlaybackAudioElementOptions {
   audioRef: MutableRef<HTMLAudioElement | null>
-  snapshotRef: MutableRef<LibrarySnapshot>
+  snapshotRef: MutableRef<MusicData>
   currentTrackIdRef: MutableRef<number | null>
   pendingStartSecondsRef: MutableRef<number>
   pendingAutoplayRef: MutableRef<boolean>

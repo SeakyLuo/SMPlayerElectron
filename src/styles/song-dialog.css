@@ -117,6 +117,10 @@
   border-bottom-right-radius: 8px;
 }
 
+.AlbumDialog .song-dialog-tabs button:not(.song-dialog-icon-button) {
+  border-radius: 8px;
+}
+
 .song-dialog-tabs button + button:not(.song-dialog-icon-button) {
   margin-left: -1px;
 }
@@ -293,6 +297,11 @@
   padding: 0 28px 18px;
   -webkit-app-region: no-drag;
   app-region: no-drag;
+}
+
+.song-dialog-commandbar,
+.song-dialog-commandbar .uwp-commandbar-primary {
+  overflow: visible;
 }
 
 .song-dialog-commandbar button,

@@ -51,6 +51,7 @@ interface AlbumsPageProps {
   onAddSongsToNowPlaying: (songIds: number[]) => void
   onCreatePlaylistWithSongs: (name: string, songIds: number[]) => void
   onUpdateSettings: (update: AppSettingsUpdate) => void
+  onRecordAlbumPlayed: (album: string) => void
   onRecordSearch?: (query: string) => void
   routeBase?: string
 }
@@ -67,6 +68,7 @@ export function AlbumsPage({
   onAddSongsToNowPlaying,
   onCreatePlaylistWithSongs,
   onUpdateSettings,
+  onRecordAlbumPlayed,
   onRecordSearch,
   routeBase = '',
 }: AlbumsPageProps) {
@@ -537,6 +539,7 @@ export function AlbumsPage({
                         navigate(getAlbumRoute(routeBase, album.name))
                       }}
                       onPlayAlbum={() => {
+                        onRecordAlbumPlayed(album.name)
                         onPlayTrack(album.songs[0].id, album.songs.map((song) => song.id))
                       }}
                       onAddAlbum={(position) => {
@@ -595,6 +598,7 @@ export function AlbumsPage({
             t,
             onPlay: () => {
               const shuffledSongIds = shuffleSongIds(albumContextMenu.album.songs.map((song) => song.id))
+              onRecordAlbumPlayed(albumContextMenu.album.name)
               onPlayTrack(shuffledSongIds[0]!, shuffledSongIds)
             },
             onAddToNowPlaying: () => {

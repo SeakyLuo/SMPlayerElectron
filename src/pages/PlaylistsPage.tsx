@@ -10,12 +10,12 @@ import { LoadingState } from '../components/LoadingState'
 import { MenuFlyout } from '../components/MenuFlyout'
 import { getPlaylistCardMenuItems } from '../components/PlaylistMenuItems'
 import { RenameDialog } from '../components/RenameDialog'
-import type { LibraryPlaylist, LibrarySnapshot, PlaylistSortCriterion, PreferenceLevel } from '../shared/contracts'
+import type { LibraryPlaylist, MusicData, PlaylistSortCriterion, PreferenceLevel } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
 import { getNextPlaylistName } from '../shared/playlistNames'
 
 interface PlaylistsPageProps {
-  snapshot: LibrarySnapshot
+  snapshot: MusicData
   t: Translator
   loading: boolean
   selectedTrackId: number | null
@@ -33,6 +33,7 @@ interface PlaylistsPageProps {
   onAddSongsToNowPlaying: (songIds: number[]) => void
   onReorderPlaylists: (playlistIds: number[]) => void
   onSetPlaylistPreferred: (playlistId: number, name: string, level: PreferenceLevel) => void
+  onRecordPlaylistPlayed: (playlistId: number) => void
   onAddSongToPlaylist: (playlistId: number, songId: number) => void
   onAddSongsToPlaylist: (playlistId: number, songIds: number[]) => void
   onRemoveSongsFromPlaylist: (playlistId: number, songIds: number[]) => void
@@ -84,6 +85,7 @@ export function PlaylistsPage({
   onCreatePlaylistWithSongs,
   onReorderPlaylists,
   onSetPlaylistPreferred,
+  onRecordPlaylistPlayed,
   onAddSongToPlaylist,
   onAddSongsToPlaylist,
   onRemoveSongsFromPlaylist,
@@ -383,6 +385,9 @@ export function PlaylistsPage({
           onSetPreferred={(level) => {
             onSetPlaylistPreferred(selectedPlaylist.id, selectedPlaylist.name, level)
           }}
+          onRecordPlay={() => {
+            onRecordPlaylistPlayed(selectedPlaylist.id)
+          }}
           onSortSongs={(songIds, sortCriterion) => {
             onReorderPlaylistSongs(selectedPlaylist.id, songIds, sortCriterion)
           }}
@@ -467,6 +472,7 @@ export function PlaylistsPage({
                   onPlay={() => {
                     const [firstSong] = playlistSongs
                     if (firstSong) {
+                      onRecordPlaylistPlayed(playlist.id)
                       onPlayTrack(firstSong.id, playlistSongs.map((song) => song.id))
                     }
                   }}

@@ -156,7 +156,7 @@
   gap: 6px;
   max-height: min(360px, calc(100vh - 190px));
   overflow: auto;
-  padding: 8px 12px;
+  padding: 8px;
   border: 1px solid rgba(83, 99, 121, 0.14);
   border-radius: 14px;
   background: rgba(244, 246, 249, 0.96);
@@ -167,25 +167,22 @@
 .page-search-suggestion {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  min-height: 42px;
+  min-height: 38px;
   align-items: center;
+  gap: 2px;
   border: 0;
-  border: 1px solid rgba(83, 99, 121, 0.1);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.66);
+  background: transparent;
   color: var(--text-strong);
-  padding: 6px 10px;
+  padding: 5px 10px;
   font: inherit;
   text-align: left;
   cursor: pointer;
-  box-shadow: 0 10px 24px rgba(72, 88, 112, 0.08);
-  transition: background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+  transition: background-color 120ms ease, color 120ms ease;
 }
 
 .page-search-suggestion:hover {
-  border-color: rgba(var(--accent-rgb), 0.24);
-  background: rgba(var(--accent-rgb), 0.12);
-  box-shadow: 0 12px 26px rgba(var(--accent-rgb), 0.13);
+  background: rgba(var(--accent-rgb), 0.08);
 }
 
 .page-search-suggestion span,
@@ -198,7 +195,7 @@
 
 .page-search-suggestion span {
   font-size: 14px;
-  font-weight: 650;
+  font-weight: 560;
 }
 
 .page-search-suggestion small {
@@ -718,22 +715,19 @@ body.night-mode .app-shell .artists-page .page-search-clear-button:hover {
 body.night-mode .app-shell .albums-page .page-search-suggestions,
 body.night-mode .app-shell .artists-page .page-search-suggestions {
   border-color: var(--night-border);
-  background: rgba(24, 30, 38, 0.98);
-  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.34);
+  background: rgba(29, 35, 43, 0.98);
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.36);
 }
 
 body.night-mode .app-shell .albums-page .page-search-suggestion,
 body.night-mode .app-shell .artists-page .page-search-suggestion {
-  border-color: var(--night-border);
-  background: rgba(255, 255, 255, 0.055);
+  background: transparent;
   color: var(--night-text);
-  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.18);
 }
 
 body.night-mode .app-shell .albums-page .page-search-suggestion:hover,
 body.night-mode .app-shell .artists-page .page-search-suggestion:hover {
-  border-color: rgba(var(--accent-rgb), 0.34);
-  background: rgba(var(--accent-rgb), 0.18);
+  background: rgba(var(--accent-rgb), 0.16);
 }
 
 body.night-mode .app-shell .albums-page .page-search-suggestion small,

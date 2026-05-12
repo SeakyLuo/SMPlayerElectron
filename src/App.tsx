@@ -13,7 +13,7 @@ import { RenameDialog } from './components/RenameDialog'
 import { ReleaseNotesDialog } from './components/ReleaseNotesDialog'
 import { Sidebar } from './components/Sidebar'
 import { Icon } from './components/icons'
-import { createLocalLibraryDataSource } from './data/libraryDataSource'
+import { createLocalMusicDataSource } from './data/musicDataSource'
 import { InAppNotificationWithButton } from './components/InAppNotificationWithButton'
 import { useOpenFilesPlayback } from './hooks/useOpenFilesPlayback'
 import { usePlaybackController } from './hooks/usePlaybackController'
@@ -24,7 +24,7 @@ import { useSearchController } from './hooks/useSearchController'
 import { useTrackNotification } from './hooks/useTrackNotification'
 import { useUndoableNotificationStore } from './state/useUndoableNotificationStore'
 import { HiddenFoldersPage } from './pages/HiddenFoldersPage'
-import { LibraryDataSourceMusicPage } from './pages/LibraryDataSourceMusicPage'
+import { MusicDataSourceMusicPage } from './pages/LibraryDataSourceMusicPage'
 import { LocalPage, LocalTitleGrid } from './pages/LocalPage'
 import { MiniModePage } from './pages/MiniModePage'
 import { MyFavoritesPage } from './pages/MyFavoritesPage'
@@ -35,13 +35,13 @@ import { RecentPage } from './pages/RecentPage'
 import { RemoteLibraryPage } from './pages/RemoteLibraryPage'
 import { SearchPage } from './pages/SearchPage'
 import { SettingsPage } from './pages/SettingsPage'
-import type { LibraryCounts, LibraryFolder, LibraryPlaylist, LibrarySong, LocalFolderSortCriterion, PreferenceLevel, ScanLibraryResult } from './shared/contracts'
+import type { LibraryCounts, LibraryFolder, LibraryPlaylist, LibrarySong, LocalFolderSortCriterion, PreferenceLevel, ScanLibraryProgress, ScanLibraryResult } from './shared/contracts'
 import { getDisplayArtists, getSongArtists } from './shared/artists'
 import { createTranslator, resolveLocale, type Translator } from './shared/i18n'
 import { getNextPlaylistName } from './shared/playlistNames'
+import { PlaybackCommands } from './shared/PlaybackCommands'
 import { sortLibrarySongs } from './shared/sorting'
 import { compareLocalText } from './shared/textCompare'
-import { addNextAndPlay as setQueueAddNextAndPlay, moveToMusicOrPlay as setQueueMoveToMusicOrPlay, playNext as setQueuePlayNext, setMusicAndPlayFromPlaylist } from './shared/mediaHelper'
 import { quickPlay } from './shared/QuickPlayHelper'
 import { ByArtistRequest, MatchType, VoiceAssistantHelper, type VolumeRequest } from './shared/VoiceAssistantHelper'
 import { useLibraryStore } from './state/useLibraryStore'
@@ -393,11 +393,13 @@ function App() {
   const loading = useLibraryStore((state) => state.loading)
   const pageLoading = loading || !initialLoadComplete
   const scanning = useLibraryStore((state) => state.scanning)
+  const scanProgress = useLibraryStore((state) => state.scanProgress)
   const error = useLibraryStore((state) => state.error)
   const refresh = useLibraryStore((state) => state.refresh)
   const pickLibraryRoot = useLibraryStore((state) => state.pickLibraryRoot)
   const scanLibrary = useLibraryStore((state) => state.scanLibrary)
   const scanLocalFolder = useLibraryStore((state) => state.scanLocalFolder)
+  const cancelLocalFolderScan = useLibraryStore((state) => state.cancelLocalFolderScan)
   const setSongFavorite = useLibraryStore((state) => state.setSongFavorite)
   const createPlaylist = useLibraryStore((state) => state.createPlaylist)
   const deletePlaylist = useLibraryStore((state) => state.deletePlaylist)
@@ -427,6 +429,9 @@ function App() {
   const removeRecentSearches = useLibraryStore((state) => state.removeRecentSearches)
   const restoreRecentSearch = useLibraryStore((state) => state.restoreRecentSearch)
   const clearRecentSearches = useLibraryStore((state) => state.clearRecentSearches)
+  const recordRecentPlaylistPlayed = useLibraryStore((state) => state.recordRecentPlaylistPlayed)
+  const recordRecentAlbumPlayed = useLibraryStore((state) => state.recordRecentAlbumPlayed)
+  const recordRecentArtistPlayed = useLibraryStore((state) => state.recordRecentArtistPlayed)
   const removeRecentPlayed = useLibraryStore((state) => state.removeRecentPlayed)
   const restoreRecentPlayed = useLibraryStore((state) => state.restoreRecentPlayed)
   const clearRecentPlayed = useLibraryStore((state) => state.clearRecentPlayed)
@@ -655,8 +660,8 @@ function App() {
     () => sortLibrarySongs(snapshot.songs, snapshot.settings.musicLibrarySort),
     [snapshot.settings.musicLibrarySort, snapshot.songs],
   )
-  const localLibraryDataSource = useMemo(
-    () => createLocalLibraryDataSource(snapshot, updateSettings),
+  const localMusicDataSource = useMemo(
+    () => createLocalMusicDataSource(snapshot, updateSettings),
     [snapshot, updateSettings],
   )
   const songsById = useMemo(
@@ -719,7 +724,7 @@ function App() {
   useOpenFilesPlayback({
     songs: snapshot.songs,
     refresh,
-    playTrack: playback.playTrack,
+    playTrack: PlaybackCommands.playTrack,
   })
 
   useEffect(() => {
@@ -828,47 +833,6 @@ function App() {
 
   useTrackNotification(playback.currentTrack, t)
 
-  async function playTrackInQueue(trackId: number, queueSongIds: number[], queueIndex = -1) {
-    const nextQueue = setMusicAndPlayFromPlaylist(
-      snapshot.nowPlaying.songIds,
-      queueSongIds,
-      trackId,
-      playback.mode === 'shuffle',
-      queueIndex,
-    )
-
-    await replaceNowPlaying(nextQueue.songIds)
-    if (nextQueue.trackId != null) {
-      await playback.playTrack(nextQueue.trackId, nextQueue.songIds, nextQueue.trackIndex ?? -1)
-    }
-  }
-
-  async function playNextInQueue(songId: number, queueIndex = -1) {
-    await replaceNowPlaying(setQueuePlayNext(snapshot.nowPlaying.songIds, songId, playback.currentTrackId, queueIndex, playback.currentQueueIndex ?? -1))
-  }
-
-  async function addNextAndPlay(songId: number) {
-    const nextQueue = setQueueAddNextAndPlay(snapshot.nowPlaying.songIds, songId, playback.currentTrackId, playback.currentQueueIndex ?? -1)
-    await replaceNowPlaying(nextQueue.songIds)
-    if (nextQueue.trackId != null) {
-      await playback.playTrack(nextQueue.trackId, nextQueue.songIds, nextQueue.trackIndex ?? -1)
-    }
-  }
-
-  async function moveToMusicOrPlayInQueue(songId: number, queueIndex = -1) {
-    const nextQueue = setQueueMoveToMusicOrPlay(
-      snapshot.nowPlaying.songIds,
-      songId,
-      queueIndex,
-      playback.currentTrackId,
-      playback.currentQueueIndex ?? -1,
-    )
-    await replaceNowPlaying(nextQueue.songIds)
-    if (nextQueue.trackId != null) {
-      await playback.playTrack(nextQueue.trackId, nextQueue.songIds, nextQueue.trackIndex ?? -1)
-    }
-  }
-
   async function playQuick() {
     const preferences = await usePreferenceStore.getState().refresh()
     if (!preferences) {
@@ -882,35 +846,20 @@ function App() {
       folders: snapshot.folders,
       preferences,
     })
-    await replaceNowPlaying(songIds)
-    if (songIds[0] != null) {
-      await playback.playTrack(songIds[0], songIds, 0)
-    }
+    await PlaybackCommands.setMusicAndPlay(songIds)
   }
 
   async function quickPlayPlaylist(playlistId: number) {
     const playlist = snapshot.playlists.find((item) => item.id === playlistId)!
-    const songIds = playlist.songIds
-    await replaceNowPlaying(songIds)
-    if (songIds[0] != null) {
-      await playback.playTrack(songIds[0], songIds, 0)
-    }
+    await PlaybackCommands.setMusicAndPlay(playlist.songIds)
   }
 
   async function playVoiceSongIds(songIds: number[]) {
-    await replaceNowPlaying(songIds)
-    if (songIds[0] != null) {
-      await playback.playTrack(songIds[0], songIds, 0)
-    }
+    await PlaybackCommands.setMusicAndPlay(songIds)
   }
 
   async function playVoiceSong(song: LibrarySong) {
-    if (snapshot.nowPlaying.songIds.includes(song.id)) {
-      await playback.playTrack(song.id, snapshot.nowPlaying.songIds)
-      return
-    }
-
-    await addNextAndPlay(song.id)
+    await PlaybackCommands.playOrAddNext(song.id)
   }
 
   function findVoiceArtist(query: string) {
@@ -1542,7 +1491,7 @@ function App() {
                   commitDirectorySearchQuery(query, folderRelativePath)
                 }}
                 onPlayTrack={(trackId, queueSongIds) => {
-                  void playTrackInQueue(trackId, queueSongIds)
+                  void PlaybackCommands.playTrackInQueue(trackId, queueSongIds)
                 }}
                 onAddSongsToNowPlaying={(songIds) => {
                   void replaceNowPlaying([...snapshot.nowPlaying.songIds, ...songIds])
@@ -1587,7 +1536,7 @@ function App() {
                   commitDirectorySearchQuery(query, folderRelativePath)
                 }}
                 onPlayTrack={(trackId, queueSongIds) => {
-                  void playTrackInQueue(trackId, queueSongIds)
+                  void PlaybackCommands.playTrackInQueue(trackId, queueSongIds)
                 }}
                 onAddSongsToNowPlaying={(songIds) => {
                   void replaceNowPlaying([...snapshot.nowPlaying.songIds, ...songIds])
@@ -1631,8 +1580,8 @@ function App() {
             <Route
               path="/songs"
               element={
-                <LibraryDataSourceMusicPage
-                  dataSource={localLibraryDataSource}
+                <MusicDataSourceMusicPage
+                  dataSource={localMusicDataSource}
                   t={t}
                   loading={pageLoading}
                   scanning={scanning}
@@ -1647,19 +1596,19 @@ function App() {
                     void scanLibrary()
                   }}
                   onPlayTrack={(trackId, queueSongIds) => {
-                    void playTrackInQueue(trackId, queueSongIds)
+                    void PlaybackCommands.playTrackInQueue(trackId, queueSongIds)
                   }}
                   onAddNextAndPlay={(trackId) => {
-                    void addNextAndPlay(trackId)
+                    void PlaybackCommands.addNextAndPlay(trackId)
                   }}
                   onMoveToMusicOrPlay={(songId) => {
-                    void moveToMusicOrPlayInQueue(songId)
+                    void PlaybackCommands.moveToMusicOrPlay(songId)
                   }}
                   onTogglePlayPause={() => {
                     void playback.togglePlayPause()
                   }}
                   onPlayNext={(songId) => {
-                    void playNextInQueue(songId)
+                    void PlaybackCommands.playNext(songId)
                   }}
                   onToggleFavorite={(songId, favorite) => {
                     void setSongFavorite(songId, favorite)
@@ -1699,10 +1648,10 @@ function App() {
                   scanning={scanning}
                   targetArtistName={targetArtistQuery ?? undefined}
                   onPlayTrack={(trackId, queueSongIds) => {
-                    void playTrackInQueue(trackId, queueSongIds)
+                    void PlaybackCommands.playTrackInQueue(trackId, queueSongIds)
                   }}
                   onMoveToMusicOrPlay={(songId) => {
-                    void moveToMusicOrPlayInQueue(songId)
+                    void PlaybackCommands.moveToMusicOrPlay(songId)
                   }}
                   onAddSongsToNowPlaying={(songIds) => {
                     void replaceNowPlaying([...snapshot.nowPlaying.songIds, ...songIds])
@@ -1714,7 +1663,7 @@ function App() {
                     void playback.togglePlayPause()
                   }}
                   onPlayNext={(songId) => {
-                    void playNextInQueue(songId)
+                    void PlaybackCommands.playNext(songId)
                   }}
                   onToggleFavorite={(songId, favorite) => {
                     void setSongFavorite(songId, favorite)
@@ -1724,6 +1673,12 @@ function App() {
                   }}
                   onAddSongsToPlaylist={(playlistId, songIds) => {
                     void addSongsToPlaylist(playlistId, songIds)
+                  }}
+                  onRecordAlbumPlayed={(album) => {
+                    void recordRecentAlbumPlayed(album)
+                  }}
+                  onRecordArtistPlayed={(artist) => {
+                    void recordRecentArtistPlayed(artist)
                   }}
                   onRevealSong={revealItem}
                   onDeleteSongFromDisk={(songId) => {
@@ -1748,13 +1703,13 @@ function App() {
                     selectedTrackId={playback.currentTrackId}
                     isPlaying={playback.isPlaying}
                     onPlayTrack={(trackId, queueSongIds) => {
-                      void playTrackInQueue(trackId, queueSongIds)
+                      void PlaybackCommands.playTrackInQueue(trackId, queueSongIds)
                     }}
                     onMoveToMusicOrPlay={(songId) => {
-                      void moveToMusicOrPlayInQueue(songId)
+                      void PlaybackCommands.moveToMusicOrPlay(songId)
                     }}
                     onPlayNext={(songId) => {
-                      void playNextInQueue(songId)
+                      void PlaybackCommands.playNext(songId)
                     }}
                     onTogglePlayPause={() => {
                       void playback.togglePlayPause()
@@ -1773,6 +1728,9 @@ function App() {
                     onSetAlbumPreferred={(albumName, level) => {
                       void usePreferenceStore.getState().addItem('album', albumName, albumName, level)
                     }}
+                    onRecordAlbumPlayed={(albumName) => {
+                      void recordRecentAlbumPlayed(albumName)
+                    }}
                     onAlbumArtworkSaved={() => {
                       void refresh()
                     }}
@@ -1786,7 +1744,7 @@ function App() {
                     loading={pageLoading}
                     scanning={scanning}
                     onPlayTrack={(trackId, queueSongIds) => {
-                      void playTrackInQueue(trackId, queueSongIds)
+                      void PlaybackCommands.playTrackInQueue(trackId, queueSongIds)
                     }}
                     onAddSongsToPlaylist={(playlistId, songIds) => {
                       void addSongsToPlaylist(playlistId, songIds)
@@ -1799,6 +1757,9 @@ function App() {
                     }}
                     onUpdateSettings={(update) => {
                       void updateSettings(update)
+                    }}
+                    onRecordAlbumPlayed={(album) => {
+                      void recordRecentAlbumPlayed(album)
                     }}
                     onRecordSearch={(query) => {
                       void addRecentSearch(query)
@@ -1822,13 +1783,13 @@ function App() {
                   selectedTrackId={playback.currentTrackId}
                   isPlaying={playback.isPlaying}
                   onPlayTrack={(trackId, queueSongIds) => {
-                    void playTrackInQueue(trackId, queueSongIds)
+                    void PlaybackCommands.playTrackInQueue(trackId, queueSongIds)
                   }}
                   onMoveToMusicOrPlay={(songId) => {
-                    void moveToMusicOrPlayInQueue(songId)
+                    void PlaybackCommands.moveToMusicOrPlay(songId)
                   }}
                   onPlayNext={(songId) => {
-                    void playNextInQueue(songId)
+                    void PlaybackCommands.playNext(songId)
                   }}
                   onTogglePlayPause={() => {
                     void playback.togglePlayPause()
@@ -1846,6 +1807,9 @@ function App() {
                   }}
                   onSetAlbumPreferred={(albumName, level) => {
                     void usePreferenceStore.getState().addItem('album', albumName, albumName, level)
+                  }}
+                  onRecordAlbumPlayed={(albumName) => {
+                    void recordRecentAlbumPlayed(albumName)
                   }}
                   onAlbumArtworkSaved={() => {
                     void refresh()
@@ -1873,13 +1837,13 @@ function App() {
                     void playback.togglePlayPause()
                   }}
                   onPlayTrack={(trackId, queueSongIds, queueIndex) => {
-                    void playback.playTrack(trackId, queueSongIds, queueIndex)
+                    void PlaybackCommands.playTrack(trackId, queueSongIds, queueIndex)
                   }}
                   onReplaceQueue={(songIds) => {
                     void replaceNowPlaying(songIds)
                   }}
                   onPlayNext={(songId, queueIndex) => {
-                    void playNextInQueue(songId, queueIndex)
+                    void PlaybackCommands.playNext(songId, queueIndex)
                   }}
                   onAddSongToPlaylist={(playlistId, songId) => {
                     void addSongToPlaylist(playlistId, songId)
@@ -1912,6 +1876,9 @@ function App() {
                 <RecentPage
                   songs={snapshot.songs}
                   recentSongs={snapshot.recentSongs}
+                  recentPlaylists={snapshot.recentPlaylists}
+                  recentAlbums={snapshot.recentAlbums}
+                  recentArtists={snapshot.recentArtists}
                   recentSearches={snapshot.search.recentSearches}
                   loading={pageLoading}
                   playlists={snapshot.playlists}
@@ -1923,16 +1890,16 @@ function App() {
                   showCount={showCount}
                   preferredLanguage={snapshot.settings.preferredLanguage}
                   onPlayTrack={(trackId, queueSongIds) => {
-                    void playTrackInQueue(trackId, queueSongIds)
+                    void PlaybackCommands.playTrackInQueue(trackId, queueSongIds)
                   }}
                   onMoveToMusicOrPlay={(songId) => {
-                    void moveToMusicOrPlayInQueue(songId)
+                    void PlaybackCommands.moveToMusicOrPlay(songId)
                   }}
                   onTogglePlayPause={() => {
                     void playback.togglePlayPause()
                   }}
                   onPlayNext={(songId) => {
-                    void playNextInQueue(songId)
+                    void PlaybackCommands.playNext(songId)
                   }}
                   onAddSongsToNowPlaying={(songIds: number[]) => {
                     void replaceNowPlaying([...snapshot.nowPlaying.songIds, ...songIds])
@@ -1990,23 +1957,31 @@ function App() {
                   searchQuery=""
                   loading={pageLoading}
                   scanning={scanning}
+                  scanProgress={scanProgress}
                   error={error}
                   onPickLibraryRoot={() => {
-                    void pickLibraryRoot()
+                    void pickLibraryRoot().then((picked) => {
+                      if (picked) {
+                        void scanLibrary()
+                      }
+                    })
                   }}
                   onOpenFolder={setLocalRelativePath}
                   onRefreshFolder={(folderPath) => scanLocalFolder(folderPath)}
+                  onCancelRefreshFolder={() => {
+                    void cancelLocalFolderScan()
+                  }}
                   onPlayTrack={(trackId, queueSongIds) => {
-                    void playTrackInQueue(trackId, queueSongIds)
+                    void PlaybackCommands.playTrackInQueue(trackId, queueSongIds)
                   }}
                   onMoveToMusicOrPlay={(songId) => {
-                    void moveToMusicOrPlayInQueue(songId)
+                    void PlaybackCommands.moveToMusicOrPlay(songId)
                   }}
                   onTogglePlayPause={() => {
                     void playback.togglePlayPause()
                   }}
                   onPlayNext={(songId) => {
-                    void playNextInQueue(songId)
+                    void PlaybackCommands.playNext(songId)
                   }}
                   onRevealSong={revealItem}
                   onRevealFolder={revealItem}
@@ -2090,13 +2065,13 @@ function App() {
                   searchQuery=""
                   error={error}
                   onPlayTrack={(trackId, queueSongIds) => {
-                    void playTrackInQueue(trackId, queueSongIds)
+                    void PlaybackCommands.playTrackInQueue(trackId, queueSongIds)
                   }}
                   onMoveToMusicOrPlay={(songId) => {
-                    void moveToMusicOrPlayInQueue(songId)
+                    void PlaybackCommands.moveToMusicOrPlay(songId)
                   }}
                   onPlayNext={(songId) => {
-                    void playNextInQueue(songId)
+                    void PlaybackCommands.playNext(songId)
                   }}
                   onTogglePlayPause={() => {
                     void playback.togglePlayPause()
@@ -2127,6 +2102,9 @@ function App() {
                   onSetPlaylistPreferred={(playlistId, name, level) => {
                     void usePreferenceStore.getState().addItem('playlist', String(playlistId), name, level)
                   }}
+                  onRecordPlaylistPlayed={(playlistId) => {
+                    void recordRecentPlaylistPlayed(playlistId)
+                  }}
                   onAddSongToPlaylist={(playlistId, songId) => {
                     void addSongToPlaylist(playlistId, songId)
                   }}
@@ -2155,13 +2133,13 @@ function App() {
                   selectedTrackId={playback.currentTrackId}
                   isPlaying={playback.isPlaying}
                   onPlayTrack={(trackId, queueSongIds) => {
-                    void playTrackInQueue(trackId, queueSongIds)
+                    void PlaybackCommands.playTrackInQueue(trackId, queueSongIds)
                   }}
                   onMoveToMusicOrPlay={(songId) => {
-                    void moveToMusicOrPlayInQueue(songId)
+                    void PlaybackCommands.moveToMusicOrPlay(songId)
                   }}
                   onPlayNext={(songId) => {
-                    void playNextInQueue(songId)
+                    void PlaybackCommands.playNext(songId)
                   }}
                   onTogglePlayPause={() => {
                     void playback.togglePlayPause()
@@ -2213,16 +2191,16 @@ function App() {
                     folders: snapshot.settings.searchFoldersCriterion,
                   }}
                   onPlayTrack={(trackId, queueSongIds) => {
-                    void playTrackInQueue(trackId, queueSongIds)
+                    void PlaybackCommands.playTrackInQueue(trackId, queueSongIds)
                   }}
                   onMoveToMusicOrPlay={(songId) => {
-                    void moveToMusicOrPlayInQueue(songId)
+                    void PlaybackCommands.moveToMusicOrPlay(songId)
                   }}
                   onTogglePlayPause={() => {
                     void playback.togglePlayPause()
                   }}
                   onPlayNext={(songId) => {
-                    void playNextInQueue(songId)
+                    void PlaybackCommands.playNext(songId)
                   }}
                   onAddSongsToNowPlaying={(songIds) => {
                     void replaceNowPlaying([...snapshot.nowPlaying.songIds, ...songIds])
@@ -2308,13 +2286,13 @@ function App() {
             setShowNowPlayingFullPage(false)
           }}
           onPlayTrack={(trackId, queueSongIds, queueIndex) => {
-            void playback.playTrack(trackId, queueSongIds, queueIndex)
+            void PlaybackCommands.playTrack(trackId, queueSongIds, queueIndex)
           }}
           onReplaceQueue={(songIds) => {
             void replaceNowPlaying(songIds)
           }}
           onPlayNext={(songId, queueIndex) => {
-            void playNextInQueue(songId, queueIndex)
+            void PlaybackCommands.playNext(songId, queueIndex)
           }}
           onAddSongToPlaylist={(playlistId, songId) => {
             void addSongToPlaylist(playlistId, songId)
@@ -2362,7 +2340,7 @@ function App() {
             void playQuick()
           }}
           onPlayTrack={(trackId, queueSongIds) => {
-            void playTrackInQueue(trackId, queueSongIds)
+            void PlaybackCommands.playTrackInQueue(trackId, queueSongIds)
           }}
           onOpenNowPlaying={() => {
             setShowNowPlayingFullPage(true)
@@ -2430,6 +2408,7 @@ function AlbumDetailRoute({
   onAddSongToPlaylist,
   onAddSongsToPlaylist,
   onSetAlbumPreferred,
+  onRecordAlbumPlayed,
   onAlbumArtworkSaved,
 }: {
   albumName?: string
@@ -2448,6 +2427,7 @@ function AlbumDetailRoute({
   onAddSongToPlaylist: (playlistId: number, songId: number) => void
   onAddSongsToPlaylist: (playlistId: number, songIds: number[]) => void
   onSetAlbumPreferred: (albumName: string, level: PreferenceLevel) => void
+  onRecordAlbumPlayed: (albumName: string) => void
   onAlbumArtworkSaved: () => void
 }) {
   const location = useLocation()
@@ -2493,6 +2473,7 @@ function AlbumDetailRoute({
       onAddSongToPlaylist={onAddSongToPlaylist}
       onAddSongsToPlaylist={onAddSongsToPlaylist}
       onSetAlbumPreferred={onSetAlbumPreferred}
+      onRecordAlbumPlayed={onRecordAlbumPlayed}
       onAlbumArtworkSaved={onAlbumArtworkSaved}
       onArtistClick={(artist) => {
         navigate(`/artists?artist=${encodeURIComponent(artist)}`)
@@ -2517,10 +2498,12 @@ function LocalPageRoute({
   searchQuery,
   loading,
   scanning,
+  scanProgress,
   error,
   onPickLibraryRoot,
   onOpenFolder,
   onRefreshFolder,
+  onCancelRefreshFolder,
   onPlayTrack,
   onMoveToMusicOrPlay,
   onTogglePlayPause,
@@ -2556,10 +2539,12 @@ function LocalPageRoute({
   searchQuery: string
   loading: boolean
   scanning: boolean
+  scanProgress: ScanLibraryProgress | null
   error: string | null
   onPickLibraryRoot: () => void
   onOpenFolder: (targetRelativePath: string) => void
   onRefreshFolder: (folderPath: string) => void | ScanLibraryResult | null | Promise<ScanLibraryResult | null | void>
+  onCancelRefreshFolder: () => void
   onPlayTrack: (trackId: number, queueSongIds: number[]) => void
   onMoveToMusicOrPlay: (songId: number) => void
   onTogglePlayPause: () => void
@@ -2597,10 +2582,12 @@ function LocalPageRoute({
       searchQuery={searchQuery}
       loading={loading}
       scanning={scanning}
+      scanProgress={scanProgress}
       error={error}
       onPickLibraryRoot={onPickLibraryRoot}
       onOpenFolder={onOpenFolder}
       onRefreshFolder={onRefreshFolder}
+      onCancelRefreshFolder={onCancelRefreshFolder}
       onPlayTrack={onPlayTrack}
       onMoveToMusicOrPlay={onMoveToMusicOrPlay}
       onTogglePlayPause={onTogglePlayPause}

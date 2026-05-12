@@ -4,24 +4,30 @@ import type {
   AppSettingsUpdate,
   HiddenStorageItem,
   LibraryPlaylist,
-  LibrarySnapshot,
+  MusicData,
   LocalFolderSortCriterion,
   PlaylistSortCriterion,
+  RecentAlbumPlayback,
+  RecentArtistPlayback,
+  RecentPlaylistPlayback,
   ScanLibraryResult,
+  ScanLibraryProgress,
   SearchHistoryEntry,
   ViewStateUpdate,
 } from '../shared/contracts'
 
 interface LibraryStoreState {
-  snapshot: LibrarySnapshot
+  snapshot: MusicData
   loading: boolean
   scanning: boolean
+  scanProgress: ScanLibraryProgress | null
   error: string | null
   clearError: () => void
   refresh: () => Promise<void>
-  pickLibraryRoot: () => Promise<void>
+  pickLibraryRoot: () => Promise<boolean>
   scanLibrary: () => Promise<ScanLibraryResult | null>
   scanLocalFolder: (folderPath: string) => Promise<ScanLibraryResult | null>
+  cancelLocalFolderScan: () => Promise<void>
   setSongFavorite: (songId: number, favorite: boolean) => Promise<void>
   setSongsFavorite: (songIds: number[], favorite: boolean) => Promise<void>
   createPlaylist: (name: string, songIds?: number[]) => Promise<void>
@@ -57,6 +63,9 @@ interface LibraryStoreState {
   removeRecentSearches: (entryIds: number[]) => Promise<void>
   restoreRecentSearch: (entry: SearchHistoryEntry) => Promise<void>
   clearRecentSearches: () => Promise<void>
+  recordRecentPlaylistPlayed: (playlistId: number) => Promise<void>
+  recordRecentAlbumPlayed: (album: string) => Promise<void>
+  recordRecentArtistPlayed: (artist: string) => Promise<void>
   removeRecentPlayed: (songIds: number[]) => Promise<void>
   restoreRecentPlayed: (songIds: number[]) => Promise<void>
   clearRecentPlayed: () => Promise<void>
@@ -64,7 +73,7 @@ interface LibraryStoreState {
   saveViewState: (update: ViewStateUpdate) => Promise<void>
 }
 
-const emptySnapshot: LibrarySnapshot = {
+const emptySnapshot: MusicData = {
   settings: {
     rootPath: '',
     useFilenameNotMusicName: false,
@@ -113,6 +122,9 @@ const emptySnapshot: LibrarySnapshot = {
   songs: [],
   folders: [],
   recentSongs: [],
+  recentPlaylists: [],
+  recentAlbums: [],
+  recentArtists: [],
   playlists: [],
   favorites: {
     playlistId: 0,
@@ -128,6 +140,8 @@ const emptySnapshot: LibrarySnapshot = {
     recentSearches: [],
   },
 }
+
+const SCAN_CANCELED_ERROR_MESSAGE = 'Scan canceled'
 
 function toLocalFolderSortValue(criterion: LocalFolderSortCriterion) {
   return {
@@ -172,7 +186,28 @@ function uniqueSongIds(songIds: number[]) {
   return [...new Set(songIds.map(Number))]
 }
 
-function patchSongsFavorite(state: LibraryStoreState, songIds: number[], favorite: boolean): LibrarySnapshot {
+function insertRecentPlaylistPlayback(
+  items: RecentPlaylistPlayback[],
+  entry: RecentPlaylistPlayback,
+) {
+  return [entry, ...items.filter((item) => item.playlistId !== entry.playlistId)]
+}
+
+function insertRecentAlbumPlayback(
+  items: RecentAlbumPlayback[],
+  entry: RecentAlbumPlayback,
+) {
+  return [entry, ...items.filter((item) => item.album !== entry.album)]
+}
+
+function insertRecentArtistPlayback(
+  items: RecentArtistPlayback[],
+  entry: RecentArtistPlayback,
+) {
+  return [entry, ...items.filter((item) => item.artist !== entry.artist)]
+}
+
+function patchSongsFavorite(state: LibraryStoreState, songIds: number[], favorite: boolean): MusicData {
   const songIdSet = new Set(songIds)
 
   return {
@@ -201,7 +236,7 @@ function patchPlaylistSongs(
   playlistId: number,
   songIds: number[],
   active: boolean,
-): LibrarySnapshot {
+): MusicData {
   const targetPlaylist = state.snapshot.playlists.find((playlist) => playlist.id === playlistId)
   const snapshot = targetPlaylist?.isBuiltIn ? patchSongsFavorite(state, songIds, active) : state.snapshot
 
@@ -213,7 +248,7 @@ function patchPlaylistSongs(
   }
 }
 
-function getFavoritePlaylistId(snapshot: LibrarySnapshot) {
+function getFavoritePlaylistId(snapshot: MusicData) {
   return snapshot.favorites.playlistId
 }
 
@@ -243,6 +278,7 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
   snapshot: emptySnapshot,
   loading: false,
   scanning: false,
+  scanProgress: null,
   error: null,
   clearError: () => {
     set({ error: null })
@@ -255,9 +291,48 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
     set({ loading: true, error: null })
 
     try {
-      const snapshot = await window.smplayer.getLibrarySnapshot()
+      const [
+        settings,
+        counts,
+        songs,
+        folders,
+        recentSongs,
+        recentPlaylists,
+        recentAlbums,
+        recentArtists,
+        playlists,
+        favorites,
+        nowPlaying,
+        search,
+      ] = await Promise.all([
+        window.smplayer.getLibrarySettings(),
+        window.smplayer.getLibraryCounts(),
+        window.smplayer.getLibrarySongs(),
+        window.smplayer.getLibraryFolders(),
+        window.smplayer.getRecentSongs(),
+        window.smplayer.getRecentPlaylists(),
+        window.smplayer.getRecentAlbums(),
+        window.smplayer.getRecentArtists(),
+        window.smplayer.getLibraryPlaylists(),
+        window.smplayer.getLibraryFavorites(),
+        window.smplayer.getNowPlaying(),
+        window.smplayer.getSearch(),
+      ])
       set({
-        snapshot,
+        snapshot: {
+          settings,
+          counts,
+          songs,
+          folders,
+          recentSongs,
+          recentPlaylists,
+          recentAlbums,
+          recentArtists,
+          playlists,
+          favorites,
+          nowPlaying,
+          search,
+        },
       })
     } catch (error) {
       set({ error: getErrorMessage(error) })
@@ -267,7 +342,7 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
   },
   pickLibraryRoot: async () => {
     if (!window.smplayer) {
-      return
+      return false
     }
 
     set({ error: null })
@@ -276,9 +351,12 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
       const result = await window.smplayer.pickLibraryRoot()
       if (result.rootPath) {
         await get().refresh()
+        return true
       }
+      return false
     } catch (error) {
       set({ error: getErrorMessage(error) })
+      return false
     }
   },
   scanLibrary: async () => {
@@ -312,17 +390,47 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
       return null
     }
 
-    set({ scanning: true, error: null })
+    set({ error: null, scanProgress: null })
 
+    let removeProgressListener: (() => void) | null = null
     try {
-      const result = await window.smplayer.scanLocalFolder(folderPath)
+      const preparation = await window.smplayer.prepareScanLocalFolder(folderPath)
+      const operationId = crypto.randomUUID()
+      removeProgressListener = window.smplayer.onScanLocalFolderProgress((progress) => {
+        if (progress.operationId === operationId) {
+          set({ scanProgress: progress })
+        }
+      })
+
+      set({
+        scanning: true,
+        scanProgress: {
+          operationId,
+          stage: 'checking',
+          progress: 0,
+          max: preparation.progressMax,
+          canCancel: true,
+        },
+      })
+
+      const result = await window.smplayer.scanLocalFolder(folderPath, operationId, preparation.progressMax)
       await get().refresh()
       return result
     } catch (error) {
-      set({ error: getErrorMessage(error) })
+      const errorMessage = getErrorMessage(error)
+      if (errorMessage !== SCAN_CANCELED_ERROR_MESSAGE) {
+        set({ error: errorMessage })
+      }
       return null
     } finally {
-      set({ scanning: false })
+      removeProgressListener?.()
+      set({ scanning: false, scanProgress: null })
+    }
+  },
+  cancelLocalFolderScan: async () => {
+    const operationId = get().scanProgress?.operationId
+    if (operationId) {
+      await window.smplayer?.cancelScanLocalFolder(operationId)
     }
   },
   setSongFavorite: async (songId, favorite) => {
@@ -982,6 +1090,63 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
       set({ error: getErrorMessage(error) })
     }
   },
+  recordRecentPlaylistPlayed: async (playlistId) => {
+    if (!window.smplayer) {
+      return
+    }
+
+    set({ error: null })
+
+    try {
+      const entry = await window.smplayer.recordRecentPlaylistPlayed(playlistId)
+      set((state) => ({
+        snapshot: {
+          ...state.snapshot,
+          recentPlaylists: insertRecentPlaylistPlayback(state.snapshot.recentPlaylists, entry),
+        },
+      }))
+    } catch (error) {
+      set({ error: getErrorMessage(error) })
+    }
+  },
+  recordRecentAlbumPlayed: async (album) => {
+    if (!window.smplayer) {
+      return
+    }
+
+    set({ error: null })
+
+    try {
+      const entry = await window.smplayer.recordRecentAlbumPlayed(album)
+      set((state) => ({
+        snapshot: {
+          ...state.snapshot,
+          recentAlbums: insertRecentAlbumPlayback(state.snapshot.recentAlbums, entry),
+        },
+      }))
+    } catch (error) {
+      set({ error: getErrorMessage(error) })
+    }
+  },
+  recordRecentArtistPlayed: async (artist) => {
+    if (!window.smplayer) {
+      return
+    }
+
+    set({ error: null })
+
+    try {
+      const entry = await window.smplayer.recordRecentArtistPlayed(artist)
+      set((state) => ({
+        snapshot: {
+          ...state.snapshot,
+          recentArtists: insertRecentArtistPlayback(state.snapshot.recentArtists, entry),
+        },
+      }))
+    } catch (error) {
+      set({ error: getErrorMessage(error) })
+    }
+  },
   removeRecentPlayed: async (songIds) => {
     if (!window.smplayer || songIds.length === 0) {
       return
@@ -1029,6 +1194,9 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
         snapshot: {
           ...state.snapshot,
           recentSongs: [],
+          recentPlaylists: [],
+          recentAlbums: [],
+          recentArtists: [],
         },
       }))
     } catch (error) {

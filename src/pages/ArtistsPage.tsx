@@ -47,6 +47,8 @@ interface ArtistsPageProps {
   onToggleFavorite: (songId: number, favorite: boolean) => void
   onAddSongToPlaylist: (playlistId: number, songId: number) => void
   onAddSongsToPlaylist: (playlistId: number, songIds: number[]) => void
+  onRecordAlbumPlayed: (album: string) => void
+  onRecordArtistPlayed: (artist: string) => void
   onRevealSong: (songPath: string) => void | Promise<void>
   onDeleteSongFromDisk: (songId: number) => void
   onRecordSearch?: (query: string) => void
@@ -128,6 +130,8 @@ export function ArtistsPage({
   onToggleFavorite,
   onAddSongToPlaylist,
   onAddSongsToPlaylist,
+  onRecordAlbumPlayed,
+  onRecordArtistPlayed,
   onRevealSong,
   onDeleteSongFromDisk,
   onRecordSearch,
@@ -161,7 +165,7 @@ export function ArtistsPage({
   const location = useLocation()
   const navigate = useNavigate()
   const refresh = useLibraryStore((state) => state.refresh)
-  const showNotification = useUndoableNotificationStore((state) => state.show)
+  const showNotification = useUndoableNotificationStore((state) => state.showMessage)
   const artistGroups = useMemo(() => buildArtistGroups(songs, t), [songs, t])
   const favoriteSongIdSet = useMemo(() => new Set(songs.filter((song) => song.favorite).map((song) => song.id)), [songs])
   const visibleArtists = artistGroups
@@ -299,7 +303,7 @@ export function ArtistsPage({
 
   const reloadArtist = (artistName: string) => {
     if (loadingArtistName === artistName) {
-      showNotification(t('nowPlaying.loading'), t('common.close'), () => {}, 2400)
+      showNotification(t('nowPlaying.loading'), 2400)
       return
     }
 
@@ -532,7 +536,7 @@ export function ArtistsPage({
 
     if (targetArtistName) {
       if (!artistGroups.some((artist) => artist.name === targetArtistName)) {
-        showNotification(t('collection.artistNotFound'), t('common.close'), () => {}, 3200)
+        showNotification(t('collection.artistNotFound'), 3200)
         return
       }
       chooseArtist(targetArtistName)
@@ -698,6 +702,7 @@ export function ArtistsPage({
                   title={t('nowPlaying.randomPlay')}
                   disabled={selectedArtistSongs.length === 0}
                   onClick={() => {
+                    onRecordArtistPlayed(selectedArtist.name)
                     playShuffledSongs(selectedArtistSongs)
                   }}
                 >
@@ -745,6 +750,7 @@ export function ArtistsPage({
                           type="button"
                           title={t('nowPlaying.randomPlay')}
                           onClick={() => {
+                            onRecordAlbumPlayed(album.name)
                             playShuffledSongs(album.songs)
                           }}
                         >
@@ -887,6 +893,11 @@ export function ArtistsPage({
           }}
           onPlaySongs={(songIds) => {
             const shuffledSongIds = shuffleSongIds(songIds)
+            if (groupMenu.type === 'artist') {
+              onRecordArtistPlayed(groupMenu.label)
+            } else {
+              onRecordAlbumPlayed(groupMenu.label)
+            }
             onPlayTrack(shuffledSongIds[0]!, shuffledSongIds)
           }}
           onSelectSongs={selectSongs}

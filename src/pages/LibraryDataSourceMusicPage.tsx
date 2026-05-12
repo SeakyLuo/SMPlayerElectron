@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react'
 
 import { LoadingState } from '../components/LoadingState'
-import { getLibrarySnapshotFromDataSource, type LibraryDataSource } from '../data/libraryDataSource'
-import type { AppSettingsUpdate, LibrarySnapshot } from '../shared/contracts'
+import { getMusicDataFromDataSource, type MusicDataSource } from '../data/musicDataSource'
+import type { AppSettingsUpdate, MusicData } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
 import { sortLibrarySongs } from '../shared/sorting'
 import { MusicLibraryPage } from './MusicLibraryPage'
 
-interface LibraryDataSourceMusicPageProps {
-  dataSource: LibraryDataSource
+interface MusicDataSourceMusicPageProps {
+  dataSource: MusicDataSource
   t: Translator
   loading: boolean
   scanning: boolean
@@ -36,7 +36,7 @@ interface LibraryDataSourceMusicPageProps {
   routeBase?: string
 }
 
-export function LibraryDataSourceMusicPage({
+export function MusicDataSourceMusicPage({
   dataSource,
   t,
   loading,
@@ -63,8 +63,8 @@ export function LibraryDataSourceMusicPage({
   readOnly = false,
   resolveArtwork = true,
   routeBase = '',
-}: LibraryDataSourceMusicPageProps) {
-  const [snapshot, setSnapshot] = useState<LibrarySnapshot | null>(null)
+}: MusicDataSourceMusicPageProps) {
+  const [snapshot, setSnapshot] = useState<MusicData | null>(null)
   const [sourceLoading, setSourceLoading] = useState(true)
   const [sourceError, setSourceError] = useState<string | null>(null)
 
@@ -73,10 +73,10 @@ export function LibraryDataSourceMusicPage({
     setSourceLoading(true)
     setSourceError(null)
 
-    getLibrarySnapshotFromDataSource(dataSource)
-      .then((nextSnapshot) => {
+    getMusicDataFromDataSource(dataSource)
+      .then((nextData) => {
         if (!disposed) {
-          setSnapshot(nextSnapshot)
+          setSnapshot(nextData)
         }
       })
       .catch(() => {
@@ -131,7 +131,7 @@ export function LibraryDataSourceMusicPage({
       onUpdateSettings={(update) => {
         void dataSource.updateSettings(update).then(async () => {
           await onUpdateSettings?.(update)
-          setSnapshot(await getLibrarySnapshotFromDataSource(dataSource))
+          setSnapshot(await getMusicDataFromDataSource(dataSource))
         })
       }}
       readOnly={readOnly}

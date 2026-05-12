@@ -29,6 +29,50 @@ export function MusicAlbumArtControl({
   onCancelDelete: () => void
 }) {
   return (
+    <AlbumArtEditorControl
+      title={song.title}
+      t={t}
+      saving={saving}
+      showBusy={showBusy}
+      artworkUrl={artworkUrl}
+      showDeleteConfirm={showDeleteConfirm}
+      onChangeArtwork={onChangeArtwork}
+      onSaveArtwork={onSaveArtwork}
+      onRequestDelete={onRequestDelete}
+      onConfirmDelete={onConfirmDelete}
+      onCancelDelete={onCancelDelete}
+    />
+  )
+}
+
+export function AlbumArtEditorControl({
+  title,
+  t,
+  saving,
+  showBusy,
+  artworkUrl,
+  songId,
+  showDeleteConfirm,
+  onChangeArtwork,
+  onSaveArtwork,
+  onRequestDelete,
+  onConfirmDelete,
+  onCancelDelete,
+}: {
+  title: string
+  t: Translator
+  saving: boolean
+  showBusy: boolean
+  artworkUrl: string
+  songId?: number
+  showDeleteConfirm: boolean
+  onChangeArtwork: () => void
+  onSaveArtwork: () => void
+  onRequestDelete: () => void
+  onConfirmDelete: () => void
+  onCancelDelete: () => void
+}) {
+  return (
     <>
       <CommandBar className="song-dialog-commandbar music-info-control-commandbar AlbumArtControllerCommandBar" overflowLabel={t('player.more')}>
         <CommandBarButton icon="albums" label={t('song.changeArtwork')} className="change-album-art-button ChangeAlbumArtButton" disabled={saving} onClick={onChangeArtwork} />
@@ -37,10 +81,18 @@ export function MusicAlbumArtControl({
         {showBusy ? <div className="music-info-save-progress SaveProgress" /> : null}
       </CommandBar>
       <div className="song-dialog-body song-dialog-artwork AlbumArtControl AlbumArtController AlbumArtControlPanel">
-        <AlbumArtControl title={song.title} artworkUrl={artworkUrl} className="AlbumArt" fallbackClassName="NoAlbumArtTextBlock" fallbackArtwork={false} fallbackText={t('song.noAlbumArt')} />
+        <AlbumArtControl
+          title={title}
+          artworkUrl={artworkUrl}
+          songId={songId}
+          className="AlbumArt"
+          fallbackClassName="NoAlbumArtTextBlock"
+          fallbackArtwork={false}
+          fallbackText={t('song.noAlbumArt')}
+        />
         {showDeleteConfirm ? (
           <div className="song-dialog-warning RemoveAlbumArtWarningPanel">
-            <p className="RemoveAlbumArtWarningTextBlock">{t('song.removeAlbumArt', { title: song.title })}</p>
+            <p className="RemoveAlbumArtWarningTextBlock">{t('song.removeAlbumArt', { title })}</p>
             <button type="button" className="ConfirmButton" disabled={saving} onClick={onConfirmDelete}>{t('common.yes')}</button>
             <button type="button" className="CancelButton" disabled={saving} onClick={onCancelDelete}>{t('common.cancel')}</button>
           </div>

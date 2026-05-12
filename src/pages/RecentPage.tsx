@@ -1,18 +1,22 @@
 import clsx from 'clsx'
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { AppBarPortal } from '../components/AppBarPortal'
+import { AlbumTile } from '../components/AlbumTile'
+import { ArtworkImage } from '../components/ArtworkImage'
 import { CommandBar, CommandBarButton } from '../components/CommandBar'
 import { requestConfirmDialog } from '../components/dialogService'
 import { GridViewMusicItemControl } from '../components/GridViewMusicItemControl'
+import { GridViewHolder } from '../components/GridViewHolder'
 import { Icon } from '../components/icons'
 import { LoadingState } from '../components/LoadingState'
 import { MenuFlyout } from '../components/MenuFlyout'
 import { getAddToPlaylistMenuFlyoutItem, getMusicMenuFlyoutItems } from '../components/MenuFlyoutHelper'
 import { MultiSelectCommandBar } from '../components/MultiSelectCommandBar'
 import { MusicDialog } from '../components/MusicDialog'
-import type { LibraryPlaylist, LibrarySong, PreferredLanguage, PreferenceItemSnapshot, PreferenceSettingsSnapshot, RecentLibrarySong, SearchHistoryEntry } from '../shared/contracts'
+import { getSongArtists } from '../shared/artists'
+import type { LibraryPlaylist, LibrarySong, PreferredLanguage, PreferenceItemSnapshot, PreferenceSettingsSnapshot, RecentAlbumPlayback, RecentArtistPlayback, RecentLibrarySong, RecentPlaylistPlayback, SearchHistoryEntry } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
 import { removeQueueRange } from '../shared/queueUndo'
 import { useLibraryStore } from '../state/useLibraryStore'
@@ -20,10 +24,14 @@ import { usePreferenceStore } from '../state/usePreferenceStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
 
 type RecentTab = 'added' | 'played' | 'searches'
+type RecentPlayedFilter = 'songs' | 'artists' | 'albums' | 'playlists'
 
 interface RecentPageProps {
   songs: LibrarySong[]
   recentSongs: RecentLibrarySong[]
+  recentPlaylists: RecentPlaylistPlayback[]
+  recentAlbums: RecentAlbumPlayback[]
+  recentArtists: RecentArtistPlayback[]
   recentSearches: SearchHistoryEntry[]
   playlists: LibraryPlaylist[]
   favoritePlaylistId: number
@@ -65,6 +73,28 @@ interface RecentAddToMenuState {
   defaultPlaylistName: string
   x: number
   y: number
+}
+
+interface RecentPlaylistView {
+  playlist: LibraryPlaylist
+  songs: LibrarySong[]
+  playedAt: string
+}
+
+interface RecentAlbumView {
+  name: string
+  artist: string
+  songs: LibrarySong[]
+  artworkUrl: string
+  songIds: number[]
+  playedAt: string
+}
+
+interface RecentArtistView {
+  name: string
+  songs: LibrarySong[]
+  artworkUrl: string
+  playedAt: string
 }
 
 function getParentFolderPath(filePath: string) {
@@ -162,6 +192,9 @@ function useRecentScrollbar(
 export function RecentPage({
   songs,
   recentSongs,
+  recentPlaylists,
+  recentAlbums,
+  recentArtists,
   recentSearches,
   playlists,
   favoritePlaylistId,
@@ -191,6 +224,7 @@ export function RecentPage({
   onSearch,
 }: RecentPageProps) {
   const [activeTab, setActiveTab] = useState<RecentTab>('added')
+  const [activePlayedFilter, setActivePlayedFilter] = useState<RecentPlayedFilter>('songs')
   const [multiSelect, setMultiSelect] = useState(false)
   const [selectedSongIds, setSelectedSongIds] = useState<Set<number>>(new Set())
   const [selectedSearchIds, setSelectedSearchIds] = useState<Set<number>>(new Set())
@@ -211,6 +245,9 @@ export function RecentPage({
   const resumeHiddenStorageItemByPath = useLibraryStore((state) => state.resumeHiddenStorageItemByPath)
   const restoreRecentSearch = useLibraryStore((state) => state.restoreRecentSearch)
   const refresh = useLibraryStore((state) => state.refresh)
+  const recordRecentPlaylistPlayed = useLibraryStore((state) => state.recordRecentPlaylistPlayed)
+  const recordRecentAlbumPlayed = useLibraryStore((state) => state.recordRecentAlbumPlayed)
+  const recordRecentArtistPlayed = useLibraryStore((state) => state.recordRecentArtistPlayed)
   const refreshPreferences = usePreferenceStore((state) => state.refresh)
   const addPreferenceItem = usePreferenceStore((state) => state.addItem)
   const removePreferenceItem = usePreferenceStore((state) => state.removeItem)
@@ -218,6 +255,7 @@ export function RecentPage({
   const hideMultiSelectCommandBarAfterOperation = useLibraryStore(
     (state) => state.snapshot.settings.hideMultiSelectCommandBarAfterOperation,
   )
+  const songsById = useMemo(() => new Map(songs.map((song) => [song.id, song])), [songs])
   const favoriteSongIdSet = useMemo(() => new Set(favoriteSongIds), [favoriteSongIds])
   const showUndo = (message: string, action: () => void | Promise<void>) => {
     showUndoableNotification(message, t('common.undo'), action)
@@ -234,12 +272,31 @@ export function RecentPage({
     () => songs.slice().sort((left, right) => dateValue(right.dateAdded) - dateValue(left.dateAdded)).slice(0, RECENT_ADDED_LIMIT),
     [songs],
   )
-  const visibleSongs = activeTab === 'added' ? recentAddedSongs : recentSongs
+  const recentPlaylistViews = useMemo(
+    () => buildRecentPlaylistViews(playlists, songs, recentPlaylists),
+    [playlists, recentPlaylists, songs],
+  )
+  const recentAlbumViews = useMemo(
+    () => buildRecentAlbumViews(songs, recentAlbums, t),
+    [recentAlbums, songs, t],
+  )
+  const recentArtistViews = useMemo(
+    () => buildRecentArtistViews(songs, recentArtists, t),
+    [recentArtists, songs, t],
+  )
+  const recentPlayedCount = recentSongs.length + recentPlaylists.length + recentAlbums.length + recentArtists.length
+  const isSongTab = activeTab === 'added' || activeTab === 'played'
+  const isSearchTab = activeTab === 'searches'
+  const canSelectVisibleSongs = activeTab === 'added'
+    || (activeTab === 'played' && activePlayedFilter === 'songs')
+  const visibleSongs = activeTab === 'added' ? recentAddedSongs : activeTab === 'played' ? recentSongs : []
   const queueSongIds = visibleSongs.map((song) => song.id)
   const selectedVisibleSongIds = visibleSongs.filter((song) => selectedSongIds.has(song.id)).map((song) => song.id)
   const selectedVisibleSearchIds = recentSearches.filter((entry) => selectedSearchIds.has(entry.id)).map((entry) => entry.id)
-  const selectedCount = activeTab === 'searches' ? selectedVisibleSearchIds.length : selectedVisibleSongIds.length
-  const canClearHistory = activeTab === 'played' ? recentSongs.length > 0 : recentSearches.length > 0
+  const selectedCount = isSearchTab ? selectedVisibleSearchIds.length : selectedVisibleSongIds.length
+  const canClearHistory = activeTab === 'played'
+    ? recentSongs.length > 0 || recentPlaylists.length > 0 || recentAlbums.length > 0 || recentArtists.length > 0
+    : activeTab === 'searches' && recentSearches.length > 0
 
   useEffect(() => {
     if (songMenu) {
@@ -263,6 +320,15 @@ export function RecentPage({
     setActiveTab(tab)
     setMultiSelect(false)
     clearSelection()
+  }
+
+  const switchPlayedFilter = (filter: RecentPlayedFilter) => {
+    setActivePlayedFilter(filter)
+    setMultiSelect(false)
+    clearSelection()
+    if (filter !== 'songs') {
+      setRecentPlayedTimelineLabel('')
+    }
   }
 
   const toggleSongSelection = (songId: number) => {
@@ -340,7 +406,7 @@ export function RecentPage({
       />
       <RecentTabButton
         active={activeTab === 'played'}
-        count={recentSongs.length}
+        count={recentPlayedCount}
         label={t('recent.played')}
         showCount={showCount}
         onClick={() => {
@@ -360,7 +426,7 @@ export function RecentPage({
   )
   const commandBarTimelineLabel =
     activeTab === 'added' ? recentAddedTimelineLabel :
-      activeTab === 'played' ? recentPlayedTimelineLabel :
+      activeTab === 'played' && activePlayedFilter === 'songs' ? recentPlayedTimelineLabel :
         ''
 
   return (
@@ -373,6 +439,13 @@ export function RecentPage({
       <div className="recent-tabs search-result-tabs">
         {renderRecentTabs()}
       </div>
+      {activeTab === 'played' ? (
+        <RecentPlayedFilterBar
+          activeFilter={activePlayedFilter}
+          t={t}
+          onChange={switchPlayedFilter}
+        />
+      ) : null}
 
       <CommandBar
         className="recent-commandbar"
@@ -383,7 +456,7 @@ export function RecentPage({
           icon="multiSelect"
           label={t('albums.multiSelect')}
           active={multiSelect}
-          disabled={activeTab === 'searches' ? recentSearches.length === 0 : visibleSongs.length === 0}
+          disabled={isSearchTab ? recentSearches.length === 0 : !isSongTab || !canSelectVisibleSongs || visibleSongs.length === 0}
           onClick={() => {
             setMultiSelect((current) => !current)
             clearSelection()
@@ -417,6 +490,60 @@ export function RecentPage({
             )
           }}
         />
+      ) : activeTab === 'played' ? (
+        <RecentPlayedPanel
+          songs={visibleSongs}
+          playlists={recentPlaylistViews}
+          albums={recentAlbumViews}
+          artists={recentArtistViews}
+          filter={activePlayedFilter}
+          queueSongIds={queueSongIds}
+          selectedSongIds={selectedSongIds}
+          multiSelect={multiSelect}
+          selectedTrackId={selectedTrackId}
+          isPlaying={isPlaying}
+          loading={loading}
+          t={t}
+          preferredLanguage={preferredLanguage}
+          onPlayTrack={onPlayTrack}
+          onTogglePlayPause={onTogglePlayPause}
+          onToggleSelection={toggleSongSelection}
+          onTimelineLabelChange={setRecentPlayedTimelineLabel}
+          onOpenAddToMenu={(menu) => {
+            setSongMenu(null)
+            setAddToMenu(menu)
+          }}
+          onOpenMenu={(menu) => {
+            setAddToMenu(null)
+            setSongMenu(menu)
+          }}
+          onOpenPlaylist={(playlistId) => {
+            navigate(`/playlists/${playlistId}`)
+          }}
+          onOpenAlbum={(albumName) => {
+            navigate(`/albums?album=${encodeURIComponent(albumName)}`)
+          }}
+          onOpenArtist={(artistName) => {
+            navigate(`/artists?artist=${encodeURIComponent(artistName)}`)
+          }}
+          onAddAlbum={(album, position) => {
+            setSongMenu(null)
+            setAddToMenu({
+              ...position,
+              songIds: album.songs.map((song) => song.id),
+              defaultPlaylistName: album.name,
+            })
+          }}
+          onRecordPlaylistPlayed={(playlistId) => {
+            void recordRecentPlaylistPlayed(playlistId)
+          }}
+          onRecordAlbumPlayed={(album) => {
+            void recordRecentAlbumPlayed(album)
+          }}
+          onRecordArtistPlayed={(artist) => {
+            void recordRecentArtistPlayed(artist)
+          }}
+        />
       ) : (
         <RecentSongGrid
           songs={visibleSongs}
@@ -425,18 +552,15 @@ export function RecentPage({
           multiSelect={multiSelect}
           selectedTrackId={selectedTrackId}
           isPlaying={isPlaying}
-          canRemove={activeTab === 'played'}
+          canRemove={false}
           loading={loading}
           t={t}
           onPlayTrack={onPlayTrack}
           onTogglePlayPause={onTogglePlayPause}
           onToggleSelection={toggleSongSelection}
-          getTimelineDate={(song) => activeTab === 'played' ? (song as RecentLibrarySong).playedAt : song.dateAdded}
-          getDetailLabel={(song) => formatRecentDateTime(
-            activeTab === 'played' ? (song as RecentLibrarySong).playedAt : song.dateAdded,
-            preferredLanguage,
-          )}
-          onTimelineLabelChange={activeTab === 'added' ? setRecentAddedTimelineLabel : setRecentPlayedTimelineLabel}
+          getTimelineDate={(song) => song.dateAdded}
+          getDetailLabel={(song) => formatRecentDateTime(song.dateAdded, preferredLanguage)}
+          onTimelineLabelChange={setRecentAddedTimelineLabel}
           onOpenAddToMenu={(menu) => {
             setSongMenu(null)
             setAddToMenu(menu)
@@ -615,7 +739,7 @@ export function RecentPage({
                 showUndo(
                   addToMenu.songIds.length === 1
                     ? t('notification.songAddedTo', {
-                        title: visibleSongs.find((song) => song.id === addToMenu.songIds[0])!.title,
+                        title: songsById.get(addToMenu.songIds[0]!)!.title,
                         target: t('common.nowPlaying'),
                       })
                     : t('notification.songsAddedTo', { count: addToMenu.songIds.length, target: t('common.nowPlaying') }),
@@ -629,7 +753,7 @@ export function RecentPage({
                 showUndo(
                   nextFavoriteSongIds.length === 1
                     ? t('notification.songAddedTo', {
-                        title: visibleSongs.find((song) => song.id === nextFavoriteSongIds[0])!.title,
+                        title: songsById.get(nextFavoriteSongIds[0]!)!.title,
                         target: t('common.myFavorites'),
                       })
                     : t('notification.songsAddedTo', { count: nextFavoriteSongIds.length, target: t('common.myFavorites') }),
@@ -651,7 +775,7 @@ export function RecentPage({
                 showUndo(
                   addToMenu.songIds.length === 1
                     ? t('notification.songAddedTo', {
-                        title: visibleSongs.find((song) => song.id === addToMenu.songIds[0])!.title,
+                        title: songsById.get(addToMenu.songIds[0]!)!.title,
                         target: targetPlaylist.name,
                       })
                     : t('notification.songsAddedTo', { count: addToMenu.songIds.length, target: targetPlaylist.name }),
@@ -701,6 +825,352 @@ function RecentTabButton({
       <span>{label}</span>
       {showCount ? <strong>{count}</strong> : null}
     </button>
+  )
+}
+
+function RecentPlayedFilterBar({
+  activeFilter,
+  t,
+  onChange,
+}: {
+  activeFilter: RecentPlayedFilter
+  t: Translator
+  onChange: (filter: RecentPlayedFilter) => void
+}) {
+  const filters: Array<{ key: RecentPlayedFilter; label: string; icon?: 'songs' | 'users' | 'albums' | 'playlists' }> = [
+    { key: 'songs', label: t('common.songs'), icon: 'songs' },
+    { key: 'artists', label: t('common.artists'), icon: 'users' },
+    { key: 'albums', label: t('common.albums'), icon: 'albums' },
+    { key: 'playlists', label: t('common.playlists'), icon: 'playlists' },
+  ]
+
+  return (
+    <div className="recent-played-filters" role="tablist" aria-label={t('recent.played')}>
+      {filters.map((filter) => (
+        <button
+          type="button"
+          className={filter.key === activeFilter ? 'is-active' : ''}
+          key={filter.key}
+          onClick={() => onChange(filter.key)}
+        >
+          {filter.icon ? <Icon name={filter.icon} /> : null}
+          <span>{filter.label}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function RecentPlayedPanel({
+  songs,
+  playlists,
+  albums,
+  artists,
+  filter,
+  queueSongIds,
+  selectedSongIds,
+  multiSelect,
+  selectedTrackId,
+  isPlaying,
+  loading,
+  t,
+  preferredLanguage,
+  onPlayTrack,
+  onTogglePlayPause,
+  onToggleSelection,
+  onTimelineLabelChange,
+  onOpenAddToMenu,
+  onOpenMenu,
+  onOpenPlaylist,
+  onOpenAlbum,
+  onOpenArtist,
+  onAddAlbum,
+  onRecordPlaylistPlayed,
+  onRecordAlbumPlayed,
+  onRecordArtistPlayed,
+}: {
+  songs: LibrarySong[]
+  playlists: RecentPlaylistView[]
+  albums: RecentAlbumView[]
+  artists: RecentArtistView[]
+  filter: RecentPlayedFilter
+  queueSongIds: number[]
+  selectedSongIds: Set<number>
+  multiSelect: boolean
+  selectedTrackId: number | null
+  isPlaying: boolean
+  loading: boolean
+  t: Translator
+  preferredLanguage: PreferredLanguage
+  onPlayTrack: (trackId: number, queueSongIds: number[]) => void
+  onTogglePlayPause: () => void
+  onToggleSelection: (songId: number) => void
+  onTimelineLabelChange: (label: string) => void
+  onOpenAddToMenu: (menu: RecentAddToMenuState) => void
+  onOpenMenu: (menu: RecentSongMenuState) => void
+  onOpenPlaylist: (playlistId: number) => void
+  onOpenAlbum: (albumName: string) => void
+  onOpenArtist: (artistName: string) => void
+  onAddAlbum: (album: RecentAlbumView, position: { x: number; y: number }) => void
+  onRecordPlaylistPlayed: (playlistId: number) => void
+  onRecordAlbumPlayed: (album: string) => void
+  onRecordArtistPlayed: (artist: string) => void
+}) {
+  const showPlaylists = filter === 'playlists'
+  const showAlbums = filter === 'albums'
+  const showArtists = filter === 'artists'
+  const showSongs = filter === 'songs'
+  const visiblePlaylists = showPlaylists ? playlists : []
+  const visibleAlbums = showAlbums ? albums : []
+  const visibleArtists = showArtists ? artists : []
+  const visibleSongs = showSongs ? songs : []
+  const hasCollections = visiblePlaylists.length > 0 || visibleAlbums.length > 0 || visibleArtists.length > 0
+
+  if (!hasCollections && visibleSongs.length === 0) {
+    return loading ? <LoadingState t={t} compact /> : null
+  }
+
+  return (
+    <div className="recent-played-panel">
+      {visiblePlaylists.length > 0 ? (
+        <RecentCollectionSection title={t('recent.playlists')}>
+          <RecentPlaylistGrid
+            playlists={visiblePlaylists}
+            t={t}
+            loading={false}
+            onOpen={onOpenPlaylist}
+            onPlay={(playlist) => {
+              onRecordPlaylistPlayed(playlist.playlist.id)
+              onPlayTrack(playlist.songs[0]!.id, playlist.songs.map((song) => song.id))
+            }}
+          />
+        </RecentCollectionSection>
+      ) : null}
+      {visibleAlbums.length > 0 ? (
+        <RecentCollectionSection title={t('recent.albums')}>
+          <RecentAlbumGrid
+            albums={visibleAlbums}
+            t={t}
+            loading={false}
+            onOpen={onOpenAlbum}
+            onPlay={(album) => {
+              onRecordAlbumPlayed(album.name)
+              onPlayTrack(album.songs[0]!.id, album.songs.map((song) => song.id))
+            }}
+            onAdd={onAddAlbum}
+          />
+        </RecentCollectionSection>
+      ) : null}
+      {visibleArtists.length > 0 ? (
+        <RecentCollectionSection title={t('recent.artists')}>
+          <RecentArtistList
+            artists={visibleArtists}
+            t={t}
+            loading={false}
+            onOpen={onOpenArtist}
+            onPlay={(artist) => {
+              onRecordArtistPlayed(artist.name)
+              onPlayTrack(artist.songs[0]!.id, artist.songs.map((song) => song.id))
+            }}
+          />
+        </RecentCollectionSection>
+      ) : null}
+      {showSongs ? <div className="recent-played-songs">
+        <RecentSongGrid
+          songs={visibleSongs}
+          queueSongIds={queueSongIds}
+          selectedSongIds={selectedSongIds}
+          multiSelect={multiSelect}
+          selectedTrackId={selectedTrackId}
+          isPlaying={isPlaying}
+          canRemove
+          loading={false}
+          t={t}
+          onPlayTrack={onPlayTrack}
+          onTogglePlayPause={onTogglePlayPause}
+          onToggleSelection={onToggleSelection}
+          getTimelineDate={(song) => (song as RecentLibrarySong).playedAt}
+          getDetailLabel={(song) => formatRecentDateTime((song as RecentLibrarySong).playedAt, preferredLanguage)}
+          onTimelineLabelChange={onTimelineLabelChange}
+          onOpenAddToMenu={onOpenAddToMenu}
+          onOpenMenu={onOpenMenu}
+        />
+      </div> : null}
+    </div>
+  )
+}
+
+function RecentCollectionSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="recent-collection-section">
+      <h3>{title}</h3>
+      {children}
+    </section>
+  )
+}
+
+function RecentPlaylistGrid({
+  playlists,
+  t,
+  loading,
+  onOpen,
+  onPlay,
+}: {
+  playlists: RecentPlaylistView[]
+  t: Translator
+  loading: boolean
+  onOpen: (playlistId: number) => void
+  onPlay: (playlist: RecentPlaylistView) => void
+}) {
+  if (playlists.length === 0) {
+    return loading ? <LoadingState t={t} compact /> : null
+  }
+
+  return (
+    <div className="recent-collection-scroll-frame">
+      <div className="recent-collection-scroll">
+        <div className="recent-collection-grid">
+          {playlists.map(({ playlist, songs, playedAt }) => (
+            <GridViewHolder
+              key={playlist.id}
+              playlist={playlist}
+              songs={songs}
+              selected={false}
+              dragging={false}
+              t={t}
+              showDragHandle={false}
+              onOpen={() => {
+                onOpen(playlist.id)
+              }}
+              onPlay={() => {
+                onPlay({ playlist, songs, playedAt })
+              }}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function RecentAlbumGrid({
+  albums,
+  t,
+  loading,
+  onOpen,
+  onPlay,
+  onAdd,
+}: {
+  albums: RecentAlbumView[]
+  t: Translator
+  loading: boolean
+  onOpen: (albumName: string) => void
+  onPlay: (album: RecentAlbumView) => void
+  onAdd: (album: RecentAlbumView, position: { x: number; y: number }) => void
+}) {
+  if (albums.length === 0) {
+    return loading ? <LoadingState t={t} compact /> : null
+  }
+
+  return (
+    <div className="recent-collection-scroll-frame">
+      <div className="recent-collection-scroll">
+        <div className="recent-collection-grid recent-album-grid">
+          {albums.map((album) => (
+            <AlbumTile
+              key={album.name}
+              album={album}
+              multiSelect={false}
+              selected={false}
+              t={t}
+              onOpenAlbum={() => {
+                onOpen(album.name)
+              }}
+              onPlayAlbum={() => {
+                onPlay(album)
+              }}
+              onAddAlbum={(position) => {
+                onAdd(album, position)
+              }}
+              onToggleSelection={() => {
+                onOpen(album.name)
+              }}
+              onOpenContextMenu={(position) => {
+                onAdd(album, position)
+              }}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function RecentArtistList({
+  artists,
+  t,
+  loading,
+  onOpen,
+  onPlay,
+}: {
+  artists: RecentArtistView[]
+  t: Translator
+  loading: boolean
+  onOpen: (artistName: string) => void
+  onPlay: (artist: RecentArtistView) => void
+}) {
+  if (artists.length === 0) {
+    return loading ? <LoadingState t={t} compact /> : null
+  }
+
+  return (
+    <div className="recent-collection-scroll-frame">
+      <div className="recent-collection-scroll recent-artist-list">
+        {artists.map((artist) => (
+          <div className="artist-virtual-row recent-artist-row" key={artist.name}>
+            <button
+              className="artist-list-item"
+              type="button"
+              title={artist.name}
+              onClick={() => {
+                onOpen(artist.name)
+              }}
+            >
+              <RecentArtistArtwork artist={artist} />
+              <span className="artist-list-copy">
+                <strong>{artist.name}</strong>
+              </span>
+            </button>
+            <button
+              type="button"
+              className="recent-artist-play"
+              aria-label={t('detail.playArtist')}
+              title={t('detail.playArtist')}
+              onClick={() => {
+                onPlay(artist)
+              }}
+            >
+              <Icon name="play" />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function RecentArtistArtwork({ artist }: { artist: RecentArtistView }) {
+  return (
+    <ArtworkImage
+      className="artist-list-artwork"
+      src={artist.artworkUrl}
+      title={artist.name}
+      renderFallback={() => (
+        <span className="artist-list-avatar" aria-hidden="true">
+          <Icon name="users" />
+        </span>
+      )}
+    />
   )
 }
 
@@ -992,6 +1462,99 @@ function toggleSetItem<T>(source: Set<T>, item: T) {
 function RecentSearchTime({ value, preferredLanguage }: { value: string; preferredLanguage: PreferredLanguage }) {
   const label = formatRecentDateTime(value, preferredLanguage)
   return label ? <small>{label}</small> : null
+}
+
+function buildRecentPlaylistViews(
+  playlists: LibraryPlaylist[],
+  songs: LibrarySong[],
+  recentPlaylists: RecentPlaylistPlayback[],
+) {
+  const songsById = new Map(songs.map((song) => [song.id, song]))
+  const playlistsById = new Map(playlists.map((playlist) => [playlist.id, playlist]))
+
+  const views: RecentPlaylistView[] = []
+  for (const recentPlaylist of recentPlaylists) {
+    const playlist = playlistsById.get(recentPlaylist.playlistId)
+    if (playlist) {
+      views.push({
+        playlist,
+        songs: playlist.songIds.map((songId) => songsById.get(songId)).filter((song) => song !== undefined),
+        playedAt: recentPlaylist.playedAt,
+      })
+    }
+  }
+
+  return views
+}
+
+function buildRecentAlbumViews(songs: LibrarySong[], recentAlbums: RecentAlbumPlayback[], t: Translator) {
+  const songsByAlbum = new Map<string, LibrarySong[]>()
+  for (const song of songs) {
+    const albumName = song.album || t('common.albumUnknown')
+    const albumSongs = songsByAlbum.get(albumName)
+    if (albumSongs) {
+      albumSongs.push(song)
+    } else {
+      songsByAlbum.set(albumName, [song])
+    }
+  }
+
+  const views: RecentAlbumView[] = []
+  for (const recentAlbum of recentAlbums) {
+    const albumName = recentAlbum.album
+    const albumSongs = songsByAlbum.get(albumName)
+    if (albumSongs) {
+      views.push({
+        name: albumName,
+        artist: getRecentAlbumArtistLabel(albumSongs, t),
+        songs: albumSongs,
+        artworkUrl: albumSongs.find((song) => song.artworkUrl)?.artworkUrl ?? '',
+        songIds: albumSongs.map((song) => song.id),
+        playedAt: recentAlbum.playedAt,
+      })
+    }
+  }
+
+  return views
+}
+
+function buildRecentArtistViews(songs: LibrarySong[], recentArtists: RecentArtistPlayback[], t: Translator) {
+  const songsByArtist = new Map<string, LibrarySong[]>()
+  for (const song of songs) {
+    for (const artistName of getSongArtists(song, t('common.artistUnknown'))) {
+      const artistSongs = songsByArtist.get(artistName)
+      if (artistSongs) {
+        artistSongs.push(song)
+      } else {
+        songsByArtist.set(artistName, [song])
+      }
+    }
+  }
+
+  const views: RecentArtistView[] = []
+  for (const recentArtist of recentArtists) {
+    const artistSongs = songsByArtist.get(recentArtist.artist)
+    if (artistSongs) {
+      views.push({
+        name: recentArtist.artist,
+        songs: artistSongs,
+        artworkUrl: artistSongs.find((song) => song.artworkUrl)?.artworkUrl ?? '',
+        playedAt: recentArtist.playedAt,
+      })
+    }
+  }
+
+  return views
+}
+
+function getRecentAlbumArtistLabel(songs: LibrarySong[], t: Translator) {
+  const artists = [...new Set(songs.flatMap((song) => getSongArtists(song, t('common.artistUnknown'))))]
+
+  if (artists.length >= 3) {
+    return t('albums.artistsAndMore', { first: artists[0]!, second: artists[1]!, count: artists.length })
+  }
+
+  return artists.join(t('albums.artistSeparator'))
 }
 
 function dateValue(value: string) {
