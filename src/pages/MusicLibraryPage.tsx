@@ -4,6 +4,7 @@ import { useRef } from 'react'
 import { Link } from 'react-router-dom'
 
 import { ArtworkImage } from '../components/ArtworkImage'
+import { CustomScrollbar } from '../components/CustomScrollbar'
 import { DefaultAlbumArtwork } from '../components/DefaultAlbumArtwork'
 import { Icon } from '../components/icons'
 import { LoadingState } from '../components/LoadingState'
@@ -17,6 +18,7 @@ import type { Translator } from '../shared/i18n'
 import { getQuickJumpTooltip } from '../shared/quickJumpTooltip'
 import { compareLocalText, getLocalTextQuickJumpBucket, LOCAL_TEXT_QUICK_JUMP_KEYS } from '../shared/textCompare'
 import { useSongArtwork } from '../hooks/useSongArtwork'
+import { useCustomScrollbar } from '../hooks/useCustomScrollbar'
 
 interface MusicLibraryPageProps {
   snapshot: LibrarySnapshot
@@ -113,6 +115,8 @@ export function MusicLibraryPage({
     () => sortSongsByColumn(songs, sortState),
     [songs, sortState],
   )
+  const tableScrollFrameRef = useRef<HTMLDivElement | null>(null)
+  const tableScrollbarTrackRef = useRef<HTMLDivElement | null>(null)
   const tableShellRef = useRef<HTMLDivElement | null>(null)
   const [contextMenu, setContextMenu] = useState<MusicMenuFlyoutState | null>(null)
   const [selectionMenu, setSelectionMenu] = useState<MenuFlyoutPosition | null>(null)
@@ -169,7 +173,6 @@ export function MusicLibraryPage({
     quickJumpColumn,
     t,
   )
-
   useEffect(() => {
     setSortState({
       column: toLibrarySortColumn(snapshot.settings.musicLibrarySort),
@@ -308,6 +311,12 @@ export function MusicLibraryPage({
       window.dispatchEvent(new CustomEvent('smplayer:library-quick-jump-open-change', { detail: false }))
     }
   }, [isCompactLayout, quickJumpPanelOpen])
+  const onTableScrollbarPointerDown = useCustomScrollbar({
+    frameRef: tableScrollFrameRef,
+    scrollContainerRef: tableShellRef,
+    scrollbarTrackRef: tableScrollbarTrackRef,
+    refreshDependencies: [visibleSongs.length, tableWidth, isCompactLayout],
+  })
 
   return (
     <section className="page-panel library-page">
@@ -377,23 +386,24 @@ export function MusicLibraryPage({
               )
             })}
           </nav>
-          <div
-            className="table-shell library-table-shell"
-            ref={tableShellRef}
-            onWheel={(event) => {
-              const horizontalDelta = event.shiftKey ? event.deltaY : event.deltaX
-              if (horizontalDelta === 0) {
-                return
-              }
+          <div className="library-table-scroll-frame custom-scrollbar-frame" ref={tableScrollFrameRef}>
+            <div
+              className="table-shell library-table-shell custom-scrollbar-container"
+              ref={tableShellRef}
+              onWheel={(event) => {
+                const horizontalDelta = event.shiftKey ? event.deltaY : event.deltaX
+                if (horizontalDelta === 0) {
+                  return
+                }
 
-              event.currentTarget.scrollLeft += horizontalDelta
-              event.preventDefault()
-            }}
-            onScroll={(event) => {
-              setScrollTop(event.currentTarget.scrollTop)
-            }}
-          >
-          <table className="music-table" style={{ width: tableWidth }}>
+                event.currentTarget.scrollLeft += horizontalDelta
+                event.preventDefault()
+              }}
+              onScroll={(event) => {
+                setScrollTop(event.currentTarget.scrollTop)
+              }}
+            >
+            <table className="music-table" style={{ width: tableWidth }}>
             {isCompactLayout ? (
               <caption className="library-compact-sort-bar">
                 {compactSortOptions.map(({ column, label }) => {
@@ -596,7 +606,12 @@ export function MusicLibraryPage({
                 </tr>
               ) : null}
             </tbody>
-          </table>
+            </table>
+            </div>
+            <CustomScrollbar
+              scrollbarTrackRef={tableScrollbarTrackRef}
+              onThumbPointerDown={onTableScrollbarPointerDown}
+            />
           </div>
         </div>
         </>

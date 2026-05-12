@@ -135,7 +135,15 @@
   top: calc(100% + 4px);
 }
 
+.now-playing-list-scroll-frame {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
 .now-playing-list-shell {
+  flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
   padding-right: 14px;

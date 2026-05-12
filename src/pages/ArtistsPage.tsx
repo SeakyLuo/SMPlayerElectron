@@ -1,10 +1,11 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import clsx from 'clsx'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 
 import { ArtworkImage } from '../components/ArtworkImage'
 import { AppBarSearch } from '../components/AppBarPortal'
 import { DefaultAlbumArtwork } from '../components/DefaultAlbumArtwork'
+import { CustomScrollbar } from '../components/CustomScrollbar'
 import { Icon } from '../components/icons'
 import { LoadingState } from '../components/LoadingState'
 import { MenuFlyout } from '../components/MenuFlyout'
@@ -23,6 +24,7 @@ import { useLibraryStore } from '../state/useLibraryStore'
 import { usePreferenceStore } from '../state/usePreferenceStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
 import { useSongArtwork } from '../hooks/useSongArtwork'
+import { useCustomScrollbar } from '../hooks/useCustomScrollbar'
 
 interface ArtistsPageProps {
   t: Translator
@@ -47,6 +49,7 @@ interface ArtistsPageProps {
   onAddSongsToPlaylist: (playlistId: number, songIds: number[]) => void
   onRevealSong: (songPath: string) => void | Promise<void>
   onDeleteSongFromDisk: (songId: number) => void
+  onRecordSearch?: (query: string) => void
   onCompactTitleChange?: (title: string) => void
   routeBase?: string
 }
@@ -127,6 +130,7 @@ export function ArtistsPage({
   onAddSongsToPlaylist,
   onRevealSong,
   onDeleteSongFromDisk,
+  onRecordSearch,
   onCompactTitleChange,
   routeBase = '',
 }: ArtistsPageProps) {
@@ -143,6 +147,8 @@ export function ArtistsPage({
   const artistMasterScrollFrameRef = useRef<HTMLDivElement | null>(null)
   const artistMasterScrollbarTrackRef = useRef<HTMLDivElement | null>(null)
   const artistListRef = useRef<HTMLDivElement | null>(null)
+  const artistDetailScrollFrameRef = useRef<HTMLDivElement | null>(null)
+  const artistDetailScrollbarTrackRef = useRef<HTMLDivElement | null>(null)
   const artistDetailRef = useRef<HTMLElement | null>(null)
   const artistAlbumListRef = useRef<HTMLDivElement | null>(null)
   const [artistScrollTop, setArtistScrollTop] = useState(0)
@@ -304,6 +310,7 @@ export function ArtistsPage({
   }
 
   const chooseArtist = (artistName: string) => {
+    onRecordSearch?.(artistName)
     setSelectedArtistName(artistName)
     setArtistSearch(artistName)
     setMultiSelect(false)
@@ -346,6 +353,8 @@ export function ArtistsPage({
     const targetArtist = exactMatch ?? artistSearchSuggestions[0]
     if (targetArtist) {
       chooseArtist(targetArtist.name)
+    } else if (artistSearch.trim()) {
+      onRecordSearch?.(artistSearch.trim())
     }
   }
 
@@ -470,74 +479,18 @@ export function ArtistsPage({
     }
   }, [])
 
-  useLayoutEffect(() => {
-    const scrollFrame = artistMasterScrollFrameRef.current
-    const scrollContainer = artistListRef.current
-    if (!scrollFrame || !scrollContainer) {
-      return
-    }
-
-    let animationFrame = 0
-    const updateScrollbar = () => {
-      const maxScrollTop = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight)
-      const trackHeight = scrollContainer.clientHeight
-      const thumbHeight = maxScrollTop > 0
-        ? Math.max(38, Math.round((trackHeight / scrollContainer.scrollHeight) * trackHeight))
-        : trackHeight
-      const thumbTop = maxScrollTop > 0
-        ? Math.round((scrollContainer.scrollTop / maxScrollTop) * Math.max(0, trackHeight - thumbHeight))
-        : 0
-
-      scrollFrame.style.setProperty('--artists-master-scrollbar-thumb-height', `${thumbHeight}px`)
-      scrollFrame.style.setProperty('--artists-master-scrollbar-thumb-top', `${thumbTop}px`)
-      scrollFrame.classList.toggle('has-scrollbar', isCompactArtistLayout && maxScrollTop > 1)
-    }
-    const scheduleUpdate = () => {
-      window.cancelAnimationFrame(animationFrame)
-      animationFrame = window.requestAnimationFrame(updateScrollbar)
-    }
-
-    updateScrollbar()
-    scrollContainer.addEventListener('scroll', scheduleUpdate, { passive: true })
-    const resizeObserver = new ResizeObserver(scheduleUpdate)
-    resizeObserver.observe(scrollFrame)
-    resizeObserver.observe(scrollContainer)
-    window.addEventListener('resize', scheduleUpdate)
-
-    return () => {
-      window.cancelAnimationFrame(animationFrame)
-      scrollContainer.removeEventListener('scroll', scheduleUpdate)
-      resizeObserver.disconnect()
-      window.removeEventListener('resize', scheduleUpdate)
-    }
-  }, [artistListHeight, isCompactArtistLayout])
-
-  const onArtistMasterScrollbarPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const scrollContainer = artistListRef.current
-    const scrollFrame = artistMasterScrollFrameRef.current
-    const scrollbarTrack = artistMasterScrollbarTrackRef.current
-    if (!scrollContainer || !scrollFrame || !scrollbarTrack) {
-      return
-    }
-
-    event.preventDefault()
-    const maxScrollTop = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight)
-    const thumbHeight = Number.parseFloat(getComputedStyle(scrollFrame).getPropertyValue('--artists-master-scrollbar-thumb-height'))
-    const trackRange = Math.max(1, scrollbarTrack.clientHeight - thumbHeight)
-    const scrollPerPixel = maxScrollTop / trackRange
-    const startY = event.clientY
-    const startScrollTop = scrollContainer.scrollTop
-    const onPointerMove = (moveEvent: PointerEvent) => {
-      scrollContainer.scrollTop = startScrollTop + (moveEvent.clientY - startY) * scrollPerPixel
-    }
-    const onPointerUp = () => {
-      window.removeEventListener('pointermove', onPointerMove)
-      window.removeEventListener('pointerup', onPointerUp)
-    }
-
-    window.addEventListener('pointermove', onPointerMove)
-    window.addEventListener('pointerup', onPointerUp)
-  }
+  const onArtistMasterScrollbarPointerDown = useCustomScrollbar({
+    frameRef: artistMasterScrollFrameRef,
+    scrollContainerRef: artistListRef,
+    scrollbarTrackRef: artistMasterScrollbarTrackRef,
+    refreshDependencies: [artistListHeight, isCompactArtistLayout],
+  })
+  const onArtistDetailScrollbarPointerDown = useCustomScrollbar({
+    frameRef: artistDetailScrollFrameRef,
+    scrollContainerRef: artistDetailRef,
+    scrollbarTrackRef: artistDetailScrollbarTrackRef,
+    refreshDependencies: [selectedArtistName, selectedAlbums.length, artistAlbumVirtualWindow.startIndex, artistAlbumVirtualWindow.endIndex],
+  })
 
   useEffect(() => {
     const artistDetail = artistDetailRef.current
@@ -654,9 +607,9 @@ export function ArtistsPage({
               )
             })}
           </nav>
-          <div className="artists-master-scroll-frame" ref={artistMasterScrollFrameRef}>
+          <div className="artists-master-scroll-frame custom-scrollbar-frame" ref={artistMasterScrollFrameRef}>
             <div
-              className="artists-list"
+              className="artists-list custom-scrollbar-container"
               ref={artistListRef}
               aria-label={t('common.artists')}
               onScroll={(event) => {
@@ -692,20 +645,22 @@ export function ArtistsPage({
                 <div className="artists-virtual-spacer" style={{ height: artistBottomSpacerHeight }} />
               ) : null}
             </div>
-            <div className="artists-master-scrollbar" ref={artistMasterScrollbarTrackRef} aria-hidden="true">
-              <div className="artists-master-scrollbar-thumb" onPointerDown={onArtistMasterScrollbarPointerDown} />
-            </div>
+            <CustomScrollbar
+              scrollbarTrackRef={artistMasterScrollbarTrackRef}
+              onThumbPointerDown={onArtistMasterScrollbarPointerDown}
+            />
           </div>
         </div>
       </aside>
 
-      <main
-        className={clsx('artists-detail', { 'is-empty': !selectedArtist })}
-        ref={artistDetailRef}
-        onScroll={(event) => {
-          setArtistDetailScrollTop(event.currentTarget.scrollTop)
-        }}
-      >
+      <div className="artists-detail-scroll-frame custom-scrollbar-frame" ref={artistDetailScrollFrameRef}>
+        <main
+          className={clsx('artists-detail custom-scrollbar-container', { 'is-empty': !selectedArtist })}
+          ref={artistDetailRef}
+          onScroll={(event) => {
+            setArtistDetailScrollTop(event.currentTarget.scrollTop)
+          }}
+        >
         {selectedArtist ? (
           <>
             <header className="artist-detail-header">
@@ -878,7 +833,12 @@ export function ArtistsPage({
             </div>
           )
         )}
-      </main>
+        </main>
+        <CustomScrollbar
+          scrollbarTrackRef={artistDetailScrollbarTrackRef}
+          onThumbPointerDown={onArtistDetailScrollbarPointerDown}
+        />
+      </div>
       <MultiSelectCommandBar
         visible={multiSelect}
         selectedCount={effectiveSelectedSongIds.length}

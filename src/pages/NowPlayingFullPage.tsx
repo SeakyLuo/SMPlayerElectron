@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import { useNavigate } from 'react-router-dom'
 
 import { AlbumArtControl } from '../components/AlbumArtControl'
+import { DEFAULT_ALBUM_ARTWORK_URL } from '../components/DefaultAlbumArtwork'
 import { requestConfirmDialog, requestTextDialog } from '../components/dialogService'
 import { Icon } from '../components/icons'
 import { LoadingState } from '../components/LoadingState'
@@ -40,7 +41,7 @@ import { usePlaybackProgress } from '../state/playbackProgressStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
 
 const QUICK_PLAY_LIMIT = 100
-const DEFAULT_ARTWORK_URL = '/monotone_bg_wide.png'
+const DEFAULT_ARTWORK_URL = DEFAULT_ALBUM_ARTWORK_URL
 const LYRICS_RESTORE_DELAY_MS = 5000
 const LYRICS_SCROLL_DURATION_MS = 360
 const PLAYER_BAR_AUTO_HIDE_DELAY_MS = 5000

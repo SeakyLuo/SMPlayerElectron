@@ -418,7 +418,7 @@
   grid-template-rows: repeat(27, minmax(0, 1fr));
   width: 22px;
   min-height: 0;
-  padding: 12px 0 calc(var(--player-height) + 18px);
+  padding: 12px 0 18px;
   box-sizing: border-box;
 }
 
@@ -459,7 +459,7 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
-  padding: 8px 8px calc(var(--player-height) + 18px) 14px;
+  padding: 8px 8px 18px 14px;
   scrollbar-gutter: stable;
 }
 
@@ -518,7 +518,7 @@
 }
 
 .app-shell.nav-minimal .albums-quick-jump {
-  padding: 2px 0 calc(var(--player-height) + 18px);
+  padding: 2px 0 18px;
 }
 
 .app-shell.nav-minimal .albums-grid-scroll-frame {
@@ -527,7 +527,7 @@
 
 .app-shell.nav-minimal .albums-grid-scroll-frame .albums-grid {
   height: 100%;
-  padding: 8px 0 calc(var(--player-height) + 18px) 14px;
+  padding: 8px 0 18px 14px;
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-gutter: auto;

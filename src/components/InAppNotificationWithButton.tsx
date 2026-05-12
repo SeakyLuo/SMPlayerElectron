@@ -12,11 +12,13 @@ export function InAppNotificationWithButton() {
 
   return (
     <div className="undoable-notification" role="status">
-      <span>{notification.message}</span>
-      <button type="button" onClick={() => void run()}>
-        {notification.buttonText}
-      </button>
-      <button type="button" aria-label="Close" onClick={dismiss}>
+      <span className="undoable-notification-message">{notification.message}</span>
+      {notification.action ? (
+        <button className="undoable-notification-action" type="button" onClick={() => void run()}>
+          {notification.buttonText}
+        </button>
+      ) : null}
+      <button className="undoable-notification-close" type="button" aria-label="Close" onClick={dismiss}>
         <Icon name="close" />
       </button>
     </div>

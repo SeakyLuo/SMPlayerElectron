@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import clsx from 'clsx'
 import { useNavigate } from 'react-router-dom'
 
@@ -6,6 +6,7 @@ import { AlbumArtControl } from '../components/AlbumArtControl'
 import { AlbumTile } from '../components/AlbumTile'
 import { AppBarPortal, AppBarSearch } from '../components/AppBarPortal'
 import { CommandBar, CommandBarButton } from '../components/CommandBar'
+import { CustomScrollbar } from '../components/CustomScrollbar'
 import { Icon } from '../components/icons'
 import { LoadingState } from '../components/LoadingState'
 import { MenuFlyout } from '../components/MenuFlyout'
@@ -18,6 +19,7 @@ import { getQuickJumpTooltip } from '../shared/quickJumpTooltip'
 import { compareLocalText, getLocalTextQuickJumpBucket, LOCAL_TEXT_QUICK_JUMP_KEYS } from '../shared/textCompare'
 import { useLibraryStore } from '../state/useLibraryStore'
 import { usePreferenceStore } from '../state/usePreferenceStore'
+import { useCustomScrollbar } from '../hooks/useCustomScrollbar'
 
 const ALBUM_TILE_TRACK_WIDTH = 180
 const ALBUM_COLUMN_GAP = 30
@@ -49,6 +51,7 @@ interface AlbumsPageProps {
   onAddSongsToNowPlaying: (songIds: number[]) => void
   onCreatePlaylistWithSongs: (name: string, songIds: number[]) => void
   onUpdateSettings: (update: AppSettingsUpdate) => void
+  onRecordSearch?: (query: string) => void
   routeBase?: string
 }
 
@@ -64,6 +67,7 @@ export function AlbumsPage({
   onAddSongsToNowPlaying,
   onCreatePlaylistWithSongs,
   onUpdateSettings,
+  onRecordSearch,
   routeBase = '',
 }: AlbumsPageProps) {
   const navigate = useNavigate()
@@ -227,74 +231,12 @@ export function AlbumsPage({
     }
   }, [])
 
-  useLayoutEffect(() => {
-    const scrollFrame = albumGridScrollFrameRef.current
-    const scrollContainer = albumGridRef.current
-    if (!scrollFrame || !scrollContainer) {
-      return
-    }
-
-    let animationFrame = 0
-    const updateScrollbar = () => {
-      const maxScrollTop = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight)
-      const trackHeight = scrollContainer.clientHeight
-      const thumbHeight = maxScrollTop > 0
-        ? Math.max(38, Math.round((trackHeight / scrollContainer.scrollHeight) * trackHeight))
-        : trackHeight
-      const thumbTop = maxScrollTop > 0
-        ? Math.round((scrollContainer.scrollTop / maxScrollTop) * Math.max(0, trackHeight - thumbHeight))
-        : 0
-
-      scrollFrame.style.setProperty('--albums-grid-scrollbar-thumb-height', `${thumbHeight}px`)
-      scrollFrame.style.setProperty('--albums-grid-scrollbar-thumb-top', `${thumbTop}px`)
-      scrollFrame.classList.toggle('has-scrollbar', isCompactAlbumLayout && maxScrollTop > 1)
-    }
-    const scheduleUpdate = () => {
-      window.cancelAnimationFrame(animationFrame)
-      animationFrame = window.requestAnimationFrame(updateScrollbar)
-    }
-
-    updateScrollbar()
-    scrollContainer.addEventListener('scroll', scheduleUpdate, { passive: true })
-    const resizeObserver = new ResizeObserver(scheduleUpdate)
-    resizeObserver.observe(scrollFrame)
-    resizeObserver.observe(scrollContainer)
-    window.addEventListener('resize', scheduleUpdate)
-
-    return () => {
-      window.cancelAnimationFrame(animationFrame)
-      scrollContainer.removeEventListener('scroll', scheduleUpdate)
-      resizeObserver.disconnect()
-      window.removeEventListener('resize', scheduleUpdate)
-    }
-  }, [albumListHeight, isCompactAlbumLayout])
-
-  const onAlbumGridScrollbarPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const scrollContainer = albumGridRef.current
-    const scrollFrame = albumGridScrollFrameRef.current
-    const scrollbarTrack = albumGridScrollbarTrackRef.current
-    if (!scrollContainer || !scrollFrame || !scrollbarTrack) {
-      return
-    }
-
-    event.preventDefault()
-    const maxScrollTop = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight)
-    const thumbHeight = Number.parseFloat(getComputedStyle(scrollFrame).getPropertyValue('--albums-grid-scrollbar-thumb-height'))
-    const trackRange = Math.max(1, scrollbarTrack.clientHeight - thumbHeight)
-    const scrollPerPixel = maxScrollTop / trackRange
-    const startY = event.clientY
-    const startScrollTop = scrollContainer.scrollTop
-    const onPointerMove = (moveEvent: PointerEvent) => {
-      scrollContainer.scrollTop = startScrollTop + (moveEvent.clientY - startY) * scrollPerPixel
-    }
-    const onPointerUp = () => {
-      window.removeEventListener('pointermove', onPointerMove)
-      window.removeEventListener('pointerup', onPointerUp)
-    }
-
-    window.addEventListener('pointermove', onPointerMove)
-    window.addEventListener('pointerup', onPointerUp)
-  }
+  const onAlbumGridScrollbarPointerDown = useCustomScrollbar({
+    frameRef: albumGridScrollFrameRef,
+    scrollContainerRef: albumGridRef,
+    scrollbarTrackRef: albumGridScrollbarTrackRef,
+    refreshDependencies: [albumListHeight, isCompactAlbumLayout],
+  })
 
   useEffect(() => {
     const compactQuery = window.matchMedia(ALBUM_COMPACT_QUERY)
@@ -342,6 +284,9 @@ export function AlbumsPage({
     showProcessing()
     setSearchDraft(nextQuery)
     setSearchQuery(nextQuery)
+    if (nextQuery) {
+      onRecordSearch?.(nextQuery)
+    }
     if (placement === 'appbar') {
       setAppBarSearchOpen(false)
     }
@@ -461,6 +406,7 @@ export function AlbumsPage({
                 onClick={() => {
                   setSearchDraft(album.name)
                   setSearchQuery(album.name)
+                  onRecordSearch?.(album.name)
                   setSearchFocused(false)
                   setAppBarSearchOpen(false)
                   scrollAlbumsToTop()
@@ -563,9 +509,9 @@ export function AlbumsPage({
               )
             })}
           </nav>
-          <div className="albums-grid-scroll-frame" ref={albumGridScrollFrameRef}>
+          <div className="albums-grid-scroll-frame custom-scrollbar-frame" ref={albumGridScrollFrameRef}>
             <div
-              className="albums-grid"
+              className="albums-grid custom-scrollbar-container"
               ref={albumGridRef}
               onScroll={(event) => {
                 setAlbumScrollTop(event.currentTarget.scrollTop)
@@ -608,9 +554,10 @@ export function AlbumsPage({
                 </div>
               </div>
             </div>
-            <div className="albums-grid-scrollbar" ref={albumGridScrollbarTrackRef} aria-hidden="true">
-              <div className="albums-grid-scrollbar-thumb" onPointerDown={onAlbumGridScrollbarPointerDown} />
-            </div>
+            <CustomScrollbar
+              scrollbarTrackRef={albumGridScrollbarTrackRef}
+              onThumbPointerDown={onAlbumGridScrollbarPointerDown}
+            />
           </div>
         </div>
       )}

@@ -275,3 +275,14 @@ body.night-mode .app-shell .preference-page::-webkit-scrollbar-thumb:hover {
     border-width: 0;
   }
 }
+
+.custom-scrollbar-container {
+  scrollbar-gutter: auto;
+  scrollbar-width: none;
+}
+
+.custom-scrollbar-container::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}

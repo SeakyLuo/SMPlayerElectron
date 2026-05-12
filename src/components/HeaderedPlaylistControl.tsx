@@ -1234,7 +1234,7 @@ function HeaderedPlaylistCover({
         <div className="headered-playlist-cover headered-playlist-cover-fallback" aria-hidden="true">
           {type === 'album'
             ? <DefaultAlbumArtwork className="headered-playlist-cover-fallback-image" />
-            : <img className="headered-playlist-cover-fallback-image" src="/monotone_bg_wide.png" alt="" />}
+            : <DefaultAlbumArtwork className="headered-playlist-cover-fallback-image" />}
         </div>
       )}
     />

@@ -5,14 +5,18 @@ import type { MenuFlyoutItem, MenuFlyoutPosition } from './MenuFlyoutHelper'
 import { Icon } from './icons'
 import { getVolumeIconName } from './volumeIcon'
 
+const MENU_FLYOUT_VERTICAL_PADDING = 12
+
 export function MenuFlyout({
   items,
   position,
   onClose,
+  layer = 'default',
 }: {
   items: MenuFlyoutItem[]
   position: MenuFlyoutPosition
   onClose: () => void
+  layer?: 'default' | 'dialog'
 }) {
   const menuRef = useRef<HTMLDivElement | null>(null)
   const [resolvedPosition, setResolvedPosition] = useState({ left: position.x, top: position.y })
@@ -64,10 +68,10 @@ export function MenuFlyout({
 
   return createPortal(
     <>
-      <div className="library-context-menu-overlay" onClick={onClose} />
+      <div className={layer === 'dialog' ? 'library-context-menu-overlay is-dialog-layer' : 'library-context-menu-overlay'} onClick={onClose} />
       <div
         ref={menuRef}
-        className="library-context-menu"
+        className={layer === 'dialog' ? 'library-context-menu is-dialog-layer' : 'library-context-menu'}
         style={{
           left: resolvedPosition.left,
           top: resolvedPosition.top,
@@ -110,7 +114,8 @@ function MenuFlyoutSubmenu({
     const margin = 8
     const triggerRect = triggerElement.getBoundingClientRect()
     const panelWidth = panelElement.getBoundingClientRect().width
-    const fullPanelHeight = panelElement.scrollHeight
+    const itemsHeight = getMenuFlyoutItemsHeight(item.submenu!)
+    const fullPanelHeight = itemsHeight + MENU_FLYOUT_VERTICAL_PADDING
     const boundaryBottom = getMenuBoundaryBottom(margin)
     const availableHeight = Math.max(120, boundaryBottom - margin * 2)
     const panelHeight = Math.min(fullPanelHeight, availableHeight)
@@ -123,7 +128,7 @@ function MenuFlyoutSubmenu({
 
     const top = Math.max(margin, Math.min(triggerRect.top - 6, boundaryBottom - panelHeight))
     const availablePanelHeight = Math.max(120, boundaryBottom - top - margin)
-    const scrollable = fullPanelHeight > availablePanelHeight + 2
+    const scrollable = itemsHeight > availablePanelHeight
     const maxHeight = scrollable ? availablePanelHeight : fullPanelHeight + 2
     setLayout({
       left,
@@ -150,12 +155,11 @@ function MenuFlyoutSubmenu({
       </span>
       <div
         ref={panelRef}
-        className="library-context-submenu-panel"
+        className={`library-context-submenu-panel${layout.scrollable ? ' is-scrollable' : ''}`}
         style={{
           '--submenu-left': `${layout.left}px`,
           '--submenu-top': `${layout.top}px`,
           '--submenu-max-height': `${layout.maxHeight}px`,
-          overflowY: layout.scrollable ? 'auto' : 'hidden',
         } as CSSProperties}
       >
         {item.submenu!.map((subitem) => renderMenuItem(subitem, menuBoundaryHeight, onClose))}
@@ -185,6 +189,18 @@ function renderMenuItem(item: MenuFlyoutItem, menuBoundaryHeight: number, onClos
   }
 
   return <MenuFlyoutButton item={item} key={item.key} onClose={onClose} />
+}
+
+function getMenuFlyoutItemsHeight(items: MenuFlyoutItem[]) {
+  return items.reduce((height, item) => {
+    if (item.separator) {
+      return height + 13
+    }
+    if (item.kind === 'volume') {
+      return height + 42
+    }
+    return height + 34
+  }, 0)
 }
 
 function MenuFlyoutVolumeItem({ item }: { item: MenuFlyoutItem }) {

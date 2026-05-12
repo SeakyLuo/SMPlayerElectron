@@ -5,6 +5,7 @@ import { AlbumDetailPage } from './pages/AlbumDetailPage'
 import { AlbumsPage } from './pages/AlbumsPage'
 import { ArtistsPage } from './pages/ArtistsPage'
 import { AppBar, APPBAR_PAGE_ACTIONS_ID } from './components/AppBar'
+import { CustomScrollbar } from './components/CustomScrollbar'
 import { DialogHost } from './components/DialogHost'
 import { LoadingState } from './components/LoadingState'
 import { MediaControl } from './components/MediaControl'
@@ -18,6 +19,7 @@ import { useOpenFilesPlayback } from './hooks/useOpenFilesPlayback'
 import { usePlaybackController } from './hooks/usePlaybackController'
 import { useRevealItem } from './hooks/useRevealItem'
 import { useScrollbarHoverClass } from './hooks/useScrollbarHoverClass'
+import { useCustomScrollbar } from './hooks/useCustomScrollbar'
 import { useSearchController } from './hooks/useSearchController'
 import { useTrackNotification } from './hooks/useTrackNotification'
 import { useUndoableNotificationStore } from './state/useUndoableNotificationStore'
@@ -361,7 +363,9 @@ function App() {
   )
   const [isMinimalNavigationOpen, setIsMinimalNavigationOpen] = useState(false)
   const hasSeenNavigationRef = useRef(false)
+  const workspaceRef = useRef<HTMLDivElement | null>(null)
   const workspaceContentRef = useRef<HTMLElement | null>(null)
+  const workspaceScrollbarTrackRef = useRef<HTMLDivElement | null>(null)
   const currentRouteScrollKeyRef = useRef('')
   const routeScrollPositionsRef = useRef(new Map<string, Map<string, { top: number; left: number }>>())
   const routeMemoryRef = useRef(new Map<string, string>())
@@ -429,6 +433,21 @@ function App() {
   const updateSettings = useLibraryStore((state) => state.updateSettings)
   const saveViewState = useLibraryStore((state) => state.saveViewState)
   const showUndoableNotification = useUndoableNotificationStore((state) => state.show)
+  const onWorkspaceScrollbarPointerDown = useCustomScrollbar({
+    frameRef: workspaceRef,
+    scrollContainerRef: workspaceContentRef,
+    scrollbarTrackRef: workspaceScrollbarTrackRef,
+    disabled: showNowPlayingFullPage,
+    refreshDependencies: [
+      location.pathname,
+      location.search,
+      snapshot.counts.songs,
+      snapshot.playlists.length,
+      snapshot.folders.length,
+      snapshot.nowPlaying.songIds.length,
+      isNavigationMinimal,
+    ],
+  })
   const [localRelativePath, setLocalRelativePath] = useState('')
   const settingsNightModeActive = snapshot.settings.nightMode === 'on' || (
     snapshot.settings.nightMode === 'auto' &&
@@ -1346,6 +1365,7 @@ function App() {
     onToggleShuffle: playback.toggleShuffle,
     onToggleRepeat: playback.toggleRepeat,
     onToggleRepeatOne: playback.toggleRepeatOne,
+    onCycleRepeatMode: playback.cycleRepeatMode,
     onVoiceCommand: handleVoiceCommand,
     getVoiceHint,
     getVoiceHelpText,
@@ -1358,10 +1378,16 @@ function App() {
         track={playerTrack}
         currentSong={playback.currentTrack}
         disabled={snapshot.nowPlaying.songIds.length === 0}
+        playerLyricsSource={snapshot.settings.playerLyricsSource}
         t={t}
         {...playerControlBindings}
         onQuickPlay={() => {
           void playQuick()
+        }}
+        onToggleFavorite={() => {
+          if (playback.currentTrack) {
+            void setSongFavorite(playback.currentTrack.id, !playback.currentTrack.favorite)
+          }
         }}
         onExitMiniMode={exitMiniMode}
         onArtworkResolved={(trackId, artworkUrl) => {
@@ -1459,14 +1485,15 @@ function App() {
         }}
       />
       <div
+        ref={workspaceRef}
         className={
           location.pathname === '/recent' && !isNavigationMinimal
-            ? 'workspace is-headerless-route'
+            ? 'workspace custom-scrollbar-frame is-headerless-route'
             : isHeaderedPlaylistRoute
-            ? 'workspace is-immersive-route is-headered-playlist-route'
+            ? 'workspace custom-scrollbar-frame is-immersive-route is-headered-playlist-route'
             : isLocalRoute
-              ? 'workspace is-local-route'
-              : 'workspace'
+              ? 'workspace custom-scrollbar-frame is-local-route'
+              : 'workspace custom-scrollbar-frame'
         }
       >
         {isNavigationMinimal ? (
@@ -1591,7 +1618,7 @@ function App() {
 
         <main
           ref={workspaceContentRef}
-          className="workspace-content"
+          className="workspace-content custom-scrollbar-container"
           onScrollCapture={(event) => {
             saveScrollElement(event.target as HTMLElement)
           }}
@@ -1702,6 +1729,9 @@ function App() {
                   onDeleteSongFromDisk={(songId) => {
                     void deleteSongFromDisk(songId)
                   }}
+                  onRecordSearch={(query) => {
+                    void addRecentSearch(query)
+                  }}
                   onCompactTitleChange={setCompactArtistTitle}
                 />
               }
@@ -1769,6 +1799,9 @@ function App() {
                     }}
                     onUpdateSettings={(update) => {
                       void updateSettings(update)
+                    }}
+                    onRecordSearch={(query) => {
+                      void addRecentSearch(query)
                     }}
                   />
                 )
@@ -2245,6 +2278,11 @@ function App() {
             />
           </Routes>
         </main>
+        <CustomScrollbar
+          className="workspace-scrollbar"
+          scrollbarTrackRef={workspaceScrollbarTrackRef}
+          onThumbPointerDown={onWorkspaceScrollbarPointerDown}
+        />
       </div>
 
       {showNowPlayingFullPage ? (

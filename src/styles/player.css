@@ -473,7 +473,7 @@ body.night-mode .app-shell .media-progress-loading {
 .player-utility button {
   width: 36px;
   height: 36px;
-  padding: 9px;
+  padding: 6px;
   border-radius: 50%;
   background: transparent;
   color: var(--text-strong);
@@ -685,7 +685,7 @@ body.night-mode .app-shell.nav-minimal .player-bar {
 .app-shell.nav-minimal .player-utility button {
   width: 36px;
   height: 36px;
-  padding: 9px;
+  padding: 6px;
 }
 
 @media (max-width: 520px) {
@@ -735,7 +735,7 @@ body.night-mode .app-shell.nav-minimal .player-bar {
   .app-shell.nav-minimal .player-utility button {
     width: 34px;
     height: 34px;
-    padding: 8px;
+    padding: 5px;
   }
 }
 

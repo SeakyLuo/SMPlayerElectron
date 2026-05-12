@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, 
 import { Link } from 'react-router-dom'
 
 import { CommandBar, CommandBarButton } from '../components/CommandBar'
+import { CustomScrollbar } from '../components/CustomScrollbar'
 import { GridViewMusicItemControl } from '../components/GridViewMusicItemControl'
 import { Icon } from '../components/icons'
 import { InputDialog } from '../components/InputDialog'
@@ -14,6 +15,7 @@ import { MultiSelectCommandBar } from '../components/MultiSelectCommandBar'
 import { PlaylistControlItem } from '../components/PlaylistControlItem'
 import { RemoveDialog } from '../components/RemoveDialog'
 import { useFolderPreferenceMenuItem } from '../hooks/useFolderPreferenceMenuItem'
+import { useCustomScrollbar } from '../hooks/useCustomScrollbar'
 import type { LibraryFolder, LibraryPlaylist, LibrarySong, LocalFolderSortCriterion, ScanLibraryResult } from '../shared/contracts'
 import { getSongArtists } from '../shared/artists'
 import type { Translator } from '../shared/i18n'
@@ -107,6 +109,15 @@ type LocalSelectionMoveMenuState = MenuFlyoutPosition
 
 type LocalToolbarMenuState = MenuFlyoutPosition
 
+interface FolderUpdateResultDialogState {
+  folder: FolderNode
+  result: ScanLibraryResult
+}
+
+interface FolderUpdateResultSongMenuState extends MenuFlyoutPosition {
+  song: LibrarySong
+}
+
 function getFolderListItemKey(folderPath: string) {
   return `folder:${folderPath}`
 }
@@ -154,10 +165,152 @@ function getRefreshResultMessage(result: ScanLibraryResult, t: Translator) {
   return messages.length > 0 ? messages.join(t('common.comma')) : t('local.refreshNoChange')
 }
 
+function hasRefreshResultChanges(result: ScanLibraryResult) {
+  return result.filesAdded.length > 0 || result.filesRemoved.length > 0 || result.filesMoved.length > 0
+}
+
+function getUpdateResultFileTitle(filePath: string, folderPath: string) {
+  const normalizedFilePath = normalizePath(filePath)
+  const normalizedFolderPath = normalizePath(folderPath)
+  const relativePath = normalizedFilePath.startsWith(`${normalizedFolderPath}/`)
+    ? normalizedFilePath.slice(normalizedFolderPath.length + 1)
+    : normalizedFilePath
+  const extensionIndex = relativePath.lastIndexOf('.')
+  return extensionIndex > 0 ? relativePath.slice(0, extensionIndex) : relativePath
+}
+
+function getUpdateResultFileItems(filePaths: string[], folderPath: string) {
+  const items = filePaths.map((filePath) => ({
+    path: filePath,
+    title: getUpdateResultFileTitle(filePath, folderPath),
+  }))
+  const titleCounts = new Map<string, number>()
+  for (const item of items) {
+    titleCounts.set(item.title, (titleCounts.get(item.title) ?? 0) + 1)
+  }
+
+  return items.map((item) => ({
+    ...item,
+    title: titleCounts.get(item.title)! > 1 ? item.path : item.title,
+  }))
+}
+
+function getPathKey(filePath: string) {
+  return normalizePath(filePath).toLocaleLowerCase()
+}
+
+function findSongByPath(songs: LibrarySong[], songPath: string) {
+  const targetPathKey = getPathKey(songPath)
+  return songs.find((song) => getPathKey(song.path) === targetPathKey) ?? null
+}
+
+function getRefreshFolderErrorMessage(error: string, t: Translator) {
+  const notFoundPrefix = 'Folder not found: '
+  const accessDeniedPrefix = 'Cannot access folder: '
+  if (error.startsWith(notFoundPrefix)) {
+    return t('local.updateFolderNotFound', { path: error.slice(notFoundPrefix.length) })
+  }
+  if (error.startsWith(accessDeniedPrefix)) {
+    return t('local.updateFolderAccessDenied', { path: error.slice(accessDeniedPrefix.length) })
+  }
+
+  return error
+}
+
 function scrollCurrentFolderToTop() {
   document.querySelector<HTMLElement>('.local-scroll-shell, .local-table-shell')?.scrollTo({
     top: 0,
   })
+}
+
+function FolderUpdateResultDialog({
+  t,
+  result,
+  folder,
+  songs,
+  selectedTrackId,
+  onPlaySong,
+  onOpenSongMenu,
+  onClose,
+}: {
+  t: Translator
+  result: ScanLibraryResult
+  folder: FolderNode
+  songs: LibrarySong[]
+  selectedTrackId: number | null
+  onPlaySong: (songId: number) => void
+  onOpenSongMenu: (song: LibrarySong, x: number, y: number) => void
+  onClose: () => void
+}) {
+  const groups = [
+    { key: 'added', label: t('local.refreshAddedGroup', { count: result.filesAdded.length }), items: getUpdateResultFileItems(result.filesAdded, folder.path), playable: true },
+    { key: 'removed', label: t('local.refreshRemovedGroup', { count: result.filesRemoved.length }), items: getUpdateResultFileItems(result.filesRemoved, folder.path), playable: false },
+    { key: 'moved', label: t('local.refreshMovedGroup', { count: result.filesMoved.length }), items: getUpdateResultFileItems(result.filesMoved, folder.path), playable: true },
+  ].filter((group) => group.items.length > 0)
+
+  return (
+    <div className="input-dialog-overlay folder-update-result-overlay" role="presentation">
+      <section className="input-dialog folder-update-result-dialog" role="dialog" aria-modal="true" aria-labelledby="folder-update-result-title">
+        <div className="folder-update-result-header">
+          <h3 id="folder-update-result-title">{t('local.updateResultOfFolder', { name: folder.name })}</h3>
+          <button type="button" className="folder-update-result-close" aria-label={t('common.close')} title={t('common.close')} onClick={onClose}>
+            <Icon name="close" />
+          </button>
+        </div>
+        <div className="folder-update-result-groups">
+          {groups.map((group) => (
+            <section className="folder-update-result-group" key={group.key}>
+              <h4>{group.label}</h4>
+              <div className="folder-update-result-list">
+                {group.items.map((item, index) => {
+                  if (!group.playable) {
+                    return (
+                      <div
+                        className="folder-update-result-item is-disabled"
+                        key={`${group.key}-${item.path}-${index}`}
+                        title={item.path}
+                      >
+                        <span className="folder-update-result-playing-icon" aria-hidden="true" />
+                        <span className="folder-update-result-path">{item.title}</span>
+                      </div>
+                    )
+                  }
+
+                  const song = findSongByPath(songs, item.path)!
+                  const isPlaying = song.id === selectedTrackId
+                  const itemClassName = joinClassNames(
+                    'folder-update-result-item',
+                    isPlaying && 'is-playing',
+                  )
+
+                  return (
+                    <button
+                      type="button"
+                      className={itemClassName}
+                      key={`${group.key}-${item.path}-${index}`}
+                      title={item.path}
+                      onClick={() => {
+                        onPlaySong(song.id)
+                      }}
+                      onContextMenu={(event) => {
+                        event.preventDefault()
+                        onOpenSongMenu(song, event.clientX, event.clientY)
+                      }}
+                    >
+                      <span className="folder-update-result-playing-icon" aria-hidden="true">
+                        {isPlaying ? <Icon name="play" /> : null}
+                      </span>
+                      <span className="folder-update-result-path">{item.title}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </section>
+          ))}
+        </div>
+      </section>
+    </div>
+  )
 }
 
 export function FolderChainListView({
@@ -181,6 +334,7 @@ export function FolderChainListView({
 }) {
   const [openedFolderChainItem, setOpenedFolderChainItem] = useState<{ path: string; left: number; top: number } | null>(null)
   const folderChainListRef = useRef<HTMLElement | null>(null)
+  const folderChainDragRef = useRef({ active: false, dragged: false, startX: 0, scrollLeft: 0 })
   const { nodes } = useMemo(
     () => buildFolderIndex(songs, folders, rootPath),
     [folders, songs, rootPath],
@@ -205,6 +359,29 @@ export function FolderChainListView({
     }
   }, [currentRelativePath, folderChain.length])
 
+  useEffect(() => {
+    const folderChainList = folderChainListRef.current!
+    const scrollFolderChain = (event: WheelEvent) => {
+      const rawDelta = event.deltaX !== 0 ? event.deltaX : event.deltaY
+      if (rawDelta === 0) {
+        return
+      }
+
+      const deltaScale = event.deltaMode === WheelEvent.DOM_DELTA_LINE
+        ? 16
+        : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+          ? folderChainList.clientWidth
+          : 1
+      event.preventDefault()
+      folderChainList.scrollLeft += rawDelta * deltaScale
+    }
+
+    folderChainList.addEventListener('wheel', scrollFolderChain, { passive: false })
+    return () => {
+      folderChainList.removeEventListener('wheel', scrollFolderChain)
+    }
+  }, [])
+
   const dropLocalItems = (event: DragEvent, targetRelativePath: string) => {
     if (!onDropLocalItems) {
       return
@@ -218,6 +395,15 @@ export function FolderChainListView({
     event.preventDefault()
     void onDropLocalItems(JSON.parse(rawPayload) as FolderChainDropPayload, targetRelativePath)
     setOpenedFolderChainItem(null)
+  }
+
+  const stopFolderChainDrag = (event: ReactPointerEvent<HTMLElement>) => {
+    if (!folderChainDragRef.current.active) {
+      return
+    }
+
+    folderChainDragRef.current.active = false
+    event.currentTarget.releasePointerCapture(event.pointerId)
   }
 
   return (
@@ -236,15 +422,41 @@ export function FolderChainListView({
         ref={folderChainListRef}
         className="folder-chain-list-view"
         aria-label={t('local.path')}
-        onWheel={(event) => {
-          const folderChainList = event.currentTarget
-          if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) {
+        onClickCapture={(event) => {
+          if (folderChainDragRef.current.dragged) {
+            event.preventDefault()
+            event.stopPropagation()
+            folderChainDragRef.current.dragged = false
+          }
+        }}
+        onPointerDown={(event) => {
+          if (event.button !== 0) {
             return
           }
 
-          event.preventDefault()
-          folderChainList.scrollLeft += event.deltaY
+          folderChainDragRef.current = {
+            active: true,
+            dragged: false,
+            startX: event.clientX,
+            scrollLeft: event.currentTarget.scrollLeft,
+          }
+          event.currentTarget.setPointerCapture(event.pointerId)
         }}
+        onPointerMove={(event) => {
+          const dragState = folderChainDragRef.current
+          if (!dragState.active) {
+            return
+          }
+
+          const deltaX = event.clientX - dragState.startX
+          if (Math.abs(deltaX) > 3) {
+            dragState.dragged = true
+          }
+          event.currentTarget.scrollLeft = dragState.scrollLeft - deltaX
+        }}
+        onPointerUp={stopFolderChainDrag}
+        onPointerCancel={stopFolderChainDrag}
+        onLostPointerCapture={stopFolderChainDrag}
       >
         {folderChain.map((folderChainItem) => {
           const isFlyoutOpen = openedFolderChainItem?.path === folderChainItem.path
@@ -553,6 +765,8 @@ export function LocalPage({
   const [selectedListItemKey, setSelectedListItemKey] = useState('')
   const [createdFolderPaths, setCreatedFolderPaths] = useState<Set<string>>(new Set())
   const [localNotification, setLocalNotification] = useState('')
+  const [folderUpdateResultDialog, setFolderUpdateResultDialog] = useState<FolderUpdateResultDialogState | null>(null)
+  const [folderUpdateResultSongMenu, setFolderUpdateResultSongMenu] = useState<FolderUpdateResultSongMenuState | null>(null)
   const [foldersExpanded, setFoldersExpanded] = useState(true)
   const [songsExpanded, setSongsExpanded] = useState(true)
   const [isCompactLayout, setIsCompactLayout] = useState(() => window.innerWidth < LOCAL_COMPACT_BREAKPOINT)
@@ -561,6 +775,8 @@ export function LocalPage({
     (state) => state.snapshot.settings.hideMultiSelectCommandBarAfterOperation,
   )
   const showUndoableNotification = useUndoableNotificationStore((state) => state.show)
+  const showNotification = useUndoableNotificationStore((state) => state.showMessage)
+  const clearLibraryError = useLibraryStore((state) => state.clearError)
   const showUndo = (message: string, action: () => void | Promise<void>) => {
     showUndoableNotification(message, t('common.undo'), action)
   }
@@ -585,6 +801,8 @@ export function LocalPage({
   const localScrollFrameRef = useRef<HTMLDivElement | null>(null)
   const localScrollShellRef = useRef<HTMLDivElement | null>(null)
   const localScrollbarTrackRef = useRef<HTMLDivElement | null>(null)
+  const localTableScrollFrameRef = useRef<HTMLDivElement | null>(null)
+  const localTableScrollbarTrackRef = useRef<HTMLDivElement | null>(null)
   const localTableShellRef = useRef<HTMLDivElement | null>(null)
   const localSongItemRefs = useRef<Array<HTMLElement | null>>([])
   const { getFolderPreferenceMenuItem } = useFolderPreferenceMenuItem(t)
@@ -709,74 +927,27 @@ export function LocalPage({
     localTableShellRef.current?.scrollTo({ top: 0 })
   }, [currentRelativePath])
 
-  useLayoutEffect(() => {
-    const scrollFrame = localScrollFrameRef.current
-    const scrollContainer = localScrollShellRef.current
-    if (!scrollFrame || !scrollContainer) {
-      return
-    }
-
-    let animationFrame = 0
-    const updateScrollbar = () => {
-      const maxScrollTop = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight)
-      const trackHeight = scrollContainer.clientHeight
-      const thumbHeight = maxScrollTop > 0
-        ? Math.max(38, Math.round((trackHeight / scrollContainer.scrollHeight) * trackHeight))
-        : trackHeight
-      const thumbTop = maxScrollTop > 0
-        ? Math.round((scrollContainer.scrollTop / maxScrollTop) * Math.max(0, trackHeight - thumbHeight))
-        : 0
-
-      scrollFrame.style.setProperty('--local-scrollbar-thumb-height', `${thumbHeight}px`)
-      scrollFrame.style.setProperty('--local-scrollbar-thumb-top', `${thumbTop}px`)
-      scrollFrame.classList.toggle('has-scrollbar', isCompactLayout && maxScrollTop > 1)
-    }
-    const scheduleUpdate = () => {
-      window.cancelAnimationFrame(animationFrame)
-      animationFrame = window.requestAnimationFrame(updateScrollbar)
-    }
-
-    updateScrollbar()
-    scrollContainer.addEventListener('scroll', scheduleUpdate, { passive: true })
-    const resizeObserver = new ResizeObserver(scheduleUpdate)
-    resizeObserver.observe(scrollFrame)
-    resizeObserver.observe(scrollContainer)
-    window.addEventListener('resize', scheduleUpdate)
-
-    return () => {
-      window.cancelAnimationFrame(animationFrame)
-      scrollContainer.removeEventListener('scroll', scheduleUpdate)
-      resizeObserver.disconnect()
-      window.removeEventListener('resize', scheduleUpdate)
-    }
-  }, [childFolders.length, currentRelativePath, currentSongs.length, foldersExpanded, isCompactLayout, showLocalSectionHeaders, songsExpanded])
-
-  const onLocalScrollbarPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const scrollContainer = localScrollShellRef.current
-    const scrollFrame = localScrollFrameRef.current
-    const scrollbarTrack = localScrollbarTrackRef.current
-    if (!scrollContainer || !scrollFrame || !scrollbarTrack) {
-      return
-    }
-
-    event.preventDefault()
-    const maxScrollTop = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight)
-    const thumbHeight = Number.parseFloat(getComputedStyle(scrollFrame).getPropertyValue('--local-scrollbar-thumb-height'))
-    const trackRange = Math.max(1, scrollbarTrack.clientHeight - thumbHeight)
-    const scrollPerPixel = maxScrollTop / trackRange
-    const startY = event.clientY
-    const startScrollTop = scrollContainer.scrollTop
-    const onPointerMove = (moveEvent: PointerEvent) => {
-      scrollContainer.scrollTop = startScrollTop + (moveEvent.clientY - startY) * scrollPerPixel
-    }
-    const onPointerUp = () => {
-      window.removeEventListener('pointermove', onPointerMove)
-      window.removeEventListener('pointerup', onPointerUp)
-    }
-
-    window.addEventListener('pointermove', onPointerMove)
-    window.addEventListener('pointerup', onPointerUp)
-  }
+  const localScrollRefreshDependencies = [
+    childFolders.length,
+    currentRelativePath,
+    currentSongs.length,
+    foldersExpanded,
+    isCompactLayout,
+    showLocalSectionHeaders,
+    songsExpanded,
+  ]
+  const onLocalScrollbarPointerDown = useCustomScrollbar({
+    frameRef: localScrollFrameRef,
+    scrollContainerRef: localScrollShellRef,
+    scrollbarTrackRef: localScrollbarTrackRef,
+    refreshDependencies: localScrollRefreshDependencies,
+  })
+  const onLocalTableScrollbarPointerDown = useCustomScrollbar({
+    frameRef: localTableScrollFrameRef,
+    scrollContainerRef: localTableShellRef,
+    scrollbarTrackRef: localTableScrollbarTrackRef,
+    refreshDependencies: localScrollRefreshDependencies,
+  })
 
   useEffect(() => {
     const childFolderPathSet = new Set(childFolders.map((folder) => folder.relativePath))
@@ -1108,11 +1279,31 @@ export function LocalPage({
   }
 
   const refreshFolderWithResult = async (folder: FolderNode) => {
+    setLocalNotification('')
+    setFolderMenu(null)
+    setFolderUpdateResultDialog(null)
+    setFolderUpdateResultSongMenu(null)
     const result = await onRefreshFolder(folder.path)
     if (result) {
-      setLocalNotification(getRefreshResultMessage(result, t))
+      if (hasRefreshResultChanges(result)) {
+        showUndoableNotification(
+          getRefreshResultMessage(result, t),
+          t('common.detail'),
+          () => {
+            setFolderUpdateResultDialog({ folder, result })
+          },
+          10000,
+        )
+      } else {
+        showNotification(getRefreshResultMessage(result, t), 2000)
+      }
+    } else {
+      const refreshError = useLibraryStore.getState().error
+      if (refreshError) {
+        showNotification(getRefreshFolderErrorMessage(refreshError, t), 2000)
+        clearLibraryError()
+      }
     }
-    setFolderMenu(null)
   }
 
   const selectFolder = (folder: FolderNode) => {
@@ -1307,6 +1498,12 @@ export function LocalPage({
       {loading ? <div className="root-banner">{t('library.refreshing')}</div> : null}
       {error ? <div className="error-banner">{error}</div> : null}
       {localNotification ? <div className="root-banner">{localNotification}</div> : null}
+      {scanning ? (
+        <div className="local-refresh-overlay" role="status" aria-live="polite">
+          <LoadingState t={t} />
+          <p>{t('local.updateFolderLoading')}</p>
+        </div>
+      ) : null}
 
       <MultiSelectCommandBar
         visible={multiSelect}
@@ -1360,21 +1557,17 @@ export function LocalPage({
       {childFolders.length === 0 && currentSongs.length === 0 ? (
         loading || scanning ? (
           <LoadingState t={t} />
-        ) : (
+        ) : songs.length === 0 || searchQuery.trim() ? (
         <div className="empty-state">
           <h3>
             {songs.length === 0
               ? t('local.noSongsScanned')
-              : searchQuery.trim()
-                ? t('local.noSongsBranch', { query: searchQuery })
-                : t('local.noDirectSongs')}
+              : t('local.noSongsBranch', { query: searchQuery })}
           </h3>
           <p>
             {songs.length === 0
               ? t('local.scanPopulate')
-              : searchQuery.trim()
-                ? t('local.searchHelp')
-                : t('local.openChildHelp')}
+              : t('local.searchHelp')}
           </p>
           {songs.length === 0 ? (
             <Link className="local-command" to="/settings">
@@ -1383,10 +1576,12 @@ export function LocalPage({
             </Link>
           ) : null}
         </div>
+        ) : (
+          <div className="local-empty-folder" aria-hidden="true" />
         )
       ) : effectiveViewMode === 'grid' ? (
-        <div className="local-scroll-frame" ref={localScrollFrameRef}>
-          <div className="local-scroll-shell" ref={localScrollShellRef}>
+        <div className="local-scroll-frame custom-scrollbar-frame" ref={localScrollFrameRef}>
+          <div className="local-scroll-shell custom-scrollbar-container" ref={localScrollShellRef}>
             {childFolders.length > 0 ? (
             showLocalSectionHeaders ? (
               <LocalContentSection
@@ -1634,13 +1829,15 @@ export function LocalPage({
             )
             ) : null}
           </div>
-          <div className="local-scrollbar" ref={localScrollbarTrackRef} aria-hidden="true">
-            <div className="local-scrollbar-thumb" onPointerDown={onLocalScrollbarPointerDown} />
-          </div>
+          <CustomScrollbar
+            scrollbarTrackRef={localScrollbarTrackRef}
+            onThumbPointerDown={onLocalScrollbarPointerDown}
+          />
         </div>
       ) : (
-        <div className="table-shell local-table-shell" ref={localTableShellRef}>
-          <table className="music-table">
+        <div className="local-scroll-frame custom-scrollbar-frame" ref={localTableScrollFrameRef}>
+          <div className="table-shell local-table-shell custom-scrollbar-container" ref={localTableShellRef}>
+            <table className="music-table">
             <thead>
               <tr>
                 <th>{t('common.name')}</th>
@@ -1899,7 +2096,12 @@ export function LocalPage({
                 </tr>
               )) : null}
             </tbody>
-          </table>
+            </table>
+          </div>
+          <CustomScrollbar
+            scrollbarTrackRef={localTableScrollbarTrackRef}
+            onThumbPointerDown={onLocalTableScrollbarPointerDown}
+          />
         </div>
       )}
       {folderMenu ? (
@@ -2134,6 +2336,48 @@ export function LocalPage({
           showMoveToFolder
           showHideFile
           onSelectSong={selectSong}
+        />
+      ) : null}
+      {folderUpdateResultDialog ? (
+        <FolderUpdateResultDialog
+          t={t}
+          result={folderUpdateResultDialog.result}
+          folder={folderUpdateResultDialog.folder}
+          songs={songs}
+          selectedTrackId={selectedTrackId}
+          onPlaySong={onMoveToMusicOrPlay}
+          onOpenSongMenu={(song, x, y) => {
+            setFolderUpdateResultSongMenu({ song, x, y })
+          }}
+          onClose={() => {
+            setFolderUpdateResultDialog(null)
+            setFolderUpdateResultSongMenu(null)
+          }}
+        />
+      ) : null}
+      {folderUpdateResultSongMenu ? (
+        <MusicMenuFlyout
+          menu={folderUpdateResultSongMenu}
+          playlists={playlists}
+          queueSongIds={queueSongIds}
+          currentTrackId={selectedTrackId}
+          isPlaying={isPlaying}
+          t={t}
+          onClose={() => {
+            setFolderUpdateResultSongMenu(null)
+          }}
+          onPlayTrack={onPlayTrack}
+          onMoveToMusicOrPlay={onMoveToMusicOrPlay}
+          onTogglePlayPause={onTogglePlayPause}
+          onPlayNext={onPlayNext}
+          onRevealSong={onRevealSong}
+          onDeleteSongFromDisk={onDeleteSongFromDisk}
+          onToggleFavorite={onToggleFavorite}
+          onAddSongToPlaylist={onAddSongToPlaylist}
+          showSelect={false}
+          showMusicProperties={false}
+          showDelete={false}
+          menuLayer="dialog"
         />
       ) : null}
       {inputDialog ? (

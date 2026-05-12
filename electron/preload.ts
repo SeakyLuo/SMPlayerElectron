@@ -174,6 +174,7 @@ const api: SmplayerApi = {
   clearInvalidPreferenceItems: (type) => ipcRenderer.invoke('preferences:clear-invalid', type),
   saveViewState: (update) => ipcRenderer.invoke('view-state:save', update),
   savePlaybackSettings: (update) => ipcRenderer.invoke('playback:save-settings', update),
+  getPlaybackSettingsImmediate: () => ipcRenderer.sendSync('playback:get-settings-immediate'),
   savePlaybackSettingsImmediate: (update) => {
     ipcRenderer.sendSync('playback:save-settings-immediate', update)
   },
