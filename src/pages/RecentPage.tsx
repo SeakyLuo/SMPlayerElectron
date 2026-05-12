@@ -73,9 +73,10 @@ function getParentFolderPath(filePath: string) {
 }
 
 const RECENT_ADDED_LIMIT = 500
-const RECENT_GRID_COLUMN_WIDTH = 300
+const RECENT_GRID_MIN_COLUMN_WIDTH = 252
 const RECENT_GRID_COLUMN_GAP = 28
 const RECENT_GRID_ROW_HEIGHT = 136
+const RECENT_GRID_COMPACT_ROW_HEIGHT = 104
 const RECENT_GRID_BOTTOM_PADDING = 92
 const RECENT_GRID_OVERSCAN_ROWS = 3
 const RECENT_SEARCH_ROW_HEIGHT = 56
@@ -390,7 +391,7 @@ export function RecentPage({
         />
         {activeTab === 'played' || activeTab === 'searches' ? (
           <CommandBarButton
-            icon="clearSelection"
+            icon="close"
             label={t('recent.clearHistory')}
             disabled={!canClearHistory}
             onClick={clearHistory}
@@ -748,9 +749,9 @@ function RecentSongGrid({
   const [gridWidth, setGridWidth] = useState(960)
   const columnCount = Math.max(
     1,
-    Math.floor((gridWidth + RECENT_GRID_COLUMN_GAP) / (RECENT_GRID_COLUMN_WIDTH + RECENT_GRID_COLUMN_GAP)),
+    Math.floor((gridWidth + RECENT_GRID_COLUMN_GAP) / (RECENT_GRID_MIN_COLUMN_WIDTH + RECENT_GRID_COLUMN_GAP)),
   )
-  const rowHeight = RECENT_GRID_ROW_HEIGHT
+  const rowHeight = gridWidth <= 520 ? RECENT_GRID_COMPACT_ROW_HEIGHT : RECENT_GRID_ROW_HEIGHT
   const rowCount = Math.ceil(songs.length / columnCount)
   const listHeight = rowCount * rowHeight
   const effectiveScrollTop = Math.min(scrollTop, Math.max(0, listHeight - viewportHeight))
@@ -815,7 +816,7 @@ function RecentSongGrid({
           <div
             className="recent-song-grid-window"
             style={{
-              gridTemplateColumns: `repeat(${columnCount}, minmax(0, min(${RECENT_GRID_COLUMN_WIDTH}px, 100%)))`,
+              gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
               transform: `translateY(${windowTop}px)`,
             }}
           >

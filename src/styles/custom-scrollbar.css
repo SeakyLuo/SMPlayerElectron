@@ -1,0 +1,61 @@
+.custom-scrollbar-frame {
+  position: relative;
+}
+
+.custom-scrollbar-container {
+  scrollbar-gutter: auto;
+  scrollbar-width: none;
+}
+
+.custom-scrollbar-container::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.custom-scrollbar {
+  position: absolute;
+  top: 0;
+  right: -5px;
+  bottom: 4px;
+  z-index: 8;
+  display: block;
+  width: 9px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease;
+}
+
+.custom-scrollbar-frame.has-custom-scrollbar:hover > .custom-scrollbar,
+.custom-scrollbar-frame.has-custom-scrollbar:focus-within > .custom-scrollbar,
+.custom-scrollbar-frame.has-custom-scrollbar > .custom-scrollbar:hover {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.custom-scrollbar-thumb {
+  position: absolute;
+  top: var(--custom-scrollbar-thumb-top, 0);
+  right: 2px;
+  left: 2px;
+  height: var(--custom-scrollbar-thumb-height, 40px);
+  border-radius: 999px;
+  background: rgba(91, 105, 122, 0.5);
+  cursor: default;
+}
+
+.custom-scrollbar-thumb:hover {
+  right: 1px;
+  left: 1px;
+  background: rgba(67, 80, 96, 0.68);
+}
+
+body.night-mode .app-shell .custom-scrollbar-thumb,
+body.night-mode .custom-scrollbar-thumb {
+  background: rgba(150, 164, 182, 0.45);
+}
+
+body.night-mode .app-shell .custom-scrollbar-thumb:hover,
+body.night-mode .custom-scrollbar-thumb:hover {
+  background: rgba(188, 202, 220, 0.62);
+}

@@ -88,9 +88,17 @@
   cursor: pointer;
   white-space: nowrap;
   text-decoration: none;
+  user-select: none;
+  -webkit-user-select: none;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42);
   -webkit-app-region: no-drag;
   app-region: no-drag;
+}
+
+.uwp-commandbar .uwp-commandbar-button-label,
+.uwp-commandbar .uwp-commandbar-button svg {
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .uwp-commandbar .uwp-commandbar-button:hover,

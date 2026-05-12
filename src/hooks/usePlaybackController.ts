@@ -1,6 +1,6 @@
 import { startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
-import type { LibrarySnapshot, LibrarySong, PlaybackMode } from '../shared/contracts'
+import type { LibrarySnapshot, LibrarySong, PlaybackMode, PlaybackRuntimeSettings } from '../shared/contracts'
 import {
   currentIndex,
   moveNext,
@@ -56,8 +56,24 @@ interface LoadTrackOptions {
 const PLAYBACK_STALL_TIMEOUT_MS = 8_000
 const PLAYBACK_PROGRESS_EPSILON_SECONDS = 0.05
 
+type SmplayerPlaybackSettingsApi = Omit<NonNullable<typeof window.smplayer>, 'getPlaybackSettingsImmediate'> & {
+  getPlaybackSettingsImmediate?: () => PlaybackRuntimeSettings
+}
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
+}
+
+function getSmplayerPlaybackSettingsApi() {
+  return window.smplayer as SmplayerPlaybackSettingsApi | undefined
+}
+
+function readInitialPlaybackSettings(snapshot: LibrarySnapshot): PlaybackRuntimeSettings {
+  return getSmplayerPlaybackSettingsApi()?.getPlaybackSettingsImmediate?.() ?? {
+    volume: snapshot.settings.volume,
+    isMuted: snapshot.settings.isMuted,
+    mode: snapshot.settings.mode,
+  }
 }
 
 export function usePlaybackController(snapshot: LibrarySnapshot, ready: boolean): PlaybackController {
@@ -85,13 +101,14 @@ export function usePlaybackController(snapshot: LibrarySnapshot, ready: boolean)
     async () => {},
   )
 
+  const [initialPlaybackSettings] = useState(() => readInitialPlaybackSettings(snapshot))
   const [currentTrackId, setCurrentTrackId] = useState<number | null>(null)
   const [currentQueueIndex, setCurrentQueueIndex] = useState<number | null>(null)
   const [status, setStatusState] = useState<PlaybackStatus>('idle')
   const [isPlaying, setIsPlaying] = useState(false)
-  const [volume, setVolume] = useState(72)
-  const [isMuted, setIsMuted] = useState(false)
-  const [mode, setMode] = useState<PlaybackMode>('once')
+  const [volume, setVolume] = useState(() => clamp(initialPlaybackSettings.volume, 0, 100))
+  const [isMuted, setIsMuted] = useState(initialPlaybackSettings.isMuted)
+  const [mode, setMode] = useState<PlaybackMode>(initialPlaybackSettings.mode)
 
   const snapshotRef = useRef(snapshot)
   const currentTrackIdRef = useRef(currentTrackId)
@@ -116,6 +133,23 @@ export function usePlaybackController(snapshot: LibrarySnapshot, ready: boolean)
 
     statusRef.current = nextStatus
     setStatusState(nextStatus)
+  }, [])
+
+  const applyPlaybackRuntimeSettings = useCallback((settings: PlaybackRuntimeSettings) => {
+    const nextVolume = clamp(settings.volume, 0, 100)
+    volumeRef.current = nextVolume
+    isMutedRef.current = settings.isMuted
+    modeRef.current = settings.mode
+
+    const audio = audioRef.current
+    if (audio) {
+      audio.volume = nextVolume / 100
+      audio.muted = settings.isMuted
+    }
+
+    setVolume(nextVolume)
+    setIsMuted(settings.isMuted)
+    setMode(settings.mode)
   }, [])
 
   useLayoutEffect(() => {
@@ -145,6 +179,14 @@ export function usePlaybackController(snapshot: LibrarySnapshot, ready: boolean)
     snapshotQueueSongIds,
     volume,
   ])
+
+  useEffect(() => {
+    return window.smplayer?.onTrayCommand((command) => {
+      if (command === 'show-window') {
+        applyPlaybackRuntimeSettings(readInitialPlaybackSettings(snapshotRef.current))
+      }
+    })
+  }, [applyPlaybackRuntimeSettings])
 
   useEffect(() => {
     if (currentTrackId == null) {
@@ -456,7 +498,6 @@ export function usePlaybackController(snapshot: LibrarySnapshot, ready: boolean)
     pendingAutoplayRef,
     volumeRef,
     isMutedRef,
-    modeRef,
     isUserSeekingRef,
     pendingSeekSecondsRef,
     durationSecondsRef,
@@ -482,23 +523,9 @@ export function usePlaybackController(snapshot: LibrarySnapshot, ready: boolean)
       return
     }
 
-    const nextVolume = clamp(snapshot.settings.volume, 0, 100)
-
     if (!hydratedRef.current) {
       hydratedRef.current = true
-      volumeRef.current = nextVolume
-      isMutedRef.current = snapshot.settings.isMuted
-      modeRef.current = snapshot.settings.mode
-      const audio = audioRef.current
-      if (audio) {
-        audio.volume = nextVolume / 100
-        audio.muted = snapshot.settings.isMuted
-      }
-      startTransition(() => {
-        setVolume(nextVolume)
-        setIsMuted(snapshot.settings.isMuted)
-        setMode(snapshot.settings.mode)
-      })
+      applyPlaybackRuntimeSettings(snapshot.settings)
     }
 
     const audio = audioRef.current
@@ -558,7 +585,7 @@ export function usePlaybackController(snapshot: LibrarySnapshot, ready: boolean)
           ? snapshot.settings.musicProgress
           : 0,
     })
-  }, [ready, snapshot, snapshotQueueSongIds, transitionStatus, setDurationFromPlayback, setProgressFromPlayback])
+  }, [ready, snapshot, snapshotQueueSongIds, transitionStatus, setDurationFromPlayback, setProgressFromPlayback, applyPlaybackRuntimeSettings])
 
   const playTrack = useCallback(async (trackId: number, queueSongIds?: number[], queueIndex = -1) => {
     if (queueSongIds) {

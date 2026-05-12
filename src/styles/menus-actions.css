@@ -7,6 +7,10 @@
   app-region: no-drag;
 }
 
+.library-context-menu-overlay.is-dialog-layer {
+  z-index: 330;
+}
+
 .dropdown-dismiss-layer {
   position: fixed;
   inset: 0;
@@ -66,6 +70,10 @@
 
 .library-context-submenu > span {
   grid-template-columns: 20px minmax(0, 1fr) 14px;
+}
+
+.library-context-menu.is-dialog-layer {
+  z-index: 340;
 }
 
 .library-context-volume-item {
@@ -177,7 +185,7 @@
   max-width: min(380px, calc(100vw - 16px));
   max-height: var(--submenu-max-height);
   overflow-x: hidden;
-  overflow-y: auto;
+  overflow-y: hidden;
   padding: 6px;
   border: 1px solid rgba(126, 139, 154, 0.2);
   border-radius: 10px;
@@ -185,9 +193,15 @@
   box-shadow: 0 18px 44px rgba(38, 51, 68, 0.18);
   opacity: 0;
   pointer-events: none;
+  scrollbar-color: transparent transparent;
+  scrollbar-width: none;
+  visibility: hidden;
+}
+
+.library-context-submenu-panel.is-scrollable {
+  overflow-y: auto;
   scrollbar-color: rgba(91, 105, 122, 0.42) transparent;
   scrollbar-width: thin;
-  visibility: hidden;
 }
 
 .library-context-submenu:hover > .library-context-submenu-panel,

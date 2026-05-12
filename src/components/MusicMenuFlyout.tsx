@@ -37,6 +37,9 @@ interface MusicMenuFlyoutProps {
   showSelect?: boolean
   showMoveToFolder?: boolean
   showHideFile?: boolean
+  showMusicProperties?: boolean
+  showDelete?: boolean
+  menuLayer?: 'default' | 'dialog'
   onSelectSong?: (songId: number) => void
 }
 
@@ -59,6 +62,9 @@ export function MusicMenuFlyout({
   showSelect,
   showMoveToFolder,
   showHideFile,
+  showMusicProperties,
+  showDelete,
+  menuLayer,
   onSelectSong,
 }: MusicMenuFlyoutProps) {
   const navigate = useNavigate()
@@ -99,12 +105,15 @@ export function MusicMenuFlyout({
         <MenuFlyout
           position={menu}
           onClose={onClose}
+          layer={menuLayer}
           items={getMusicMenuFlyoutItems({
             song: menu.song,
             option: {
               showSelect: showSelect ?? true,
               showMoveToFolder: showMoveToFolder ?? false,
               showHideFile: showHideFile ?? false,
+              showMusicProperties: showMusicProperties ?? true,
+              showDelete: showDelete ?? true,
             },
             playlists,
             folders,

@@ -7,7 +7,7 @@ export interface AppInfo {
 
 export type PlaybackMode = 'once' | 'repeat' | 'repeat-one' | 'shuffle'
 export type GlobalMediaCommand = 'play-pause' | 'next' | 'previous' | 'stop'
-export type TrayCommand = 'scan-library'
+export type TrayCommand = 'scan-library' | 'show-window'
 export type NotificationSendMode = 'music-changed' | 'never'
 export type NotificationDisplayMode = 'reminder' | 'normal' | 'quick'
 export type NightMode = 'auto' | 'on' | 'never'
@@ -345,6 +345,8 @@ export interface PreferenceItemSnapshot {
   canRemove: boolean
 }
 
+export type PlaybackRuntimeSettings = Pick<SettingsSnapshot, 'volume' | 'isMuted' | 'mode'>
+
 export interface PreferenceSettingsSnapshot {
   enabled: {
     songs: boolean
@@ -540,6 +542,7 @@ export interface SmplayerApi {
   clearInvalidPreferenceItems: (type: PreferenceEntityType) => Promise<void>
   saveViewState: (update: ViewStateUpdate) => Promise<void>
   savePlaybackSettings: (update: PlaybackSettingsUpdate) => Promise<void>
+  getPlaybackSettingsImmediate: () => PlaybackRuntimeSettings
   savePlaybackSettingsImmediate: (update: PlaybackSettingsUpdate) => void
   markSongPlayed: (songId: number) => Promise<void>
   updateSongDuration: (songId: number, duration: number) => Promise<void>

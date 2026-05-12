@@ -17,6 +17,7 @@ interface LibraryStoreState {
   loading: boolean
   scanning: boolean
   error: string | null
+  clearError: () => void
   refresh: () => Promise<void>
   pickLibraryRoot: () => Promise<void>
   scanLibrary: () => Promise<ScanLibraryResult | null>
@@ -90,7 +91,7 @@ const emptySnapshot: LibrarySnapshot = {
     searchPlaylistsCriterion: 'default',
     searchFoldersCriterion: 'default',
     lastMusicIndex: -1,
-    volume: 72,
+    volume: 50,
     isMuted: false,
     mode: 'once',
     musicProgress: 0,
@@ -243,6 +244,9 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
   loading: false,
   scanning: false,
   error: null,
+  clearError: () => {
+    set({ error: null })
+  },
   refresh: async () => {
     if (!window.smplayer) {
       return
@@ -282,6 +286,10 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
       return null
     }
 
+    if (get().scanning) {
+      return null
+    }
+
     set({ scanning: true, error: null })
 
     try {
@@ -297,6 +305,10 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
   },
   scanLocalFolder: async (folderPath) => {
     if (!window.smplayer) {
+      return null
+    }
+
+    if (get().scanning) {
       return null
     }
 

@@ -85,9 +85,13 @@
           "flac",
           "wma",
           "alac",
+          "aiff",
+          "ape",
           "aac",
+          "m4a",
           "wav",
-          "ogg"
+          "ogg",
+          "opus"
         ],
         "icon": "public/app-icon.ico",
         "role": "Viewer"

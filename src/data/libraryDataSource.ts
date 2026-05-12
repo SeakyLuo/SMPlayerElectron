@@ -82,7 +82,7 @@ function createRemoteSettings(musicLibrarySort: MusicLibrarySortCriterion) {
     searchPlaylistsCriterion: 'default' as const,
     searchFoldersCriterion: 'default' as const,
     lastMusicIndex: -1,
-    volume: 72,
+    volume: 50,
     isMuted: false,
     mode: 'once' as const,
     musicProgress: 0,

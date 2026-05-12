@@ -275,6 +275,14 @@ const paths = {
     <circle key="circle" cx="11" cy="11" r="7" />,
     <path key="handle" d="m20 20-4-4" />,
   ],
+  dice: [
+    <rect key="body" x="4" y="4" width="16" height="16" rx="3.5" />,
+    <circle key="dot1" cx="8.5" cy="8.5" r="0.9" fill="currentColor" stroke="none" />,
+    <circle key="dot2" cx="15.5" cy="8.5" r="0.9" fill="currentColor" stroke="none" />,
+    <circle key="dot3" cx="12" cy="12" r="0.9" fill="currentColor" stroke="none" />,
+    <circle key="dot4" cx="8.5" cy="15.5" r="0.9" fill="currentColor" stroke="none" />,
+    <circle key="dot5" cx="15.5" cy="15.5" r="0.9" fill="currentColor" stroke="none" />,
+  ],
   save: [
     <path key="body" d="M5 4h12l2 2v14H5z" />,
     <path key="slot" d="M8 4v6h8V4" />,
@@ -332,25 +340,25 @@ const paths = {
     <path key="base" d="M8 21h8" />,
   ],
   volume: [
-    <path key="speaker" d="M4 10v4h4l5 4V6l-5 4z" />,
-    <path key="wave1" d="M15.4 10.2a3 3 0 0 1 0 3.6" />,
-    <path key="wave2" d="M17.7 8.2a6 6 0 0 1 0 7.6" />,
-    <path key="wave3" d="M20 6.2a9 9 0 0 1 0 11.6" />,
+    <path key="speaker" d="M4.7 9.4q-.8 0-.8.8v3.6q0 .8.8.8h3.2l4.2 3.7q.9.8.9-.45V6.15q0-1.25-.9-.45L7.9 9.4z" />,
+    <path key="wave1" d="M15.3 9.55a4.1 4.1 0 0 1 0 4.9" />,
+    <path key="wave2" d="M17.6 7.55a7 7 0 0 1 0 8.9" />,
+    <path key="wave3" d="M19.9 5.6a10 10 0 0 1 0 12.8" />,
   ],
   volumeOff: [
-    <path key="speaker" d="M4 10v4h4l5 4V6l-5 4z" />,
+    <path key="speaker" d="M4.7 9.4q-.8 0-.8.8v3.6q0 .8.8.8h3.2l4.2 3.7q.9.8.9-.45V6.15q0-1.25-.9-.45L7.9 9.4z" />,
   ],
   volumeLow: [
-    <path key="speaker" d="M4 10v4h4l5 4V6l-5 4z" />,
-    <path key="wave1" d="M15.4 10.2a3 3 0 0 1 0 3.6" />,
+    <path key="speaker" d="M4.7 9.4q-.8 0-.8.8v3.6q0 .8.8.8h3.2l4.2 3.7q.9.8.9-.45V6.15q0-1.25-.9-.45L7.9 9.4z" />,
+    <path key="wave1" d="M15.3 9.55a4.1 4.1 0 0 1 0 4.9" />,
   ],
   volumeMedium: [
-    <path key="speaker" d="M4 10v4h4l5 4V6l-5 4z" />,
-    <path key="wave1" d="M15.4 10.2a3 3 0 0 1 0 3.6" />,
-    <path key="wave2" d="M17.7 8.2a6 6 0 0 1 0 7.6" />,
+    <path key="speaker" d="M4.7 9.4q-.8 0-.8.8v3.6q0 .8.8.8h3.2l4.2 3.7q.9.8.9-.45V6.15q0-1.25-.9-.45L7.9 9.4z" />,
+    <path key="wave1" d="M15.3 9.55a4.1 4.1 0 0 1 0 4.9" />,
+    <path key="wave2" d="M17.6 7.55a7 7 0 0 1 0 8.9" />,
   ],
   volumeMuted: [
-    <path key="speaker" d="M4 10v4h4l5 4V6l-5 4z" />,
+    <path key="speaker" d="M4.7 9.4q-.8 0-.8.8v3.6q0 .8.8.8h3.2l4.2 3.7q.9.8.9-.45V6.15q0-1.25-.9-.45L7.9 9.4z" />,
     <path key="x1" d="m18 9-4 4" />,
     <path key="x2" d="m14 9 4 4" />,
   ],
@@ -427,8 +435,10 @@ export function Icon({ name, className, ...props }: IconProps & { name: IconName
   const FluentIcon = fluentIcons[name]
   const strokeWidth = name === 'albums' || name === 'playlists' || name === 'playNext'
     ? 1.35
+    : name === 'dice'
+      ? 1.55
     : name.startsWith('volume')
-      ? 1.45
+      ? 1.3
       : 2.2
 
   if (FluentIcon) {

@@ -6,6 +6,7 @@
 @import './styles/appbar.css';
 @import './styles/common.css';
 @import './styles/commandbar.css';
+@import './styles/custom-scrollbar.css';
 @import './styles/library.css';
 @import './styles/artists.css';
 @import './styles/albums.css';

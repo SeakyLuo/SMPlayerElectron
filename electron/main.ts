@@ -26,6 +26,7 @@ import type {
   HiddenStorageItem,
   LibrarySnapshot,
   LibraryPlaylist,
+  PlaybackRuntimeSettings,
   PlaylistSortCriterion,
   LocalFolderSortCriterion,
   PreferenceEntityType,
@@ -56,8 +57,8 @@ let isWindowMiniMode = false
 let windowBoundsBeforeMiniMode: Rectangle | null = null
 let wasWindowMaximizedBeforeMiniMode = false
 const openFileCoordinator = new OpenFileCoordinator()
-const defaultWindowMinimumSize = { width: 506, height: 520 }
-const miniModeWindowSize = { width: 300, height: 300 }
+const defaultWindowMinimumSize = { width: 506, height: 740 }
+const miniModeWindowSize = { width: 360, height: 360 }
 const windowsJumpListRecentLimit = 10
 
 function stopWindowDrag() {
@@ -203,6 +204,12 @@ const titleBarOverlayColor = '#00000000'
 const nightTitleBarOverlayColor = '#00000000'
 const defaultTitleBarSymbolColor = '#111111'
 const immersiveTitleBarSymbolColor = '#ffffff'
+const windowsAppUserModelId = 'com.seaky.smplayer'
+
+if (process.platform === 'win32') {
+  app.setAppUserModelId(windowsAppUserModelId)
+}
+
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
 const restorableRoutes = new Set([
   '/songs',
@@ -801,6 +808,7 @@ function showMainWindow() {
   }
   mainWindow.show()
   mainWindow.focus()
+  mainWindow.webContents.send('app:tray-command', 'show-window')
 }
 
 function updateWindowsJumpList() {
@@ -810,10 +818,15 @@ function updateWindowsJumpList() {
 
   const settings = dataStore!.getSettingsSnapshot()
   const t = createTranslator(settings.preferredLanguage, app.getLocale())
-  const recentFileItems = dataStore!.getRecentPlayedSongPaths(windowsJumpListRecentLimit).map((filePath) => ({
-    type: 'file' as const,
-    path: filePath,
-  }))
+  const canUseRecentFileCategory = app.isPackaged &&
+    !process.env.PORTABLE_EXECUTABLE_DIR &&
+    !process.env.PORTABLE_EXECUTABLE_FILE
+  const recentFileItems = canUseRecentFileCategory
+    ? dataStore!.getRecentPlayedSongPaths(windowsJumpListRecentLimit).map((filePath) => ({
+        type: 'file' as const,
+        path: filePath,
+      }))
+    : []
   const categories: JumpListCategory[] = [
     ...(recentFileItems.length > 0
       ? [{
@@ -856,6 +869,20 @@ function openAppRoute(route: string) {
 function sendTrayCommand(command: 'scan-library') {
   showMainWindow()
   mainWindow!.webContents.send('app:tray-command', command)
+}
+
+async function trashPathIfExists(targetPath: string) {
+  try {
+    await stat(targetPath)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return
+    }
+
+    throw error
+  }
+
+  await shell.trashItem(targetPath)
 }
 
 function updateTrayMenu() {
@@ -1095,7 +1122,6 @@ app.on('open-file', (event, filePath) => {
 })
 
 app.whenReady().then(async () => {
-  app.setAppUserModelId('com.seaky.smplayer')
   app.setPath('userData', await resolveUserDataPath())
   dataStore = new SmplayerDataStore(app.getPath('userData'))
   updateWindowsJumpList()
@@ -1232,8 +1258,7 @@ app.whenReady().then(async () => {
   )
   ipcMain.handle('library:delete-song-from-disk', async (_event, songId: number) => {
     const songPath = dataStore!.getSongPath(songId)
-    await stat(songPath)
-    await shell.trashItem(songPath)
+    await trashPathIfExists(songPath)
     dataStore!.deleteSong(songId)
   })
   ipcMain.handle('library:hide-song', (_event, songId: number) => {
@@ -1254,8 +1279,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('library:delete-songs-from-disk', async (_event, songIds: number[]) => {
     const songPaths = songIds.map((songId) => dataStore!.getSongPath(songId))
     for (const songPath of songPaths) {
-      await stat(songPath)
-      await shell.trashItem(songPath)
+      await trashPathIfExists(songPath)
     }
     dataStore!.deleteSongs(songIds)
   })
@@ -1266,12 +1290,10 @@ app.whenReady().then(async () => {
         songPath.startsWith(`${folderPath}\\`) || songPath.startsWith(`${folderPath}/`),
       ))
     for (const songPath of songPaths) {
-      await stat(songPath)
-      await shell.trashItem(songPath)
+      await trashPathIfExists(songPath)
     }
     for (const folderPath of folderPaths) {
-      await stat(folderPath)
-      await shell.trashItem(folderPath)
+      await trashPathIfExists(folderPath)
     }
     dataStore!.deleteLocalItems(songIds, folderPaths)
   })
@@ -1282,8 +1304,7 @@ app.whenReady().then(async () => {
     dataStore!.renameLocalFolder(folderPath, name),
   )
   ipcMain.handle('library:delete-local-folder', async (_event, folderPath: string) => {
-    await stat(folderPath)
-    await shell.trashItem(folderPath)
+    await trashPathIfExists(folderPath)
     dataStore!.deleteLocalFolder(folderPath)
   })
   ipcMain.handle('library:hide-local-folder', (_event, folderPath: string) => {
@@ -1607,6 +1628,14 @@ app.whenReady().then(async () => {
   ipcMain.handle('playback:save-settings', (_event, update) =>
     dataStore!.savePlaybackSettings(update),
   )
+  ipcMain.on('playback:get-settings-immediate', (event) => {
+    const settings = dataStore!.getSettingsSnapshot()
+    event.returnValue = {
+      volume: settings.volume,
+      isMuted: settings.isMuted,
+      mode: settings.mode,
+    } satisfies PlaybackRuntimeSettings
+  })
   ipcMain.on('playback:save-settings-immediate', (event, update) => {
     dataStore!.savePlaybackSettings(update)
     event.returnValue = true

@@ -1,4 +1,5 @@
 .local-page {
+  position: relative;
   height: 100%;
   min-height: 0;
   gap: 14px;
@@ -66,6 +67,7 @@
   z-index: 32;
   display: flex;
   align-items: center;
+  flex-wrap: nowrap;
   gap: 2px;
   width: 100%;
   min-height: 42px;
@@ -151,7 +153,7 @@
   position: relative;
   display: inline-flex;
   align-items: center;
-  min-width: 0;
+  min-width: max-content;
   flex: 0 0 auto;
   border-radius: 5px;
   color: var(--text-strong);
@@ -159,10 +161,11 @@
 }
 
 .folder-chain-item-path-button {
-  max-width: min(360px, 32vw);
+  flex: 0 0 auto;
+  max-width: none;
   padding: 0 8px 0 10px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .folder-chain-item:hover,
@@ -379,13 +382,18 @@
 .local-table-shell {
   flex: 1 1 auto;
   min-height: 0;
+  height: 100%;
+  max-height: 100%;
+  box-sizing: border-box;
   overflow: auto;
-  padding: 4px 6px calc(var(--player-height) + 18px);
+  padding: 4px 6px 18px;
   scrollbar-gutter: stable;
 }
 
 .local-scroll-frame {
   position: relative;
+  display: flex;
+  flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
 }
@@ -1244,7 +1252,7 @@
 
 .app-shell.nav-minimal .local-scroll-shell {
   height: 100%;
-  padding: 4px 0 calc(var(--player-height) + 18px);
+  padding: 4px 0 18px;
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-gutter: auto;
@@ -1315,6 +1323,169 @@
   background: var(--panel);
   box-shadow: var(--card-shadow);
   overflow: hidden;
+}
+
+.local-refresh-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 240;
+  display: grid;
+  place-items: center;
+  gap: 10px;
+  background: rgba(248, 250, 253, 0.72);
+  color: var(--text-strong);
+  backdrop-filter: blur(18px);
+  -webkit-app-region: no-drag;
+}
+
+.local-refresh-overlay .loading-state {
+  margin: 0;
+}
+
+.local-refresh-overlay p {
+  margin: -8px 0 0;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.folder-update-result-dialog {
+  width: min(560px, calc(100vw - 48px));
+  max-height: min(620px, calc(100vh - 48px));
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  padding: 18px 20px 20px;
+}
+
+.folder-update-result-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 38px;
+}
+
+.folder-update-result-header h3 {
+  margin: 0;
+  text-align: left;
+}
+
+.folder-update-result-close {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.folder-update-result-close:hover,
+.folder-update-result-close:focus-visible {
+  background: var(--surface-control-hover);
+  color: var(--text-strong);
+  outline: none;
+}
+
+.folder-update-result-close svg {
+  width: 18px;
+  height: 18px;
+}
+
+.folder-update-result-groups {
+  min-height: 0;
+  margin-top: 12px;
+  overflow-y: auto;
+}
+
+.folder-update-result-group {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.folder-update-result-group:first-child {
+  margin-top: 0;
+}
+
+.folder-update-result-group h4 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 16px;
+  font-weight: 750;
+}
+
+.folder-update-result-list {
+  display: grid;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.folder-update-result-item {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  align-items: center;
+  min-height: 36px;
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--panel);
+  color: var(--text-strong);
+  padding: 0 12px;
+  font: inherit;
+  text-align: left;
+}
+
+.folder-update-result-item:first-child {
+  border-top: 0;
+}
+
+.folder-update-result-item:not(.is-disabled) {
+  cursor: pointer;
+}
+
+.folder-update-result-item:not(.is-disabled):hover,
+.folder-update-result-item:not(.is-disabled):focus-visible {
+  background: rgba(var(--accent-rgb), 0.1);
+  outline: none;
+}
+
+.folder-update-result-item.is-disabled {
+  cursor: default;
+  color: var(--text-muted);
+}
+
+.folder-update-result-path {
+  display: block;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  white-space: nowrap;
+}
+
+.folder-update-result-path::-webkit-scrollbar {
+  height: 6px;
+}
+
+.local-empty-folder {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.folder-update-result-playing-icon {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  color: var(--accent-strong);
+}
+
+.folder-update-result-playing-icon svg {
+  width: 16px;
+  height: 16px;
 }
 
 .app-shell.nav-minimal .local-folder-card-list,
@@ -1544,7 +1715,7 @@
 
 .app-shell.nav-minimal .local-table-shell {
   overflow-x: hidden;
-  padding: 4px 0 calc(var(--player-height) + 16px);
+  padding: 4px 0 16px;
   scrollbar-gutter: auto;
 }
 
@@ -1766,7 +1937,7 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
-  padding: 0 0 calc(var(--player-height) + 18px);
+  padding: 0 0 18px;
 }
 
 .hidden-storage-empty {
@@ -1838,6 +2009,48 @@ body.night-mode .app-shell .workspace:has(.hidden-folders-page) {
 body.night-mode .app-shell .local-page,
 body.night-mode .app-shell .hidden-folders-page {
   color: var(--night-text);
+}
+
+body.night-mode .local-refresh-overlay {
+  background: rgba(4, 8, 13, 0.72);
+  color: var(--night-text);
+}
+
+body.night-mode .local-refresh-overlay p {
+  color: var(--night-muted);
+}
+
+body.night-mode .folder-update-result-close {
+  color: var(--night-muted);
+}
+
+body.night-mode .folder-update-result-close:hover,
+body.night-mode .folder-update-result-close:focus-visible {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--night-text);
+}
+
+body.night-mode .folder-update-result-group h4,
+body.night-mode .folder-update-result-item {
+  color: var(--night-text);
+}
+
+body.night-mode .folder-update-result-list,
+body.night-mode .folder-update-result-item {
+  border-color: var(--night-border);
+}
+
+body.night-mode .folder-update-result-item {
+  background: rgba(255, 255, 255, 0.035);
+}
+
+body.night-mode .folder-update-result-item:not(.is-disabled):hover,
+body.night-mode .folder-update-result-item:not(.is-disabled):focus-visible {
+  background: rgba(var(--accent-rgb), 0.2);
+}
+
+body.night-mode .folder-update-result-item.is-disabled {
+  color: var(--night-muted);
 }
 
 body.night-mode .app-shell .folder-chain-item-flyout {

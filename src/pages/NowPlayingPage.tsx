@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 
 import { CommandBar, CommandBarButton } from '../components/CommandBar'
 import { AppBarPortal } from '../components/AppBarPortal'
+import { CustomScrollbar } from '../components/CustomScrollbar'
 import { requestConfirmDialog } from '../components/dialogService'
 import { LoadingState } from '../components/LoadingState'
 import { MenuFlyout } from '../components/MenuFlyout'
@@ -17,6 +18,7 @@ import { quickPlay } from '../shared/QuickPlayHelper'
 import { useLibraryStore } from '../state/useLibraryStore'
 import { usePreferenceStore } from '../state/usePreferenceStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
+import { useCustomScrollbar } from '../hooks/useCustomScrollbar'
 
 const QUICK_PLAY_LIMIT = 100
 const NOW_PLAYING_ROW_HEIGHT = 82
@@ -97,7 +99,9 @@ export function NowPlayingPage({
   const [songDialog, setSongDialog] = useState<{ song: LibrarySong; mode: 'properties' | 'lyrics' | 'album-art' } | null>(null)
   const [songPreferenceItem, setSongPreferenceItem] = useState<PreferenceItemSnapshot | null>(null)
   const [isCompactQueueLayout, setIsCompactQueueLayout] = useState(() => window.matchMedia(NOW_PLAYING_COMPACT_QUERY).matches)
+  const listScrollFrameRef = useRef<HTMLDivElement | null>(null)
   const listShellRef = useRef<HTMLElement | null>(null)
+  const listScrollbarTrackRef = useRef<HTMLDivElement | null>(null)
   const currentRowRef = useRef<HTMLDivElement | null>(null)
   const createPlaylist = useLibraryStore((state) => state.createPlaylist)
   const folders = useLibraryStore((state) => state.snapshot.folders)
@@ -532,6 +536,12 @@ export function NowPlayingPage({
       window.requestAnimationFrame(locateCurrent)
     }
   }, [selectedQueueIndex, selectedTrackId, searchQuery, songs.length])
+  const onListScrollbarPointerDown = useCustomScrollbar({
+    frameRef: listScrollFrameRef,
+    scrollContainerRef: listShellRef,
+    scrollbarTrackRef: listScrollbarTrackRef,
+    refreshDependencies: [listHeight, isCompactQueueLayout, visibleSongs.length],
+  })
 
   return (
     <section className="now-playing-page page-panel">
@@ -561,26 +571,27 @@ export function NowPlayingPage({
 
       {error ? <div className="error-banner">{error}</div> : null}
 
-      <section
-        className="now-playing-list-shell"
-        ref={listShellRef}
-        onScroll={(event) => {
-          setScrollTop(event.currentTarget.scrollTop)
-        }}
-      >
-        {visibleSongs.length === 0 ? (
-          loading ? (
-            <LoadingState t={t} compact />
-          ) : songs.length > 0 ? (
-            <div className="empty-state compact">
-              <h3>{t('nowPlaying.noQueueMatch', { query: searchQuery })}</h3>
-              <p>{t('nowPlaying.queueSearchHelp')}</p>
-            </div>
+      <div className="now-playing-list-scroll-frame custom-scrollbar-frame" ref={listScrollFrameRef}>
+        <section
+          className="now-playing-list-shell custom-scrollbar-container"
+          ref={listShellRef}
+          onScroll={(event) => {
+            setScrollTop(event.currentTarget.scrollTop)
+          }}
+        >
+          {visibleSongs.length === 0 ? (
+            loading ? (
+              <LoadingState t={t} compact />
+            ) : songs.length > 0 ? (
+              <div className="empty-state compact">
+                <h3>{t('nowPlaying.noQueueMatch', { query: searchQuery })}</h3>
+                <p>{t('nowPlaying.queueSearchHelp')}</p>
+              </div>
+            ) : (
+              null
+            )
           ) : (
-            null
-          )
-        ) : (
-          <div className="now-playing-playlist-control" style={{ minHeight: listHeight }}>
+            <div className="now-playing-playlist-control" style={{ minHeight: listHeight }}>
             {topSpacerHeight > 0 ? <div className="now-playing-virtual-spacer" style={{ height: topSpacerHeight }} /> : null}
             {renderedEntries.map(({ song, queueIndex }) => {
               const current = selectedQueueIndex == null ? song.id === selectedTrackId : queueIndex === selectedQueueIndex
@@ -671,9 +682,14 @@ export function NowPlayingPage({
               )
             })}
             {bottomSpacerHeight > 0 ? <div className="now-playing-virtual-spacer" style={{ height: bottomSpacerHeight }} /> : null}
-          </div>
-        )}
-      </section>
+            </div>
+          )}
+        </section>
+        <CustomScrollbar
+          scrollbarTrackRef={listScrollbarTrackRef}
+          onThumbPointerDown={onListScrollbarPointerDown}
+        />
+      </div>
 
       <MultiSelectCommandBar
         visible={multiSelect}

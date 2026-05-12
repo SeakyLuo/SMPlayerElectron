@@ -11,6 +11,7 @@ import { useLibraryStore } from '../state/useLibraryStore'
 import { usePlaybackProgress } from '../state/playbackProgressStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
 import { useSongArtwork } from '../hooks/useSongArtwork'
+import { DefaultAlbumArtwork, DEFAULT_ALBUM_ARTWORK_URL } from './DefaultAlbumArtwork'
 import { Icon } from './icons'
 import { formatDuration } from '../shared/formatters'
 import { MenuFlyout } from './MenuFlyout'
@@ -167,7 +168,7 @@ function getPlaybackModeIcon(mode: PlaybackMode): NonNullable<MenuFlyoutItem['ic
   }
 }
 
-export const DEFAULT_ARTWORK_URL = '/monotone_bg_wide.png'
+export const DEFAULT_ARTWORK_URL = DEFAULT_ALBUM_ARTWORK_URL
 
 export function MediaControlButtons({
   trackId,
@@ -735,16 +736,20 @@ export function MediaControl({
         onClick={onOpenNowPlaying}
       >
         <span className="player-artwork-shell">
-          <img
-            className="album-swatch artwork-image"
-            src={displayArtworkUrl}
-            alt=""
-            aria-hidden="true"
-            onError={() => {
-              setFailedArtworkUrl(displayArtworkUrl)
-              refreshArtwork()
-            }}
-          />
+          {usableArtworkUrl ? (
+            <img
+              className="album-swatch artwork-image"
+              src={displayArtworkUrl}
+              alt=""
+              aria-hidden="true"
+              onError={() => {
+                setFailedArtworkUrl(displayArtworkUrl)
+                refreshArtwork()
+              }}
+            />
+          ) : (
+            <DefaultAlbumArtwork className="album-swatch artwork-image" />
+          )}
           <span className="player-artwork-overlay" aria-hidden="true">
             <Icon name="fullscreen" />
           </span>

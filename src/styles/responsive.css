@@ -61,7 +61,7 @@
   }
 
   .settings-board {
-    padding: 0 0 calc(var(--player-height) + 34px);
+    padding: 0 0 34px;
   }
 
   .settings-row-with-control,
@@ -140,6 +140,7 @@
   }
 
   .artists-master,
+  .artists-detail-scroll-frame,
   .artists-detail {
     height: 100%;
   }
@@ -150,7 +151,7 @@
     border-bottom: 0;
   }
 
-  .artists-detail {
+  .artists-detail-scroll-frame {
     display: none;
   }
 
@@ -158,8 +159,8 @@
     display: none;
   }
 
-  .artists-page.is-compact-detail-open .artists-detail {
-    display: block;
+  .artists-page.is-compact-detail-open .artists-detail-scroll-frame {
+    display: flex;
   }
 
   .artists-page.is-compact-detail-open .artists-detail.is-empty {

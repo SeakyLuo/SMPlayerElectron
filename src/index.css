@@ -58,6 +58,8 @@ body {
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.82), transparent 36%),
     linear-gradient(180deg, #f6f8fb 0%, #edf2f7 100%);
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 body.night-mode {
@@ -139,9 +141,49 @@ a {
   color: inherit;
 }
 
+.default-album-artwork {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.78), transparent 34%),
+    linear-gradient(145deg, rgba(var(--accent-rgb), 0.13), rgba(245, 248, 252, 0.94));
+}
+
+.default-album-artwork-logo {
+  width: 68% !important;
+  height: 68% !important;
+  object-fit: contain !important;
+  opacity: 0.9;
+  filter: drop-shadow(0 10px 18px rgba(38, 57, 82, 0.12));
+}
+
+body.night-mode .default-album-artwork {
+  background:
+    radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.08), transparent 34%),
+    linear-gradient(145deg, rgba(var(--accent-rgb), 0.2), rgba(20, 26, 34, 0.96));
+}
+
+body.night-mode .default-album-artwork-logo {
+  opacity: 0.78;
+  filter: drop-shadow(0 12px 22px rgba(0, 0, 0, 0.32));
+}
+
 button,
 input {
   font: inherit;
+}
+
+input:not([type='button']):not([type='submit']):not([type='reset']):not([type='checkbox']):not([type='radio']):not([type='range']):not(:disabled):not([readonly]),
+textarea:not(:disabled):not([readonly]),
+[contenteditable='true'] {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+select {
+  user-select: auto;
+  -webkit-user-select: auto;
 }
 
 input {

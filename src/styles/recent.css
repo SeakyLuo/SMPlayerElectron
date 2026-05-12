@@ -521,10 +521,10 @@
 
 .recent-search-row:hover,
 .recent-search-row.is-selected {
-  border-color: rgba(var(--accent-rgb), 0.14);
-  background: rgba(255, 255, 255, 0.82);
+  border-color: rgba(var(--accent-rgb), 0.24);
+  background: rgba(var(--accent-rgb), 0.12);
   box-shadow:
-    0 10px 22px rgba(39, 52, 70, 0.06),
+    0 12px 26px rgba(var(--accent-rgb), 0.13),
     inset 0 0 0 1px rgba(var(--accent-rgb), 0.08);
 }
 
@@ -559,7 +559,12 @@
 }
 
 .recent-search-row-main small {
-  display: none;
+  flex: 0 0 auto;
+  display: inline;
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 520;
 }
 
 .recent-search-remove {
@@ -607,27 +612,27 @@
 }
 
 .app-shell.nav-minimal .recent-song-grid-window {
-  row-gap: 22px;
+  row-gap: 8px;
   padding-right: 0;
 }
 
 .app-shell.nav-minimal .recent-song-tile {
-  grid-template-columns: 110px minmax(0, 1fr);
-  gap: 12px;
-  min-height: 116px;
-  padding: 3px 8px 3px 3px;
-  border-radius: 12px;
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: 10px;
+  min-height: 92px;
+  padding: 2px 6px 2px 2px;
+  border-radius: 9px;
 }
 
 .app-shell.nav-minimal .recent-song-artwork-wrap,
 .app-shell.nav-minimal .recent-song-artwork {
-  width: 110px;
-  height: 110px;
+  width: 84px;
+  height: 84px;
 }
 
 .app-shell.nav-minimal .recent-song-copy {
-  gap: 5px;
-  padding: 8px 0 10px;
+  gap: 3px;
+  padding: 4px 0;
 }
 
 .app-shell.nav-minimal .recent-search-list {

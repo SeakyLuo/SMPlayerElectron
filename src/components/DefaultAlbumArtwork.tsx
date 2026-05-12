@@ -1,4 +1,4 @@
-export const DEFAULT_ALBUM_ARTWORK_URL = '/monotone_bg_wide.png'
+export const DEFAULT_ALBUM_ARTWORK_URL = '/app-icon.png'
 
 interface DefaultAlbumArtworkProps {
   className: string
@@ -6,5 +6,9 @@ interface DefaultAlbumArtworkProps {
 }
 
 export function DefaultAlbumArtwork({ className, title = '' }: DefaultAlbumArtworkProps) {
-  return <img className={className} src={DEFAULT_ALBUM_ARTWORK_URL} alt={title ? `${title} artwork` : ''} aria-hidden={!title} />
+  return (
+    <span className={`default-album-artwork ${className}`} aria-hidden={!title} aria-label={title ? `${title} artwork` : undefined}>
+      <img className="default-album-artwork-logo" src={DEFAULT_ALBUM_ARTWORK_URL} alt="" />
+    </span>
+  )
 }

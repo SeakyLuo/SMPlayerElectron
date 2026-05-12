@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { mkdir, readFile, readdir, rename, rmdir, stat, unlink, writeFile } from 'node:fs/promises'
-import { basename, dirname, extname, join } from 'node:path'
+import { basename, dirname, extname, join, normalize } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { pathToFileURL } from 'node:url'
 
@@ -2075,6 +2075,18 @@ export class SmplayerDataStore {
 
   private deleteLocalFolderInsideTransaction(folderPath: string) {
     this.db.prepare(`
+      UPDATE PreferenceItem
+      SET State = ?
+      WHERE Type = ?
+        AND ItemId IN (
+          SELECT CAST(Id AS TEXT)
+          FROM Folder
+          WHERE Path = ?
+             OR Path LIKE ?
+             OR Path LIKE ?
+        )
+    `).run(ACTIVE_STATE.inactive, this.toPreferenceEntityValue('folder'), folderPath, `${folderPath}\\%`, `${folderPath}/%`)
+    this.db.prepare(`
       UPDATE Folder
       SET State = ?
       WHERE Path = ?
@@ -3453,10 +3465,13 @@ export class SmplayerDataStore {
   async scanLocalFolder(folderPath: string): Promise<ScanLibraryResult> {
     const settings = this.getSettings()
     const rootPath = settings.RootPath
-    const folderStats = await stat(folderPath)
+    const scanFolderPath = normalize(folderPath)
+    const normalizedScanFolderPath = this.getNormalizedPathForSql(scanFolderPath)
+    const normalizedScanFolderPattern = `${normalizedScanFolderPath}/%`
+    const folderStats = await this.statLocalFolderForScan(scanFolderPath)
 
     if (!folderStats.isDirectory()) {
-      throw new Error(`Selected path is not a directory: ${folderPath}`)
+      throw new Error(`Folder not found: ${scanFolderPath}`)
     }
 
     const startedAt = Date.now()
@@ -3473,7 +3488,7 @@ export class SmplayerDataStore {
     )
 
     await mkdir(this.thumbnailCachePath, { recursive: true })
-    await this.walkLibrary(folderPath, folders, audioFiles, hiddenFolderPaths, hiddenFilePaths)
+    await this.walkLibrary(scanFolderPath, folders, audioFiles, hiddenFolderPaths, hiddenFilePaths)
 
     const useFilenameNotMusicName = Boolean(settings.UseFilenameNotMusicName)
     const scannedSongs = await this.readSongs(audioFiles, useFilenameNotMusicName)
@@ -3482,8 +3497,8 @@ export class SmplayerDataStore {
       SELECT Path
       FROM Music
       WHERE State = ?
-        AND (Path LIKE ? OR Path LIKE ?)
-    `).all(ACTIVE_STATE.active, `${folderPath}\\%`, `${folderPath}/%`) as Array<{ Path: string }>).map((row) => row.Path)
+        AND REPLACE(Path, ?, ?) LIKE ?
+    `).all(ACTIVE_STATE.active, '\\', '/', normalizedScanFolderPattern) as Array<{ Path: string }>).map((row) => row.Path)
     const updateResult = this.buildFolderUpdateResult(previousSongPaths, scannedSongs.map((song) => song.path))
 
     this.db.exec('BEGIN')
@@ -3492,20 +3507,30 @@ export class SmplayerDataStore {
         UPDATE Music
         SET State = ?
         WHERE State NOT IN (?, ?)
-          AND (Path LIKE ? OR Path LIKE ?)
-      `).run(ACTIVE_STATE.inactive, ACTIVE_STATE.hidden, ACTIVE_STATE.parentHidden, `${folderPath}\\%`, `${folderPath}/%`)
+          AND REPLACE(Path, ?, ?) LIKE ?
+      `).run(ACTIVE_STATE.inactive, ACTIVE_STATE.hidden, ACTIVE_STATE.parentHidden, '\\', '/', normalizedScanFolderPattern)
       this.db.prepare(`
         UPDATE Folder
         SET State = ?
         WHERE State NOT IN (?, ?)
-          AND (Path = ? OR Path LIKE ? OR Path LIKE ?)
-      `).run(ACTIVE_STATE.inactive, ACTIVE_STATE.hidden, ACTIVE_STATE.parentHidden, folderPath, `${folderPath}\\%`, `${folderPath}/%`)
+          AND (REPLACE(Path, ?, ?) = ? OR REPLACE(Path, ?, ?) LIKE ?)
+      `).run(
+        ACTIVE_STATE.inactive,
+        ACTIVE_STATE.hidden,
+        ACTIVE_STATE.parentHidden,
+        '\\',
+        '/',
+        normalizedScanFolderPath,
+        '\\',
+        '/',
+        normalizedScanFolderPattern,
+      )
       this.db.prepare(`
         UPDATE File
         SET State = ?
         WHERE State NOT IN (?, ?)
-          AND (Path LIKE ? OR Path LIKE ?)
-      `).run(ACTIVE_STATE.inactive, ACTIVE_STATE.hidden, ACTIVE_STATE.parentHidden, `${folderPath}\\%`, `${folderPath}/%`)
+          AND REPLACE(Path, ?, ?) LIKE ?
+      `).run(ACTIVE_STATE.inactive, ACTIVE_STATE.hidden, ACTIVE_STATE.parentHidden, '\\', '/', normalizedScanFolderPattern)
 
       const folderIds = new Map<string, number>()
       const sortedFolders = folders
@@ -3513,7 +3538,7 @@ export class SmplayerDataStore {
         .sort((left, right) => left.split(/[/\\]+/).length - right.split(/[/\\]+/).length)
 
       for (const scannedFolderPath of sortedFolders) {
-        const parentId = scannedFolderPath === rootPath
+        const parentId = this.getPathComparisonKey(scannedFolderPath) === this.getPathComparisonKey(rootPath)
           ? 0
           : (folderIds.get(dirname(scannedFolderPath)) ?? this.getActiveFolderId(dirname(scannedFolderPath)) ?? 0)
         const row = this.upsertFolderStatement.get(
@@ -3577,16 +3602,16 @@ export class SmplayerDataStore {
   }
 
   private buildFolderUpdateResult(previousSongPaths: string[], scannedSongPaths: string[]) {
-    const previousPaths = new Set(previousSongPaths)
-    const scannedPaths = new Set(scannedSongPaths)
-    const filesAdded = scannedSongPaths.filter((songPath) => !previousPaths.has(songPath))
-    const filesRemoved = previousSongPaths.filter((songPath) => !scannedPaths.has(songPath))
+    const previousPaths = new Set(previousSongPaths.map((songPath) => this.getPathComparisonKey(songPath)))
+    const scannedPaths = new Set(scannedSongPaths.map((songPath) => this.getPathComparisonKey(songPath)))
+    const filesAdded = scannedSongPaths.filter((songPath) => !previousPaths.has(this.getPathComparisonKey(songPath)))
+    const filesRemoved = previousSongPaths.filter((songPath) => !scannedPaths.has(this.getPathComparisonKey(songPath)))
     const filesMoved: string[] = []
 
     for (const addedPath of filesAdded.slice()) {
-      const fileName = basename(addedPath)
-      const matchingRemovedCount = filesRemoved.filter((removedPath) => basename(removedPath) === fileName).length
-      const matchingAddedCount = filesAdded.filter((candidatePath) => basename(candidatePath) === fileName).length
+      const fileName = basename(addedPath).toLocaleLowerCase()
+      const matchingRemovedCount = filesRemoved.filter((removedPath) => basename(removedPath).toLocaleLowerCase() === fileName).length
+      const matchingAddedCount = filesAdded.filter((candidatePath) => basename(candidatePath).toLocaleLowerCase() === fileName).length
 
       if (matchingRemovedCount === 1 && matchingAddedCount === 1) {
         filesMoved.push(addedPath)
@@ -3595,9 +3620,33 @@ export class SmplayerDataStore {
 
     return {
       filesAdded: filesAdded.filter((songPath) => !filesMoved.includes(songPath)),
-      filesRemoved: filesRemoved.filter((songPath) => !filesMoved.some((movedPath) => basename(movedPath) === basename(songPath))),
+      filesRemoved: filesRemoved.filter((songPath) =>
+        !filesMoved.some((movedPath) => basename(movedPath).toLocaleLowerCase() === basename(songPath).toLocaleLowerCase())),
       filesMoved,
     }
+  }
+
+  private async statLocalFolderForScan(folderPath: string) {
+    try {
+      return await stat(folderPath)
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code
+      if (code === 'ENOENT') {
+        throw new Error(`Folder not found: ${folderPath}`)
+      }
+      if (code === 'EACCES' || code === 'EPERM') {
+        throw new Error(`Cannot access folder: ${folderPath}`)
+      }
+      throw error
+    }
+  }
+
+  private getNormalizedPathForSql(filePath: string) {
+    return filePath.replace(/\\/g, '/').replace(/\/+$/, '')
+  }
+
+  private getPathComparisonKey(filePath: string) {
+    return this.getNormalizedPathForSql(filePath).toLocaleLowerCase()
   }
 
   private initializeSettingsRows() {
@@ -4226,6 +4275,10 @@ export class SmplayerDataStore {
       const fullPath = join(currentPath, entry.name)
 
       if (entry.isDirectory()) {
+        if (entry.name.endsWith('.logicx')) {
+          continue
+        }
+
         const isHiddenFolder = hiddenFolderPaths.some((hiddenFolderPath) =>
           fullPath === hiddenFolderPath ||
           fullPath.startsWith(`${hiddenFolderPath}\\`) ||

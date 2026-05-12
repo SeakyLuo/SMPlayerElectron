@@ -159,7 +159,7 @@ export function getAddToPlaylistMenuFlyoutItem({
     submenu.push({
       key: `${key}-now-playing`,
       text: t('common.nowPlaying'),
-      icon: 'next',
+      icon: 'songs',
       onClick: onAddToNowPlaying,
     })
   }

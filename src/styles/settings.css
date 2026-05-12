@@ -97,7 +97,7 @@
   display: grid;
   grid-template-columns: minmax(360px, 1fr) minmax(360px, 1.1fr);
   gap: 22px;
-  padding: 0 18px calc(var(--player-height) + 42px);
+  padding: 0 18px 42px;
 }
 
 .settings-column {

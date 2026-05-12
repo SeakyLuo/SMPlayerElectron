@@ -1,20 +1,20 @@
-import { useEffect, useRef, useState, type CSSProperties, type PointerEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent } from 'react'
 
 import {
   DEFAULT_ARTWORK_URL,
   getRepeatOneTitle,
   getRepeatTitle,
-  getShuffleTitle,
   type MediaControlTrack,
   type VoiceAssistantResponse,
 } from '../components/MediaControl'
 import { VoiceAssistantFlyout, type VoiceAssistantFlyoutHandle } from '../components/VoiceAssistantFlyout'
-import { Icon } from '../components/icons'
+import { Icon, type IconName } from '../components/icons'
 import { getVolumeIconName } from '../components/volumeIcon'
 import { useSongArtwork } from '../hooks/useSongArtwork'
-import type { LibrarySong, PlaybackMode } from '../shared/contracts'
+import type { LibrarySong, LyricsRequestMode, LyricsSnapshot, PlaybackMode } from '../shared/contracts'
 import { formatDuration } from '../shared/formatters'
 import type { Translator } from '../shared/i18n'
+import { getCurrentLyricsLine } from '../shared/lyrics'
 import { usePlaybackProgress } from '../state/playbackProgressStore'
 
 interface MiniModePageProps {
@@ -25,6 +25,7 @@ interface MiniModePageProps {
   volume: number
   isMuted: boolean
   mode: PlaybackMode
+  playerLyricsSource: LyricsRequestMode
   t: Translator
   onTogglePlayPause: () => void
   onPrevious: () => void
@@ -33,10 +34,8 @@ interface MiniModePageProps {
   onBeginSeek: () => void
   onEndSeek: () => void
   onVolumeChange: (volume: number) => void
-  onToggleMute: () => void
-  onToggleShuffle: () => void
-  onToggleRepeat: () => void
-  onToggleRepeatOne: () => void
+  onCycleRepeatMode: () => void
+  onToggleFavorite: () => void
   onQuickPlay: () => void | Promise<void>
   onVoiceCommand: (text: string) => Promise<VoiceAssistantResponse>
   getVoiceHint: () => string
@@ -53,6 +52,7 @@ export function MiniModePage({
   volume,
   isMuted,
   mode,
+  playerLyricsSource,
   t,
   onTogglePlayPause,
   onPrevious,
@@ -61,10 +61,8 @@ export function MiniModePage({
   onBeginSeek,
   onEndSeek,
   onVolumeChange,
-  onToggleMute,
-  onToggleShuffle,
-  onToggleRepeat,
-  onToggleRepeatOne,
+  onCycleRepeatMode,
+  onToggleFavorite,
   onQuickPlay,
   onVoiceCommand,
   getVoiceHint,
@@ -75,14 +73,17 @@ export function MiniModePage({
   const [isProgressSeeking, setIsProgressSeeking] = useState(false)
   const [draftProgressSeconds, setDraftProgressSeconds] = useState(0)
   const [failedArtworkUrl, setFailedArtworkUrl] = useState('')
-  const [moreOpen, setMoreOpen] = useState(false)
+  const [volumeOpen, setVolumeOpen] = useState(false)
+  const [controlsVisible, setControlsVisible] = useState(false)
   const [voiceAssistantOpen, setVoiceAssistantOpen] = useState(false)
   const [voiceAssistantAvailable, setVoiceAssistantAvailable] = useState(false)
   const [volumeTooltipActive, setVolumeTooltipActive] = useState(false)
+  const [lyrics, setLyrics] = useState<LyricsSnapshot | null>(null)
   const isProgressSeekingRef = useRef(false)
+  const controlsHideTimerRef = useRef<number | null>(null)
   const volumeTooltipTimerRef = useRef<number | null>(null)
-  const moreButtonRef = useRef<HTMLButtonElement | null>(null)
-  const morePanelRef = useRef<HTMLDivElement | null>(null)
+  const volumeButtonRef = useRef<HTMLButtonElement | null>(null)
+  const volumePanelRef = useRef<HTMLDivElement | null>(null)
   const voiceAssistantFlyoutRef = useRef<VoiceAssistantFlyoutHandle>(null)
   const { progressSeconds, durationSeconds } = usePlaybackProgress()
   const {
@@ -101,16 +102,24 @@ export function MiniModePage({
     : Math.min(Math.max(displayProgressSeconds, 0), effectiveDurationSeconds)
   const progressMax = Math.max(effectiveDurationSeconds, 0)
   const progressFill = progressMax > 0 ? (progressValue / progressMax) * 100 : 0
+  const progressRatio = effectiveDurationSeconds > 0 ? progressSeconds / effectiveDurationSeconds : 0
+  const currentLyricsLine = useMemo(
+    () => getCurrentLyricsLine(lyrics, progressSeconds, progressRatio).trim(),
+    [lyrics, progressRatio, progressSeconds],
+  )
   const volumeValue = disabled ? 0 : Math.min(Math.max(volume, 0), 100)
   const volumeDisplayValue = Math.round(volumeValue)
   const playTitle = isPlaying ? t('player.pause') : t('player.play')
   const volumeTitle = isMuted ? t('player.unmute') : t('player.mute')
   const volumeIconName = getVolumeIconName(volumeValue, isMuted)
+  const favoriteTitle = track.favorite ? t('player.unlike') : t('player.like')
+  const repeatTitle = mode === 'repeat-one' ? getRepeatOneTitle(t, mode) : getRepeatTitle(t, mode)
+  const repeatIconName: IconName = mode === 'repeat-one' ? 'repeatOne' : 'repeat'
   const trackTitle = track.title || t('nowPlaying.noActiveTrack')
   const trackArtist = track.artist || t('common.artistUnknown')
 
   const openVoiceAssistant = () => {
-    setMoreOpen(false)
+    setVolumeOpen(false)
     setVoiceAssistantOpen(true)
     voiceAssistantFlyoutRef.current?.open()
   }
@@ -134,10 +143,30 @@ export function MiniModePage({
     setIsProgressSeeking(false)
   }
 
-  const runMoreAction = (action: () => void | Promise<void>) => {
-    void Promise.resolve(action()).then(() => {
-      setMoreOpen(false)
-    })
+  const runMiniAction = (action: () => void | Promise<void>) => {
+    setVolumeOpen(false)
+    void Promise.resolve(action())
+  }
+
+  const clearControlsHideTimer = () => {
+    if (controlsHideTimerRef.current != null) {
+      window.clearTimeout(controlsHideTimerRef.current)
+      controlsHideTimerRef.current = null
+    }
+  }
+
+  const showControls = () => {
+    clearControlsHideTimer()
+    setControlsVisible(true)
+  }
+
+  const scheduleControlsHide = () => {
+    clearControlsHideTimer()
+    controlsHideTimerRef.current = window.setTimeout(() => {
+      setControlsVisible(false)
+      setVolumeOpen(false)
+      controlsHideTimerRef.current = null
+    }, 5000)
   }
 
   const clearVolumeTooltipTimer = () => {
@@ -184,8 +213,15 @@ export function MiniModePage({
   }, [])
 
   useEffect(() => () => {
+    clearControlsHideTimer()
     clearVolumeTooltipTimer()
   }, [])
+
+  useEffect(() => {
+    if (volumeOpen || voiceAssistantOpen || isProgressSeeking) {
+      showControls()
+    }
+  }, [isProgressSeeking, voiceAssistantOpen, volumeOpen])
 
   useEffect(() => {
     setFailedArtworkUrl('')
@@ -195,32 +231,65 @@ export function MiniModePage({
   }, [baseArtworkUrl, onArtworkResolved, track.id])
 
   useEffect(() => {
-    if (!moreOpen) {
+    if (!currentSong) {
+      setLyrics(null)
+      return
+    }
+
+    let isDisposed = false
+    void window.smplayer!.getLyrics(currentSong.id, playerLyricsSource).then((snapshot) => {
+      if (!isDisposed) {
+        setLyrics(snapshot)
+      }
+    })
+
+    return () => {
+      isDisposed = true
+    }
+  }, [currentSong?.id, playerLyricsSource])
+
+  useEffect(() => {
+    if (!volumeOpen) {
       hideVolumeTooltip()
       return
     }
 
-    const closeMoreOnOutsidePointerDown = (event: globalThis.PointerEvent) => {
+    const closeVolumeOnOutsidePointerDown = (event: globalThis.PointerEvent) => {
       const target = event.target as Node
-      if (morePanelRef.current?.contains(target) || moreButtonRef.current?.contains(target)) {
+      if (volumePanelRef.current?.contains(target) || volumeButtonRef.current?.contains(target)) {
         return
       }
 
-      setMoreOpen(false)
+      setVolumeOpen(false)
     }
 
-    document.addEventListener('pointerdown', closeMoreOnOutsidePointerDown)
+    document.addEventListener('pointerdown', closeVolumeOnOutsidePointerDown)
     return () => {
-      document.removeEventListener('pointerdown', closeMoreOnOutsidePointerDown)
+      document.removeEventListener('pointerdown', closeVolumeOnOutsidePointerDown)
     }
-  }, [moreOpen])
+  }, [volumeOpen])
 
   return (
     <section
-      className="mini-mode-page"
+      className={`mini-mode-page${controlsVisible ? ' is-controls-visible' : ''}`}
       style={{ '--mini-mode-artwork': `url(${JSON.stringify(displayArtworkUrl)})` } as CSSProperties}
+      onPointerEnter={showControls}
+      onPointerMove={showControls}
+      onPointerLeave={scheduleControlsHide}
+      onFocusCapture={showControls}
     >
       <div className="mini-mode-titlebar" aria-hidden="true" />
+      <div className="mini-mode-top-actions">
+        <button
+          className="mini-mode-corner-button"
+          type="button"
+          aria-label={t('player.exitMiniMode')}
+          title={t('player.exitMiniMode')}
+          onClick={onExitMiniMode}
+        >
+          <Icon name="arrowLeft" />
+        </button>
+      </div>
       <img
         className="mini-mode-artwork-probe"
         src={displayArtworkUrl}
@@ -265,37 +334,139 @@ export function MiniModePage({
         </button>
       </div>
 
-      <div className="mini-mode-bottom">
-        <div className="mini-mode-track-copy">
-          <strong title={trackTitle}>{trackTitle}</strong>
-          <span title={trackArtist}>{trackArtist}</span>
+      <div className="mini-mode-track-copy">
+        <strong title={trackTitle}>{trackTitle}</strong>
+        <span title={trackArtist}>{trackArtist}</span>
+        {currentLyricsLine ? (
+          <span className="mini-mode-control-lyrics" title={currentLyricsLine}>
+            <span key={currentLyricsLine}>{currentLyricsLine}</span>
+          </span>
+        ) : null}
+      </div>
+
+      {currentLyricsLine ? (
+        <div className="mini-mode-lyrics-strip">
+          <span key={currentLyricsLine}>{currentLyricsLine}</span>
         </div>
-        <div className="mini-mode-actions">
-          {voiceAssistantAvailable ? (
+      ) : null}
+
+      <div className="mini-mode-bottom">
+        <div className="mini-mode-controls-surface">
+          <div className="mini-mode-actions">
             <button
-              className={voiceAssistantOpen ? 'is-active' : ''}
               type="button"
               disabled={disabled}
-              aria-label={t('player.voiceAssistant')}
-              title={t('player.voiceAssistant')}
-              onClick={openVoiceAssistant}
+              aria-label={t('nowPlaying.randomPlay')}
+              title={t('nowPlaying.randomPlay')}
+              onClick={() => {
+                runMiniAction(onQuickPlay)
+              }}
             >
-              <Icon name="voice" />
+              <Icon name="dice" />
             </button>
-          ) : null}
-          <button
-            ref={moreButtonRef}
-            type="button"
-            disabled={disabled}
-            aria-label={t('player.more')}
-            title={t('player.more')}
-            onClick={() => {
-              voiceAssistantFlyoutRef.current?.close()
-              setMoreOpen((current) => !current)
-            }}
-          >
-            <Icon name="moreHorizontal" />
-          </button>
+            <button
+              type="button"
+              disabled={disabled}
+              className={mode === 'repeat' || mode === 'repeat-one' ? 'is-active' : ''}
+              aria-label={repeatTitle}
+              title={repeatTitle}
+              onClick={() => {
+                runMiniAction(onCycleRepeatMode)
+              }}
+            >
+              <Icon name={repeatIconName} />
+            </button>
+            <button
+              className={`favorite-toggle${track.favorite ? ' is-active' : ''}`}
+              type="button"
+              disabled={disabled || track.id == null}
+              aria-label={favoriteTitle}
+              title={favoriteTitle}
+              onClick={onToggleFavorite}
+            >
+              <Icon name={track.favorite ? 'heartFilled' : 'heart'} />
+            </button>
+            {voiceAssistantAvailable ? (
+              <button
+                className={voiceAssistantOpen ? 'is-active' : ''}
+                type="button"
+                disabled={disabled}
+                aria-label={t('player.voiceAssistant')}
+                title={t('player.voiceAssistant')}
+                onClick={openVoiceAssistant}
+              >
+                <Icon name="voice" />
+              </button>
+            ) : null}
+            <div className="mini-mode-volume-action">
+              <button
+                ref={volumeButtonRef}
+                type="button"
+                disabled={disabled}
+                className={volumeOpen ? 'is-active' : ''}
+                aria-label={volumeTitle}
+                title={volumeTitle}
+                onClick={() => {
+                  voiceAssistantFlyoutRef.current?.close()
+                  setVolumeOpen((current) => !current)
+                }}
+              >
+                <Icon name={volumeIconName} />
+              </button>
+              {volumeOpen ? (
+                <div
+                  ref={volumePanelRef}
+                  className={`mini-mode-volume-popover${volumeTooltipActive ? ' is-active' : ''}${disabled ? ' is-disabled' : ''}`}
+                  style={{ '--volume-tooltip-bottom': `${volumeValue}%` } as CSSProperties}
+                >
+                  <input
+                    className="mini-mode-volume-slider"
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={volumeValue}
+                    style={{ '--range-progress': `${volumeValue}%` } as CSSProperties}
+                    disabled={disabled}
+                    onChange={() => {
+                      keepVolumeTooltipVisible()
+                    }}
+                    onInput={(event) => {
+                      commitVolumeChange(event.currentTarget.value)
+                    }}
+                    onPointerDown={() => {
+                      keepVolumeTooltipVisible()
+                    }}
+                    onPointerEnter={() => {
+                      keepVolumeTooltipVisible()
+                    }}
+                    onPointerLeave={() => {
+                      hideVolumeTooltip()
+                    }}
+                    onPointerUp={(event) => {
+                      commitVolumeChange(event.currentTarget.value)
+                      showVolumeTooltip(650)
+                    }}
+                    onPointerCancel={() => {
+                      hideVolumeTooltip()
+                    }}
+                    onLostPointerCapture={(event) => {
+                      commitVolumeChange(event.currentTarget.value)
+                      showVolumeTooltip(650)
+                    }}
+                    onFocus={() => {
+                      keepVolumeTooltipVisible()
+                    }}
+                    onBlur={() => {
+                      hideVolumeTooltip()
+                    }}
+                    aria-label={t('player.volume')}
+                    aria-valuetext={String(volumeDisplayValue)}
+                  />
+                  <span className="volume-slider-tooltip" aria-hidden="true">{volumeDisplayValue}</span>
+                </div>
+              ) : null}
+            </div>
+          </div>
         </div>
         <input
           className="mini-mode-progress-slider"
@@ -323,100 +494,6 @@ export function MiniModePage({
           title={`${formatDuration(progressValue)} / ${formatDuration(effectiveDurationSeconds)}`}
         />
       </div>
-
-      {moreOpen ? (
-        <div ref={morePanelRef} className="mini-mode-more-panel" role="menu">
-          <button type="button" role="menuitem" onClick={() => runMoreAction(onQuickPlay)}>
-            <Icon name="shuffle" />
-            <span>{t('nowPlaying.randomPlay')}</span>
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className={mode === 'shuffle' ? 'is-active' : ''}
-            onClick={() => runMoreAction(onToggleShuffle)}
-          >
-            <Icon name="shuffle" />
-            <span>{getShuffleTitle(t, mode)}</span>
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className={mode === 'repeat' ? 'is-active' : ''}
-            onClick={() => runMoreAction(onToggleRepeat)}
-          >
-            <Icon name="repeat" />
-            <span>{getRepeatTitle(t, mode)}</span>
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className={mode === 'repeat-one' ? 'is-active' : ''}
-            onClick={() => runMoreAction(onToggleRepeatOne)}
-          >
-            <Icon name="repeatOne" />
-            <span>{getRepeatOneTitle(t, mode)}</span>
-          </button>
-          <div className="mini-mode-volume-row">
-            <button type="button" onClick={onToggleMute} aria-label={volumeTitle} title={volumeTitle}>
-              <Icon name={volumeIconName} />
-            </button>
-            <div
-              className={`mini-mode-volume-slider-wrap${volumeTooltipActive ? ' is-active' : ''}${disabled ? ' is-disabled' : ''}`}
-              style={{ '--volume-tooltip-left': `${volumeValue}%` } as CSSProperties}
-            >
-              <input
-                className="mini-mode-volume-slider"
-                type="range"
-                min="0"
-                max="100"
-                value={volumeValue}
-                style={{ '--range-progress': `${volumeValue}%` } as CSSProperties}
-                disabled={disabled}
-                onChange={() => {
-                  keepVolumeTooltipVisible()
-                }}
-                onInput={(event) => {
-                  commitVolumeChange(event.currentTarget.value)
-                }}
-                onPointerDown={() => {
-                  keepVolumeTooltipVisible()
-                }}
-                onPointerEnter={() => {
-                  keepVolumeTooltipVisible()
-                }}
-                onPointerLeave={() => {
-                  hideVolumeTooltip()
-                }}
-                onPointerUp={(event) => {
-                  commitVolumeChange(event.currentTarget.value)
-                  showVolumeTooltip(650)
-                }}
-                onPointerCancel={() => {
-                  hideVolumeTooltip()
-                }}
-                onLostPointerCapture={(event) => {
-                  commitVolumeChange(event.currentTarget.value)
-                  showVolumeTooltip(650)
-                }}
-                onFocus={() => {
-                  keepVolumeTooltipVisible()
-                }}
-                onBlur={() => {
-                  hideVolumeTooltip()
-                }}
-                aria-label={t('player.volume')}
-                aria-valuetext={String(volumeDisplayValue)}
-              />
-              <span className="volume-slider-tooltip" aria-hidden="true">{volumeDisplayValue}</span>
-            </div>
-          </div>
-          <button type="button" role="menuitem" onClick={onExitMiniMode}>
-            <Icon name="miniMode" />
-            <span>{t('player.exitMiniMode')}</span>
-          </button>
-        </div>
-      ) : null}
 
       {voiceAssistantAvailable ? (
         <VoiceAssistantFlyout

@@ -3,53 +3,122 @@
   left: 50%;
   bottom: 104px;
   z-index: 90;
-  width: min(520px, calc(100vw - 32px));
+  width: min(540px, calc(100vw - 40px));
+  min-height: 62px;
+  box-sizing: border-box;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto 28px;
   align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
-  border: 1px solid rgba(92, 113, 137, 0.28);
-  border-radius: 8px;
-  background: rgba(250, 252, 255, 0.98);
-  box-shadow: 0 18px 46px rgba(35, 45, 60, 0.22);
+  gap: 14px;
+  padding: 12px 16px 12px 20px;
+  border: 1px solid rgba(21, 31, 46, 0.1);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow:
+    0 18px 44px rgba(40, 50, 64, 0.12),
+    0 2px 8px rgba(40, 50, 64, 0.08);
   transform: translateX(-50%);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
 }
 
-.undoable-notification span {
+.undoable-notification-message {
   min-width: 0;
   overflow: hidden;
-  color: var(--text-primary);
+  color: #3b4654;
+  font-size: 15px;
+  font-weight: 560;
+  line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .undoable-notification button {
-  min-height: 32px;
+  appearance: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.undoable-notification-action {
+  min-width: 64px;
+  min-height: 36px;
   border: 1px solid rgba(120, 130, 145, 0.24);
+  border-radius: 9px;
+  padding: 0 16px;
+  background: rgba(255, 255, 255, 0.82);
+  color: #2d3644;
+  box-shadow:
+    0 7px 18px rgba(42, 55, 72, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.undoable-notification-action:hover,
+.undoable-notification-action:focus-visible {
+  border-color: rgba(var(--accent-rgb), 0.24);
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--accent-strong);
+  outline: none;
+}
+
+.undoable-notification-close {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  border: 0;
   border-radius: 7px;
-  padding: 0 12px;
-  background: rgba(255, 255, 255, 0.9);
-  color: var(--text-primary);
-  font-weight: 650;
+  padding: 0;
+  background: transparent;
+  color: rgba(45, 54, 68, 0.72);
+}
+
+.undoable-notification-close:hover,
+.undoable-notification-close:focus-visible {
+  background: rgba(31, 41, 55, 0.06);
+  color: #1f2937;
+  outline: none;
+}
+
+.undoable-notification-close svg {
+  width: 18px;
+  height: 18px;
 }
 
 body.night-mode .undoable-notification {
-  border-color: var(--night-border);
-  background: rgba(22, 28, 36, 0.98);
-  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.42);
+  border-color: rgba(214, 224, 236, 0.12);
+  background: rgba(28, 34, 43, 0.92);
+  box-shadow:
+    0 18px 44px rgba(0, 0, 0, 0.34),
+    0 2px 8px rgba(0, 0, 0, 0.22);
 }
 
-body.night-mode .undoable-notification span {
+body.night-mode .undoable-notification-message {
   color: var(--night-text);
 }
 
-body.night-mode .undoable-notification button {
-  border-color: var(--night-border);
-  background: rgba(255, 255, 255, 0.065);
+body.night-mode .undoable-notification-action {
+  border-color: rgba(214, 224, 236, 0.13);
+  background: rgba(255, 255, 255, 0.08);
   color: color-mix(in srgb, var(--accent) 72%, #f5fbff 28%);
+  box-shadow:
+    0 7px 18px rgba(0, 0, 0, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
-body.night-mode .undoable-notification button:hover {
+body.night-mode .undoable-notification-action:hover,
+body.night-mode .undoable-notification-action:focus-visible {
   background: rgba(var(--accent-rgb), 0.18);
+}
+
+body.night-mode .undoable-notification-close {
+  color: rgba(226, 232, 240, 0.78);
+}
+
+body.night-mode .undoable-notification-close:hover,
+body.night-mode .undoable-notification-close:focus-visible {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
 }

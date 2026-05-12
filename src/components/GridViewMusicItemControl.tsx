@@ -2,6 +2,7 @@ import clsx from 'clsx'
 import type { DragEvent, KeyboardEvent, MouseEvent } from 'react'
 
 import { ArtworkImage } from './ArtworkImage'
+import { DefaultAlbumArtwork } from './DefaultAlbumArtwork'
 import { Icon } from './icons'
 import { getDisplayArtists } from '../shared/artists'
 import type { LibrarySong } from '../shared/contracts'
@@ -88,7 +89,7 @@ export function GridViewMusicItemControl({
             title={song.title}
             renderFallback={() => (
               <span className="local-grid-song-cover local-grid-song-cover-fallback" aria-hidden="true">
-                <img className="local-grid-song-cover-fallback-image" src="/monotone_bg_wide.png" alt="" />
+                <DefaultAlbumArtwork className="local-grid-song-cover-fallback-image" />
               </span>
             )}
           />
@@ -172,7 +173,7 @@ export function GridViewMusicItemControl({
           title={song.title}
           renderFallback={() => (
             <span className="recent-song-artwork recent-song-artwork-fallback" aria-hidden="true">
-              <img className="recent-song-artwork-fallback-image" src="/monotone_bg_wide.png" alt="" />
+              <DefaultAlbumArtwork className="recent-song-artwork-fallback-image" />
             </span>
           )}
         />
