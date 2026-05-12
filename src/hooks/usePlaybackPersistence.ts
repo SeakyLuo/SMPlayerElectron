@@ -1,10 +1,10 @@
 import { useCallback, useRef, type RefObject } from 'react'
 
-import type { LibrarySnapshot, PlaybackSettingsUpdate } from '../shared/contracts'
+import type { MusicData, PlaybackSettingsUpdate } from '../shared/contracts'
 import { currentIndex } from '../shared/mediaHelper'
 
 interface PlaybackPersistenceOptions {
-  snapshotRef: RefObject<LibrarySnapshot>
+  snapshotRef: RefObject<MusicData>
   currentTrackIdRef: RefObject<number | null>
   currentQueueIndexRef: RefObject<number | null>
   progressSecondsRef: RefObject<number>

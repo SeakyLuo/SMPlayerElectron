@@ -7,7 +7,7 @@ import { RemoveDialog } from '../components/RemoveDialog'
 import { RemoteShareDialog } from '../components/RemoteShareDialog'
 import type {
   AppSettingsUpdate,
-  LibrarySnapshot,
+  MusicData,
   LyricsRequestMode,
   NightMode,
   NotificationDisplayMode,
@@ -19,7 +19,7 @@ import { PreferenceSettingsPage } from './PreferenceSettingsPage'
 
 interface SettingsPageProps {
   t: Translator
-  snapshot: LibrarySnapshot
+  snapshot: MusicData
   loading: boolean
   scanning: boolean
   error: string | null

@@ -60,6 +60,24 @@ export interface RecentLibrarySong extends LibrarySong {
   playedAt: string
 }
 
+export interface RecentPlaylistPlayback {
+  id: number
+  playlistId: number
+  playedAt: string
+}
+
+export interface RecentAlbumPlayback {
+  id: number
+  album: string
+  playedAt: string
+}
+
+export interface RecentArtistPlayback {
+  id: number
+  artist: string
+  playedAt: string
+}
+
 export interface LibraryPlaylist {
   id: number
   name: string
@@ -139,7 +157,7 @@ export interface RemoteHostConnectResult {
   songCount: number
 }
 
-export interface RemoteLibrarySnapshot {
+export interface RemoteMusicData {
   host: RemoteHost
   songs: LibrarySong[]
   playlists: LibraryPlaylist[]
@@ -321,12 +339,15 @@ export interface SettingsSnapshot {
   lastReleaseNotesVersion: string
 }
 
-export interface LibrarySnapshot {
+export interface MusicData {
   settings: SettingsSnapshot
   counts: LibraryCounts
   songs: LibrarySong[]
   folders: LibraryFolder[]
   recentSongs: RecentLibrarySong[]
+  recentPlaylists: RecentPlaylistPlayback[]
+  recentAlbums: RecentAlbumPlayback[]
+  recentArtists: RecentArtistPlayback[]
   playlists: LibraryPlaylist[]
   favorites: MyFavoritesSnapshot
   nowPlaying: NowPlayingSnapshot
@@ -390,6 +411,21 @@ export interface ScanLibraryResult {
   filesMoved: string[]
 }
 
+export type ScanLibraryProgressStage = 'checking' | 'updating'
+
+export interface ScanLibraryProgress {
+  operationId: string
+  stage: ScanLibraryProgressStage
+  progress: number
+  max: number
+  folderName?: string
+  canCancel: boolean
+}
+
+export interface ScanLocalFolderPreparation {
+  progressMax: number
+}
+
 export interface DataTransferResult {
   canceled: boolean
   path: string | null
@@ -442,7 +478,18 @@ export interface ViewStateUpdate {
 
 export interface SmplayerApi {
   getAppInfo: () => Promise<AppInfo>
-  getLibrarySnapshot: () => Promise<LibrarySnapshot>
+  getLibrarySettings: () => Promise<SettingsSnapshot>
+  getLibraryCounts: () => Promise<LibraryCounts>
+  getLibrarySongs: () => Promise<LibrarySong[]>
+  getLibraryFolders: () => Promise<LibraryFolder[]>
+  getRecentSongs: () => Promise<RecentLibrarySong[]>
+  getRecentPlaylists: () => Promise<RecentPlaylistPlayback[]>
+  getRecentAlbums: () => Promise<RecentAlbumPlayback[]>
+  getRecentArtists: () => Promise<RecentArtistPlayback[]>
+  getLibraryPlaylists: () => Promise<LibraryPlaylist[]>
+  getLibraryFavorites: () => Promise<MyFavoritesSnapshot>
+  getNowPlaying: () => Promise<NowPlayingSnapshot>
+  getSearch: () => Promise<SearchSnapshot>
   getPreferenceSettings: () => Promise<PreferenceSettingsSnapshot>
   getSongProperties: (songId: number) => Promise<SongPropertiesSnapshot>
   updateSongProperties: (songId: number, update: SongPropertiesUpdate) => Promise<void>
@@ -495,11 +542,14 @@ export interface SmplayerApi {
   deleteAuthorizedDevice: (deviceId: number) => Promise<void>
   getRemoteHosts: () => Promise<RemoteHost[]>
   connectRemoteHost: (request: RemoteHostConnectRequest) => Promise<RemoteHostConnectResult>
-  getRemoteHostLibrary: (hostId: number) => Promise<RemoteLibrarySnapshot>
+  getRemoteHostLibrary: (hostId: number) => Promise<RemoteMusicData>
   deleteRemoteHost: (hostId: number) => Promise<void>
   pickLibraryRoot: () => Promise<ChooseLibraryRootResult>
   scanLibrary: (rootPath?: string) => Promise<ScanLibraryResult>
-  scanLocalFolder: (folderPath: string) => Promise<ScanLibraryResult>
+  prepareScanLocalFolder: (folderPath: string) => Promise<ScanLocalFolderPreparation>
+  scanLocalFolder: (folderPath: string, operationId?: string, progressMax?: number) => Promise<ScanLibraryResult>
+  cancelScanLocalFolder: (operationId: string) => Promise<void>
+  onScanLocalFolderProgress: (callback: (progress: ScanLibraryProgress) => void) => () => void
   takePendingOpenFiles: () => Promise<number[]>
   exportData: () => Promise<DataTransferResult>
   importData: () => Promise<DataTransferResult>
@@ -531,6 +581,9 @@ export interface SmplayerApi {
   removeRecentSearches: (entryIds: number[]) => Promise<void>
   restoreRecentSearch: (entry: SearchHistoryEntry) => Promise<void>
   clearRecentSearches: () => Promise<void>
+  recordRecentPlaylistPlayed: (playlistId: number) => Promise<RecentPlaylistPlayback>
+  recordRecentAlbumPlayed: (album: string) => Promise<RecentAlbumPlayback>
+  recordRecentArtistPlayed: (artist: string) => Promise<RecentArtistPlayback>
   removeRecentPlayed: (songIds: number[]) => Promise<void>
   restoreRecentPlayed: (songIds: number[]) => Promise<void>
   clearRecentPlayed: () => Promise<void>

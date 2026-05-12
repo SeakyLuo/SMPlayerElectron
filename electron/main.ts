@@ -1,169 +1,59 @@
 import {
-  Menu,
   Notification,
-  Tray,
   app,
-  nativeImage,
   BrowserWindow,
   dialog,
-  globalShortcut,
   ipcMain,
   net,
   protocol,
-  screen,
   shell,
 } from 'electron'
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
-import { copyFile, mkdir, readdir, stat } from 'node:fs/promises'
+import { mkdir, stat } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { basename, dirname, extname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
-import type { JumpListCategory, OpenDialogOptions, Rectangle, SaveDialogOptions } from 'electron'
-import type {
-  AppInfo,
-  GlobalMediaCommand,
-  HiddenStorageItem,
-  LibrarySnapshot,
-  LibraryPlaylist,
-  PlaybackRuntimeSettings,
-  PlaylistSortCriterion,
-  LocalFolderSortCriterion,
-  PreferenceEntityType,
-  PreferenceLevel,
-  RemoteHostConnectRequest,
-  RemoteLibrarySnapshot,
-  SearchHistoryEntry,
-  TrackNotificationPayload,
-  VoiceRecognitionHypothesis,
-  VoiceRecognitionResult,
-  VoiceRecognitionStateChange,
-} from '../src/shared/contracts'
-import { createTranslator } from '../src/shared/i18n'
-import { SmplayerDataStore } from './services/data-store'
-import { AUDIO_EXTENSIONS, SMPLAYER_DB_NAME } from './services/constants'
+import type { AppInfo } from '../src/shared/contracts'
+import { DataService } from './services/data-service'
+import { AUDIO_EXTENSIONS } from './services/constants'
 import { OpenFileCoordinator } from './services/open-file-coordinator'
 import { RemotePlayServer } from './services/remote-play-server'
+import { resolveUserDataPath } from './services/user-data-path'
+import {
+  cancelWindowsSpeechRecognition,
+  recognizeWindowsSpeech,
+} from './services/windows-speech-recognition'
+import { registerDataIpc } from './ipc/data-ipc'
+import { registerLibraryIpc } from './ipc/library-ipc'
+import { registerRemoteIpc } from './ipc/remote-ipc'
+import { createLocalFolder, registerShellIpc } from './ipc/shell-ipc'
+import { registerWindowIpc } from './ipc/window-ipc'
+import { TrayController } from './tray-controller'
+import { WindowController } from './window-controller'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 let mainWindow: BrowserWindow | null = null
-let dataStore: SmplayerDataStore | null = null
+let libraryService: DataService | null = null
 let remotePlayServer: RemotePlayServer | null = null
-let appTray: Tray | null = null
 let isQuitting = false
-let windowDragInterval: NodeJS.Timeout | null = null
-let isWindowMiniMode = false
-let windowBoundsBeforeMiniMode: Rectangle | null = null
-let wasWindowMaximizedBeforeMiniMode = false
+const windowController = new WindowController()
+const trayController = new TrayController({
+  getWindow: () => mainWindow,
+  getAppIconPath,
+  getRootPath: () => libraryService!.settingsService.getSettingsSnapshot().rootPath,
+  getPreferredLanguage: () => libraryService!.settingsService.getSettingsSnapshot().preferredLanguage,
+  getRecentPlayedSongPaths: (limit) => libraryService!.historyService.getRecentPlayedSongPaths(limit),
+  hideWindow: () => hideMainWindow(),
+  showWindow: () => showMainWindow(),
+  openAppRoute: (route) => openAppRoute(route),
+  sendTrayCommand: (command) => sendTrayCommand(command),
+  requestQuit: () => {
+    isQuitting = true
+    app.quit()
+  },
+})
 const openFileCoordinator = new OpenFileCoordinator()
-const defaultWindowMinimumSize = { width: 506, height: 740 }
-const miniModeWindowSize = { width: 360, height: 360 }
-const windowsJumpListRecentLimit = 10
-
-function stopWindowDrag() {
-  if (windowDragInterval) {
-    clearInterval(windowDragInterval)
-    windowDragInterval = null
-  }
-}
-
-function startWindowDrag() {
-  if (!mainWindow || mainWindow.isDestroyed() || mainWindow.isMaximized()) {
-    return
-  }
-
-  stopWindowDrag()
-  const startCursor = screen.getCursorScreenPoint()
-  const [startX, startY] = mainWindow.getPosition()
-
-  windowDragInterval = setInterval(() => {
-    if (!mainWindow || mainWindow.isDestroyed()) {
-      stopWindowDrag()
-      return
-    }
-
-    const cursor = screen.getCursorScreenPoint()
-    mainWindow.setPosition(
-      Math.round(startX + cursor.x - startCursor.x),
-      Math.round(startY + cursor.y - startCursor.y),
-    )
-  }, 16)
-}
-
-function emitWindowFullScreenChange() {
-  if (!mainWindow || mainWindow.isDestroyed()) {
-    return
-  }
-
-  mainWindow.webContents.send('window:full-screen-change', mainWindow.isFullScreen())
-}
-
-function emitWindowMiniModeChange() {
-  if (!mainWindow || mainWindow.isDestroyed()) {
-    return
-  }
-
-  mainWindow.webContents.send('window:mini-mode-change', isWindowMiniMode)
-}
-
-function enterWindowMiniMode() {
-  const window = mainWindow!
-  stopWindowDrag()
-
-  if (!isWindowMiniMode) {
-    wasWindowMaximizedBeforeMiniMode = window.isMaximized()
-    if (wasWindowMaximizedBeforeMiniMode) {
-      window.unmaximize()
-    }
-    windowBoundsBeforeMiniMode = window.getBounds()
-  }
-
-  if (window.isFullScreen()) {
-    window.setFullScreen(false)
-    emitWindowFullScreenChange()
-  }
-
-  const currentBounds = window.getBounds()
-  const workArea = screen.getDisplayMatching(currentBounds).workArea
-  const x = Math.max(
-    workArea.x,
-    Math.min(currentBounds.x + currentBounds.width - miniModeWindowSize.width, workArea.x + workArea.width - miniModeWindowSize.width),
-  )
-  const y = Math.max(
-    workArea.y,
-    Math.min(currentBounds.y, workArea.y + workArea.height - miniModeWindowSize.height),
-  )
-
-  isWindowMiniMode = true
-  window.setMinimumSize(miniModeWindowSize.width, miniModeWindowSize.height)
-  window.setBounds({ x, y, ...miniModeWindowSize }, true)
-  window.setResizable(true)
-  window.setMaximizable(false)
-  window.setAlwaysOnTop(true, 'floating')
-  emitWindowMiniModeChange()
-}
-
-function exitWindowMiniMode() {
-  const window = mainWindow!
-  stopWindowDrag()
-  isWindowMiniMode = false
-  window.setAlwaysOnTop(false)
-  window.setResizable(true)
-  window.setMaximizable(true)
-  window.setMinimumSize(defaultWindowMinimumSize.width, defaultWindowMinimumSize.height)
-
-  if (windowBoundsBeforeMiniMode) {
-    window.setBounds(windowBoundsBeforeMiniMode, true)
-  }
-  if (wasWindowMaximizedBeforeMiniMode) {
-    window.maximize()
-  }
-
-  windowBoundsBeforeMiniMode = null
-  wasWindowMaximizedBeforeMiniMode = false
-  emitWindowMiniModeChange()
-}
 
 let hasShownTrayHint = false
 
@@ -197,7 +87,6 @@ const feedbackIssueUrl = 'https://github.com/SeakyLuo/SMPlayerEletron/issues'
 const feedbackEmailAddress = 'luokiss9@qq.com'
 const feedbackEmailSubject = 'Feedback about Simple Melody Player'
 const audioDialogExtensions = [...AUDIO_EXTENSIONS].map((extension) => extension.slice(1))
-const legacyUwpPackageIdentityName = '23778SeakyTheLoner.SMPlayer'
 const appWindowBackgroundColor = '#f6f8fb'
 const nightAppWindowBackgroundColor = '#101419'
 const titleBarOverlayColor = '#00000000'
@@ -222,132 +111,8 @@ const restorableRoutes = new Set([
   '/favorites',
 ])
 
-function normalizeRemoteBaseUrl(baseUrl: string) {
-  const trimmedBaseUrl = baseUrl.trim().replace(/\/+$/, '')
-  const url = new URL(/^https?:\/\//i.test(trimmedBaseUrl) ? trimmedBaseUrl : `http://${trimmedBaseUrl}`)
-  return url.toString().replace(/\/$/, '')
-}
-
-async function readRemoteJson<T>(url: string, init?: RequestInit) {
-  const response = await fetch(url, init)
-  if (!response.ok) {
-    throw new Error(`Remote request failed: ${response.status}`)
-  }
-
-  return await response.json() as T
-}
-
-async function connectRemoteHost(request: RemoteHostConnectRequest) {
-  const baseUrl = normalizeRemoteBaseUrl(request.baseUrl)
-  const info = await readRemoteJson<{
-    deviceId: string
-    deviceName: string
-    platform?: string
-  }>(`${baseUrl}/api/server/info`)
-  const localDevice = dataStore!.getRemoteShareSettings()
-  const login = await readRemoteJson<{
-    token: string
-    hostId: string
-    hostName: string
-  }>(`${baseUrl}/api/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      password: request.password,
-      deviceId: localDevice.deviceId,
-      deviceName: localDevice.deviceName,
-      platform: process.platform,
-      browser: 'Simple Melody Player',
-    }),
-  })
-  const snapshot = await readRemoteJson<{
-    songs: unknown[]
-  }>(`${baseUrl}/api/library/snapshot`, {
-    headers: { Authorization: `Bearer ${login.token}` },
-  })
-  const host = dataStore!.saveRemoteHost({
-    hostId: login.hostId || info.deviceId,
-    name: login.hostName || info.deviceName,
-    baseUrl,
-    platform: info.platform ?? '',
-    token: login.token,
-  })
-
-  return {
-    host,
-    songCount: snapshot.songs.length,
-  }
-}
-
-async function getRemoteHostLibrary(hostId: number): Promise<RemoteLibrarySnapshot> {
-  const connection = dataStore!.getRemoteHostConnection(hostId)
-  const snapshot = await readRemoteJson<LibrarySnapshot>(`${connection.host.baseUrl}/api/library/snapshot`, {
-    headers: { Authorization: `Bearer ${connection.token}` },
-  })
-
-  return {
-    host: connection.host,
-    songs: snapshot.songs.map((song) => ({
-      ...song,
-      mediaUrl: `${connection.host.baseUrl}/api/stream/${song.id}?token=${encodeURIComponent(connection.token)}`,
-      artworkUrl: '',
-    })),
-    playlists: snapshot.playlists,
-    favorites: snapshot.favorites,
-    nowPlaying: snapshot.nowPlaying,
-  }
-}
-
 if (!gotSingleInstanceLock) {
   app.quit()
-}
-
-function isWindowsStorePackage() {
-  return Boolean((process as NodeJS.Process & { windowsStore?: boolean }).windowsStore)
-}
-
-async function findUwpPackageLocalStatePath() {
-  if (process.platform !== 'win32') {
-    return null
-  }
-
-  const localAppDataPath = process.env.LOCALAPPDATA
-  if (!localAppDataPath) {
-    return null
-  }
-
-  const packagesPath = join(localAppDataPath, 'Packages')
-  let packageEntries: Array<{ name: string; isDirectory: () => boolean }>
-  try {
-    packageEntries = await readdir(packagesPath, { withFileTypes: true, encoding: 'utf8' })
-  } catch {
-    return null
-  }
-
-  const localStatePaths = packageEntries
-    .filter((entry) => entry.isDirectory() && entry.name.startsWith(`${legacyUwpPackageIdentityName}_`))
-    .map((entry) => join(packagesPath, entry.name, 'LocalState'))
-
-  const existingDatabasePaths: Array<{ localStatePath: string; updatedAt: number }> = []
-  for (const localStatePath of localStatePaths) {
-    const databasePath = join(localStatePath, SMPLAYER_DB_NAME)
-    if (existsSync(databasePath)) {
-      const databaseStats = await stat(databasePath)
-      existingDatabasePaths.push({ localStatePath, updatedAt: databaseStats.mtimeMs })
-    }
-  }
-
-  if (existingDatabasePaths.length > 0) {
-    return existingDatabasePaths
-      .reduce((latest, candidate) => candidate.updatedAt > latest.updatedAt ? candidate : latest)
-      .localStatePath
-  }
-
-  for (const localStatePath of localStatePaths) {
-    return localStatePath
-  }
-
-  return null
 }
 
 function enqueuePendingOpenFilePaths(filePaths: string[]) {
@@ -368,25 +133,6 @@ function takePendingOpenFilePaths() {
 
 async function openPendingFilePaths() {
   await openAudioFilesFromShell([...takePendingOpenFilePaths(), ...process.argv])
-}
-
-async function resolveUserDataPath() {
-  const defaultUserDataPath = app.getPath('userData')
-  const uwpLocalStatePath = await findUwpPackageLocalStatePath()
-
-  // Keep the legacy UWP LocalState as the canonical Windows data directory so
-  // Store users can move to this Electron build without a one-time copy step.
-  if (uwpLocalStatePath) {
-    await mkdir(uwpLocalStatePath, { recursive: true })
-    return uwpLocalStatePath
-  }
-
-  if (isWindowsStorePackage()) {
-    throw new Error(`Windows Store package data path was not found for ${legacyUwpPackageIdentityName}`)
-  }
-
-  await mkdir(defaultUserDataPath, { recursive: true })
-  return defaultUserDataPath
 }
 
 function getPackagedAssetPath(assetName: string) {
@@ -445,7 +191,7 @@ function getClockMinute() {
 }
 
 function getStartupNightModeActive() {
-  const settings = dataStore!.getSettingsSnapshot()
+  const settings = libraryService!.settingsService.getSettingsSnapshot()
   return settings.nightMode === 'on' || (
     settings.nightMode === 'auto' &&
     isClockMinuteInRange(
@@ -468,232 +214,9 @@ async function openVoiceAssistantPrivacySettings() {
   )
 }
 
-function escapePowerShellSingleQuotedString(value: string) {
-  return value.replace(/'/g, "''")
-}
-
-let activeVoiceRecognitionProcess: ChildProcessWithoutNullStreams | null = null
-
-type WindowsSpeechRecognitionOutput =
-  | (VoiceRecognitionHypothesis & { type: 'hypothesis' })
-  | { type: 'state'; state: string }
-  | (VoiceRecognitionResult & { type?: undefined })
-
-function cancelWindowsSpeechRecognition() {
-  activeVoiceRecognitionProcess?.kill()
-  activeVoiceRecognitionProcess = null
-}
-
-function getWindowsSpeechRecognitionScript(language: string) {
-  const cultureName = language.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en-US'
-
-  return `
-$ErrorActionPreference = 'Stop'
-[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
-$cultureName = '${escapePowerShellSingleQuotedString(cultureName)}'
-$recognizer = $null
-
-function Write-RecognitionOutput($payload) {
-  $json = $payload | ConvertTo-Json -Compress
-  [Console]::Out.WriteLine($json)
-  [Console]::Out.Flush()
-}
-
-function Await-WinRtOperation($operation, [Type]$resultType) {
-  $method = [System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object {
-    $_.Name -eq 'AsTask' -and $_.IsGenericMethodDefinition -and $_.GetParameters().Count -eq 1
-  } | Select-Object -First 1
-  $task = $method.MakeGenericMethod($resultType).Invoke($null, @($operation))
-  return $task.GetAwaiter().GetResult()
-}
-
-function Resolve-SpeechLanguage($requestedLanguageTag) {
-  [Windows.Globalization.Language, Windows.Globalization, ContentType=WindowsRuntime] | Out-Null
-  $requestedLanguage = [Windows.Globalization.Language]::new($requestedLanguageTag)
-  $supportedLanguages = [Windows.Media.SpeechRecognition.SpeechRecognizer]::SupportedTopicLanguages
-  $exactLanguage = $supportedLanguages | Where-Object { $_.LanguageTag -eq $requestedLanguage.LanguageTag } | Select-Object -First 1
-  if ($null -ne $exactLanguage) {
-    return $exactLanguage
-  }
-
-  $primaryLanguage = $requestedLanguage.LanguageTag.Split('-')[0]
-  $primaryMatch = $supportedLanguages | Where-Object { $_.LanguageTag.StartsWith($primaryLanguage) } | Select-Object -First 1
-  if ($null -ne $primaryMatch) {
-    return $primaryMatch
-  }
-
-  return [Windows.Media.SpeechRecognition.SpeechRecognizer]::SystemSpeechLanguage
-}
-
-try {
-  Add-Type -AssemblyName System.Runtime.WindowsRuntime
-  [Windows.Media.SpeechRecognition.SpeechRecognizer, Windows.Media.SpeechRecognition, ContentType=WindowsRuntime] | Out-Null
-  $recognizerLanguage = Resolve-SpeechLanguage $cultureName
-  if ($null -eq $recognizerLanguage) {
-    Write-RecognitionOutput @{ text = ''; error = 'unavailable' }
-    exit 0
-  }
-
-  $recognizer = [Windows.Media.SpeechRecognition.SpeechRecognizer]::new($recognizerLanguage)
-  $recognizer.UIOptions.IsReadBackEnabled = $false
-  $recognizer.add_HypothesisGenerated({
-    param($sender, $eventArgs)
-    if ($null -ne $eventArgs -and -not [string]::IsNullOrWhiteSpace($eventArgs.Hypothesis.Text)) {
-      Write-RecognitionOutput @{ type = 'hypothesis'; text = $eventArgs.Hypothesis.Text }
-    }
-  })
-  $recognizer.add_StateChanged({
-    param($sender, $eventArgs)
-    if ($null -ne $eventArgs) {
-      Write-RecognitionOutput @{ type = 'state'; state = $eventArgs.State.ToString() }
-    }
-  })
-  $compileResult = Await-WinRtOperation ($recognizer.CompileConstraintsAsync()) ([Windows.Media.SpeechRecognition.SpeechRecognitionCompilationResult])
-  if ($compileResult.Status -ne [Windows.Media.SpeechRecognition.SpeechRecognitionResultStatus]::Success) {
-    Write-RecognitionOutput @{ text = ''; error = 'unavailable' }
-    exit 0
-  }
-
-  Write-RecognitionOutput @{ type = 'state'; state = 'Capturing' }
-  $result = Await-WinRtOperation ($recognizer.RecognizeWithUIAsync()) ([Windows.Media.SpeechRecognition.SpeechRecognitionResult])
-  if ($null -eq $result) {
-    Write-RecognitionOutput @{ text = ''; error = 'no-speech' }
-    exit 0
-  }
-  if ($result.Status -eq [Windows.Media.SpeechRecognition.SpeechRecognitionResultStatus]::UserCanceled) {
-    Write-RecognitionOutput @{ text = ''; error = 'canceled' }
-    exit 0
-  }
-  if ($result.Status -ne [Windows.Media.SpeechRecognition.SpeechRecognitionResultStatus]::Success) {
-    Write-RecognitionOutput @{ text = ''; error = 'failed' }
-    exit 0
-  }
-  if ([string]::IsNullOrWhiteSpace($result.Text)) {
-    Write-RecognitionOutput @{ text = ''; error = 'no-speech' }
-    exit 0
-  }
-
-  Write-RecognitionOutput @{ text = $result.Text }
-} catch [System.UnauthorizedAccessException] {
-  Write-RecognitionOutput @{ text = ''; error = 'privacy-required' }
-} catch {
-  if ($_.Exception.Message -like '*speech privacy policy*') {
-    Write-RecognitionOutput @{ text = ''; error = 'privacy-required' }
-  } else {
-    Write-RecognitionOutput @{ text = ''; error = 'failed' }
-  }
-} finally {
-  if ($null -ne $recognizer) {
-    $recognizer.Dispose()
-  }
-}
-`
-}
-
-function recognizeWindowsSpeech(language: string): Promise<VoiceRecognitionResult> {
-  if (process.platform !== 'win32') {
-    return Promise.resolve({ text: '', error: 'unsupported-platform' })
-  }
-
-  return new Promise((resolve) => {
-    cancelWindowsSpeechRecognition()
-    const script = getWindowsSpeechRecognitionScript(language)
-    const encodedScript = Buffer.from(script, 'utf16le').toString('base64')
-    const child = spawn('powershell.exe', [
-      '-NoProfile',
-      '-NonInteractive',
-      '-ExecutionPolicy',
-      'Bypass',
-      '-EncodedCommand',
-      encodedScript,
-    ], {
-      windowsHide: true,
-    })
-    activeVoiceRecognitionProcess = child
-    let settled = false
-    let stdout = ''
-    let stdoutRemainder = ''
-    const finish = (result: VoiceRecognitionResult) => {
-      if (settled) {
-        return
-      }
-
-      settled = true
-      if (activeVoiceRecognitionProcess === child) {
-        activeVoiceRecognitionProcess = null
-      }
-      resolve(result)
-    }
-    const emitRecognitionState = (state: string) => {
-      let mappedState: VoiceRecognitionStateChange['state'] = 'idle'
-      if (state === 'Capturing' || state === 'SoundStarted' || state === 'SpeechDetected') {
-        mappedState = 'capturing'
-      } else if (state === 'Processing') {
-        mappedState = 'processing'
-      }
-
-      mainWindow?.webContents.send('voice:recognition-state', { state: mappedState } satisfies VoiceRecognitionStateChange)
-    }
-    const handleOutputLine = (line: string) => {
-      const output = line.trim()
-      if (!output) {
-        return
-      }
-
-      stdout += `${output}\n`
-      try {
-        const payload = JSON.parse(output) as WindowsSpeechRecognitionOutput
-        if (activeVoiceRecognitionProcess !== child) {
-          return
-        }
-
-        if (payload.type === 'hypothesis' && payload.text.trim()) {
-          mainWindow?.webContents.send('voice:recognition-hypothesis', { text: payload.text.trim() } satisfies VoiceRecognitionHypothesis)
-        } else if (payload.type === 'state' && payload.state) {
-          emitRecognitionState(payload.state)
-        }
-      } catch {
-        stdout += ''
-      }
-    }
-
-    const timeout = setTimeout(() => {
-      child.kill()
-      finish({ text: '', error: 'no-speech' })
-    }, 18000)
-
-    child.stdout.setEncoding('utf8')
-    child.stdout.on('data', (chunk: string) => {
-      stdoutRemainder += chunk
-      const lines = stdoutRemainder.split(/\r?\n/)
-      stdoutRemainder = lines.pop() ?? ''
-      lines.forEach(handleOutputLine)
-    })
-    child.on('error', () => {
-      clearTimeout(timeout)
-      finish({ text: '', error: 'failed' })
-    })
-    child.on('close', () => {
-      clearTimeout(timeout)
-      if (stdoutRemainder) {
-        handleOutputLine(stdoutRemainder)
-      }
-      try {
-        const output = stdout.trim().split(/\r?\n/).at(-1) ?? ''
-        const result = JSON.parse(output) as VoiceRecognitionResult
-        finish({
-          text: typeof result.text === 'string' ? result.text : '',
-          error: result.error,
-        })
-      } catch {
-        finish({ text: '', error: activeVoiceRecognitionProcess === child ? 'failed' : 'canceled' })
-      }
-    })
-  })
-}
-
 async function createWindow() {
   const startupNightModeActive = getStartupNightModeActive()
+  const defaultWindowMinimumSize = windowController.getDefaultMinimumSize()
   mainWindow = new BrowserWindow({
     width: 1460,
     height: 940,
@@ -714,7 +237,7 @@ async function createWindow() {
     backgroundMaterial: process.platform === 'win32' ? 'mica' : undefined,
     vibrancy: process.platform === 'darwin' ? 'under-window' : undefined,
     visualEffectState: 'active',
-    title: '简音播放器',
+    title: 'Simple Melody Player',
     icon: getAppIconPath(),
     webPreferences: {
       contextIsolation: true,
@@ -730,7 +253,7 @@ async function createWindow() {
       return
     }
 
-    if (dataStore!.getSettingsSnapshot().quitOnClose) {
+    if (libraryService!.settingsService.getSettingsSnapshot().quitOnClose) {
       return
     }
 
@@ -747,17 +270,17 @@ async function createWindow() {
     }
   })
   mainWindow.on('closed', () => {
-    stopWindowDrag()
+    windowController.stopDrag()
   })
-  mainWindow.on('enter-full-screen', emitWindowFullScreenChange)
-  mainWindow.on('leave-full-screen', emitWindowFullScreenChange)
+  mainWindow.on('enter-full-screen', () => windowController.emitFullScreenChange(mainWindow!))
+  mainWindow.on('leave-full-screen', () => windowController.emitFullScreenChange(mainWindow!))
 
   mainWindow.on('show', () => {
-    updateTrayMenu()
+    trayController.updateMenu()
   })
 
   mainWindow.on('hide', () => {
-    updateTrayMenu()
+    trayController.updateMenu()
   })
   mainWindow.once('ready-to-show', () => {
     showMainWindow()
@@ -775,7 +298,7 @@ async function createWindow() {
     return permission === 'media'
   })
 
-  const startupRoute = resolveStartupRoute(dataStore!.getSettingsSnapshot().lastPage)
+  const startupRoute = resolveStartupRoute(libraryService!.settingsService.getSettingsSnapshot().lastPage)
   if (process.env.VITE_DEV_SERVER_URL) {
     const devServerUrl = new URL(process.env.VITE_DEV_SERVER_URL)
     devServerUrl.hash = startupRoute
@@ -785,16 +308,6 @@ async function createWindow() {
     indexUrl.hash = startupRoute
     await mainWindow.loadURL(indexUrl.toString())
   }
-}
-
-function getTrayIcon() {
-  const icon = nativeImage.createFromPath(getAppIconPath())
-
-  if (process.platform === 'win32') {
-    return icon.resize({ width: 16, height: 16 })
-  }
-
-  return icon.resize({ width: 18, height: 18 })
 }
 
 function showMainWindow() {
@@ -809,47 +322,6 @@ function showMainWindow() {
   mainWindow.show()
   mainWindow.focus()
   mainWindow.webContents.send('app:tray-command', 'show-window')
-}
-
-function updateWindowsJumpList() {
-  if (process.platform !== 'win32') {
-    return
-  }
-
-  const settings = dataStore!.getSettingsSnapshot()
-  const t = createTranslator(settings.preferredLanguage, app.getLocale())
-  const canUseRecentFileCategory = app.isPackaged &&
-    !process.env.PORTABLE_EXECUTABLE_DIR &&
-    !process.env.PORTABLE_EXECUTABLE_FILE
-  const recentFileItems = canUseRecentFileCategory
-    ? dataStore!.getRecentPlayedSongPaths(windowsJumpListRecentLimit).map((filePath) => ({
-        type: 'file' as const,
-        path: filePath,
-      }))
-    : []
-  const categories: JumpListCategory[] = [
-    ...(recentFileItems.length > 0
-      ? [{
-          type: 'custom' as const,
-          name: t('common.recent'),
-          items: recentFileItems,
-        }]
-      : []),
-    {
-      type: 'tasks',
-      items: [{
-        type: 'task',
-        title: t('app.shell'),
-        description: t('app.shell'),
-        program: process.execPath,
-        args: '--smplayer-show-window',
-        iconPath: getAppIconPath(),
-        iconIndex: 0,
-      }],
-    },
-  ]
-
-  app.setJumpList(categories)
 }
 
 function hideMainWindow() {
@@ -885,131 +357,6 @@ async function trashPathIfExists(targetPath: string) {
   await shell.trashItem(targetPath)
 }
 
-function updateTrayMenu() {
-  if (!appTray) {
-    return
-  }
-
-  const isWindowVisible = Boolean(mainWindow?.isVisible())
-  const rootPath = dataStore!.getSettingsSnapshot().rootPath
-  const contextMenu = Menu.buildFromTemplate([
-    {
-      label: isWindowVisible ? '隐藏简音播放器' : '显示简音播放器',
-      click: () => {
-        if (isWindowVisible) {
-          hideMainWindow()
-        } else {
-          showMainWindow()
-        }
-      },
-    },
-    { type: 'separator' },
-    {
-      label: '播放/暂停',
-      click: () => {
-        sendGlobalMediaCommand('play-pause')
-      },
-    },
-    {
-      label: '上一首',
-      click: () => {
-        sendGlobalMediaCommand('previous')
-      },
-    },
-    {
-      label: '下一首',
-      click: () => {
-        sendGlobalMediaCommand('next')
-      },
-    },
-    {
-      label: '停止',
-      click: () => {
-        sendGlobalMediaCommand('stop')
-      },
-    },
-    { type: 'separator' },
-    {
-      label: '打开音乐文件夹',
-      enabled: Boolean(rootPath),
-      click: () => {
-        void shell.openPath(rootPath)
-      },
-    },
-    {
-      label: '扫描音乐库',
-      enabled: Boolean(rootPath),
-      click: () => {
-        sendTrayCommand('scan-library')
-      },
-    },
-    {
-      label: '设置',
-      click: () => {
-        openAppRoute('/settings')
-      },
-    },
-    { type: 'separator' },
-    {
-      label: '退出',
-      click: () => {
-        isQuitting = true
-        app.quit()
-      },
-    },
-  ])
-
-  appTray.setContextMenu(contextMenu)
-  appTray.setToolTip('简音播放器')
-}
-
-function createTray() {
-  if (appTray) {
-    return
-  }
-
-  appTray = new Tray(getTrayIcon())
-  appTray.on('double-click', () => {
-    if (mainWindow?.isVisible()) {
-      hideMainWindow()
-    } else {
-      showMainWindow()
-    }
-  })
-  appTray.on('click', () => {
-    if (mainWindow?.isVisible()) {
-      hideMainWindow()
-    } else {
-      showMainWindow()
-    }
-  })
-
-  updateTrayMenu()
-}
-
-function sendGlobalMediaCommand(command: GlobalMediaCommand) {
-  if (!mainWindow || mainWindow.webContents.isDestroyed()) {
-    return
-  }
-
-  mainWindow.webContents.send('playback:global-media-command', command)
-}
-
-function registerGlobalMediaShortcuts() {
-  const shortcuts: Array<[string, GlobalMediaCommand]> = [
-    ['MediaPlayPause', 'play-pause'],
-    ['MediaNextTrack', 'next'],
-    ['MediaPreviousTrack', 'previous'],
-    ['MediaStop', 'stop'],
-  ]
-
-  for (const [accelerator, command] of shortcuts) {
-    globalShortcut.register(accelerator, () => {
-      sendGlobalMediaCommand(command)
-    })
-  }
-}
-
 function getProtocolSongId(url: string) {
   const parsedUrl = new URL(url)
   const songId = Number(parsedUrl.pathname.slice(1))
@@ -1024,12 +371,12 @@ function getProtocolSongId(url: string) {
 function registerMediaProtocols() {
   protocol.registerFileProtocol('smplayer-media', (request, callback) => {
     const songId = getProtocolSongId(request.url)
-    callback({ path: dataStore!.getSongPath(songId) })
+    callback({ path: libraryService!.songService.getSongPath(songId) })
   })
 
   protocol.handle('smplayer-artwork', async (request) => {
     const songId = getProtocolSongId(request.url)
-    const artworkUrl = await dataStore!.getSongArtworkFileUrl(songId)
+    const artworkUrl = await libraryService!.artworkService.getSongArtworkFileUrl(songId)
     if (!artworkUrl) {
       return new Response(null, { status: 404 })
     }
@@ -1078,12 +425,12 @@ async function openAudioFilesFromShell(filePaths: string[]) {
     return
   }
 
-  if (!dataStore) {
+  if (!libraryService) {
     enqueuePendingOpenFilePaths(audioFilePaths)
     return
   }
 
-  const songIds = await dataStore.addExternalAudioFilesNextAndPlay(audioFilePaths)
+  const songIds = await libraryService.externalAudioService.addNextAndPlay(audioFilePaths)
   enqueuePendingOpenSongIds(songIds)
   mainWindow?.webContents.send('app:open-files', songIds)
   showMainWindow()
@@ -1123,10 +470,14 @@ app.on('open-file', (event, filePath) => {
 
 app.whenReady().then(async () => {
   app.setPath('userData', await resolveUserDataPath())
-  dataStore = new SmplayerDataStore(app.getPath('userData'))
-  updateWindowsJumpList()
-  remotePlayServer = new RemotePlayServer(dataStore)
-  if (dataStore.getRemoteShareSettings().shareEnabled) {
+  libraryService = new DataService(app.getPath('userData'))
+  trayController.updateWindowsJumpList()
+  remotePlayServer = new RemotePlayServer(
+    libraryService.remoteStore,
+    libraryService.musicQueryService,
+    libraryService.songService,
+  )
+  if (libraryService.remoteStore.getRemoteShareSettings().shareEnabled) {
     await remotePlayServer.start()
   }
   registerMediaProtocols()
@@ -1135,526 +486,64 @@ app.whenReady().then(async () => {
   ipcMain.handle('app:take-pending-open-files', () => {
     return takePendingOpenSongIds()
   })
-  ipcMain.handle('library:get-snapshot', () => dataStore!.getLibrarySnapshot())
-  ipcMain.handle('library:get-artwork-snapshot', (_event, songId: number) =>
-    dataStore!.getSongArtworkSnapshot(songId),
-  )
-  ipcMain.handle('library:get-artwork-snapshots', (_event, songIds: number[]) =>
-    dataStore!.getSongArtworkSnapshots(songIds),
-  )
-  ipcMain.handle('library:get-song-properties', (_event, songId: number) =>
-    dataStore!.getSongProperties(songId),
-  )
-  ipcMain.handle('library:update-song-properties', (_event, songId: number, update) =>
-    dataStore!.updateSongProperties(songId, update),
-  )
-  ipcMain.handle('library:update-song-play-count', (_event, songId: number, playCount: number) =>
-    dataStore!.updateSongPlayCount(songId, playCount),
-  )
-  ipcMain.handle('library:pick-album-artwork', async (_event, albumName: string) => {
-    const result = mainWindow
-      ? await dialog.showOpenDialog(mainWindow, {
-          title: 'Choose Album Artwork',
-          properties: ['openFile'],
-          filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp', 'bmp'] }],
-        })
-      : await dialog.showOpenDialog({
-          title: 'Choose Album Artwork',
-          properties: ['openFile'],
-          filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp', 'bmp'] }],
-        })
-
-    if (!result.canceled) {
-      dataStore!.setAlbumArtwork(albumName, result.filePaths[0]!)
-    }
+  registerLibraryIpc({
+    audioDialogExtensions,
+    getWindow: () => mainWindow,
+    getLibraryService: () => libraryService!,
+    setLibraryService: (nextLibraryService) => {
+      libraryService = nextLibraryService
+    },
+    trashPathIfExists,
+    resolveMoveConflict,
+    updateWindowsJumpList: () => trayController.updateWindowsJumpList(),
   })
-  ipcMain.handle('library:pick-album-artwork-source', async () => {
-    const dialogOptions: OpenDialogOptions = {
-      title: 'Choose Album Artwork',
-      properties: ['openFile'],
-      filters: [
-        { name: 'Artwork or Music', extensions: ['jpg', 'jpeg', 'png', 'webp', 'bmp', ...audioDialogExtensions] },
-        { name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp', 'bmp'] },
-        { name: 'Music', extensions: audioDialogExtensions },
-      ],
-    }
-    const result = mainWindow
-      ? await dialog.showOpenDialog(mainWindow, dialogOptions)
-      : await dialog.showOpenDialog(dialogOptions)
-
-    if (result.canceled || result.filePaths.length === 0) {
-      return { canceled: true, sourcePath: '', artworkUrl: '', sourceName: '' }
-    }
-
-    const sourcePath = result.filePaths[0]!
-    const sourceName = basename(sourcePath, extname(sourcePath))
-    const artworkSource = await dataStore!.prepareArtworkSource(sourcePath)
-    return {
-      canceled: false,
-      sourcePath: artworkSource.sourcePath,
-      artworkUrl: artworkSource.artworkUrl,
-      sourceName,
-    }
+  registerRemoteIpc({
+    getLibraryService: () => libraryService!,
+    getRemotePlayServer: () => remotePlayServer!,
   })
-  ipcMain.handle('library:save-album-artwork', (_event, albumName: string, sourcePath: string) =>
-    dataStore!.saveAlbumArtwork(albumName, sourcePath),
-  )
-  ipcMain.handle('library:delete-album-artwork', (_event, albumName: string) =>
-    dataStore!.deleteAlbumArtwork(albumName),
-  )
-  ipcMain.handle('library:pick-song-artwork-source', async () => {
-    const dialogOptions: OpenDialogOptions = {
-      title: 'Choose Album Artwork',
-      properties: ['openFile'],
-      filters: [
-        { name: 'Artwork or Music', extensions: ['jpg', 'jpeg', 'png', 'webp', 'bmp', ...audioDialogExtensions] },
-        { name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp', 'bmp'] },
-        { name: 'Music', extensions: audioDialogExtensions },
-      ],
-    }
-    const result = mainWindow
-      ? await dialog.showOpenDialog(mainWindow, dialogOptions)
-      : await dialog.showOpenDialog(dialogOptions)
-
-    if (result.canceled || result.filePaths.length === 0) {
-      return { canceled: true, sourcePath: '', artworkUrl: '', sourceName: '' }
-    }
-
-    const sourcePath = result.filePaths[0]!
-    const sourceName = basename(sourcePath, extname(sourcePath))
-    try {
-      const artworkSource = await dataStore!.prepareArtworkSource(sourcePath)
-      return {
-        canceled: false,
-        sourcePath: artworkSource.sourcePath,
-        artworkUrl: artworkSource.artworkUrl,
-        sourceName,
-      }
-    } catch (error) {
-      if (!(error instanceof Error) || error.message !== 'No album art found in the selected music file.') {
-        return {
-          canceled: false,
-          sourcePath: '',
-          artworkUrl: '',
-          sourceName,
-          error: 'error',
-        }
-      }
-
-      return {
-        canceled: false,
-        sourcePath: '',
-        artworkUrl: '',
-        sourceName,
-        error: 'no-artwork',
-      }
-    }
+  registerShellIpc({
+    getWindow: () => mainWindow,
+    createLocalFolder,
+    sendFeedbackEmail,
+    openFeedbackInBrowser,
+    openVoiceAssistantPrivacySettings,
+    recognizeWindowsSpeech: (language) => recognizeWindowsSpeech(language, {
+      onHypothesis: (hypothesis) => {
+        mainWindow?.webContents.send('voice:recognition-hypothesis', hypothesis)
+      },
+      onStateChange: (update) => {
+        mainWindow?.webContents.send('voice:recognition-state', update)
+      },
+    }),
+    cancelWindowsSpeechRecognition,
+    revealSystemLogs,
+    showNotifications: () => Boolean(libraryService?.settingsService.getSettingsSnapshot().showNotifications),
+    getTrackNotificationBody: (_songId) => Promise.resolve(''),
   })
-  ipcMain.handle('library:save-song-artwork', (_event, songId: number, sourcePath: string) =>
-    dataStore!.saveSongArtwork(songId, sourcePath),
-  )
-  ipcMain.handle('library:delete-song-artwork', (_event, songId: number) =>
-    dataStore!.deleteSongArtwork(songId),
-  )
-  ipcMain.handle('library:delete-song-from-disk', async (_event, songId: number) => {
-    const songPath = dataStore!.getSongPath(songId)
-    await trashPathIfExists(songPath)
-    dataStore!.deleteSong(songId)
+  registerWindowIpc({
+    getWindow: () => mainWindow!,
+    windowController,
+    appWindowBackgroundColor,
+    nightAppWindowBackgroundColor,
+    titleBarOverlayColor,
+    nightTitleBarOverlayColor,
+    defaultTitleBarSymbolColor,
+    immersiveTitleBarSymbolColor,
   })
-  ipcMain.handle('library:hide-song', (_event, songId: number) => {
-    dataStore!.hideSong(songId)
-  })
-  ipcMain.handle('library:move-song-to-folder', (_event, songId: number, folderPath: string) =>
-    dataStore!.moveSongToFolder(songId, folderPath, resolveMoveConflict),
-  )
-  ipcMain.handle('library:move-songs-to-folder', (_event, songIds: number[], folderPath: string) =>
-    dataStore!.moveSongsToFolder(songIds, folderPath, resolveMoveConflict),
-  )
-  ipcMain.handle('library:move-local-folder-to-folder', (_event, sourceFolderPath: string, targetFolderPath: string) =>
-    dataStore!.moveLocalFolderToFolder(sourceFolderPath, targetFolderPath, resolveMoveConflict),
-  )
-  ipcMain.handle('library:move-local-items-to-folder', (_event, songIds: number[], folderPaths: string[], targetFolderPath: string) =>
-    dataStore!.moveLocalItemsToFolder(songIds, folderPaths, targetFolderPath, resolveMoveConflict),
-  )
-  ipcMain.handle('library:delete-songs-from-disk', async (_event, songIds: number[]) => {
-    const songPaths = songIds.map((songId) => dataStore!.getSongPath(songId))
-    for (const songPath of songPaths) {
-      await trashPathIfExists(songPath)
-    }
-    dataStore!.deleteSongs(songIds)
-  })
-  ipcMain.handle('library:delete-local-items', async (_event, songIds: number[], folderPaths: string[]) => {
-    const songPaths = songIds
-      .map((songId) => dataStore!.getSongPath(songId))
-      .filter((songPath) => !folderPaths.some((folderPath) =>
-        songPath.startsWith(`${folderPath}\\`) || songPath.startsWith(`${folderPath}/`),
-      ))
-    for (const songPath of songPaths) {
-      await trashPathIfExists(songPath)
-    }
-    for (const folderPath of folderPaths) {
-      await trashPathIfExists(folderPath)
-    }
-    dataStore!.deleteLocalItems(songIds, folderPaths)
-  })
-  ipcMain.handle('library:update-local-folder-sort', (_event, folderPath: string, sortCriterion: LocalFolderSortCriterion) =>
-    dataStore!.updateLocalFolderSort(folderPath, sortCriterion),
-  )
-  ipcMain.handle('library:rename-local-folder', (_event, folderPath: string, name: string) =>
-    dataStore!.renameLocalFolder(folderPath, name),
-  )
-  ipcMain.handle('library:delete-local-folder', async (_event, folderPath: string) => {
-    await trashPathIfExists(folderPath)
-    dataStore!.deleteLocalFolder(folderPath)
-  })
-  ipcMain.handle('library:hide-local-folder', (_event, folderPath: string) => {
-    dataStore!.hideLocalFolder(folderPath)
-  })
-  ipcMain.handle('library:get-hidden-storage-items', () => dataStore!.getHiddenStorageItems())
-  ipcMain.handle('library:resume-hidden-storage-item', (_event, item: HiddenStorageItem) => {
-    dataStore!.resumeHiddenStorageItem(item)
-  })
-  ipcMain.handle('remote-share:get-status', () => remotePlayServer!.getStatus())
-  ipcMain.handle('remote-share:update-settings', async (_event, update) => {
-    const wasRunning = remotePlayServer!.getStatus().running
-    if (wasRunning) {
-      await remotePlayServer!.stop()
-    }
-    dataStore!.updateRemoteShareSettings(update)
-    if (update.shareEnabled || (wasRunning && update.shareEnabled !== false)) {
-      await remotePlayServer!.start()
-    }
-    return remotePlayServer!.getStatus()
-  })
-  ipcMain.handle('remote-share:start', () => remotePlayServer!.start())
-  ipcMain.handle('remote-share:stop', () => remotePlayServer!.stop())
-  ipcMain.handle('authorized-devices:list', () => dataStore!.getAuthorizedDevices())
-  ipcMain.handle('authorized-devices:update', (_event, deviceId: number, update) =>
-    dataStore!.updateAuthorizedDevice(deviceId, update),
-  )
-  ipcMain.handle('authorized-devices:delete', (_event, deviceId: number) =>
-    dataStore!.deleteAuthorizedDevice(deviceId),
-  )
-  ipcMain.handle('remote-hosts:list', () => dataStore!.getRemoteHosts())
-  ipcMain.handle('remote-hosts:connect', (_event, request: RemoteHostConnectRequest) =>
-    connectRemoteHost(request),
-  )
-  ipcMain.handle('remote-hosts:get-library', (_event, hostId: number) =>
-    getRemoteHostLibrary(hostId),
-  )
-  ipcMain.handle('remote-hosts:delete', (_event, hostId: number) =>
-    dataStore!.deleteRemoteHost(hostId),
-  )
-  ipcMain.handle('preferences:get-settings', () => dataStore!.getPreferenceSettings())
-  ipcMain.handle('lyrics:get', (_event, songId: number, mode) => dataStore!.getLyrics(songId, mode))
-  ipcMain.handle('lyrics:import', async () => {
-    const dialogOptions: OpenDialogOptions = {
-      title: 'Import Lyrics',
-      properties: ['openFile'],
-      filters: [
-        { name: 'Lyrics or Music', extensions: ['lrc', 'txt', ...audioDialogExtensions] },
-        { name: 'Lyrics', extensions: ['lrc', 'txt'] },
-        { name: 'Music', extensions: audioDialogExtensions },
-      ],
-    }
-    const result = mainWindow
-      ? await dialog.showOpenDialog(mainWindow, dialogOptions)
-      : await dialog.showOpenDialog(dialogOptions)
-
-    if (result.canceled || result.filePaths.length === 0) {
-      return { canceled: true, rawText: '' }
-    }
-
-    return {
-      canceled: false,
-      rawText: await dataStore!.readLyricsFromFile(result.filePaths[0]!),
-    }
-  })
-  ipcMain.handle('lyrics:save', (_event, songId: number, rawLyrics: string) =>
-    dataStore!.saveSongLyrics(songId, rawLyrics),
-  )
-  ipcMain.handle('lyrics:open-search-browser', (_event, songId: number) =>
-    shell.openExternal(dataStore!.getLyricsSearchUrl(songId)),
-  )
-  ipcMain.handle('lyrics:save-internet-to-file', (_event, songId: number) =>
-    dataStore!.saveInternetLyricsToFile(songId),
-  )
-  ipcMain.handle('shell:reveal-item', async (_event, itemPath: string) => {
-    await stat(itemPath)
-    shell.showItemInFolder(itemPath)
-  })
-  ipcMain.handle('window:start-drag', () => {
-    startWindowDrag()
-  })
-  ipcMain.handle('window:stop-drag', () => {
-    stopWindowDrag()
-  })
-  ipcMain.handle('window:set-controls-light', (_event, light: boolean) => {
-    mainWindow!.setBackgroundColor(light ? nightAppWindowBackgroundColor : appWindowBackgroundColor)
-    if (process.platform === 'win32') {
-      mainWindow!.setTitleBarOverlay({
-        color: light ? nightTitleBarOverlayColor : titleBarOverlayColor,
-        symbolColor: light ? immersiveTitleBarSymbolColor : defaultTitleBarSymbolColor,
-        height: 32,
-      })
-    }
-  })
-  ipcMain.handle('window:set-full-screen', (_event, fullScreen: boolean) => {
-    stopWindowDrag()
-    if (fullScreen && isWindowMiniMode) {
-      exitWindowMiniMode()
-    }
-    mainWindow!.setFullScreen(fullScreen)
-    emitWindowFullScreenChange()
-  })
-  ipcMain.handle('window:get-full-screen', () => {
-    return mainWindow!.isFullScreen()
-  })
-  ipcMain.handle('window:set-mini-mode', (_event, miniMode: boolean) => {
-    if (miniMode) {
-      enterWindowMiniMode()
-      return
-    }
-
-    exitWindowMiniMode()
-  })
-  ipcMain.handle('window:get-mini-mode', () => {
-    return isWindowMiniMode
-  })
-  ipcMain.handle('shell:create-local-folder', async (_event, rootPath: string, relativePath: string, name: string) => {
-    await mkdir(join(rootPath, relativePath, name), { recursive: true })
-  })
-  ipcMain.handle('shell:send-feedback-email', () => sendFeedbackEmail())
-  ipcMain.handle('shell:open-feedback-browser', () => openFeedbackInBrowser())
-  ipcMain.handle('shell:open-voice-assistant-privacy-settings', () => openVoiceAssistantPrivacySettings())
-  ipcMain.handle('voice:recognize', (_event, language: string) => recognizeWindowsSpeech(language))
-  ipcMain.handle('voice:cancel-recognition', () => cancelWindowsSpeechRecognition())
-  ipcMain.handle('shell:reveal-system-logs', () => revealSystemLogs())
-  ipcMain.handle('shell:show-track-notification', async (_event, track: TrackNotificationPayload) => {
-    if (!Notification.isSupported()) {
-      return
-    }
-
-    if (!dataStore?.getSettingsSnapshot().showNotifications) {
-      return
-    }
-
-    const lyricsPreview = await dataStore.getTrackNotificationBody(track.songId)
-    const defaultBody = [track.artist, track.album].filter(Boolean).join(' - ') || 'Simple Melody Player'
-
-    const notification = new Notification({
-      title: track.title,
-      body: lyricsPreview || defaultBody,
-      silent: false,
-    })
-
-    notification.on('click', () => {
-      if (!mainWindow) {
-        return
-      }
-
-      if (mainWindow.isMinimized()) {
-        mainWindow.restore()
-      }
-      mainWindow.show()
-      mainWindow.focus()
-    })
-
-    notification.show()
-  })
-  ipcMain.handle('library:pick-root', async () => {
-    const snapshot = dataStore!.getLibrarySnapshot()
-    const dialogOptions: OpenDialogOptions = {
-      title: 'Choose Music Library Folder',
-      defaultPath: snapshot.settings.rootPath || app.getPath('music'),
-      properties: ['openDirectory'],
-    }
-    const result = mainWindow
-      ? await dialog.showOpenDialog(mainWindow, dialogOptions)
-      : await dialog.showOpenDialog(dialogOptions)
-
-    if (result.canceled || result.filePaths.length === 0) {
-      return { rootPath: null }
-    }
-
-    const [rootPath] = result.filePaths
-    dataStore!.setRootPath(rootPath)
-
-    return { rootPath }
-  })
-  ipcMain.handle('library:scan', async (_event, requestedRootPath?: string) =>
-    dataStore!.scanLibrary(requestedRootPath),
-  )
-  ipcMain.handle('library:scan-folder', async (_event, folderPath: string) =>
-    dataStore!.scanLocalFolder(folderPath),
-  )
-  ipcMain.handle('data:export', async () => {
-    const dialogOptions: SaveDialogOptions = {
-      title: 'Export Data',
-      defaultPath: join(app.getPath('documents'), SMPLAYER_DB_NAME),
-      filters: [{ name: 'Simple Melody Player Database', extensions: ['db'] }],
-    }
-    const result = mainWindow
-      ? await dialog.showSaveDialog(mainWindow, dialogOptions)
-      : await dialog.showSaveDialog(dialogOptions)
-
-    if (result.canceled || !result.filePath) {
-      return { canceled: true, path: null }
-    }
-
-    dataStore!.flush()
-    await copyFile(join(app.getPath('userData'), SMPLAYER_DB_NAME), result.filePath)
-    return { canceled: false, path: result.filePath }
-  })
-  ipcMain.handle('data:import', async () => {
-    const dialogOptions: OpenDialogOptions = {
-      title: 'Import Data',
-      defaultPath: app.getPath('documents'),
-      filters: [{ name: 'Simple Melody Player Database', extensions: ['db'] }],
-      properties: ['openFile'],
-    }
-    const result = mainWindow
-      ? await dialog.showOpenDialog(mainWindow, dialogOptions)
-      : await dialog.showOpenDialog(dialogOptions)
-
-    if (result.canceled || result.filePaths.length === 0) {
-      return { canceled: true, path: null }
-    }
-
-    const [sourcePath] = result.filePaths
-    const currentRootPath = dataStore!.getSettingsSnapshot().rootPath
-    const targetPath = join(app.getPath('userData'), SMPLAYER_DB_NAME)
-    dataStore!.close()
-    await mkdir(app.getPath('userData'), { recursive: true })
-    await copyFile(sourcePath, targetPath)
-    dataStore = new SmplayerDataStore(app.getPath('userData'))
-    const importedRootPath = dataStore.getSettingsSnapshot().rootPath
-    if (currentRootPath && importedRootPath && currentRootPath !== importedRootPath) {
-      dataStore.replaceRootPathReferences(importedRootPath, currentRootPath)
-    }
-    updateWindowsJumpList()
-    return { canceled: false, path: sourcePath }
-  })
-  ipcMain.handle('library:set-favorite', (_event, songId: number, favorite: boolean) =>
-    dataStore!.setSongFavorite(songId, favorite),
-  )
-  ipcMain.handle('library:set-favorites', (_event, songIds: number[], favorite: boolean) =>
-    dataStore!.setSongsFavorite(songIds, favorite),
-  )
-  ipcMain.handle('library:update-song-duration', (_event, songId: number, duration: number) =>
-    dataStore!.updateSongDuration(songId, duration),
-  )
-  ipcMain.handle('playlist:create', (_event, name: string, songIds?: number[]) => dataStore!.createPlaylist(name, songIds))
-  ipcMain.handle('playlist:delete', (_event, playlistId: number) =>
-    dataStore!.deletePlaylist(playlistId),
-  )
-  ipcMain.handle('playlist:restore', (_event, playlist: LibraryPlaylist) =>
-    dataStore!.restorePlaylist(playlist),
-  )
-  ipcMain.handle('playlist:rename', (_event, playlistId: number, name: string) =>
-    dataStore!.renamePlaylist(playlistId, name),
-  )
-  ipcMain.handle('playlist:reorder', (_event, playlistIds: number[]) =>
-    dataStore!.reorderPlaylists(playlistIds),
-  )
-  ipcMain.handle('playlist:add-song', (_event, playlistId: number, songId: number) =>
-    dataStore!.addSongToPlaylist(playlistId, songId),
-  )
-  ipcMain.handle('playlist:add-songs', (_event, playlistId: number, songIds: number[]) =>
-    dataStore!.addSongsToPlaylist(playlistId, songIds),
-  )
-  ipcMain.handle('playlist:remove-song', (_event, playlistId: number, songId: number) =>
-    dataStore!.removeSongFromPlaylist(playlistId, songId),
-  )
-  ipcMain.handle('playlist:remove-songs', (_event, playlistId: number, songIds: number[]) =>
-    dataStore!.removeSongsFromPlaylist(playlistId, songIds),
-  )
-  ipcMain.handle('playlist:reorder-songs', (_event, playlistId: number, songIds: number[], sortCriterion?: PlaylistSortCriterion) =>
-    dataStore!.reorderPlaylistSongs(playlistId, songIds, sortCriterion),
-  )
-  ipcMain.handle('queue:replace', (_event, songIds: number[]) => dataStore!.replaceNowPlaying(songIds))
-  ipcMain.handle('queue:remove-song', (_event, songId: number) =>
-    dataStore!.removeSongFromNowPlaying(songId),
-  )
-  ipcMain.handle('queue:clear', () => dataStore!.clearNowPlaying())
-  ipcMain.handle('search:save-query', (_event, query: string) => dataStore!.saveSearchQuery(query))
-  ipcMain.handle('search:add-recent', (_event, query: string) => dataStore!.addRecentSearch(query))
-  ipcMain.handle('search:remove-recent', (_event, entryId: number) =>
-    dataStore!.removeRecentSearch(entryId),
-  )
-  ipcMain.handle('search:remove-recents', (_event, entryIds: number[]) =>
-    dataStore!.removeRecentSearches(entryIds),
-  )
-  ipcMain.handle('search:restore-recent', (_event, entry: SearchHistoryEntry) =>
-    dataStore!.restoreRecentSearch(entry),
-  )
-  ipcMain.handle('search:clear-recent', () => dataStore!.clearRecentSearches())
-  ipcMain.handle('recent-played:remove', (_event, songIds: number[]) => {
-    const result = dataStore!.removeRecentPlayed(songIds)
-    updateWindowsJumpList()
-    return result
-  })
-  ipcMain.handle('recent-played:restore', (_event, songIds: number[]) => {
-    const result = dataStore!.restoreRecentPlayed(songIds)
-    updateWindowsJumpList()
-    return result
-  })
-  ipcMain.handle('recent-played:clear', () => {
-    const result = dataStore!.clearRecentPlayed()
-    updateWindowsJumpList()
-    return result
-  })
-  ipcMain.handle('settings:update', (_event, update) => {
-    const result = dataStore!.updateSettings(update)
-    updateWindowsJumpList()
-    return result
-  })
-  ipcMain.handle('preferences:update-settings', (_event, update) =>
-    dataStore!.updatePreferenceSettings(update),
-  )
-  ipcMain.handle('preferences:add-item', (_event, type: PreferenceEntityType, itemId: string, name: string, level?: PreferenceLevel) =>
-    dataStore!.addPreferenceItem(type, itemId, name, level),
-  )
-  ipcMain.handle('preferences:update-item', (_event, itemId: number, update) =>
-    dataStore!.updatePreferenceItem(itemId, update),
-  )
-  ipcMain.handle('preferences:remove-item', (_event, itemId: number) =>
-    dataStore!.removePreferenceItem(itemId),
-  )
-  ipcMain.handle('preferences:clear-invalid', (_event, type) =>
-    dataStore!.clearInvalidPreferenceItems(type),
-  )
-  ipcMain.handle('view-state:save', (_event, update) => dataStore!.saveViewState(update))
-  ipcMain.handle('playback:save-settings', (_event, update) =>
-    dataStore!.savePlaybackSettings(update),
-  )
-  ipcMain.on('playback:get-settings-immediate', (event) => {
-    const settings = dataStore!.getSettingsSnapshot()
-    event.returnValue = {
-      volume: settings.volume,
-      isMuted: settings.isMuted,
-      mode: settings.mode,
-    } satisfies PlaybackRuntimeSettings
-  })
-  ipcMain.on('playback:save-settings-immediate', (event, update) => {
-    dataStore!.savePlaybackSettings(update)
-    event.returnValue = true
-  })
-  ipcMain.handle('playback:mark-song-played', (_event, songId: number) => {
-    const result = dataStore!.markSongPlayed(songId)
-    updateWindowsJumpList()
-    return result
+  registerDataIpc({
+    getLibraryService: () => libraryService!,
+    updateWindowsJumpList: () => trayController.updateWindowsJumpList(),
   })
 
   await createWindow()
   await openPendingFilePaths()
-  createTray()
-  registerGlobalMediaShortcuts()
+  trayController.createTray()
+  trayController.registerGlobalMediaShortcuts()
 
   app.on('activate', async () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       await createWindow()
-      createTray()
+      trayController.createTray()
       return
     }
 
@@ -1664,12 +553,12 @@ app.whenReady().then(async () => {
 
 app.on('before-quit', () => {
   isQuitting = true
-  dataStore?.flush()
+  libraryService?.flush()
   void remotePlayServer?.stop()
 })
 
 app.on('will-quit', () => {
-  globalShortcut.unregisterAll()
+  trayController.unregisterGlobalMediaShortcuts()
 })
 
 app.on('window-all-closed', () => {

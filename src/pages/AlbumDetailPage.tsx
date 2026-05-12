@@ -21,6 +21,7 @@ interface AlbumDetailPageProps {
   onAddSongsToPlaylist: (playlistId: number, songIds: number[]) => void
   onToggleFavorite?: (songId: number, favorite: boolean) => void
   onSetAlbumPreferred?: (albumName: string, level: PreferenceLevel) => void
+  onRecordAlbumPlayed: (albumName: string) => void
   onAlbumArtworkSaved: () => void
   onArtistClick: (artist: string) => void
   onAlbumClick: (album: string) => void
@@ -44,6 +45,7 @@ export function AlbumDetailPage({
   onAddSongsToPlaylist,
   onToggleFavorite,
   onSetAlbumPreferred,
+  onRecordAlbumPlayed,
   onAlbumArtworkSaved,
   onArtistClick,
   onAlbumClick,
@@ -51,7 +53,8 @@ export function AlbumDetailPage({
   canSetPreferred = true,
 }: AlbumDetailPageProps) {
   const [showArtworkDialog, setShowArtworkDialog] = useState(false)
-  const artworkUrl = songs.find((song) => song.artworkUrl)?.artworkUrl ?? ''
+  const artworkSong = songs.find((song) => song.artworkUrl) ?? songs[0]!
+  const artworkUrl = artworkSong.artworkUrl
 
   return (
     <section className="page-panel immersive-detail-page">
@@ -78,6 +81,9 @@ export function AlbumDetailPage({
         onAddSongToPlaylist={onAddSongToPlaylist}
         onAddSongsToPlaylist={onAddSongsToPlaylist}
         onToggleFavorite={onToggleFavorite}
+        onRecordPlay={() => {
+          onRecordAlbumPlayed(albumName)
+        }}
         onArtistClick={onArtistClick}
         onAlbumClick={onAlbumClick}
         onSetPreferred={(level) => {
@@ -91,6 +97,7 @@ export function AlbumDetailPage({
         <AlbumArtworkDialog
           albumName={albumName}
           artworkUrl={artworkUrl}
+          songId={artworkSong.id}
           t={t}
           onClose={() => {
             setShowArtworkDialog(false)

@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
 
 import { LoadingState } from '../components/LoadingState'
-import { getLibrarySnapshotFromDataSource, type LibraryDataSource } from '../data/libraryDataSource'
-import type { LibrarySnapshot, PlaylistSortCriterion, PreferenceLevel } from '../shared/contracts'
+import { getMusicDataFromDataSource, type MusicDataSource } from '../data/musicDataSource'
+import type { MusicData, PlaylistSortCriterion, PreferenceLevel } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
 import { PlaylistsPage } from './PlaylistsPage'
 
-interface LibraryDataSourcePlaylistsPageProps {
-  dataSource: LibraryDataSource
+interface MusicDataSourcePlaylistsPageProps {
+  dataSource: MusicDataSource
   t: Translator
   selectedTrackId: number | null
   isPlaying: boolean
@@ -32,7 +32,7 @@ interface LibraryDataSourcePlaylistsPageProps {
   routePlaylistId?: number | null
 }
 
-export function LibraryDataSourcePlaylistsPage({
+export function MusicDataSourcePlaylistsPage({
   dataSource,
   t,
   selectedTrackId,
@@ -56,8 +56,8 @@ export function LibraryDataSourcePlaylistsPage({
   onReorderPlaylistSongs,
   routeBase = '',
   routePlaylistId = null,
-}: LibraryDataSourcePlaylistsPageProps) {
-  const [snapshot, setSnapshot] = useState<LibrarySnapshot | null>(null)
+}: MusicDataSourcePlaylistsPageProps) {
+  const [snapshot, setSnapshot] = useState<MusicData | null>(null)
   const [sourceLoading, setSourceLoading] = useState(true)
   const [sourceError, setSourceError] = useState<string | null>(null)
 
@@ -66,10 +66,10 @@ export function LibraryDataSourcePlaylistsPage({
     setSourceLoading(true)
     setSourceError(null)
 
-    getLibrarySnapshotFromDataSource(dataSource)
-      .then((nextSnapshot) => {
+    getMusicDataFromDataSource(dataSource)
+      .then((nextData) => {
         if (!disposed) {
-          setSnapshot(nextSnapshot)
+          setSnapshot(nextData)
         }
       })
       .catch(() => {
@@ -116,6 +116,7 @@ export function LibraryDataSourcePlaylistsPage({
       onAddSongsToNowPlaying={onAddSongsToNowPlaying}
       onReorderPlaylists={onReorderPlaylists}
       onSetPlaylistPreferred={onSetPlaylistPreferred}
+      onRecordPlaylistPlayed={() => {}}
       onAddSongToPlaylist={onAddSongToPlaylist}
       onAddSongsToPlaylist={onAddSongsToPlaylist}
       onRemoveSongsFromPlaylist={onRemoveSongsFromPlaylist}

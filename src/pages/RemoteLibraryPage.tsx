@@ -1,19 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useParams } from 'react-router-dom'
 
-import { createRemoteLibraryDataSource } from '../data/libraryDataSource'
+import { createRemoteMusicDataSource } from '../data/musicDataSource'
 import type { Translator } from '../shared/i18n'
-import { LibraryDataSourceAlbumsPage } from './LibraryDataSourceAlbumsPage'
-import { LibraryDataSourceArtistsPage } from './LibraryDataSourceArtistsPage'
-import { LibraryDataSourceMusicPage } from './LibraryDataSourceMusicPage'
-import { LibraryDataSourcePlaylistsPage } from './LibraryDataSourcePlaylistsPage'
+import { MusicDataSourceAlbumsPage } from './LibraryDataSourceAlbumsPage'
+import { MusicDataSourceArtistsPage } from './LibraryDataSourceArtistsPage'
+import { MusicDataSourceMusicPage } from './LibraryDataSourceMusicPage'
+import { MusicDataSourcePlaylistsPage } from './LibraryDataSourcePlaylistsPage'
 
 export function RemoteLibraryPage({ t }: { t: Translator }) {
   const params = useParams()
   const location = useLocation()
   const hostId = Number(params.hostId)
   const audioRef = useRef<HTMLAudioElement | null>(null)
-  const dataSource = useMemo(() => createRemoteLibraryDataSource(hostId), [hostId])
+  const dataSource = useMemo(() => createRemoteMusicDataSource(hostId), [hostId])
   const [currentTrackId, setCurrentTrackId] = useState<number | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
 
@@ -84,7 +84,7 @@ export function RemoteLibraryPage({ t }: { t: Translator }) {
   return (
     <>
       {remoteRoute.section === 'artists' ? (
-        <LibraryDataSourceArtistsPage
+        <MusicDataSourceArtistsPage
           dataSource={dataSource}
           t={t}
           searchQuery=""
@@ -101,7 +101,7 @@ export function RemoteLibraryPage({ t }: { t: Translator }) {
           {...commonPlaybackProps}
         />
       ) : remoteRoute.section === 'albums' ? (
-        <LibraryDataSourceAlbumsPage
+        <MusicDataSourceAlbumsPage
           dataSource={dataSource}
           t={t}
           error={null}
@@ -126,7 +126,7 @@ export function RemoteLibraryPage({ t }: { t: Translator }) {
           }}
         />
       ) : remoteRoute.section === 'playlists' ? (
-        <LibraryDataSourcePlaylistsPage
+        <MusicDataSourcePlaylistsPage
           dataSource={dataSource}
           t={t}
           searchQuery=""
@@ -147,7 +147,7 @@ export function RemoteLibraryPage({ t }: { t: Translator }) {
           {...commonPlaybackProps}
         />
       ) : (
-        <LibraryDataSourceMusicPage
+        <MusicDataSourceMusicPage
           dataSource={dataSource}
           t={t}
           loading={false}

@@ -63,6 +63,7 @@ interface HeaderedPlaylistControlProps {
   onToggleFavorite?: (songId: number, favorite: boolean) => void
   onMoveToMusicOrPlay?: (songId: number) => void
   onPlayNext?: (songId: number) => void
+  onRecordPlay?: () => void
 }
 
 const sortOptions: MusicLibrarySortCriterion[] = ['title', 'artist', 'album', 'duration', 'play-count', 'date-added']
@@ -149,6 +150,7 @@ export function HeaderedPlaylistControl({
   onToggleFavorite,
   onMoveToMusicOrPlay,
   onPlayNext,
+  onRecordPlay,
 }: HeaderedPlaylistControlProps) {
   const controlRef = useRef<HTMLElement | null>(null)
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false)
@@ -280,6 +282,7 @@ export function HeaderedPlaylistControl({
 
   const shuffle = () => {
     const shuffledSongIds = shuffleSongIds(queueSongIds)
+    onRecordPlay?.()
     onPlayTrack(shuffledSongIds[0]!, shuffledSongIds)
   }
 

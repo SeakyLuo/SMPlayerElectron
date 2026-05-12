@@ -168,6 +168,7 @@ export function NowPlayingFullPage({
   const playerBarPinnedRef = useRef(false)
   const lyricScrollAnimationRef = useRef<number | null>(null)
   const activeLyricsIndexRef = useRef(-1)
+  const [isCompactImmersive, setIsCompactImmersive] = useState(() => window.matchMedia(COMPACT_IMMERSIVE_QUERY).matches)
   const isCompactImmersiveRef = useRef(window.matchMedia(COMPACT_IMMERSIVE_QUERY).matches)
   const lyricDragRef = useRef<{ pointerId: number; clientY: number; scrollTop: number; moved: boolean } | null>(null)
   const createPlaylist = useLibraryStore((state) => state.createPlaylist)
@@ -222,6 +223,7 @@ export function NowPlayingFullPage({
     const mediaQuery = window.matchMedia(COMPACT_IMMERSIVE_QUERY)
     const updateCompactImmersive = () => {
       isCompactImmersiveRef.current = mediaQuery.matches
+      setIsCompactImmersive(mediaQuery.matches)
     }
 
     updateCompactImmersive()
@@ -651,7 +653,7 @@ export function NowPlayingFullPage({
       mode,
       volume,
       isMuted,
-      isCompact: isCompactImmersiveRef.current,
+      isCompact: isCompactImmersive,
       onVolumeChange,
       onToggleMute,
       onToggleShuffle,

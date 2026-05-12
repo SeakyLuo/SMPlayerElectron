@@ -1,6 +1,6 @@
 import { startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
-import type { LibrarySnapshot, LibrarySong, PlaybackMode, PlaybackRuntimeSettings } from '../shared/contracts'
+import type { MusicData, LibrarySong, PlaybackMode, PlaybackRuntimeSettings } from '../shared/contracts'
 import {
   currentIndex,
   moveNext,
@@ -11,6 +11,7 @@ import {
 } from '../shared/mediaHelper'
 import { getNextRecoverableTrackId } from '../shared/playbackRecovery'
 import { createTranslator } from '../shared/i18n'
+import { PlaybackCommands } from '../shared/PlaybackCommands'
 import { setPlaybackProgress } from '../state/playbackProgressStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
 import { useLibraryStore } from '../state/useLibraryStore'
@@ -68,7 +69,7 @@ function getSmplayerPlaybackSettingsApi() {
   return window.smplayer as SmplayerPlaybackSettingsApi | undefined
 }
 
-function readInitialPlaybackSettings(snapshot: LibrarySnapshot): PlaybackRuntimeSettings {
+function readInitialPlaybackSettings(snapshot: MusicData): PlaybackRuntimeSettings {
   return getSmplayerPlaybackSettingsApi()?.getPlaybackSettingsImmediate?.() ?? {
     volume: snapshot.settings.volume,
     isMuted: snapshot.settings.isMuted,
@@ -76,7 +77,7 @@ function readInitialPlaybackSettings(snapshot: LibrarySnapshot): PlaybackRuntime
   }
 }
 
-export function usePlaybackController(snapshot: LibrarySnapshot, ready: boolean): PlaybackController {
+export function usePlaybackController(snapshot: MusicData, ready: boolean): PlaybackController {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const loadedTrackIdRef = useRef<number | null>(null)
   const pendingStartSecondsRef = useRef(0)
@@ -300,12 +301,7 @@ export function usePlaybackController(snapshot: LibrarySnapshot, ready: boolean)
       if (Date.now() - stalledProgressStartedAtRef.current >= PLAYBACK_STALL_TIMEOUT_MS) {
         stalledProgressStartedAtRef.current = null
         const t = createTranslator(snapshotRef.current.settings.preferredLanguage)
-        useUndoableNotificationStore.getState().show(
-          t('notification.playbackStalled'),
-          t('common.close'),
-          () => {},
-          4000,
-        )
+        useUndoableNotificationStore.getState().showMessage(t('notification.playbackStalled'), 4000)
         transitionStatus({ type: 'buffering' })
         const duration = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : durationSecondsRef.current
         if (duration > 0 && duration - audio.currentTime <= 0.5) {
@@ -614,6 +610,15 @@ export function usePlaybackController(snapshot: LibrarySnapshot, ready: boolean)
 
     await loadTrackRef.current(trackId, { autoplay: true, queueIndex, startAt: 0 })
   }, [getPlaybackSongIds, persistPlaybackSettings, recoverFromPlaybackFailure, transitionStatus])
+
+  useEffect(() => {
+    PlaybackCommands.bind({
+      playTrack,
+      getCurrentTrackId: () => currentTrackIdRef.current,
+      getCurrentQueueIndex: () => currentQueueIndexRef.current,
+      getMode: () => modeRef.current,
+    })
+  }, [playTrack])
 
   const playCurrent = useCallback(async () => {
     const audio = audioRef.current

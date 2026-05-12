@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
 
 import { LoadingState } from '../components/LoadingState'
-import { getLibrarySnapshotFromDataSource, type LibraryDataSource } from '../data/libraryDataSource'
-import type { LibrarySnapshot } from '../shared/contracts'
+import { getMusicDataFromDataSource, type MusicDataSource } from '../data/musicDataSource'
+import type { MusicData } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
 import { ArtistsPage } from './ArtistsPage'
 
-interface LibraryDataSourceArtistsPageProps {
-  dataSource: LibraryDataSource
+interface MusicDataSourceArtistsPageProps {
+  dataSource: MusicDataSource
   t: Translator
   selectedTrackId: number | null
   isPlaying: boolean
@@ -28,7 +28,7 @@ interface LibraryDataSourceArtistsPageProps {
   routeBase?: string
 }
 
-export function LibraryDataSourceArtistsPage({
+export function MusicDataSourceArtistsPage({
   dataSource,
   t,
   selectedTrackId,
@@ -48,9 +48,9 @@ export function LibraryDataSourceArtistsPage({
   onRevealSong,
   onDeleteSongFromDisk,
   routeBase = '',
-}: LibraryDataSourceArtistsPageProps) {
-  const [snapshot, setSnapshot] = useState<LibrarySnapshot | null>(null)
-  const [songs, setSongs] = useState<LibrarySnapshot['songs']>([])
+}: MusicDataSourceArtistsPageProps) {
+  const [snapshot, setSnapshot] = useState<MusicData | null>(null)
+  const [songs, setSongs] = useState<MusicData['songs']>([])
   const [sourceLoading, setSourceLoading] = useState(true)
   const [sourceError, setSourceError] = useState<string | null>(null)
 
@@ -59,10 +59,10 @@ export function LibraryDataSourceArtistsPage({
     setSourceLoading(true)
     setSourceError(null)
 
-    Promise.all([getLibrarySnapshotFromDataSource(dataSource), dataSource.getArtists()])
-      .then(([nextSnapshot, artists]) => {
+    Promise.all([getMusicDataFromDataSource(dataSource), dataSource.getArtists()])
+      .then(([nextData, artists]) => {
         if (!disposed) {
-          setSnapshot(nextSnapshot)
+          setSnapshot(nextData)
           setSongs(distinctSongs(artists.flatMap((artist) => artist.songs)))
         }
       })
@@ -112,6 +112,8 @@ export function LibraryDataSourceArtistsPage({
       onToggleFavorite={onToggleFavorite}
       onAddSongToPlaylist={onAddSongToPlaylist}
       onAddSongsToPlaylist={onAddSongsToPlaylist}
+      onRecordAlbumPlayed={() => {}}
+      onRecordArtistPlayed={() => {}}
       onRevealSong={onRevealSong}
       onDeleteSongFromDisk={onDeleteSongFromDisk}
       routeBase={routeBase}
@@ -119,7 +121,7 @@ export function LibraryDataSourceArtistsPage({
   )
 }
 
-function distinctSongs(songs: LibrarySnapshot['songs']) {
+function distinctSongs(songs: MusicData['songs']) {
   const songsById = new Map(songs.map((song) => [song.id, song]))
   return [...songsById.values()]
 }

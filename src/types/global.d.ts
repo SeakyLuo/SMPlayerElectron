@@ -1,4 +1,4 @@
-import type { SmplayerApi } from '../shared/contracts'
+﻿import type { SmplayerApi } from '../shared/contracts'
 
 declare global {
   interface Window {

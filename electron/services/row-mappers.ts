@@ -36,7 +36,7 @@ export function toSearchHistoryEntry(row: SearchHistoryRow): SearchHistoryEntry 
   }
 }
 
-export function toLibraryFolder(row: LibraryFolder): LibraryFolder {
+export function toFolder(row: LibraryFolder): LibraryFolder {
   return {
     id: Number(row.id),
     path: row.path,
@@ -59,7 +59,7 @@ export function toSongArtistRow(row: SongArtistRow): SongArtistRow {
   }
 }
 
-export function toLibraryPlaylist(
+export function toPlaylist(
   row: PlaylistRow,
   playlistSongIds: Map<number, number[]>,
   favoritesPlaylistId: number,

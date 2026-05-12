@@ -1,26 +1,27 @@
-import { Icon } from './icons'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
 
 export function InAppNotificationWithButton() {
   const notification = useUndoableNotificationStore((state) => state.notification)
-  const dismiss = useUndoableNotificationStore((state) => state.dismiss)
   const run = useUndoableNotificationStore((state) => state.run)
 
   if (!notification) {
     return null
   }
 
+  const hasActions = notification.actions.length > 0
+
   return (
-    <div className="undoable-notification" role="status">
+    <div className={hasActions ? 'undoable-notification undoable-notification-with-action' : 'undoable-notification'} role="status">
       <span className="undoable-notification-message">{notification.message}</span>
-      {notification.action ? (
-        <button className="undoable-notification-action" type="button" onClick={() => void run()}>
-          {notification.buttonText}
-        </button>
+      {hasActions ? (
+        <div className="undoable-notification-actions">
+          {notification.actions.map((action, index) => (
+            <button key={`${action.text}-${index}`} className="undoable-notification-action" type="button" onClick={() => void run(index)}>
+              {action.text}
+            </button>
+          ))}
+        </div>
       ) : null}
-      <button className="undoable-notification-close" type="button" aria-label="Close" onClick={dismiss}>
-        <Icon name="close" />
-      </button>
     </div>
   )
 }

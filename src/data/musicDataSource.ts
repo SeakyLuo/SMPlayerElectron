@@ -3,20 +3,24 @@ import type {
   LibraryCounts,
   LibraryFolder,
   LibraryPlaylist,
-  LibrarySnapshot,
+  MusicData,
   LibrarySong,
   MusicLibrarySortCriterion,
   MyFavoritesSnapshot,
   NowPlayingSnapshot,
-  RemoteLibrarySnapshot,
+  RecentAlbumPlayback,
+  RecentArtistPlayback,
+  RecentLibrarySong,
+  RecentPlaylistPlayback,
+  RemoteMusicData,
   SearchSnapshot,
   SettingsSnapshot,
 } from '../shared/contracts'
 import { getSongArtists } from '../shared/artists'
 
-export type LibraryDataSourceKind = 'local' | 'remote'
+export type MusicDataSourceKind = 'local' | 'remote'
 
-export interface LibraryArtistQueryResult {
+export interface ArtistQueryResult {
   name: string
   songs: LibrarySong[]
   songCount: number
@@ -26,7 +30,7 @@ export interface LibraryArtistQueryResult {
   artworkUrl: string
 }
 
-export interface LibraryAlbumQueryResult {
+export interface AlbumQueryResult {
   name: string
   artist: string
   songs: LibrarySong[]
@@ -36,17 +40,20 @@ export interface LibraryAlbumQueryResult {
   artworkUrl: string
 }
 
-export interface LibraryDataSource {
-  readonly kind: LibraryDataSourceKind
+export interface MusicDataSource {
+  readonly kind: MusicDataSourceKind
   readonly id: string
   readonly name: string
-  getSnapshot: () => Promise<LibrarySnapshot>
   getSettings: () => Promise<SettingsSnapshot>
   getCounts: () => Promise<LibraryCounts>
   getSongs: () => Promise<LibrarySong[]>
-  getArtists: () => Promise<LibraryArtistQueryResult[]>
-  getAlbums: () => Promise<LibraryAlbumQueryResult[]>
+  getArtists: () => Promise<ArtistQueryResult[]>
+  getAlbums: () => Promise<AlbumQueryResult[]>
   getFolders: () => Promise<LibraryFolder[]>
+  getRecentSongs: () => Promise<RecentLibrarySong[]>
+  getRecentPlaylists: () => Promise<RecentPlaylistPlayback[]>
+  getRecentAlbums: () => Promise<RecentAlbumPlayback[]>
+  getRecentArtists: () => Promise<RecentArtistPlayback[]>
   getPlaylists: () => Promise<LibraryPlaylist[]>
   getFavorites: () => Promise<MyFavoritesSnapshot>
   getNowPlaying: () => Promise<NowPlayingSnapshot>
@@ -97,24 +104,27 @@ function createRemoteSettings(musicLibrarySort: MusicLibrarySortCriterion) {
   }
 }
 
-function createSnapshotFromRemote(remoteSnapshot: RemoteLibrarySnapshot, musicLibrarySort: MusicLibrarySortCriterion): LibrarySnapshot {
-  const albums = new Set(remoteSnapshot.songs.map((song) => song.album).filter(Boolean))
-  const artists = new Set(remoteSnapshot.songs.flatMap((song) => song.artists.length > 0 ? song.artists : [song.artist]).filter(Boolean))
+function createDataFromRemote(remoteData: RemoteMusicData, musicLibrarySort: MusicLibrarySortCriterion): MusicData {
+  const albums = new Set(remoteData.songs.map((song) => song.album).filter(Boolean))
+  const artists = new Set(remoteData.songs.flatMap((song) => song.artists.length > 0 ? song.artists : [song.artist]).filter(Boolean))
 
   return {
     settings: createRemoteSettings(musicLibrarySort),
     counts: {
-      songs: remoteSnapshot.songs.length,
+      songs: remoteData.songs.length,
       artists: artists.size,
       albums: albums.size,
       folders: 0,
     },
-    songs: remoteSnapshot.songs,
+    songs: remoteData.songs,
     folders: [],
     recentSongs: [],
-    playlists: remoteSnapshot.playlists,
-    favorites: remoteSnapshot.favorites,
-    nowPlaying: remoteSnapshot.nowPlaying,
+    recentPlaylists: [],
+    recentAlbums: [],
+    recentArtists: [],
+    playlists: remoteData.playlists,
+    favorites: remoteData.favorites,
+    nowPlaying: remoteData.nowPlaying,
     search: {
       lastQuery: '',
       recentSearches: [],
@@ -122,22 +132,66 @@ function createSnapshotFromRemote(remoteSnapshot: RemoteLibrarySnapshot, musicLi
   }
 }
 
-export async function getLibrarySnapshotFromDataSource(dataSource: LibraryDataSource): Promise<LibrarySnapshot> {
-  return dataSource.getSnapshot()
+export async function getMusicDataFromDataSource(dataSource: MusicDataSource): Promise<MusicData> {
+  const [
+    settings,
+    counts,
+    songs,
+    folders,
+    recentSongs,
+    recentPlaylists,
+    recentAlbums,
+    recentArtists,
+    playlists,
+    favorites,
+    nowPlaying,
+    search,
+  ] = await Promise.all([
+    dataSource.getSettings(),
+    dataSource.getCounts(),
+    dataSource.getSongs(),
+    dataSource.getFolders(),
+    dataSource.getRecentSongs(),
+    dataSource.getRecentPlaylists(),
+    dataSource.getRecentAlbums(),
+    dataSource.getRecentArtists(),
+    dataSource.getPlaylists(),
+    dataSource.getFavorites(),
+    dataSource.getNowPlaying(),
+    dataSource.getSearch(),
+  ])
+
+  return {
+    settings,
+    counts,
+    songs,
+    folders,
+    recentSongs,
+    recentPlaylists,
+    recentAlbums,
+    recentArtists,
+    playlists,
+    favorites,
+    nowPlaying,
+    search,
+  }
 }
 
-export function createLocalLibraryDataSource(snapshot: LibrarySnapshot, updateSettings: (update: AppSettingsUpdate) => Promise<void>): LibraryDataSource {
+export function createLocalMusicDataSource(snapshot: MusicData, updateSettings: (update: AppSettingsUpdate) => Promise<void>): MusicDataSource {
   return {
     kind: 'local',
     id: 'local',
     name: 'Local',
-    getSnapshot: async () => snapshot,
     getSettings: async () => snapshot.settings,
     getCounts: async () => snapshot.counts,
     getSongs: async () => snapshot.songs,
     getArtists: async () => buildArtistQueryResults(snapshot.songs),
     getAlbums: async () => buildAlbumQueryResults(snapshot.songs),
     getFolders: async () => snapshot.folders,
+    getRecentSongs: async () => snapshot.recentSongs,
+    getRecentPlaylists: async () => snapshot.recentPlaylists,
+    getRecentAlbums: async () => snapshot.recentAlbums,
+    getRecentArtists: async () => snapshot.recentArtists,
     getPlaylists: async () => snapshot.playlists,
     getFavorites: async () => snapshot.favorites,
     getNowPlaying: async () => snapshot.nowPlaying,
@@ -147,76 +201,79 @@ export function createLocalLibraryDataSource(snapshot: LibrarySnapshot, updateSe
   }
 }
 
-export function createRemoteLibraryDataSource(hostId: number): LibraryDataSource {
-  let cachedSnapshot: RemoteLibrarySnapshot | null = null
-  let cachedLibrarySnapshot: LibrarySnapshot | null = null
-  let loadingSnapshot: Promise<LibrarySnapshot> | null = null
+export function createRemoteMusicDataSource(hostId: number): MusicDataSource {
+  let cachedRemoteData: RemoteMusicData | null = null
+  let cachedMusicData: MusicData | null = null
+  let loadingData: Promise<MusicData> | null = null
   let musicLibrarySort: MusicLibrarySortCriterion = 'title'
 
-  const loadSnapshot = async () => {
-    const nextSnapshot = await window.smplayer!.getRemoteHostLibrary(hostId)
+  const loadRemoteData = async () => {
+    const nextData = await window.smplayer!.getRemoteHostLibrary(hostId)
     const songIdMap = new Map<number, number>()
-    for (const [index, song] of nextSnapshot.songs.entries()) {
+    for (const [index, song] of nextData.songs.entries()) {
       songIdMap.set(song.id, -(index + 1))
     }
     const mapSongIds = (songIds: number[]) => songIds.map((songId) => songIdMap.get(songId)!)
-    cachedSnapshot = {
-      ...nextSnapshot,
-      songs: nextSnapshot.songs.map((song, index) => ({
+    cachedRemoteData = {
+      ...nextData,
+      songs: nextData.songs.map((song, index) => ({
         ...song,
         id: -(index + 1),
       })),
-      playlists: nextSnapshot.playlists.map((playlist) => ({
+      playlists: nextData.playlists.map((playlist) => ({
         ...playlist,
         songIds: mapSongIds(playlist.songIds),
         songCount: playlist.songIds.length,
       })),
       favorites: {
-        ...nextSnapshot.favorites,
-        songIds: mapSongIds(nextSnapshot.favorites.songIds),
+        ...nextData.favorites,
+        songIds: mapSongIds(nextData.favorites.songIds),
       },
       nowPlaying: {
-        ...nextSnapshot.nowPlaying,
-        songIds: mapSongIds(nextSnapshot.nowPlaying.songIds),
+        ...nextData.nowPlaying,
+        songIds: mapSongIds(nextData.nowPlaying.songIds),
       },
     }
-    cachedLibrarySnapshot = createSnapshotFromRemote(cachedSnapshot, musicLibrarySort)
-    return cachedLibrarySnapshot
+    cachedMusicData = createDataFromRemote(cachedRemoteData, musicLibrarySort)
+    return cachedMusicData
   }
 
-  const getSnapshot = async () => {
-    if (cachedLibrarySnapshot) {
-      return cachedLibrarySnapshot
+  const loadData = async () => {
+    if (cachedMusicData) {
+      return cachedMusicData
     }
 
-    loadingSnapshot ??= loadSnapshot().finally(() => {
-      loadingSnapshot = null
+    loadingData ??= loadRemoteData().finally(() => {
+      loadingData = null
     })
-    return await loadingSnapshot
+    return await loadingData
   }
 
   return {
     kind: 'remote',
     id: `remote:${hostId}`,
     get name() {
-      return cachedSnapshot?.host.name ?? ''
+      return cachedRemoteData?.host.name ?? ''
     },
-    getSnapshot: getSnapshot,
-    getSettings: async () => (await getSnapshot()).settings,
-    getCounts: async () => (await getSnapshot()).counts,
-    getSongs: async () => (await getSnapshot()).songs,
-    getArtists: async () => buildArtistQueryResults((await getSnapshot()).songs),
-    getAlbums: async () => buildAlbumQueryResults((await getSnapshot()).songs),
-    getFolders: async () => (await getSnapshot()).folders,
-    getPlaylists: async () => (await getSnapshot()).playlists,
-    getFavorites: async () => (await getSnapshot()).favorites,
-    getNowPlaying: async () => (await getSnapshot()).nowPlaying,
-    getSearch: async () => (await getSnapshot()).search,
+    getSettings: async () => (await loadData()).settings,
+    getCounts: async () => (await loadData()).counts,
+    getSongs: async () => (await loadData()).songs,
+    getArtists: async () => buildArtistQueryResults((await loadData()).songs),
+    getAlbums: async () => buildAlbumQueryResults((await loadData()).songs),
+    getFolders: async () => (await loadData()).folders,
+    getRecentSongs: async () => [],
+    getRecentPlaylists: async () => [],
+    getRecentAlbums: async () => [],
+    getRecentArtists: async () => [],
+    getPlaylists: async () => (await loadData()).playlists,
+    getFavorites: async () => (await loadData()).favorites,
+    getNowPlaying: async () => (await loadData()).nowPlaying,
+    getSearch: async () => (await loadData()).search,
     async updateSettings(update) {
       if (update.musicLibrarySort) {
         musicLibrarySort = update.musicLibrarySort
-        if (cachedSnapshot) {
-          cachedLibrarySnapshot = createSnapshotFromRemote(cachedSnapshot, musicLibrarySort)
+        if (cachedRemoteData) {
+          cachedMusicData = createDataFromRemote(cachedRemoteData, musicLibrarySort)
         }
       }
     },

@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto'
+﻿import { createHash, randomBytes } from 'node:crypto'
 import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
@@ -6,7 +6,9 @@ import { extname } from 'node:path'
 import { networkInterfaces } from 'node:os'
 
 import type { RemoteShareStatus } from '../../src/shared/contracts.ts'
-import type { SmplayerDataStore } from './data-store.ts'
+import type { MusicQueryService } from './music-query-service.ts'
+import type { RemoteStore } from './remote-store.ts'
+import type { SongService } from './song-service.ts'
 
 const DEFAULT_REMOTE_PORT = 8023
 
@@ -73,16 +75,24 @@ function sendNotFound(response: ServerResponse) {
 }
 
 export class RemotePlayServer {
-  private readonly dataStore: SmplayerDataStore
+  private readonly remoteStore: RemoteStore
+  private readonly musicQueryService: MusicQueryService
+  private readonly songService: SongService
   private server: Server | null = null
   private port = DEFAULT_REMOTE_PORT
 
-  constructor(dataStore: SmplayerDataStore) {
-    this.dataStore = dataStore
+  constructor(
+    remoteStore: RemoteStore,
+    musicQueryService: MusicQueryService,
+    songService: SongService,
+  ) {
+    this.remoteStore = remoteStore
+    this.musicQueryService = musicQueryService
+    this.songService = songService
   }
 
   getStatus(): RemoteShareStatus {
-    const settings = this.dataStore.getRemoteShareSettings()
+    const settings = this.remoteStore.getRemoteShareSettings()
 
     return {
       ...settings,
@@ -96,7 +106,7 @@ export class RemotePlayServer {
       return this.getStatus()
     }
 
-    const settings = this.dataStore.getRemoteShareSettings()
+    const settings = this.remoteStore.getRemoteShareSettings()
     this.port = settings.port
     this.server = createServer((request, response) => {
       void this.handleRequest(request, response)
@@ -110,13 +120,13 @@ export class RemotePlayServer {
       })
     })
 
-    this.dataStore.updateRemoteShareSettings({ shareEnabled: true })
+    this.remoteStore.updateRemoteShareSettings({ shareEnabled: true })
     return this.getStatus()
   }
 
   async stop() {
     if (!this.server) {
-      this.dataStore.updateRemoteShareSettings({ shareEnabled: false })
+      this.remoteStore.updateRemoteShareSettings({ shareEnabled: false })
       return this.getStatus()
     }
 
@@ -132,7 +142,7 @@ export class RemotePlayServer {
         resolve()
       })
     })
-    this.dataStore.updateRemoteShareSettings({ shareEnabled: false })
+    this.remoteStore.updateRemoteShareSettings({ shareEnabled: false })
     return this.getStatus()
   }
 
@@ -146,7 +156,7 @@ export class RemotePlayServer {
     }
 
     if (request.method === 'GET' && url.pathname === '/api/server/info') {
-      const settings = this.dataStore.getRemoteShareSettings()
+      const settings = this.remoteStore.getRemoteShareSettings()
       sendJson(response, 200, {
         deviceId: settings.deviceId,
         deviceName: settings.deviceName,
@@ -166,13 +176,33 @@ export class RemotePlayServer {
       return
     }
 
-    if (request.method === 'GET' && url.pathname === '/api/library/snapshot') {
-      sendJson(response, 200, this.dataStore.getLibrarySnapshot())
+    if (request.method === 'GET' && url.pathname === '/api/library/counts') {
+      sendJson(response, 200, this.musicQueryService.getCounts())
+      return
+    }
+
+    if (request.method === 'GET' && url.pathname === '/api/library/songs') {
+      sendJson(response, 200, this.musicQueryService.getSongs())
+      return
+    }
+
+    if (request.method === 'GET' && url.pathname === '/api/library/playlists') {
+      sendJson(response, 200, this.musicQueryService.getPlaylists())
+      return
+    }
+
+    if (request.method === 'GET' && url.pathname === '/api/library/favorites') {
+      sendJson(response, 200, this.musicQueryService.getFavorites())
+      return
+    }
+
+    if (request.method === 'GET' && url.pathname === '/api/library/now-playing') {
+      sendJson(response, 200, this.musicQueryService.getNowPlaying())
       return
     }
 
     if (request.method === 'GET' && url.pathname === '/api/songs') {
-      sendJson(response, 200, { songs: this.dataStore.getLibrarySnapshot().songs })
+      sendJson(response, 200, { songs: this.musicQueryService.getSongs() })
       return
     }
 
@@ -187,12 +217,12 @@ export class RemotePlayServer {
 
   private async handleLogin(request: IncomingMessage, response: ServerResponse) {
     const body = await readJsonBody(request)
-    const settings = this.dataStore.getRemoteShareSettings()
+    const settings = this.remoteStore.getRemoteShareSettings()
     const password = String(body.password ?? '')
     const deviceId = String(body.deviceId ?? '')
     const ip = getRemoteIp(request)
 
-    if (this.dataStore.isRemoteDeviceBlocked(deviceId, ip)) {
+    if (this.remoteStore.isRemoteDeviceBlocked(deviceId, ip)) {
       sendJson(response, 403, { error: 'blocked' })
       return
     }
@@ -203,7 +233,7 @@ export class RemotePlayServer {
     }
 
     const token = createToken()
-    const allowed = this.dataStore.authorizeRemoteDevice({
+    const allowed = this.remoteStore.authorizeRemoteDevice({
       deviceId,
       deviceName: String(body.deviceName ?? ''),
       platform: String(body.platform ?? ''),
@@ -230,11 +260,11 @@ export class RemotePlayServer {
       ? authorization.slice('Bearer '.length)
       : url.searchParams.get('token') ?? ''
 
-    return token ? this.dataStore.touchAuthorizedDeviceByTokenHash(hashToken(token)) : false
+    return token ? this.remoteStore.touchAuthorizedDeviceByTokenHash(hashToken(token)) : false
   }
 
   private async handleSongStream(request: IncomingMessage, response: ServerResponse, songId: number) {
-    const filePath = this.dataStore.getSongPath(songId)
+    const filePath = this.songService.getSongPath(songId)
     const fileStat = await stat(filePath)
     const range = request.headers.range
     const contentType = getContentType(filePath)

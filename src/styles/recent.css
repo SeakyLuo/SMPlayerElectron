@@ -92,6 +92,59 @@
   background: var(--accent);
 }
 
+.recent-played-filters {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 14px 2px 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-app-region: no-drag;
+}
+
+.recent-played-filters::-webkit-scrollbar {
+  display: none;
+}
+
+.recent-played-filters button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 72px;
+  min-height: 36px;
+  padding: 0 18px;
+  border: 1px solid rgba(83, 99, 121, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.5);
+  color: var(--text-strong);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 720;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.recent-played-filters button:hover {
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--accent-strong);
+}
+
+.recent-played-filters button.is-active {
+  border-color: rgba(var(--accent-rgb), 0.42);
+  background: rgba(var(--accent-rgb), 0.14);
+  color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.48);
+}
+
+.recent-played-filters svg {
+  width: 18px;
+  height: 18px;
+}
+
 .recent-commandbar {
   display: flex;
   align-items: center;
@@ -120,7 +173,8 @@
 }
 
 .recent-grid-scroll-frame,
-.recent-search-scroll-frame {
+.recent-search-scroll-frame,
+.recent-collection-scroll-frame {
   position: relative;
   display: flex;
   flex: 1 1 auto;
@@ -130,7 +184,8 @@
 }
 
 .recent-grid-shell,
-.recent-search-list {
+.recent-search-list,
+.recent-collection-scroll {
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
@@ -142,14 +197,16 @@
 }
 
 .recent-grid-shell::-webkit-scrollbar,
-.recent-search-list::-webkit-scrollbar {
+.recent-search-list::-webkit-scrollbar,
+.recent-collection-scroll::-webkit-scrollbar {
   display: none;
   width: 0;
   height: 0;
 }
 
 .recent-grid-shell *,
-.recent-search-list * {
+.recent-search-list *,
+.recent-collection-scroll * {
   -webkit-app-region: no-drag;
 }
 
@@ -195,6 +252,112 @@
 
 .recent-grid-shell {
   padding: 8px 14px 0 8px;
+}
+
+.recent-collection-scroll {
+  padding: 8px 14px 92px 8px;
+}
+
+.recent-played-panel {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.recent-collection-section {
+  flex: 0 0 auto;
+  min-width: 0;
+  padding: 0 0 12px;
+}
+
+.recent-collection-section h3 {
+  margin: 0 0 4px 8px;
+  color: var(--text-strong);
+  font-size: 15px;
+  font-weight: 680;
+}
+
+.recent-collection-section .recent-collection-scroll-frame {
+  display: block;
+  min-height: auto;
+}
+
+.recent-collection-section .recent-collection-scroll {
+  display: block;
+  overflow: visible;
+  padding: 0 14px 0 8px;
+}
+
+.recent-played-songs {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.recent-collection-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 180px);
+  justify-content: start;
+  gap: 26px 30px;
+}
+
+.recent-album-grid {
+  align-items: start;
+}
+
+.recent-artist-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 520px;
+}
+
+.recent-artist-row {
+  position: relative;
+}
+
+.recent-artist-row .artist-list-item {
+  padding-right: 46px;
+}
+
+.recent-artist-play {
+  position: absolute;
+  right: 5px;
+  top: 50%;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(-50%);
+  transition:
+    background-color 120ms ease,
+    color 120ms ease,
+    opacity 120ms ease;
+}
+
+.recent-artist-row:hover .recent-artist-play,
+.recent-artist-row:focus-within .recent-artist-play {
+  opacity: 1;
+}
+
+.recent-artist-play:hover {
+  background: rgba(var(--accent-rgb), 0.1);
+  color: var(--accent-strong);
+}
+
+.recent-artist-play svg {
+  width: 17px;
+  height: 17px;
 }
 
 .recent-search-list {
@@ -493,7 +656,7 @@
   display: flex;
   flex-direction: column;
   gap: 0;
-  padding: 2px 14px 0 0;
+  padding: 2px 22px 0 8px;
 }
 
 .recent-search-spacer {
@@ -611,6 +774,14 @@
   padding: 6px 0 0;
 }
 
+.app-shell.nav-minimal .recent-collection-scroll {
+  padding: 6px 0 92px;
+}
+
+.app-shell.nav-minimal .recent-collection-grid {
+  row-gap: 2px;
+}
+
 .app-shell.nav-minimal .recent-song-grid-window {
   row-gap: 8px;
   padding-right: 0;
@@ -636,7 +807,7 @@
 }
 
 .app-shell.nav-minimal .recent-search-list {
-  padding: 2px 0 0;
+  padding: 2px 8px 0;
 }
 
 .app-shell.nav-minimal .recent-commandbar > strong {
@@ -703,6 +874,20 @@ body.night-mode .app-shell .recent-tabs button.is-active::after {
   content: none;
 }
 
+body.night-mode .app-shell .recent-played-filters button {
+  border-color: var(--night-border);
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--night-text);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055);
+}
+
+body.night-mode .app-shell .recent-played-filters button:hover,
+body.night-mode .app-shell .recent-played-filters button.is-active {
+  border-color: rgba(var(--accent-rgb), 0.38);
+  background: rgba(var(--accent-rgb), 0.18);
+  color: color-mix(in srgb, var(--accent) 72%, #f5fbff 28%);
+}
+
 body.night-mode .app-shell .recent-appbar-tabs button {
   border-color: var(--night-border);
   border-radius: 999px;
@@ -720,6 +905,10 @@ body.night-mode .app-shell .recent-appbar-tabs button.is-active {
 }
 
 body.night-mode .app-shell .recent-commandbar > strong {
+  color: var(--night-text);
+}
+
+body.night-mode .app-shell .recent-collection-section h3 {
   color: var(--night-text);
 }
 
@@ -819,6 +1008,15 @@ body.night-mode .app-shell .recent-search-remove {
 }
 
 body.night-mode .app-shell .recent-search-remove:hover {
+  background: rgba(var(--accent-rgb), 0.18);
+  color: color-mix(in srgb, var(--accent) 72%, #f5fbff 28%);
+}
+
+body.night-mode .app-shell .recent-artist-play {
+  color: var(--night-muted);
+}
+
+body.night-mode .app-shell .recent-artist-play:hover {
   background: rgba(var(--accent-rgb), 0.18);
   color: color-mix(in srgb, var(--accent) 72%, #f5fbff 28%);
 }

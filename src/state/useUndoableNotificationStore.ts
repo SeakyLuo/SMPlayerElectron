@@ -3,16 +3,21 @@ import { create } from 'zustand'
 interface UndoableNotification {
   id: number
   message: string
-  buttonText?: string
-  action?: () => void | Promise<void>
+  actions: UndoableNotificationAction[]
+}
+
+interface UndoableNotificationAction {
+  text: string
+  action: () => void | Promise<void>
 }
 
 interface UndoableNotificationStoreState {
   notification: UndoableNotification | null
   show: (message: string, buttonText: string, action: () => void | Promise<void>, duration?: number) => void
+  showButtons: (message: string, actions: UndoableNotificationAction[], duration?: number) => void
   showMessage: (message: string, duration?: number) => void
   dismiss: () => void
-  run: () => Promise<void>
+  run: (actionIndex?: number) => Promise<void>
 }
 
 let nextNotificationId = 1
@@ -28,14 +33,16 @@ function clearDismissTimer() {
 export const useUndoableNotificationStore = create<UndoableNotificationStoreState>((set, get) => ({
   notification: null,
   show: (message, buttonText, action, duration = 5000) => {
+    get().showButtons(message, [{ text: buttonText, action }], duration)
+  },
+  showButtons: (message, actions, duration = 5000) => {
     clearDismissTimer()
     const id = nextNotificationId++
     set({
       notification: {
         id,
         message,
-        buttonText,
-        action,
+        actions,
       },
     })
     dismissTimer = window.setTimeout(() => {
@@ -44,13 +51,14 @@ export const useUndoableNotificationStore = create<UndoableNotificationStoreStat
       }
     }, duration)
   },
-  showMessage: (message, duration = 5000) => {
+  showMessage: (message, duration = 2000) => {
     clearDismissTimer()
     const id = nextNotificationId++
     set({
       notification: {
         id,
         message,
+        actions: [],
       },
     })
     dismissTimer = window.setTimeout(() => {
@@ -63,14 +71,15 @@ export const useUndoableNotificationStore = create<UndoableNotificationStoreStat
     clearDismissTimer()
     set({ notification: null })
   },
-  run: async () => {
+  run: async (actionIndex = 0) => {
     const current = get().notification
-    if (!current?.action) {
+    const action = current?.actions[actionIndex]
+    if (!action) {
       return
     }
 
     clearDismissTimer()
     set({ notification: null })
-    await current.action()
+    await action.action()
   },
 }))
