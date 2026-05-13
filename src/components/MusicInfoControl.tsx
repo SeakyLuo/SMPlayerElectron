@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 
+import { useRevealItem } from '../hooks/useRevealItem'
 import type { LibrarySong, SongPropertiesSnapshot } from '../shared/contracts'
 import { formatBytes, formatDuration } from '../shared/formatters'
 import type { Translator } from '../shared/i18n'
@@ -65,6 +66,7 @@ export function MusicInfoControl({
   onUpdateNumericProperty: (key: keyof SongPropertiesSnapshot, value: string) => void
 }) {
   const formatTagList = (value: string) => value.split(', ').join(t('common.comma'))
+  const revealItem = useRevealItem()
 
   return (
     <>
@@ -139,7 +141,7 @@ export function MusicInfoControl({
             <PropertyRow label={t('local.path')} labelClassName="PathTextBlock">
               <span className="song-dialog-inline-field music-property-inline-field">
                 <input className="path-text-box PathTextBox" value={properties.path} disabled />
-                <button type="button" className="show-in-explorer-button ShowInExplorerButton" onClick={() => window.smplayer?.revealItemInFolder(properties.path)}>{t('song.showInExplorer')}</button>
+                <button type="button" className="show-in-explorer-button ShowInExplorerButton" onClick={() => revealItem(properties.path)}>{t('song.showInExplorer')}</button>
               </span>
             </PropertyRow>
           </div>

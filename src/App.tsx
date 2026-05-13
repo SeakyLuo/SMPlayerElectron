@@ -10,9 +10,12 @@ import { ReleaseNotesDialog } from './components/ReleaseNotesDialog'
 import { Sidebar } from './components/Sidebar'
 import { Icon } from './components/icons'
 import { InAppNotificationWithButton } from './components/InAppNotificationWithButton'
+import { useAppWindowController, useWindowControlsLight } from './hooks/useAppWindowController'
 import { useOpenFilesPlayback } from './hooks/useOpenFilesPlayback'
+import { usePlaybackCommands } from './hooks/usePlaybackCommands'
 import { usePlaybackController } from './hooks/usePlaybackController'
 import { useRevealItem } from './hooks/useRevealItem'
+import { useReleaseNotesVersion } from './hooks/useReleaseNotesVersion'
 import { useScrollbarHoverClass } from './hooks/useScrollbarHoverClass'
 import { useCustomScrollbar } from './hooks/useCustomScrollbar'
 import { useSearchController } from './hooks/useSearchController'
@@ -26,12 +29,10 @@ import type { LibrarySong } from './shared/contracts'
 import { getDisplayArtists } from './shared/artists'
 import { createTranslator, resolveLocale } from './shared/i18n'
 import { getNextPlaylistName } from './shared/playlistNames'
-import { PlaybackCommands } from './shared/PlaybackCommands'
 import { quickPlay } from './shared/QuickPlayHelper'
 import { AppRoutes } from './AppRoutes'
 import {
   applyThemeColor,
-  compareAppVersions,
   getClockMinute,
   getPageTitle,
   getRouteSection,
@@ -80,36 +81,28 @@ function App() {
   const navigationType = useNavigationType()
   const [navigationDepth, setNavigationDepth] = useState(0)
   const [showNowPlayingFullPage, setShowNowPlayingFullPage] = useState(false)
-  const [isWindowFullScreen, setIsWindowFullScreen] = useState(false)
-  const [isMiniMode, setIsMiniMode] = useState(false)
   const [startupNightModeActive] = useState(() =>
     document.body.classList.contains('night-mode') || document.documentElement.classList.contains('night-mode'),
   )
   const [windowControlClockMinute, setWindowControlClockMinute] = useState(getClockMinute)
   const [isCreatePlaylistDialogOpen, setIsCreatePlaylistDialogOpen] = useState(false)
   const [pendingCreatedPlaylistName, setPendingCreatedPlaylistName] = useState('')
-  const [releaseNotesDialogVersion, setReleaseNotesDialogVersion] = useState('')
   const [compactArtistTitle, setCompactArtistTitle] = useState('')
   const [immersiveHeaderTitle, setImmersiveHeaderTitle] = useState('')
   const [isLibraryQuickJumpOpen, setIsLibraryQuickJumpOpen] = useState(false)
-  const releaseNotesCheckedRef = useRef(false)
   const revealItem = useRevealItem()
 
   const snapshot = useLibraryStore((state) => state.snapshot)
   const loading = useLibraryStore((state) => state.loading)
   const pageLoading = loading || !initialLoadComplete
   const scanning = useLibraryStore((state) => state.scanning)
-  const scanProgress = useLibraryStore((state) => state.scanProgress)
   const error = useLibraryStore((state) => state.error)
   const refresh = useLibraryStore((state) => state.refresh)
   const refreshShell = useLibraryStore((state) => state.refreshShell)
   const loadFolders = useLibraryStore((state) => state.loadFolders)
   const loadRecent = useLibraryStore((state) => state.loadRecent)
   const loadSongs = useLibraryStore((state) => state.loadSongs)
-  const pickLibraryRoot = useLibraryStore((state) => state.pickLibraryRoot)
   const scanLibrary = useLibraryStore((state) => state.scanLibrary)
-  const scanLocalFolder = useLibraryStore((state) => state.scanLocalFolder)
-  const cancelLocalFolderScan = useLibraryStore((state) => state.cancelLocalFolderScan)
   const setSongFavorite = useLibraryStore((state) => state.setSongFavorite)
   const createPlaylist = useLibraryStore((state) => state.createPlaylist)
   const deletePlaylist = useLibraryStore((state) => state.deletePlaylist)
@@ -117,34 +110,16 @@ function App() {
   const renamePlaylist = useLibraryStore((state) => state.renamePlaylist)
   const addSongToPlaylist = useLibraryStore((state) => state.addSongToPlaylist)
   const addSongsToPlaylist = useLibraryStore((state) => state.addSongsToPlaylist)
-  const removeSongsFromPlaylist = useLibraryStore((state) => state.removeSongsFromPlaylist)
-  const reorderPlaylistSongs = useLibraryStore((state) => state.reorderPlaylistSongs)
   const reorderPlaylists = useLibraryStore((state) => state.reorderPlaylists)
   const replaceNowPlaying = useLibraryStore((state) => state.replaceNowPlaying)
   const deleteSongFromDisk = useLibraryStore((state) => state.deleteSongFromDisk)
-  const createLocalFolder = useLibraryStore((state) => state.createLocalFolder)
-  const moveSongsToFolder = useLibraryStore((state) => state.moveSongsToFolder)
-  const moveLocalFolderToFolder = useLibraryStore((state) => state.moveLocalFolderToFolder)
   const moveLocalItemsToFolder = useLibraryStore((state) => state.moveLocalItemsToFolder)
-  const deleteLocalItems = useLibraryStore((state) => state.deleteLocalItems)
-  const updateLocalFolderSort = useLibraryStore((state) => state.updateLocalFolderSort)
-  const hideLocalFolder = useLibraryStore((state) => state.hideLocalFolder)
-  const renameLocalFolder = useLibraryStore((state) => state.renameLocalFolder)
-  const deleteLocalFolder = useLibraryStore((state) => state.deleteLocalFolder)
-  const resumeHiddenStorageItem = useLibraryStore((state) => state.resumeHiddenStorageItem)
   const clearNowPlaying = useLibraryStore((state) => state.clearNowPlaying)
   const saveSearchQuery = useLibraryStore((state) => state.saveSearchQuery)
   const addRecentSearch = useLibraryStore((state) => state.addRecentSearch)
   const removeRecentSearch = useLibraryStore((state) => state.removeRecentSearch)
-  const removeRecentSearches = useLibraryStore((state) => state.removeRecentSearches)
   const restoreRecentSearch = useLibraryStore((state) => state.restoreRecentSearch)
   const clearRecentSearches = useLibraryStore((state) => state.clearRecentSearches)
-  const recordRecentPlaylistPlayed = useLibraryStore((state) => state.recordRecentPlaylistPlayed)
-  const recordRecentAlbumPlayed = useLibraryStore((state) => state.recordRecentAlbumPlayed)
-  const recordRecentArtistPlayed = useLibraryStore((state) => state.recordRecentArtistPlayed)
-  const removeRecentPlayed = useLibraryStore((state) => state.removeRecentPlayed)
-  const restoreRecentPlayed = useLibraryStore((state) => state.restoreRecentPlayed)
-  const clearRecentPlayed = useLibraryStore((state) => state.clearRecentPlayed)
   const updateSettings = useLibraryStore((state) => state.updateSettings)
   const saveViewState = useLibraryStore((state) => state.saveViewState)
   const showUndoableNotification = useUndoableNotificationStore((state) => state.show)
@@ -164,6 +139,13 @@ function App() {
     ],
   })
   const [localRelativePath, setLocalRelativePath] = useState('')
+  const handleEnterMiniMode = useCallback(() => {
+    setShowNowPlayingFullPage(false)
+  }, [])
+  const appWindow = useAppWindowController({
+    onScanLibrary: scanLibrary,
+    onEnterMiniMode: handleEnterMiniMode,
+  })
   const settingsNightModeActive = snapshot.settings.nightMode === 'on' || (
     snapshot.settings.nightMode === 'auto' &&
     isClockMinuteInRange(
@@ -176,7 +158,8 @@ function App() {
   const isRouteImmersiveForWindowControls = isAlbumDetailRoute(location.pathname) ||
     isPlaylistDetailRoute(location.pathname) ||
     (location.pathname === '/albums' && new URLSearchParams(location.search).has('album'))
-  const usesLightWindowControls = isMiniMode || nightModeActive || (isNavigationMinimal && isRouteImmersiveForWindowControls)
+  const usesLightWindowControls = appWindow.isMiniMode || nightModeActive || (isNavigationMinimal && isRouteImmersiveForWindowControls)
+  useWindowControlsLight(usesLightWindowControls)
 
   useEffect(() => {
     document.documentElement.classList.toggle('night-mode', nightModeActive)
@@ -192,30 +175,6 @@ function App() {
   }, [nightModeActive])
 
   useEffect(() => {
-    void window.smplayer?.setWindowControlsLight(usesLightWindowControls)
-  }, [usesLightWindowControls])
-
-  useEffect(() => {
-    void window.smplayer?.getWindowFullScreen().then(setIsWindowFullScreen)
-    return window.smplayer?.onWindowFullScreenChange(setIsWindowFullScreen)
-  }, [])
-
-  useEffect(() => {
-    void window.smplayer?.getWindowMiniMode().then((miniMode) => {
-      setIsMiniMode(miniMode)
-      if (miniMode) {
-        setShowNowPlayingFullPage(false)
-      }
-    })
-    return window.smplayer?.onWindowMiniModeChange((miniMode) => {
-      setIsMiniMode(miniMode)
-      if (miniMode) {
-        setShowNowPlayingFullPage(false)
-      }
-    })
-  }, [])
-
-  useEffect(() => {
     const interval = window.setInterval(() => {
       setWindowControlClockMinute(getClockMinute())
     }, 60_000)
@@ -224,14 +183,6 @@ function App() {
       window.clearInterval(interval)
     }
   }, [])
-
-  useEffect(() => {
-    return window.smplayer?.onTrayCommand((command) => {
-      if (command === 'scan-library') {
-        void scanLibrary()
-      }
-    })
-  }, [scanLibrary])
 
   useEffect(() => {
     if (!pendingCreatedPlaylistName) {
@@ -246,23 +197,21 @@ function App() {
     }
   }, [navigate, pendingCreatedPlaylistName, saveViewState, snapshot.playlists])
 
-  useEffect(() => {
-    if (!initialLoadComplete || releaseNotesCheckedRef.current) {
-      return
-    }
-
-    releaseNotesCheckedRef.current = true
-    void window.smplayer?.getAppInfo().then((appInfo) => {
-      if (
-        snapshot.settings.lastReleaseNotesVersion &&
-        compareAppVersions(appInfo.version, snapshot.settings.lastReleaseNotesVersion) > 0
-      ) {
-        setReleaseNotesDialogVersion(appInfo.version)
-      }
-    })
-  }, [initialLoadComplete, snapshot.settings.lastReleaseNotesVersion])
+  const {
+    releaseNotesDialogVersion,
+    setReleaseNotesDialogVersion,
+  } = useReleaseNotesVersion({
+    ready: initialLoadComplete,
+    lastReleaseNotesVersion: snapshot.settings.lastReleaseNotesVersion,
+  })
 
   const playback = usePlaybackController(snapshot, initialLoadComplete)
+  const playbackCommands = usePlaybackCommands({
+    playTrack: playback.playTrack,
+    currentTrackId: playback.currentTrackId,
+    currentQueueIndex: playback.currentQueueIndex,
+    mode: playback.mode,
+  })
   const {
     searchInput,
     submittedSearchQuery,
@@ -278,7 +227,6 @@ function App() {
   })
   const routeScrollKey = `${location.pathname}${location.search}`
   const routeSearchParams = useMemo(() => new URLSearchParams(location.search), [location.search])
-  const targetArtistQuery = routeSearchParams.get('artist')
   const targetAlbumQuery = routeSearchParams.get('album')
   const currentRouteSection = getRouteSection(location.pathname)
   const isInAlbumDetail = isAlbumDetailRoute(location.pathname) || (location.pathname === '/albums' && targetAlbumQuery != null)
@@ -431,7 +379,7 @@ function App() {
   useOpenFilesPlayback({
     songs: snapshot.songs,
     refresh: refreshOpenFilesPlayback,
-    playTrack: PlaybackCommands.playTrack,
+    playTrack: playbackCommands.playTrack,
   })
 
   useEffect(() => {
@@ -561,18 +509,19 @@ function App() {
       folders: currentSnapshot.folders,
       preferences,
     })
-    await PlaybackCommands.setMusicAndPlay(songIds)
+    await playbackCommands.setMusicAndPlay(songIds)
   }
 
   async function quickPlayPlaylist(playlistId: number) {
     const playlist = snapshot.playlists.find((item) => item.id === playlistId)!
-    await PlaybackCommands.setMusicAndPlay(playlist.songIds)
+    await playbackCommands.setMusicAndPlay(playlist.songIds)
   }
 
   const voiceAssistant = useVoiceAssistantController({
     snapshot,
     songsById,
     playback,
+    playbackCommands,
     t,
     playQuick,
     commitSearchQuery,
@@ -625,23 +574,7 @@ function App() {
       return
     }
 
-    event.currentTarget.setPointerCapture(event.pointerId)
-    void window.smplayer?.startWindowDrag()
-  }
-
-  const stopMinimalTitlebarDrag = () => {
-    void window.smplayer?.stopWindowDrag()
-  }
-
-  const enterMiniMode = () => {
-    setShowNowPlayingFullPage(false)
-    setIsMiniMode(true)
-    void window.smplayer?.setWindowMiniMode(true)
-  }
-
-  const exitMiniMode = () => {
-    setIsMiniMode(false)
-    void window.smplayer?.setWindowMiniMode(false)
+    appWindow.startWindowDrag(event)
   }
 
   useEffect(() => {
@@ -697,7 +630,7 @@ function App() {
     voiceLanguage: resolveLocale(snapshot.settings.preferredLanguage),
   }
 
-  if (isMiniMode) {
+  if (appWindow.isMiniMode) {
     return (
       <MiniModePage
         track={playerTrack}
@@ -714,7 +647,7 @@ function App() {
             void setSongFavorite(playback.currentTrack.id, !playback.currentTrack.favorite)
           }
         }}
-        onExitMiniMode={exitMiniMode}
+        onExitMiniMode={appWindow.exitMiniMode}
         onArtworkResolved={(trackId, artworkUrl) => {
           setResolvedArtwork({ trackId, artworkUrl })
         }}
@@ -730,9 +663,9 @@ function App() {
         <div
           className="minimal-titlebar"
           onPointerDownCapture={startMinimalTitlebarDrag}
-          onPointerUpCapture={stopMinimalTitlebarDrag}
-          onPointerCancelCapture={stopMinimalTitlebarDrag}
-          onLostPointerCapture={stopMinimalTitlebarDrag}
+          onPointerUpCapture={appWindow.stopWindowDrag}
+          onPointerCancelCapture={appWindow.stopWindowDrag}
+          onLostPointerCapture={appWindow.stopWindowDrag}
         >
           {canNavigateBack ? (
             <button
@@ -867,7 +800,7 @@ function App() {
                   commitDirectorySearchQuery(query, folderRelativePath)
                 }}
                 onPlayTrack={(trackId, queueSongIds) => {
-                  void PlaybackCommands.playTrackInQueue(trackId, queueSongIds)
+                  void playbackCommands.playTrackInQueue(trackId, queueSongIds)
                 }}
                 onAddSongsToNowPlaying={(songIds) => {
                   void replaceNowPlaying([...snapshot.nowPlaying.songIds, ...songIds])
@@ -912,7 +845,7 @@ function App() {
                   commitDirectorySearchQuery(query, folderRelativePath)
                 }}
                 onPlayTrack={(trackId, queueSongIds) => {
-                  void PlaybackCommands.playTrackInQueue(trackId, queueSongIds)
+                  void playbackCommands.playTrackInQueue(trackId, queueSongIds)
                 }}
                 onAddSongsToNowPlaying={(songIds) => {
                   void replaceNowPlaying([...snapshot.nowPlaying.songIds, ...songIds])
@@ -957,62 +890,20 @@ function App() {
               scanning,
               error,
               playback,
-              pickLibraryRoot,
-              scanLibrary,
-              setSongFavorite,
-              addSongToPlaylist,
-              addSongsToPlaylist,
-              replaceNowPlaying,
-              createPlaylist,
+              playbackCommands,
               revealItem,
-              deleteSongFromDisk,
-              targetArtistQuery,
-              recordRecentAlbumPlayed,
-              recordRecentArtistPlayed,
-              addRecentSearch,
               setCompactArtistTitle,
-              targetAlbumQuery,
-              updateSettings,
-              clearNowPlaying,
               setShowNowPlayingFullPage,
               showCount,
-              removeRecentPlayed,
-              restoreRecentPlayed,
-              clearRecentPlayed,
-              removeRecentSearches,
-              clearRecentSearches,
               commitSearchQuery,
               localRelativePath,
-              scanProgress,
-              scanLocalFolder,
-              cancelLocalFolderScan,
               setLocalRelativePath,
-              createLocalFolder,
-              renameLocalFolder,
-              deleteLocalFolder,
-              hideLocalFolder,
-              moveSongsToFolder,
-              moveLocalFolderToFolder,
-              deleteLocalItems,
-              updateLocalFolderSort,
               commitDirectorySearchQuery,
-              navigate,
-              resumeHiddenStorageItem,
-              saveViewState,
-              deletePlaylist,
-              showUndoableNotification,
-              restorePlaylist,
-              renamePlaylist,
-              reorderPlaylists,
-              recordRecentPlaylistPlayed,
-              removeSongsFromPlaylist,
-              reorderPlaylistSongs,
               searchResultQuery,
               submittedSearchQuery,
               searchResultsLoading,
               searchFolderPath,
               searchFolderName,
-              location,
             }}
           />
         </main>
@@ -1046,13 +937,13 @@ function App() {
             setShowNowPlayingFullPage(false)
           }}
           onPlayTrack={(trackId, queueSongIds, queueIndex) => {
-            void PlaybackCommands.playTrack(trackId, queueSongIds, queueIndex)
+            void playbackCommands.playTrack(trackId, queueSongIds, queueIndex)
           }}
           onReplaceQueue={(songIds) => {
             void replaceNowPlaying(songIds)
           }}
           onPlayNext={(songId, queueIndex) => {
-            void PlaybackCommands.playNext(songId, queueIndex)
+            void playbackCommands.playNext(songId, queueIndex)
           }}
           onAddSongToPlaylist={(playlistId, songId) => {
             void addSongToPlaylist(playlistId, songId)
@@ -1100,18 +991,14 @@ function App() {
             void playQuick()
           }}
           onPlayTrack={(trackId, queueSongIds) => {
-            void PlaybackCommands.playTrackInQueue(trackId, queueSongIds)
+            void playbackCommands.playTrackInQueue(trackId, queueSongIds)
           }}
           onOpenNowPlaying={() => {
             setShowNowPlayingFullPage(true)
           }}
-          isWindowFullScreen={isWindowFullScreen}
-          onToggleWindowFullScreen={() => {
-            const nextFullScreen = !isWindowFullScreen
-            setIsWindowFullScreen(nextFullScreen)
-            void window.smplayer?.setWindowFullScreen(nextFullScreen)
-          }}
-          onEnterMiniMode={enterMiniMode}
+          isWindowFullScreen={appWindow.isWindowFullScreen}
+          onToggleWindowFullScreen={appWindow.toggleWindowFullScreen}
+          onEnterMiniMode={appWindow.enterMiniMode}
           onArtworkResolved={(trackId, artworkUrl) => {
             setResolvedArtwork({ trackId, artworkUrl })
           }}

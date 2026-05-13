@@ -3,6 +3,12 @@ import { useEffect, useRef, useState } from 'react'
 const artworkUrlCache = new Map<number, string>()
 const artworkRequestCache = new Map<number, Promise<string>>()
 const resolvedArtworkSongIds = new Set<number>()
+const artworkBatchSongIds = new Set<number>()
+const artworkBatchResolvers = new Map<number, Array<{
+  resolve: (artworkUrl: string) => void
+  reject: (error: unknown) => void
+}>>()
+let artworkBatchTimer = 0
 
 function isGeneratedSongArtworkUrl(artworkUrl: string) {
   return artworkUrl.startsWith('smplayer-artwork://')
@@ -26,6 +32,56 @@ function versionArtworkUrl(artworkUrl: string, version: number) {
   }
 
   return `${artworkUrl}${artworkUrl.includes('?') ? '&' : '?'}v=${version}`
+}
+
+function requestBatchedArtworkSnapshot(songId: number) {
+  const request = new Promise<string>((resolve, reject) => {
+    artworkBatchSongIds.add(songId)
+    const resolvers = artworkBatchResolvers.get(songId)
+    if (resolvers) {
+      resolvers.push({ resolve, reject })
+    } else {
+      artworkBatchResolvers.set(songId, [{ resolve, reject }])
+    }
+
+    if (artworkBatchTimer === 0) {
+      artworkBatchTimer = window.setTimeout(flushArtworkBatch, 0)
+    }
+  })
+
+  return request
+}
+
+function flushArtworkBatch() {
+  artworkBatchTimer = 0
+  const requestSongIds = [...artworkBatchSongIds]
+  artworkBatchSongIds.clear()
+
+  void window.smplayer!.getSongArtworkSnapshots(requestSongIds)
+    .then((snapshots) => {
+      const snapshotsBySongId = new Map(snapshots.map((snapshot) => [snapshot.songId, snapshot.artworkUrl]))
+      for (const songId of requestSongIds) {
+        const artworkUrl = snapshotsBySongId.get(songId) ?? ''
+        artworkUrlCache.set(songId, artworkUrl)
+        resolvedArtworkSongIds.add(songId)
+        artworkRequestCache.delete(songId)
+        const resolvers = artworkBatchResolvers.get(songId)!
+        artworkBatchResolvers.delete(songId)
+        for (const resolver of resolvers) {
+          resolver.resolve(artworkUrl)
+        }
+      }
+    })
+    .catch((error) => {
+      for (const songId of requestSongIds) {
+        artworkRequestCache.delete(songId)
+        const resolvers = artworkBatchResolvers.get(songId)!
+        artworkBatchResolvers.delete(songId)
+        for (const resolver of resolvers) {
+          resolver.reject(error)
+        }
+      }
+    })
 }
 
 export function primeSongArtwork(songId: number, artworkUrl: string) {
@@ -52,17 +108,7 @@ export async function resolveSongArtwork(songId: number, artworkUrl = '', force 
     return artworkRequestCache.get(songId)!
   }
 
-  const request = window.smplayer!.getSongArtworkSnapshot(songId)
-    .then((snapshot) => {
-      artworkUrlCache.set(songId, snapshot.artworkUrl)
-      resolvedArtworkSongIds.add(songId)
-      artworkRequestCache.delete(songId)
-      return snapshot.artworkUrl
-    })
-    .catch((error) => {
-      artworkRequestCache.delete(songId)
-      throw error
-    })
+  const request = requestBatchedArtworkSnapshot(songId)
 
   artworkRequestCache.set(songId, request)
   return request

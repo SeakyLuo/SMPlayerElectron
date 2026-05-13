@@ -1,15 +1,16 @@
 import { getDisplayArtists, getSongArtists } from '../shared/artists'
 import type { LibrarySong, MusicData } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
-import { PlaybackCommands } from '../shared/PlaybackCommands'
 import { ByArtistRequest, MatchType, VoiceAssistantHelper, type VolumeRequest } from '../shared/VoiceAssistantHelper'
 import { findBest, findSongsInFolder, getFolderName } from '../appModel'
+import type { PlaybackCommands } from './usePlaybackCommands'
 import type { PlaybackController } from './usePlaybackController'
 
 interface VoiceAssistantControllerOptions {
   snapshot: MusicData
   songsById: Map<number, LibrarySong>
   playback: PlaybackController
+  playbackCommands: PlaybackCommands
   t: Translator
   playQuick: () => Promise<void>
   commitSearchQuery: (query: string) => Promise<void>
@@ -19,16 +20,17 @@ export function useVoiceAssistantController({
   snapshot,
   songsById,
   playback,
+  playbackCommands,
   t,
   playQuick,
   commitSearchQuery,
 }: VoiceAssistantControllerOptions) {
   async function playVoiceSongIds(songIds: number[]) {
-    await PlaybackCommands.setMusicAndPlay(songIds)
+    await playbackCommands.setMusicAndPlay(songIds)
   }
 
   async function playVoiceSong(song: LibrarySong) {
-    await PlaybackCommands.playOrAddNext(song.id)
+    await playbackCommands.playOrAddNext(song.id)
   }
 
   function findVoiceArtist(query: string) {

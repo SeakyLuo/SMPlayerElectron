@@ -139,6 +139,7 @@ export function buildSearchResults(
         .sort(sortByScoreThenTitle)
         .map((result) => result.entity)
     : []
+  const matchedSongIds = new Set(matchedSongs.map((song) => song.id))
   const artists = buildArtistResults(songs, matchedSongs, normalizedQuery, t)
   const albums = buildAlbumResults(songs, matchedSongs, normalizedQuery, t)
   const folderResults = buildFolderResults(songs, folders, matchedSongs, rootPath, normalizedQuery, t)
@@ -148,7 +149,7 @@ export function buildSearchResults(
       entity: playlist,
       score: Math.max(
         evaluateString(playlist.name, normalizedQuery),
-        playlist.songIds.some((songId) => matchedSongs.some((song) => song.id === songId)) ? 1 : 0,
+        playlist.songIds.some((songId) => matchedSongIds.has(songId)) ? 1 : 0,
       ),
     }))
     .filter((result) => result.score > 0)
@@ -189,7 +190,12 @@ function buildArtistResults(
   for (const song of allSongs) {
     for (const artist of getSongArtists(song, t('common.artistUnknown'))) {
       if (artist.toLocaleLowerCase().includes(normalizedQuery)) {
-        groups.set(artist, [...(groups.get(artist) ?? []), song])
+        const artistSongs = groups.get(artist)
+        if (artistSongs) {
+          artistSongs.push(song)
+        } else {
+          groups.set(artist, [song])
+        }
       }
     }
   }
@@ -233,7 +239,12 @@ function buildAlbumResults(
       album.toLocaleLowerCase().includes(normalizedQuery) ||
       artists.some((artist) => artist.toLocaleLowerCase().includes(normalizedQuery))
     ) {
-      groups.set(album, [...(groups.get(album) ?? []), song])
+      const albumSongs = groups.get(album)
+      if (albumSongs) {
+        albumSongs.push(song)
+      } else {
+        groups.set(album, [song])
+      }
     }
   }
 
@@ -291,11 +302,22 @@ function buildFolderResults(
   }
 
   const songsByFolder = new Map<string, LibrarySong[]>()
+  const normalizedCandidateFolderPathByPath = new Map(
+    [...candidateFolderPaths].map((folderPath) => [normalizeFolderPath(folderPath), folderPath]),
+  )
   for (const song of allSongs) {
-    for (const candidateFolderPath of candidateFolderPaths) {
-      if (isSongUnderFolder(song.path, candidateFolderPath)) {
-        songsByFolder.set(candidateFolderPath, [...(songsByFolder.get(candidateFolderPath) ?? []), song])
+    let currentFolderPath = normalizeFolderPath(getFolderPath(song.path))
+    while (currentFolderPath) {
+      const candidateFolderPath = normalizedCandidateFolderPathByPath.get(currentFolderPath)
+      if (candidateFolderPath) {
+        const folderSongs = songsByFolder.get(candidateFolderPath)
+        if (folderSongs) {
+          folderSongs.push(song)
+        } else {
+          songsByFolder.set(candidateFolderPath, [song])
+        }
       }
+      currentFolderPath = getParentFolderPath(currentFolderPath)
     }
   }
 
@@ -408,6 +430,15 @@ function sortByScoreThenTitle(
 function getFolderPath(filePath: string) {
   const separatorIndex = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'))
   return separatorIndex >= 0 ? filePath.slice(0, separatorIndex) : ''
+}
+
+function getParentFolderPath(folderPath: string) {
+  const separatorIndex = folderPath.lastIndexOf('/')
+  return separatorIndex > 0 ? folderPath.slice(0, separatorIndex) : ''
+}
+
+function normalizeFolderPath(folderPath: string) {
+  return folderPath.replace(/\\/g, '/').replace(/\/+$/, '')
 }
 
 function getPathLabel(path: string) {

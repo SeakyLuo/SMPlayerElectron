@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { AlbumArtControl } from '../components/AlbumArtControl'
@@ -10,6 +10,7 @@ import { getAddToPlaylistMenuFlyoutItem, getPreferenceMenuFlyoutItem, type MenuF
 import { MusicMenuFlyout, type MusicMenuFlyoutState } from '../components/MusicMenuFlyout'
 import { MultiSelectCommandBar } from '../components/MultiSelectCommandBar'
 import { PlaylistControlItem } from '../components/PlaylistControlItem'
+import { useRevealItem } from '../hooks/useRevealItem'
 import type { AppSettingsUpdate, LibraryFolder, LibraryPlaylist, LibrarySong, PreferenceItemSnapshot, PreferenceSettingsSnapshot, SearchSortCriterion } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
 import {
@@ -125,6 +126,7 @@ export function SearchPage({
   onOpenLocalFolder,
   onSearchDirectory,
 }: SearchPageProps) {
+  const revealItem = useRevealItem()
   const navigate = useNavigate()
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
   const [activeFilter, setActiveFilter] = useState<SearchFilterKey>('all')
@@ -143,6 +145,7 @@ export function SearchPage({
   const refreshPreferences = usePreferenceStore((state) => state.refresh)
   const normalizedQuery = query.trim().toLocaleLowerCase()
   const normalizedRequestedQuery = requestedQuery.trim().toLocaleLowerCase()
+  const deferredNormalizedQuery = useDeferredValue(normalizedQuery)
   const searchableSongs = useMemo(
     () => searchFolderPath ? songs.filter((song) => isSongUnderFolder(song.path, searchFolderPath)) : songs,
     [searchFolderPath, songs],
@@ -152,8 +155,8 @@ export function SearchPage({
     [folders, searchFolderPath],
   )
   const results = useMemo(
-    () => buildSearchResults(searchableSongs, searchableFolders, playlists, rootPath, normalizedQuery, t),
-    [normalizedQuery, playlists, rootPath, searchableFolders, searchableSongs, t],
+    () => buildSearchResults(searchableSongs, searchableFolders, playlists, rootPath, deferredNormalizedQuery, t),
+    [deferredNormalizedQuery, playlists, rootPath, searchableFolders, searchableSongs, t],
   )
   const sortedResults = useMemo(
     () => ({
@@ -652,6 +655,7 @@ export function SearchPage({
                 onAddSongsToNowPlaying,
                 onCreatePlaylistWithSongs,
                 onAddSongsToPlaylist,
+                onRevealItem: revealItem,
                 onSearchDirectory,
                 rootPath,
                 preferenceItem: getSearchResultExistingPreferenceItem(cardContextMenu, preferenceItems),
@@ -709,6 +713,7 @@ function getSearchResultMenuItems({
   onAddSongsToNowPlaying,
   onCreatePlaylistWithSongs,
   onAddSongsToPlaylist,
+  onRevealItem,
   onSearchDirectory,
   rootPath,
   preferenceItem,
@@ -725,6 +730,7 @@ function getSearchResultMenuItems({
   onAddSongsToNowPlaying: (songIds: number[]) => void
   onCreatePlaylistWithSongs: (name: string, songIds: number[]) => void
   onAddSongsToPlaylist: (playlistId: number, songIds: number[]) => void
+  onRevealItem: (itemPath: string) => void | Promise<void>
   onSearchDirectory: (query: string, folderRelativePath: string) => void
   rootPath: string
   preferenceItem: PreferenceItemSnapshot | null
@@ -802,7 +808,7 @@ function getSearchResultMenuItems({
         text: t('context.reveal'),
         pendingText: t('context.openingLocal'),
         icon: 'local',
-        onClick: () => window.smplayer?.revealItemInFolder(card.sourcePath!),
+        onClick: () => onRevealItem(card.sourcePath!),
       },
       {
         key: 'search-directory',

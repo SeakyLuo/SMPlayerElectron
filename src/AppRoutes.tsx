@@ -1,9 +1,10 @@
 import { useEffect, useMemo, type ReactNode } from 'react'
-import { Route, Routes, useLocation, useNavigate, type NavigateFunction } from 'react-router-dom'
+import { Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 
 import { AlbumsPage } from './pages/AlbumsPage'
 import { ArtistsPage } from './pages/ArtistsPage'
 import { HiddenFoldersPage } from './pages/HiddenFoldersPage'
+import { LocalPage } from './pages/LocalPage'
 import { MusicDataSourceMusicPage } from './pages/LibraryDataSourceMusicPage'
 import { MyFavoritesPage } from './pages/MyFavoritesPage'
 import { NowPlayingPage } from './pages/NowPlayingPage'
@@ -12,12 +13,12 @@ import { RecentPage } from './pages/RecentPage'
 import { RemoteLibraryPage } from './pages/RemoteLibraryPage'
 import { SearchPage } from './pages/SearchPage'
 import { SettingsPage } from './pages/SettingsPage'
-import { AlbumDetailRoute, LocalPageRoute } from './AppRouteComponents'
+import { AlbumDetailRoute } from './AppRouteComponents'
 import { createLocalMusicDataSource } from './data/musicDataSource'
-import { PlaybackCommands } from './shared/PlaybackCommands'
 import { resolveRestoredPage } from './appModel'
 import type { LibrarySong, MusicData } from './shared/contracts'
 import type { Translator } from './shared/i18n'
+import type { PlaybackCommands } from './hooks/usePlaybackCommands'
 import type { PlaybackController } from './hooks/usePlaybackController'
 import { useLibraryStore } from './state/useLibraryStore'
 import { useUndoableNotificationStore } from './state/useUndoableNotificationStore'
@@ -70,10 +71,6 @@ function RequireLibraryData({ songs, folders, recent, children }: RequireLibrary
   return children
 }
 
-type LibraryStoreState = ReturnType<typeof useLibraryStore.getState>
-type ShowUndoableNotification = ReturnType<typeof useUndoableNotificationStore.getState>['show']
-type AppLocation = ReturnType<typeof useLocation>
-
 interface AppRoutesContext {
   initialLoadComplete: boolean
   snapshot: MusicData
@@ -82,62 +79,20 @@ interface AppRoutesContext {
   scanning: boolean
   error: string | null
   playback: PlaybackController
-  pickLibraryRoot: LibraryStoreState['pickLibraryRoot']
-  scanLibrary: LibraryStoreState['scanLibrary']
-  setSongFavorite: LibraryStoreState['setSongFavorite']
-  addSongToPlaylist: LibraryStoreState['addSongToPlaylist']
-  addSongsToPlaylist: LibraryStoreState['addSongsToPlaylist']
-  replaceNowPlaying: LibraryStoreState['replaceNowPlaying']
-  createPlaylist: LibraryStoreState['createPlaylist']
+  playbackCommands: PlaybackCommands
   revealItem: (itemPath: string) => void | Promise<void>
-  deleteSongFromDisk: LibraryStoreState['deleteSongFromDisk']
-  targetArtistQuery: string | null
-  recordRecentAlbumPlayed: LibraryStoreState['recordRecentAlbumPlayed']
-  recordRecentArtistPlayed: LibraryStoreState['recordRecentArtistPlayed']
-  addRecentSearch: LibraryStoreState['addRecentSearch']
   setCompactArtistTitle: (title: string) => void
-  targetAlbumQuery: string | null
-  updateSettings: LibraryStoreState['updateSettings']
-  clearNowPlaying: LibraryStoreState['clearNowPlaying']
   setShowNowPlayingFullPage: (show: boolean) => void
   showCount: boolean
-  removeRecentPlayed: LibraryStoreState['removeRecentPlayed']
-  restoreRecentPlayed: LibraryStoreState['restoreRecentPlayed']
-  clearRecentPlayed: LibraryStoreState['clearRecentPlayed']
-  removeRecentSearches: LibraryStoreState['removeRecentSearches']
-  clearRecentSearches: LibraryStoreState['clearRecentSearches']
   commitSearchQuery: (query: string) => Promise<void>
   localRelativePath: string
-  scanProgress: LibraryStoreState['scanProgress']
-  scanLocalFolder: LibraryStoreState['scanLocalFolder']
-  cancelLocalFolderScan: LibraryStoreState['cancelLocalFolderScan']
   setLocalRelativePath: (relativePath: string) => void
-  createLocalFolder: LibraryStoreState['createLocalFolder']
-  renameLocalFolder: LibraryStoreState['renameLocalFolder']
-  deleteLocalFolder: LibraryStoreState['deleteLocalFolder']
-  hideLocalFolder: LibraryStoreState['hideLocalFolder']
-  moveSongsToFolder: LibraryStoreState['moveSongsToFolder']
-  moveLocalFolderToFolder: LibraryStoreState['moveLocalFolderToFolder']
-  deleteLocalItems: LibraryStoreState['deleteLocalItems']
-  updateLocalFolderSort: LibraryStoreState['updateLocalFolderSort']
   commitDirectorySearchQuery: (query: string, folderRelativePath: string) => void
-  navigate: NavigateFunction
-  resumeHiddenStorageItem: LibraryStoreState['resumeHiddenStorageItem']
-  saveViewState: LibraryStoreState['saveViewState']
-  deletePlaylist: LibraryStoreState['deletePlaylist']
-  showUndoableNotification: ShowUndoableNotification
-  restorePlaylist: LibraryStoreState['restorePlaylist']
-  renamePlaylist: LibraryStoreState['renamePlaylist']
-  reorderPlaylists: LibraryStoreState['reorderPlaylists']
-  recordRecentPlaylistPlayed: LibraryStoreState['recordRecentPlaylistPlayed']
-  removeSongsFromPlaylist: LibraryStoreState['removeSongsFromPlaylist']
-  reorderPlaylistSongs: LibraryStoreState['reorderPlaylistSongs']
   searchResultQuery: string
   submittedSearchQuery: string
   searchResultsLoading: boolean
   searchFolderPath: string
   searchFolderName: string
-  location: AppLocation
 }
 
 interface AppRoutesProps {
@@ -153,64 +108,65 @@ export function AppRoutes({ context }: AppRoutesProps) {
     scanning,
     error,
     playback,
-    pickLibraryRoot,
-    scanLibrary,
-    setSongFavorite,
-    addSongToPlaylist,
-    addSongsToPlaylist,
-    replaceNowPlaying,
-    createPlaylist,
+    playbackCommands,
     revealItem,
-    deleteSongFromDisk,
-    targetArtistQuery,
-    recordRecentAlbumPlayed,
-    recordRecentArtistPlayed,
-    addRecentSearch,
     setCompactArtistTitle,
-    targetAlbumQuery,
-    updateSettings,
-    clearNowPlaying,
     setShowNowPlayingFullPage,
     showCount,
-    removeRecentPlayed,
-    restoreRecentPlayed,
-    clearRecentPlayed,
-    removeRecentSearches,
-    clearRecentSearches,
     commitSearchQuery,
     localRelativePath,
-    scanProgress,
-    scanLocalFolder,
-    cancelLocalFolderScan,
     setLocalRelativePath,
-    createLocalFolder,
-    renameLocalFolder,
-    deleteLocalFolder,
-    hideLocalFolder,
-    moveSongsToFolder,
-    moveLocalFolderToFolder,
-    deleteLocalItems,
-    updateLocalFolderSort,
     commitDirectorySearchQuery,
-    navigate,
-    resumeHiddenStorageItem,
-    saveViewState,
-    deletePlaylist,
-    showUndoableNotification,
-    restorePlaylist,
-    renamePlaylist,
-    reorderPlaylists,
-    recordRecentPlaylistPlayed,
-    removeSongsFromPlaylist,
-    reorderPlaylistSongs,
     searchResultQuery,
     submittedSearchQuery,
     searchResultsLoading,
     searchFolderPath,
     searchFolderName,
-    location,
   } = context
+  const location = useLocation()
+  const navigate = useNavigate()
   const refresh = useLibraryStore((state) => state.refresh)
+  const pickLibraryRoot = useLibraryStore((state) => state.pickLibraryRoot)
+  const scanLibrary = useLibraryStore((state) => state.scanLibrary)
+  const scanProgress = useLibraryStore((state) => state.scanProgress)
+  const scanLocalFolder = useLibraryStore((state) => state.scanLocalFolder)
+  const cancelLocalFolderScan = useLibraryStore((state) => state.cancelLocalFolderScan)
+  const setSongFavorite = useLibraryStore((state) => state.setSongFavorite)
+  const addSongToPlaylist = useLibraryStore((state) => state.addSongToPlaylist)
+  const addSongsToPlaylist = useLibraryStore((state) => state.addSongsToPlaylist)
+  const replaceNowPlaying = useLibraryStore((state) => state.replaceNowPlaying)
+  const createPlaylist = useLibraryStore((state) => state.createPlaylist)
+  const deleteSongFromDisk = useLibraryStore((state) => state.deleteSongFromDisk)
+  const recordRecentAlbumPlayed = useLibraryStore((state) => state.recordRecentAlbumPlayed)
+  const recordRecentArtistPlayed = useLibraryStore((state) => state.recordRecentArtistPlayed)
+  const addRecentSearch = useLibraryStore((state) => state.addRecentSearch)
+  const updateSettings = useLibraryStore((state) => state.updateSettings)
+  const clearNowPlaying = useLibraryStore((state) => state.clearNowPlaying)
+  const removeRecentPlayed = useLibraryStore((state) => state.removeRecentPlayed)
+  const restoreRecentPlayed = useLibraryStore((state) => state.restoreRecentPlayed)
+  const clearRecentPlayed = useLibraryStore((state) => state.clearRecentPlayed)
+  const removeRecentSearches = useLibraryStore((state) => state.removeRecentSearches)
+  const clearRecentSearches = useLibraryStore((state) => state.clearRecentSearches)
+  const createLocalFolder = useLibraryStore((state) => state.createLocalFolder)
+  const renameLocalFolder = useLibraryStore((state) => state.renameLocalFolder)
+  const deleteLocalFolder = useLibraryStore((state) => state.deleteLocalFolder)
+  const hideLocalFolder = useLibraryStore((state) => state.hideLocalFolder)
+  const moveLocalItemsToFolder = useLibraryStore((state) => state.moveLocalItemsToFolder)
+  const deleteLocalItems = useLibraryStore((state) => state.deleteLocalItems)
+  const updateLocalFolderSort = useLibraryStore((state) => state.updateLocalFolderSort)
+  const resumeHiddenStorageItem = useLibraryStore((state) => state.resumeHiddenStorageItem)
+  const saveViewState = useLibraryStore((state) => state.saveViewState)
+  const deletePlaylist = useLibraryStore((state) => state.deletePlaylist)
+  const restorePlaylist = useLibraryStore((state) => state.restorePlaylist)
+  const renamePlaylist = useLibraryStore((state) => state.renamePlaylist)
+  const reorderPlaylists = useLibraryStore((state) => state.reorderPlaylists)
+  const recordRecentPlaylistPlayed = useLibraryStore((state) => state.recordRecentPlaylistPlayed)
+  const removeSongsFromPlaylist = useLibraryStore((state) => state.removeSongsFromPlaylist)
+  const reorderPlaylistSongs = useLibraryStore((state) => state.reorderPlaylistSongs)
+  const showUndoableNotification = useUndoableNotificationStore((state) => state.show)
+  const routeSearchParams = useMemo(() => new URLSearchParams(location.search), [location.search])
+  const targetArtistQuery = routeSearchParams.get('artist')
+  const targetAlbumQuery = routeSearchParams.get('album')
   const localMusicDataSource = useMemo(
     () => createLocalMusicDataSource(snapshot, updateSettings),
     [snapshot, updateSettings],
@@ -264,19 +220,19 @@ export function AppRoutes({ context }: AppRoutesProps) {
                       void scanLibrary()
                     }}
                     onPlayTrack={(trackId, queueSongIds) => {
-                      void PlaybackCommands.playTrackInQueue(trackId, queueSongIds)
+                      void playbackCommands.playTrackInQueue(trackId, queueSongIds)
                     }}
                     onAddNextAndPlay={(trackId) => {
-                      void PlaybackCommands.addNextAndPlay(trackId)
+                      void playbackCommands.addNextAndPlay(trackId)
                     }}
                     onMoveToMusicOrPlay={(songId) => {
-                      void PlaybackCommands.moveToMusicOrPlay(songId)
+                      void playbackCommands.moveToMusicOrPlay(songId)
                     }}
                     onTogglePlayPause={() => {
                       void playback.togglePlayPause()
                     }}
                     onPlayNext={(songId) => {
-                      void PlaybackCommands.playNext(songId)
+                      void playbackCommands.playNext(songId)
                     }}
                     onToggleFavorite={(songId, favorite) => {
                       void setSongFavorite(songId, favorite)
@@ -318,10 +274,10 @@ export function AppRoutes({ context }: AppRoutesProps) {
                   scanning={scanning}
                   targetArtistName={targetArtistQuery ?? undefined}
                   onPlayTrack={(trackId, queueSongIds) => {
-                    void PlaybackCommands.playTrackInQueue(trackId, queueSongIds)
+                    void playbackCommands.playTrackInQueue(trackId, queueSongIds)
                   }}
                   onMoveToMusicOrPlay={(songId) => {
-                    void PlaybackCommands.moveToMusicOrPlay(songId)
+                    void playbackCommands.moveToMusicOrPlay(songId)
                   }}
                   onAddSongsToNowPlaying={(songIds) => {
                     void replaceNowPlaying([...snapshot.nowPlaying.songIds, ...songIds])
@@ -333,7 +289,7 @@ export function AppRoutes({ context }: AppRoutesProps) {
                     void playback.togglePlayPause()
                   }}
                   onPlayNext={(songId) => {
-                    void PlaybackCommands.playNext(songId)
+                    void playbackCommands.playNext(songId)
                   }}
                   onToggleFavorite={(songId, favorite) => {
                     void setSongFavorite(songId, favorite)
@@ -375,13 +331,13 @@ export function AppRoutes({ context }: AppRoutesProps) {
                     selectedTrackId={playback.currentTrackId}
                     isPlaying={playback.isPlaying}
                     onPlayTrack={(trackId, queueSongIds) => {
-                      void PlaybackCommands.playTrackInQueue(trackId, queueSongIds)
+                      void playbackCommands.playTrackInQueue(trackId, queueSongIds)
                     }}
                     onMoveToMusicOrPlay={(songId) => {
-                      void PlaybackCommands.moveToMusicOrPlay(songId)
+                      void playbackCommands.moveToMusicOrPlay(songId)
                     }}
                     onPlayNext={(songId) => {
-                      void PlaybackCommands.playNext(songId)
+                      void playbackCommands.playNext(songId)
                     }}
                     onTogglePlayPause={() => {
                       void playback.togglePlayPause()
@@ -416,7 +372,7 @@ export function AppRoutes({ context }: AppRoutesProps) {
                     loading={pageLoading}
                     scanning={scanning}
                     onPlayTrack={(trackId, queueSongIds) => {
-                      void PlaybackCommands.playTrackInQueue(trackId, queueSongIds)
+                      void playbackCommands.playTrackInQueue(trackId, queueSongIds)
                     }}
                     onAddSongsToPlaylist={(playlistId, songIds) => {
                       void addSongsToPlaylist(playlistId, songIds)
@@ -457,13 +413,13 @@ export function AppRoutes({ context }: AppRoutesProps) {
                   selectedTrackId={playback.currentTrackId}
                   isPlaying={playback.isPlaying}
                   onPlayTrack={(trackId, queueSongIds) => {
-                    void PlaybackCommands.playTrackInQueue(trackId, queueSongIds)
+                    void playbackCommands.playTrackInQueue(trackId, queueSongIds)
                   }}
                   onMoveToMusicOrPlay={(songId) => {
-                    void PlaybackCommands.moveToMusicOrPlay(songId)
+                    void playbackCommands.moveToMusicOrPlay(songId)
                   }}
                   onPlayNext={(songId) => {
-                    void PlaybackCommands.playNext(songId)
+                    void playbackCommands.playNext(songId)
                   }}
                   onTogglePlayPause={() => {
                     void playback.togglePlayPause()
@@ -513,13 +469,13 @@ export function AppRoutes({ context }: AppRoutesProps) {
                     void playback.togglePlayPause()
                   }}
                   onPlayTrack={(trackId, queueSongIds, queueIndex) => {
-                    void PlaybackCommands.playTrack(trackId, queueSongIds, queueIndex)
+                    void playbackCommands.playTrack(trackId, queueSongIds, queueIndex)
                   }}
                   onReplaceQueue={(songIds) => {
                     void replaceNowPlaying(songIds)
                   }}
                   onPlayNext={(songId, queueIndex) => {
-                    void PlaybackCommands.playNext(songId, queueIndex)
+                    void playbackCommands.playNext(songId, queueIndex)
                   }}
                   onAddSongToPlaylist={(playlistId, songId) => {
                     void addSongToPlaylist(playlistId, songId)
@@ -568,16 +524,16 @@ export function AppRoutes({ context }: AppRoutesProps) {
                   showCount={showCount}
                   preferredLanguage={snapshot.settings.preferredLanguage}
                   onPlayTrack={(trackId, queueSongIds) => {
-                    void PlaybackCommands.playTrackInQueue(trackId, queueSongIds)
+                    void playbackCommands.playTrackInQueue(trackId, queueSongIds)
                   }}
                   onMoveToMusicOrPlay={(songId) => {
-                    void PlaybackCommands.moveToMusicOrPlay(songId)
+                    void playbackCommands.moveToMusicOrPlay(songId)
                   }}
                   onTogglePlayPause={() => {
                     void playback.togglePlayPause()
                   }}
                   onPlayNext={(songId) => {
-                    void PlaybackCommands.playNext(songId)
+                    void playbackCommands.playNext(songId)
                   }}
                   onAddSongsToNowPlaying={(songIds: number[]) => {
                     void replaceNowPlaying([...snapshot.nowPlaying.songIds, ...songIds])
@@ -624,7 +580,7 @@ export function AppRoutes({ context }: AppRoutesProps) {
               path="/local"
               element={
                 <RequireLibraryData songs folders>
-                  <LocalPageRoute
+                  <LocalPage
                   songs={snapshot.songs}
                   folders={snapshot.folders}
                   playlists={snapshot.playlists}
@@ -652,16 +608,19 @@ export function AppRoutes({ context }: AppRoutesProps) {
                     void cancelLocalFolderScan()
                   }}
                   onPlayTrack={(trackId, queueSongIds) => {
-                    void PlaybackCommands.playTrackInQueue(trackId, queueSongIds)
+                    void playbackCommands.playTrackInQueue(trackId, queueSongIds)
                   }}
                   onMoveToMusicOrPlay={(songId) => {
-                    void PlaybackCommands.moveToMusicOrPlay(songId)
+                    void playbackCommands.moveToMusicOrPlay(songId)
                   }}
                   onTogglePlayPause={() => {
                     void playback.togglePlayPause()
                   }}
                   onPlayNext={(songId) => {
-                    void PlaybackCommands.playNext(songId)
+                    void playbackCommands.playNext(songId)
+                  }}
+                  onAddNextAndPlay={(songId) => {
+                    void playbackCommands.addNextAndPlay(songId)
                   }}
                   onRevealSong={revealItem}
                   onRevealFolder={revealItem}
@@ -695,11 +654,8 @@ export function AppRoutes({ context }: AppRoutesProps) {
                   onDeleteSongFromDisk={(songId) => {
                     void deleteSongFromDisk(songId)
                   }}
-                  onMoveSongsToFolder={async (songIds, folderPath) => {
-                    await moveSongsToFolder(songIds, folderPath)
-                  }}
-                  onMoveFolderToFolder={async (sourceFolderPath, targetFolderPath) => {
-                    await moveLocalFolderToFolder(sourceFolderPath, targetFolderPath)
+                  onMoveLocalItemsToFolder={async (songIds, folderPaths, targetFolderPath) => {
+                    await moveLocalItemsToFolder(songIds, folderPaths, targetFolderPath)
                   }}
                   onDeleteLocalItems={async (songIds, folderPaths) => {
                     await deleteLocalItems(songIds, folderPaths)
@@ -747,13 +703,13 @@ export function AppRoutes({ context }: AppRoutesProps) {
                   searchQuery=""
                   error={error}
                   onPlayTrack={(trackId, queueSongIds) => {
-                    void PlaybackCommands.playTrackInQueue(trackId, queueSongIds)
+                    void playbackCommands.playTrackInQueue(trackId, queueSongIds)
                   }}
                   onMoveToMusicOrPlay={(songId) => {
-                    void PlaybackCommands.moveToMusicOrPlay(songId)
+                    void playbackCommands.moveToMusicOrPlay(songId)
                   }}
                   onPlayNext={(songId) => {
-                    void PlaybackCommands.playNext(songId)
+                    void playbackCommands.playNext(songId)
                   }}
                   onTogglePlayPause={() => {
                     void playback.togglePlayPause()
@@ -817,13 +773,13 @@ export function AppRoutes({ context }: AppRoutesProps) {
                   selectedTrackId={playback.currentTrackId}
                   isPlaying={playback.isPlaying}
                   onPlayTrack={(trackId, queueSongIds) => {
-                    void PlaybackCommands.playTrackInQueue(trackId, queueSongIds)
+                    void playbackCommands.playTrackInQueue(trackId, queueSongIds)
                   }}
                   onMoveToMusicOrPlay={(songId) => {
-                    void PlaybackCommands.moveToMusicOrPlay(songId)
+                    void playbackCommands.moveToMusicOrPlay(songId)
                   }}
                   onPlayNext={(songId) => {
-                    void PlaybackCommands.playNext(songId)
+                    void playbackCommands.playNext(songId)
                   }}
                   onTogglePlayPause={() => {
                     void playback.togglePlayPause()
@@ -877,16 +833,16 @@ export function AppRoutes({ context }: AppRoutesProps) {
                     folders: snapshot.settings.searchFoldersCriterion,
                   }}
                   onPlayTrack={(trackId, queueSongIds) => {
-                    void PlaybackCommands.playTrackInQueue(trackId, queueSongIds)
+                    void playbackCommands.playTrackInQueue(trackId, queueSongIds)
                   }}
                   onMoveToMusicOrPlay={(songId) => {
-                    void PlaybackCommands.moveToMusicOrPlay(songId)
+                    void playbackCommands.moveToMusicOrPlay(songId)
                   }}
                   onTogglePlayPause={() => {
                     void playback.togglePlayPause()
                   }}
                   onPlayNext={(songId) => {
-                    void PlaybackCommands.playNext(songId)
+                    void playbackCommands.playNext(songId)
                   }}
                   onAddSongsToNowPlaying={(songIds) => {
                     void replaceNowPlaying([...snapshot.nowPlaying.songIds, ...songIds])

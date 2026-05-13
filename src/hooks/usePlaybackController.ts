@@ -11,7 +11,6 @@ import {
 } from '../shared/mediaHelper'
 import { getNextRecoverableTrackId } from '../shared/playbackRecovery'
 import { createTranslator } from '../shared/i18n'
-import { PlaybackCommands } from '../shared/PlaybackCommands'
 import { setPlaybackProgress } from '../state/playbackProgressStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
 import { useLibraryStore } from '../state/useLibraryStore'
@@ -19,6 +18,11 @@ import { transitionPlaybackStatus, type PlaybackStatus, type PlaybackTransition 
 import { usePlaybackAudioElement } from './usePlaybackAudioElement'
 import { updateMediaSessionPosition, useMediaSession } from './useMediaSession'
 import { usePlaybackPersistence } from './usePlaybackPersistence'
+import {
+  readInitialPlaybackSettings,
+  useGlobalPlaybackCommands,
+  usePlaybackRuntimeSettingsRestore,
+} from './usePlaybackRuntimeCommands'
 import { usePlaybackShortcuts } from './usePlaybackShortcuts'
 
 export interface PlaybackController {
@@ -57,24 +61,8 @@ interface LoadTrackOptions {
 const PLAYBACK_STALL_TIMEOUT_MS = 8_000
 const PLAYBACK_PROGRESS_EPSILON_SECONDS = 0.05
 
-type SmplayerPlaybackSettingsApi = Omit<NonNullable<typeof window.smplayer>, 'getPlaybackSettingsImmediate'> & {
-  getPlaybackSettingsImmediate?: () => PlaybackRuntimeSettings
-}
-
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
-}
-
-function getSmplayerPlaybackSettingsApi() {
-  return window.smplayer as SmplayerPlaybackSettingsApi | undefined
-}
-
-function readInitialPlaybackSettings(snapshot: MusicData): PlaybackRuntimeSettings {
-  return getSmplayerPlaybackSettingsApi()?.getPlaybackSettingsImmediate?.() ?? {
-    volume: snapshot.settings.volume,
-    isMuted: snapshot.settings.isMuted,
-    mode: snapshot.settings.mode,
-  }
 }
 
 export function usePlaybackController(snapshot: MusicData, ready: boolean): PlaybackController {
@@ -120,6 +108,8 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
   const volumeRef = useRef(volume)
   const isMutedRef = useRef(isMuted)
   const modeRef = useRef(mode)
+  const replaceNowPlaying = useLibraryStore((state) => state.replaceNowPlaying)
+  const showPlaybackMessage = useUndoableNotificationStore((state) => state.showMessage)
 
   const snapshotQueueSongIds = useMemo(
     () => normalizeQueueSongIds(snapshot.nowPlaying.songIds, snapshot.songs),
@@ -181,13 +171,9 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
     volume,
   ])
 
-  useEffect(() => {
-    return window.smplayer?.onTrayCommand((command) => {
-      if (command === 'show-window') {
-        applyPlaybackRuntimeSettings(readInitialPlaybackSettings(snapshotRef.current))
-      }
-    })
-  }, [applyPlaybackRuntimeSettings])
+  usePlaybackRuntimeSettingsRestore(() => {
+    applyPlaybackRuntimeSettings(readInitialPlaybackSettings(snapshotRef.current))
+  })
 
   useEffect(() => {
     if (currentTrackId == null) {
@@ -301,7 +287,7 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
       if (Date.now() - stalledProgressStartedAtRef.current >= PLAYBACK_STALL_TIMEOUT_MS) {
         stalledProgressStartedAtRef.current = null
         const t = createTranslator(snapshotRef.current.settings.preferredLanguage)
-        useUndoableNotificationStore.getState().showMessage(t('notification.playbackStalled'), 4000)
+        showPlaybackMessage(t('notification.playbackStalled'), 4000)
         transitionStatus({ type: 'buffering' })
         const duration = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : durationSecondsRef.current
         if (duration > 0 && duration - audio.currentTime <= 0.5) {
@@ -311,7 +297,7 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
         }
       }
     }, 500)
-  }, [stopProgressSync, transitionStatus, updateProgressFromAudio])
+  }, [showPlaybackMessage, stopProgressSync, transitionStatus, updateProgressFromAudio])
 
   const finishCurrentTrack = useCallback(
     async () => {
@@ -611,15 +597,6 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
     await loadTrackRef.current(trackId, { autoplay: true, queueIndex, startAt: 0 })
   }, [getPlaybackSongIds, persistPlaybackSettings, recoverFromPlaybackFailure, transitionStatus])
 
-  useEffect(() => {
-    PlaybackCommands.bind({
-      playTrack,
-      getCurrentTrackId: () => currentTrackIdRef.current,
-      getCurrentQueueIndex: () => currentQueueIndexRef.current,
-      getMode: () => modeRef.current,
-    })
-  }, [playTrack])
-
   const playCurrent = useCallback(async () => {
     const audio = audioRef.current
     if (!audio) {
@@ -842,12 +819,12 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
       const shuffledCurrentIndex = currentIndex(queueOverrideRef.current, currentTrackIdRef.current)
       currentQueueIndexRef.current = shuffledCurrentIndex > -1 ? shuffledCurrentIndex : null
       setCurrentQueueIndex(shuffledCurrentIndex > -1 ? shuffledCurrentIndex : null)
-      void useLibraryStore.getState().replaceNowPlaying(queueOverrideRef.current)
+      void replaceNowPlaying(queueOverrideRef.current)
     }
     modeRef.current = nextMode
     setMode(nextMode)
     void persistPlaybackSettings({ mode: nextMode })
-  }, [getPlaybackSongIds, persistPlaybackSettings])
+  }, [getPlaybackSongIds, persistPlaybackSettings, replaceNowPlaying])
 
   const toggleRepeat = useCallback(() => {
     const nextMode = modeRef.current === 'repeat' ? 'once' : 'repeat'
@@ -918,34 +895,24 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
     onSeekBySeconds: seekBySeconds,
   })
 
-  useEffect(() => {
-    if (!window.smplayer) {
-      return
-    }
-
-    return window.smplayer.onGlobalMediaCommand((command) => {
-      if (command === 'play-pause') {
-        void togglePlayPause()
-        return
-      }
-
-      if (command === 'next') {
-        void playNext()
-        return
-      }
-
-      if (command === 'previous') {
-        void playPrevious()
-        return
-      }
-
+  useGlobalPlaybackCommands({
+    onTogglePlayPause: () => {
+      void togglePlayPause()
+    },
+    onPlayNext: () => {
+      void playNext()
+    },
+    onPlayPrevious: () => {
+      void playPrevious()
+    },
+    onStop: () => {
       const audio = audioRef.current
       if (audio) {
         audio.pause()
         void persistPlaybackSettings({ musicProgress: audio.currentTime })
       }
-    })
-  }, [persistPlaybackSettings, playNext, playPrevious, togglePlayPause])
+    },
+  })
 
   return {
     currentTrack,
