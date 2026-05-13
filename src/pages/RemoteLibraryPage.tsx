@@ -142,6 +142,7 @@ export function RemoteLibraryPage({ t }: { t: Translator }) {
           onSetPlaylistPreferred={noopPlaylistPreference}
           onAddSongToPlaylist={noop}
           onAddSongsToPlaylist={noop}
+          onToggleFavorite={noop}
           onRemoveSongsFromPlaylist={noop}
           onReorderPlaylistSongs={noop}
           {...commonPlaybackProps}

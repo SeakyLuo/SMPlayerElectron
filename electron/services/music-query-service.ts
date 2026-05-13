@@ -112,7 +112,6 @@ export class MusicQueryService {
       INNER JOIN Music
         ON Music.Id = MusicArtist.MusicId
        AND Music.State = ?
-       AND MusicArtist.Name = TRIM(Music.Artist)
       WHERE MusicArtist.State = ?
       ORDER BY MusicArtist.Priority, MusicArtist.Id
     `)

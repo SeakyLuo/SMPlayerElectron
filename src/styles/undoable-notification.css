@@ -1,8 +1,8 @@
 .undoable-notification {
   position: fixed;
   left: 50%;
-  bottom: 104px;
-  z-index: 90;
+  top: 48px;
+  z-index: 760;
   width: min(540px, calc(100vw - 40px));
   min-height: 62px;
   box-sizing: border-box;
@@ -65,6 +65,21 @@
   font-weight: 700;
 }
 
+.undoable-notification-action:disabled {
+  cursor: default;
+}
+
+.undoable-notification-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  vertical-align: -3px;
+  animation: undoable-notification-spinner-rotate 760ms linear infinite;
+}
+
 .undoable-notification-action:hover,
 .undoable-notification-action:focus-visible {
   border-color: rgba(var(--accent-rgb), 0.24);
@@ -97,4 +112,10 @@ body.night-mode .undoable-notification-action {
 body.night-mode .undoable-notification-action:hover,
 body.night-mode .undoable-notification-action:focus-visible {
   background: rgba(var(--accent-rgb), 0.18);
+}
+
+@keyframes undoable-notification-spinner-rotate {
+  to {
+    transform: rotate(360deg);
+  }
 }

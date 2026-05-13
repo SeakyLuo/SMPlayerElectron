@@ -487,6 +487,7 @@ export function SearchPage({
                     onToggleSelection={() => {
                       toggleSongSelection(song.id)
                     }}
+                    onToggleFavorite={onToggleFavorite}
                     onAddToPlaylistClick={(contextSong, x, y) => {
                       setSongContextMenu(null)
                       setCardContextMenu(null)

@@ -40,7 +40,7 @@ const DEFAULT_ARTWORK_URL = DEFAULT_ALBUM_ARTWORK_URL
 const LYRICS_RESTORE_DELAY_MS = 5000
 const LYRICS_SCROLL_DURATION_MS = 360
 const PLAYER_BAR_AUTO_HIDE_DELAY_MS = 5000
-const COMPACT_IMMERSIVE_QUERY = '(max-width: 760px)'
+const COMPACT_IMMERSIVE_QUERY = '(max-width: 800px)'
 
 type FullDialogMode = 'properties' | 'lyrics' | 'album-art'
 
@@ -200,6 +200,7 @@ export function NowPlayingFullPage({
     [displayLyricsLines],
   )
   const previewLyricIndex = isLyricPreviewing ? lyricPreviewIndex : null
+  const previewLyricLine = previewLyricIndex != null ? displayLyricsLines[previewLyricIndex] : null
   const isPlayerBarPinned = dialogMode !== null || moreMenu !== null
   const immersiveNightActive = nightMode === 'on' || (
     nightMode === 'auto' &&
@@ -460,7 +461,7 @@ export function NowPlayingFullPage({
 
   const openMoreMenu = (event: MouseEvent<HTMLButtonElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
-    setMoreMenu({ x: rect.left, y: rect.top })
+    setMoreMenu({ x: rect.left, y: rect.top, anchor: event.currentTarget })
     void refreshPreferenceItem()
   }
 
@@ -522,9 +523,26 @@ export function NowPlayingFullPage({
     }
   }
 
+  const previewLyricsFromScrollInput = () => {
+    if (displayLyricsLines.length === 0) {
+      return
+    }
+
+    cancelLyricScrollAnimation()
+    clearLyricRestoreTimer()
+    setIsLyricPreviewing(true)
+    window.requestAnimationFrame(() => {
+      updateLyricPreviewFromViewport()
+      scheduleLyricRestore()
+    })
+  }
+
   const seekToLyricLine = (line: ImmersiveLyricsLine) => {
     clearLyricRestoreTimer()
     onSeek(line.seekSeconds)
+    if (!isPlaying) {
+      onTogglePlayPause()
+    }
     setIsLyricPreviewing(false)
     setLyricPreviewIndex(null)
   }
@@ -719,58 +737,60 @@ export function NowPlayingFullPage({
               <p>{albumLabel}</p>
             </div>
           </div>
-          <div
-            ref={lyricStageRef}
-            className={clsx('now-playing-full-lyric-stage', {
-              'is-dragging': isLyricDragging,
-            })}
-            onPointerDown={beginLyricsDrag}
-            onPointerMove={moveLyricsDrag}
-            onPointerUp={finishLyricsDrag}
-            onPointerCancel={finishLyricsDrag}
-          >
-            <div className="now-playing-full-lyric-lines">
-              {lyricsLoading && displayLyrics?.trackId !== currentSongId ? (
-                <div className="now-playing-full-lyric-row is-active is-loading">
-                  <p>{t('nowPlaying.loadingLyrics')}</p>
-                </div>
-              ) : displayLyricsLines.length > 0 ? displayLyricsLines.map((line, index) => (
-                <div
-                  key={`${currentSongId}-${line.id}`}
-                  ref={(element) => {
-                    lyricLineRefs.current[index] = element
-                  }}
-                  className={clsx('now-playing-full-lyric-row', {
-                    'is-active': line.active,
-                    'is-preview': previewLyricIndex === index,
-                  })}
-                >
-                  <p>{line.text}</p>
-                  {previewLyricIndex === index ? (
-                    <button
-                      type="button"
-                      className="now-playing-full-lyric-seek"
-                      aria-label={`${t('player.play')} ${formatDuration(line.seekSeconds)}`}
-                      title={`${t('player.play')} ${formatDuration(line.seekSeconds)}`}
-                      onPointerDown={(event) => {
-                        event.stopPropagation()
-                      }}
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        seekToLyricLine(line)
-                      }}
-                    >
-                      <Icon name="play" />
-                      <span>{formatDuration(line.seekSeconds)}</span>
-                    </button>
-                  ) : null}
-                </div>
-              )) : (
-                <div className="now-playing-full-lyric-row is-loading">
-                  <p>{t('nowPlaying.noLyrics')}</p>
-                </div>
-              )}
+          <div className="now-playing-full-lyric-stage">
+            <div
+              ref={lyricStageRef}
+              className={clsx('now-playing-full-lyric-scroll', {
+                'is-dragging': isLyricDragging,
+              })}
+              onPointerDown={beginLyricsDrag}
+              onPointerMove={moveLyricsDrag}
+              onPointerUp={finishLyricsDrag}
+              onPointerCancel={finishLyricsDrag}
+              onWheel={previewLyricsFromScrollInput}
+            >
+              <div className="now-playing-full-lyric-lines">
+                {lyricsLoading && displayLyrics?.trackId !== currentSongId ? (
+                  <div className="now-playing-full-lyric-row is-loading">
+                    <p>{t('nowPlaying.loadingLyrics')}</p>
+                  </div>
+                ) : displayLyricsLines.length > 0 ? displayLyricsLines.map((line, index) => (
+                  <div
+                    key={`${currentSongId}-${line.id}`}
+                    ref={(element) => {
+                      lyricLineRefs.current[index] = element
+                    }}
+                    className={clsx('now-playing-full-lyric-row', {
+                      'is-active': line.active,
+                    })}
+                  >
+                    <p>{line.text}</p>
+                  </div>
+                )) : (
+                  <div className="now-playing-full-lyric-row is-loading">
+                    <p>{t('nowPlaying.noLyrics')}</p>
+                  </div>
+                )}
+              </div>
             </div>
+            {previewLyricLine ? (
+              <button
+                type="button"
+                className="now-playing-full-lyric-seek"
+                aria-label={`${t('player.play')} ${formatDuration(previewLyricLine.seekSeconds)}`}
+                title={`${t('player.play')} ${formatDuration(previewLyricLine.seekSeconds)}`}
+                onPointerDown={(event) => {
+                  event.stopPropagation()
+                }}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  seekToLyricLine(previewLyricLine)
+                }}
+              >
+                <Icon name="play" />
+                <span>{formatDuration(previewLyricLine.seekSeconds)}</span>
+              </button>
+            ) : null}
           </div>
         </section>
 

@@ -66,6 +66,7 @@ function createRemoteSettings(musicLibrarySort: MusicLibrarySortCriterion) {
   return {
     rootPath: '',
     useFilenameNotMusicName: false,
+    smartMultiArtistRecognition: true,
     showCount: true,
     themeColor: '#0078D7',
     nightMode: 'never' as const,

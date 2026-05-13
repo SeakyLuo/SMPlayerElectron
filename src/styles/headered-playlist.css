@@ -370,6 +370,12 @@
   app-region: no-drag;
 }
 
+.headered-playlist-hero-commandbar {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+}
+
 .headered-playlist-commandbar button,
 .headered-playlist-rename button {
   display: inline-flex;
@@ -443,6 +449,7 @@
   flex: 0 0 auto;
   flex-direction: column;
   align-self: stretch;
+  container-type: inline-size;
   gap: 0;
   height: auto;
   min-height: 42px;
@@ -473,6 +480,8 @@
 
 .headered-playlist-list-header > span:last-child {
   justify-self: end;
+  min-width: max-content;
+  white-space: nowrap;
 }
 
 .headered-playlist-song-list {
@@ -484,6 +493,17 @@
 
 .headered-playlist-list.has-album {
   --headered-playlist-grid: 64px minmax(190px, 1.18fr) minmax(170px, auto) minmax(160px, 0.72fr) 74px;
+}
+
+@container (max-width: 1120px) {
+  .headered-playlist-list .headered-playlist-list-header,
+  .headered-playlist-list.has-album .headered-playlist-list-header {
+    grid-template-columns: 64px minmax(0, 1fr) max-content 20px;
+  }
+
+  .headered-playlist-list.has-album .headered-playlist-list-header > span:nth-child(4) {
+    display: none;
+  }
 }
 
 .headered-playlist-bottom-spacer {
@@ -541,6 +561,23 @@
 .app-shell.nav-minimal .headered-playlist-appbar-commandbar .uwp-commandbar-more .uwp-commandbar-button {
   width: 40px;
   padding: 0;
+}
+
+@media (max-width: 900px) and (min-width: 721px) {
+  .headered-playlist-backdrop {
+    position: fixed;
+    top: 0;
+    right: 0;
+    left: 0;
+    width: auto;
+    max-width: none;
+    height: calc(var(--header-hero-height) + 110px);
+    border-radius: 0;
+  }
+
+  .app-shell.nav-overlay-open .headered-playlist-backdrop {
+    left: 0;
+  }
 }
 
 @media (max-width: 720px) {
@@ -689,6 +726,10 @@
     width: min(100%, 520px);
     margin-top: var(--header-command-margin);
     min-height: 40px;
+  }
+
+  .headered-playlist-hero-commandbar {
+    justify-content: center;
   }
 
   .uwp-commandbar.headered-playlist-commandbar .uwp-commandbar-primary {

@@ -140,6 +140,10 @@ body.night-mode .app-shell.nav-overlay-open .sidebar {
   background: transparent;
 }
 
+body.night-mode .app-shell.nav-minimal.is-headered-playlist-route {
+  --immersive-topbar-noise-opacity: 0 !important;
+}
+
 .minimal-titlebar {
   display: none;
 }
@@ -275,6 +279,7 @@ body.night-mode .app-shell .minimal-titlebar-back-button:focus-visible {
   bottom: var(--player-height);
   z-index: 95;
   grid-row: auto;
+  grid-template-rows: auto auto auto auto minmax(0, 1fr) auto;
   width: 320px;
   height: auto;
   max-height: none;
@@ -318,10 +323,10 @@ body.night-mode .app-shell .minimal-titlebar-back-button:focus-visible {
 
 .app-shell.nav-minimal.nav-minimal-open .sidebar {
   top: 0;
-  bottom: 0;
+  bottom: var(--player-height);
   z-index: 100;
   padding-top: 40px;
-  padding-bottom: calc(var(--player-height) + 8px);
+  padding-bottom: 8px;
   pointer-events: auto;
   visibility: visible;
   box-shadow: 18px 0 42px rgba(34, 48, 70, 0.2);

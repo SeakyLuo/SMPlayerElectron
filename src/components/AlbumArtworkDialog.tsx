@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { createPortal } from 'react-dom'
 
 import type { Translator } from '../shared/i18n'
 import { Icon } from './icons'
 import { AlbumArtEditorControl } from './MusicAlbumArtControl'
+import { PopupDialog } from './PopupDialog'
 
 interface AlbumArtworkDialogProps {
   albumName: string
@@ -105,45 +105,39 @@ export function AlbumArtworkDialog({
     }
   }
 
-  return createPortal(
-    <div className="song-dialog-overlay music-dialog-overlay AlbumDialogOverlay">
-      <section
-        className="song-dialog album-artwork-dialog ContentDialog AlbumDialog"
-        role="dialog"
-        aria-modal="true"
-        aria-label={t('song.albumArt')}
-        onMouseDown={(event) => {
-          event.stopPropagation()
-        }}
-      >
-        <nav className="song-dialog-tabs music-dialog-pivot AlbumDialogPivot" aria-label={t('song.albumArt')}>
+  return (
+    <PopupDialog
+      t={t}
+      overlayClassName="music-dialog-overlay AlbumDialogOverlay"
+      className="album-artwork-dialog ContentDialog AlbumDialog"
+      navClassName="music-dialog-pivot AlbumDialogPivot"
+      navLabel={t('song.albumArt')}
+      ariaLabel={t('song.albumArt')}
+      onClose={onClose}
+      navChildren={(
+        <>
           <button type="button" className="AlbumArtItem AlbumArtPivotItem is-active">
             <Icon name="albums" />
             {t('song.albumArt')}
           </button>
-          <button type="button" className="song-dialog-icon-button music-dialog-close-button CloseButton" onClick={onClose} aria-label={t('common.close')}>
-            <Icon name="arrowLeft" className="dialog-back-icon" />
-            <Icon name="close" className="dialog-close-icon" />
-          </button>
-          <span className="dialog-titlebar-title">{t('app.shell')}</span>
-        </nav>
-        {statusMessage ? <p className="song-dialog-status">{statusMessage}</p> : null}
-        <AlbumArtEditorControl
-          title={albumName}
-          t={t}
-          saving={saving}
-          showBusy={saving}
-          artworkUrl={currentArtworkUrl}
-          songId={songId}
-          showDeleteConfirm={showDeleteConfirm}
-          onChangeArtwork={() => void changeArtwork()}
-          onSaveArtwork={() => void saveArtwork()}
-          onRequestDelete={() => setShowDeleteConfirm(true)}
-          onConfirmDelete={() => void deleteArtwork()}
-          onCancelDelete={() => setShowDeleteConfirm(false)}
-        />
-      </section>
-    </div>,
-    document.body,
+        </>
+      )}
+      afterNav={statusMessage ? <p className="song-dialog-status">{statusMessage}</p> : null}
+    >
+      <AlbumArtEditorControl
+        title={albumName}
+        t={t}
+        saving={saving}
+        showBusy={saving}
+        artworkUrl={currentArtworkUrl}
+        songId={songId}
+        showDeleteConfirm={showDeleteConfirm}
+        onChangeArtwork={() => void changeArtwork()}
+        onSaveArtwork={() => void saveArtwork()}
+        onRequestDelete={() => setShowDeleteConfirm(true)}
+        onConfirmDelete={() => void deleteArtwork()}
+        onCancelDelete={() => setShowDeleteConfirm(false)}
+      />
+    </PopupDialog>
   )
 }

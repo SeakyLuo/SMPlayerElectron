@@ -148,6 +148,52 @@
   padding: 6px 28px 44px;
 }
 
+.popup-dialog-title,
+.popup-dialog-title-block h2 {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-strong);
+  font-size: 22px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.popup-dialog-title-block {
+  min-width: 0;
+}
+
+.popup-dialog-title-block p {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
+.remote-share-dialog,
+.voice-assistant-help-dialog,
+.preference-modal,
+.release-notes-dialog {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.remote-share-dialog .song-dialog-tabs,
+.voice-assistant-help-dialog .song-dialog-tabs,
+.preference-modal .song-dialog-tabs,
+.release-notes-dialog .song-dialog-tabs {
+  align-items: center;
+}
+
+.release-notes-dialog .release-notes-list {
+  min-height: 0;
+  padding: 0 28px 44px;
+  color: var(--text-strong);
+  line-height: 1.65;
+}
+
+.voice-assistant-help-dialog .release-notes-list {
+  min-height: 0;
+  padding: 0 28px 44px;
+}
+
 .song-dialog-body::-webkit-scrollbar {
   display: none;
   width: 0;
@@ -246,18 +292,6 @@
   to {
     transform: rotate(360deg);
   }
-}
-
-.song-dialog-status {
-  position: absolute;
-  left: 22px;
-  bottom: 14px;
-  max-width: calc(100% - 44px);
-  margin: 0;
-  overflow: hidden;
-  color: var(--text-muted);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .music-info-save-progress {
@@ -555,8 +589,7 @@
   flex: 1 1 220px;
 }
 
-.song-dialog-warning p,
-.song-dialog-status {
+.song-dialog-warning p {
   margin: 0;
   color: var(--text-muted);
 }
@@ -656,6 +689,27 @@
   }
 
   .song-dialog-body {
+    padding: 0 12px 28px;
+  }
+
+  .popup-dialog-title,
+  .popup-dialog-title-block h2 {
+    font-size: 18px;
+  }
+
+  .remote-share-dialog .song-dialog-tabs,
+  .voice-assistant-help-dialog .song-dialog-tabs,
+  .preference-modal .song-dialog-tabs,
+  .release-notes-dialog .song-dialog-tabs {
+    display: flex;
+    padding: calc(var(--dialog-toolbar-offset) + 12px) 12px 10px;
+  }
+
+  .release-notes-dialog .release-notes-list {
+    padding: 0 12px 28px;
+  }
+
+  .voice-assistant-help-dialog .release-notes-list {
     padding: 0 12px 28px;
   }
 
@@ -759,6 +813,13 @@ body.night-mode .song-dialog button:hover {
   color: color-mix(in srgb, var(--accent) 72%, #f5fbff 28%);
 }
 
+body.night-mode .song-dialog-primary-button:disabled {
+  border-color: rgba(148, 163, 184, 0.18) !important;
+  background: rgba(255, 255, 255, 0.14) !important;
+  color: rgba(226, 232, 240, 0.72) !important;
+  box-shadow: none !important;
+}
+
 body.night-mode .song-dialog-tabs button.is-active,
 body.night-mode .song-dialog-modebar button.is-active {
   border-color: rgba(var(--accent-rgb), 0.38);
@@ -768,7 +829,6 @@ body.night-mode .song-dialog-modebar button.is-active {
 
 body.night-mode .song-dialog-property-label,
 body.night-mode .song-dialog-warning p,
-body.night-mode .song-dialog-status,
 body.night-mode .song-dialog-artwork .album-art-control-fallback {
   color: var(--night-muted);
 }

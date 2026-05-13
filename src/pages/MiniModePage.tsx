@@ -115,8 +115,11 @@ export function MiniModePage({
 
   const openVoiceAssistant = () => {
     setVolumeOpen(false)
-    setVoiceAssistantOpen(true)
-    voiceAssistantFlyoutRef.current?.open()
+    if (voiceAssistantOpen) {
+      voiceAssistantFlyoutRef.current?.close()
+    } else {
+      voiceAssistantFlyoutRef.current?.open()
+    }
   }
 
   const beginProgressSeek = (event: PointerEvent<HTMLInputElement>) => {

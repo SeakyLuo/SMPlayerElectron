@@ -405,10 +405,11 @@ export function NowPlayingPage({
     listShellRef.current?.scrollTo({ top: nextScrollTop, behavior: 'smooth' })
   }
 
-  const openAddToMenu = (x: number, y: number) => {
+  const openAddToMenu = (x: number, y: number, anchor?: HTMLElement) => {
     setAddToMenu({
       x,
       y,
+      anchor,
       songIds: queueSongIds,
       defaultPlaylistName: defaultNewPlaylistName,
     })
@@ -518,7 +519,7 @@ export function NowPlayingPage({
         ariaExpanded={randomMenuPosition != null}
         onClick={(event) => {
           const rect = event.currentTarget.getBoundingClientRect()
-          setRandomMenuPosition({ x: rect.left, y: rect.bottom + 4 })
+          setRandomMenuPosition({ x: rect.left, y: rect.bottom + 4, anchor: event.currentTarget })
         }}
         onOverflowClick={(position) => {
           setRandomMenuPosition(position)
@@ -537,10 +538,12 @@ export function NowPlayingPage({
           <CommandBarButton
             icon="plus"
             label={t('context.addToPlaylist')}
-            canOverflow={false}
             onClick={(event) => {
               const rect = event.currentTarget.getBoundingClientRect()
-              openAddToMenu(rect.left, rect.bottom + 8)
+              openAddToMenu(rect.left, rect.bottom + 8, event.currentTarget)
+            }}
+            onOverflowClick={(position) => {
+              openAddToMenu(position.x, position.y)
             }}
           />
           <CommandBarButton
@@ -762,6 +765,7 @@ export function NowPlayingPage({
           setAddToMenu({
             x: rect.left,
             y: rect.top - 8,
+            anchor: event.currentTarget,
             songIds: selectedVisibleSongIds,
             defaultPlaylistName: defaultNewPlaylistName,
           })
@@ -945,11 +949,9 @@ interface NowPlayingSongMenuState {
   y: number
 }
 
-interface NowPlayingAddToMenuState {
+interface NowPlayingAddToMenuState extends MenuFlyoutPosition {
   songIds: number[]
   defaultPlaylistName: string
-  x: number
-  y: number
 }
 
 function getDefaultNewPlaylistName(t: Translator, playlists: LibraryPlaylist[]) {

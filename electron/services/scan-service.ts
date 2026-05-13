@@ -2,14 +2,17 @@ import { mkdir, readdir, stat } from 'node:fs/promises'
 import { basename, dirname, extname, join, normalize } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 
-import type { HiddenStorageItem, ScanLibraryProgress, ScanLibraryResult } from '../../src/shared/contracts.ts'
+import { normalizeArtists } from '../../src/shared/artists.ts'
+import type { ArtistSplitResultItem, HiddenStorageItem, ScanLibraryProgress, ScanLibraryResult } from '../../src/shared/contracts.ts'
 import { ACTIVE_STATE, AUDIO_EXTENSIONS } from './constants.ts'
 import { pruneThumbnailCache } from './artwork-cache.ts'
 import { readAudioMetadataBatch, type ScannedSong } from './audio-metadata-reader.ts'
 import type { SettingsRow } from './settings-service.ts'
 import { syncAlbums } from './album-sync.ts'
+import { SongArtistSync } from './song-artist-sync.ts'
 
 const METADATA_SCAN_CONCURRENCY = 6
+const SMART_ARTIST_SPLIT_PATTERN = /\s*(?:\/|\uFF0F|;|\uFF1B|\u3001|\|)\s*/u
 export const SCAN_CANCELED_ERROR_MESSAGE = 'Scan canceled'
 
 export interface FolderScanOptions {
@@ -40,9 +43,8 @@ export class ScanService {
   private readonly markFileInactiveStatement
   private readonly upsertFolderStatement
   private readonly upsertMusicStatement
-  private readonly markSongArtistsInactiveStatement
-  private readonly upsertSongArtistStatement
   private readonly upsertFileStatement
+  private readonly songArtistSync
 
   constructor(db: DatabaseSync, options: ScanServiceOptions) {
     this.db = db
@@ -80,18 +82,6 @@ export class ScanService {
         State = excluded.State
       RETURNING Id
     `)
-    this.markSongArtistsInactiveStatement = this.db.prepare(`
-      UPDATE MusicArtist
-      SET State = ?
-      WHERE MusicId = ?
-    `)
-    this.upsertSongArtistStatement = this.db.prepare(`
-      INSERT INTO MusicArtist (MusicId, Name, Priority, State)
-      VALUES (?, ?, ?, ?)
-      ON CONFLICT DO UPDATE SET
-        Priority = excluded.Priority,
-        State = excluded.State
-    `)
     this.upsertFileStatement = this.db.prepare(`
       INSERT INTO File (Path, ParentId, FileId, FileType, State)
       VALUES (?, ?, ?, 0, ?)
@@ -101,6 +91,7 @@ export class ScanService {
         State = excluded.State
       RETURNING Id
     `)
+    this.songArtistSync = new SongArtistSync(this.db)
   }
 
   async scanAll(requestedRootPath?: string): Promise<ScanLibraryResult> {
@@ -127,6 +118,7 @@ export class ScanService {
     await this.walk(rootPath, folders, audioFiles, hiddenFolderPaths, hiddenFilePaths)
 
     const scannedSongs = await this.readSongs(audioFiles, Boolean(settings.UseFilenameNotMusicName))
+    let artistSplitResult = { applied: [] as ArtistSplitResultItem[], suggestions: [] as ArtistSplitResultItem[] }
 
     this.db.exec('BEGIN')
     try {
@@ -135,7 +127,7 @@ export class ScanService {
       this.markFileInactiveStatement.run(ACTIVE_STATE.inactive, ACTIVE_STATE.hidden, ACTIVE_STATE.parentHidden)
 
       const folderIds = this.upsertScannedFolders(rootPath, folders)
-      this.upsertScannedSongs(scannedSongs, folderIds)
+      artistSplitResult = this.upsertScannedSongs(scannedSongs, folderIds, Boolean(settings.SmartMultiArtistRecognition))
       syncAlbums(this.db)
       this.cleanupSideEffects(settings)
 
@@ -155,6 +147,8 @@ export class ScanService {
       filesAdded: [],
       filesRemoved: [],
       filesMoved: [],
+      artistSplitsApplied: artistSplitResult.applied,
+      artistSplitSuggestions: artistSplitResult.suggestions,
     }
   }
 
@@ -257,9 +251,11 @@ export class ScanService {
       `).run(ACTIVE_STATE.inactive, ACTIVE_STATE.hidden, ACTIVE_STATE.parentHidden, '\\', '/', normalizedScanFolderPattern)
 
       const folderIds = this.upsertScannedFolders(rootPath, folders)
-      this.upsertScannedSongs(scannedSongs, folderIds)
+      const artistSplitResult = this.upsertScannedSongs(scannedSongs, folderIds, Boolean(settings.SmartMultiArtistRecognition))
       syncAlbums(this.db)
       this.cleanupSideEffects(settings)
+      updateResult.artistSplitsApplied = artistSplitResult.applied
+      updateResult.artistSplitSuggestions = artistSplitResult.suggestions
       this.db.exec('COMMIT')
     } catch (error) {
       this.db.exec('ROLLBACK')
@@ -276,6 +272,8 @@ export class ScanService {
       filesAdded: updateResult.filesAdded,
       filesRemoved: updateResult.filesRemoved,
       filesMoved: updateResult.filesMoved,
+      artistSplitsApplied: updateResult.artistSplitsApplied,
+      artistSplitSuggestions: updateResult.artistSplitSuggestions,
     }
   }
 
@@ -314,7 +312,17 @@ export class ScanService {
     return folderIds
   }
 
-  private upsertScannedSongs(scannedSongs: ScannedSong[], folderIds: Map<string, number>) {
+  private upsertScannedSongs(
+    scannedSongs: ScannedSong[],
+    folderIds: Map<string, number>,
+    smartMultiArtistRecognition: boolean,
+  ) {
+    const artistSplitPlan = smartMultiArtistRecognition
+      ? this.buildArtistSplitPlan(scannedSongs)
+      : { autoSplits: new Map<ScannedSong, string[]>(), suggestions: new Map<ScannedSong, string[]>() }
+    const applied: ArtistSplitResultItem[] = []
+    const suggestions: ArtistSplitResultItem[] = []
+
     for (const song of scannedSongs) {
       const musicRow = this.upsertMusicStatement.get(
         song.path,
@@ -328,15 +336,16 @@ export class ScanService {
         song.dateAdded,
         ACTIVE_STATE.active,
       ) as { Id: number }
+      const splitArtists = artistSplitPlan.autoSplits.get(song)
+      const artists = splitArtists ?? (song.artist ? [song.artist] : [])
 
-      this.markSongArtistsInactiveStatement.run(ACTIVE_STATE.inactive, musicRow.Id)
-      if (song.artist) {
-        this.upsertSongArtistStatement.run(
-          musicRow.Id,
-          song.artist,
-          0,
-          ACTIVE_STATE.active,
-        )
+      this.songArtistSync.sync(musicRow.Id, artists)
+      if (splitArtists && splitArtists.length > 1) {
+        applied.push(this.toArtistSplitResultItem(musicRow.Id, song, splitArtists))
+      }
+      const suggestedArtists = artistSplitPlan.suggestions.get(song)
+      if (suggestedArtists) {
+        suggestions.push(this.toArtistSplitResultItem(musicRow.Id, song, suggestedArtists))
       }
 
       this.upsertFileStatement.get(
@@ -345,6 +354,11 @@ export class ScanService {
         musicRow.Id,
         ACTIVE_STATE.active,
       )
+    }
+
+    return {
+      applied,
+      suggestions,
     }
   }
 
@@ -370,7 +384,112 @@ export class ScanService {
       filesRemoved: filesRemoved.filter((songPath) =>
         !filesMoved.some((movedPath) => basename(movedPath).toLocaleLowerCase() === basename(songPath).toLocaleLowerCase())),
       filesMoved,
+      artistSplitsApplied: [] as ArtistSplitResultItem[],
+      artistSplitSuggestions: [] as ArtistSplitResultItem[],
     }
+  }
+
+  private buildArtistSplitPlan(scannedSongs: ScannedSong[]) {
+    const knownArtists = this.getKnownArtists()
+    const autoSplits = new Map<ScannedSong, string[]>()
+    const candidates: Array<{ song: ScannedSong; artists: string[] }> = []
+
+    for (const song of scannedSongs) {
+      if (song.artists.length > 1) {
+        autoSplits.set(song, song.artists)
+        for (const artist of song.artists) {
+          knownArtists.add(this.getArtistKey(artist))
+        }
+        continue
+      }
+
+      const artists = this.splitSmartArtistCandidate(song.artist)
+      if (artists.length > 1) {
+        candidates.push({ song, artists })
+      } else if (song.artist) {
+        knownArtists.add(this.getArtistKey(song.artist))
+      }
+    }
+
+    const recurringPartKeys = this.getRecurringCandidatePartKeys(candidates)
+    const unresolvedCandidates = new Set(candidates)
+    let changed = true
+    while (changed) {
+      changed = false
+      for (const candidate of unresolvedCandidates) {
+        if (!candidate.artists.some((artist) =>
+          knownArtists.has(this.getArtistKey(artist)) ||
+          recurringPartKeys.has(this.getArtistKey(artist)),
+        )) {
+          continue
+        }
+
+        autoSplits.set(candidate.song, candidate.artists)
+        for (const artist of candidate.artists) {
+          knownArtists.add(this.getArtistKey(artist))
+        }
+        unresolvedCandidates.delete(candidate)
+        changed = true
+      }
+    }
+
+    return {
+      autoSplits,
+      suggestions: new Map([...unresolvedCandidates].map((candidate) => [candidate.song, candidate.artists])),
+    }
+  }
+
+  private getKnownArtists() {
+    const rows = this.db.prepare(`
+      SELECT MusicArtist.Name AS name
+      FROM MusicArtist
+      INNER JOIN Music
+        ON Music.Id = MusicArtist.MusicId
+       AND Music.State = ?
+      WHERE MusicArtist.State = ?
+    `).all(ACTIVE_STATE.active, ACTIVE_STATE.active) as Array<{ name: string }>
+    return new Set(rows.flatMap((row) => normalizeArtists([row.name]).map((artist) => this.getArtistKey(artist))))
+  }
+
+  private splitSmartArtistCandidate(artist: string) {
+    return normalizeArtists(
+      artist
+        .split(SMART_ARTIST_SPLIT_PATTERN)
+        .map((part) => part.trim()),
+    )
+  }
+
+  private getRecurringCandidatePartKeys(candidates: Array<{ song: ScannedSong; artists: string[] }>) {
+    const candidateKeysByPartKey = new Map<string, Set<string>>()
+    for (const candidate of candidates) {
+      const candidateKey = this.getArtistKey(candidate.song.artist)
+      for (const artist of candidate.artists) {
+        const partKey = this.getArtistKey(artist)
+        const candidateKeys = candidateKeysByPartKey.get(partKey) ?? new Set<string>()
+        candidateKeys.add(candidateKey)
+        candidateKeysByPartKey.set(partKey, candidateKeys)
+      }
+    }
+
+    return new Set(
+      [...candidateKeysByPartKey.entries()]
+        .filter(([, candidateKeys]) => candidateKeys.size > 1)
+        .map(([partKey]) => partKey),
+    )
+  }
+
+  private toArtistSplitResultItem(songId: number, song: ScannedSong, artists: string[]): ArtistSplitResultItem {
+    return {
+      songId,
+      path: song.path,
+      title: song.title,
+      artist: song.artist,
+      artists,
+    }
+  }
+
+  private getArtistKey(artist: string) {
+    return artist.trim().toLocaleLowerCase()
   }
 
   private async statFolderForScan(folderPath: string) {

@@ -24,6 +24,7 @@ export function LocalTableContent({
   currentRelativePath,
   selectedFolderPaths,
   selectedSongIds,
+  dragOverFolderPath,
   selectedListItemKey,
   selectedTrackId,
   isPlaying,
@@ -46,7 +47,10 @@ export function LocalTableContent({
   onOpenFolder,
   onOpenFolderMenu,
   onDragFolderStart,
+  onDragOverFolder,
+  onDragLeaveFolder,
   onDropFolder,
+  onDragLocalItemEnd,
   onPlayFolder,
   onAddFolder,
   onRefreshFolder,
@@ -71,6 +75,7 @@ export function LocalTableContent({
   currentRelativePath: string
   selectedFolderPaths: Set<string>
   selectedSongIds: Set<number>
+  dragOverFolderPath: string
   selectedListItemKey: string
   selectedTrackId: number | null
   isPlaying: boolean
@@ -93,7 +98,10 @@ export function LocalTableContent({
   onOpenFolder: (folderPath: string) => void
   onOpenFolderMenu: (folder: FolderNode, x: number, y: number) => void
   onDragFolderStart: (event: DragEvent, folder: FolderNode) => void
+  onDragOverFolder: (event: DragEvent, folder: FolderNode) => void
+  onDragLeaveFolder: (event: DragEvent, folder: FolderNode) => void
   onDropFolder: (event: DragEvent, folder: FolderNode) => void
+  onDragLocalItemEnd: () => void
   onPlayFolder: (folder: FolderNode) => void
   onAddFolder: (folder: FolderNode, x: number, y: number) => void
   onRefreshFolder: (folder: FolderNode) => void
@@ -136,18 +144,22 @@ export function LocalTableContent({
                   'local-table-folder-row',
                   !multiSelect && selectedListItemKey === getFolderListItemKey(folder.relativePath) && 'is-selected',
                   multiSelect && selectedFolderPaths.has(folder.relativePath) && 'is-selected',
+                  dragOverFolderPath === folder.relativePath && 'is-drop-target',
                 )}
                 draggable
                 onDragStart={(event) => {
                   onDragFolderStart(event, folder)
                 }}
                 onDragOver={(event) => {
-                  event.preventDefault()
-                  event.dataTransfer.dropEffect = 'move'
+                  onDragOverFolder(event, folder)
+                }}
+                onDragLeave={(event) => {
+                  onDragLeaveFolder(event, folder)
                 }}
                 onDrop={(event) => {
                   onDropFolder(event, folder)
                 }}
+                onDragEnd={onDragLocalItemEnd}
                 onClick={() => {
                   if (multiSelect) {
                     onToggleFolderSelection(folder.relativePath)
@@ -273,6 +285,7 @@ export function LocalTableContent({
                 onDragStart={(event) => {
                   onDragSongStart(event, song)
                 }}
+                onDragEnd={onDragLocalItemEnd}
                 onClick={() => {
                   if (multiSelect) {
                     onToggleSongSelection(song.id)

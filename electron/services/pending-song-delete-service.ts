@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises'
+import { readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 
@@ -148,7 +148,8 @@ export class PendingSongDeleteService {
     }
 
     try {
-      this.records = JSON.parse(await readFile(this.filePath, 'utf8')) as PendingSongDeleteRecord[]
+      const content = await readFile(this.filePath, 'utf8')
+      this.records = content.trim() ? JSON.parse(content) as PendingDeleteRecord[] : []
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
         throw error
@@ -159,7 +160,9 @@ export class PendingSongDeleteService {
   }
 
   private async save() {
-    await writeFile(this.filePath, `${JSON.stringify(this.records)}\n`, 'utf8')
+    const tempPath = `${this.filePath}.${process.pid}.tmp`
+    await writeFile(tempPath, `${JSON.stringify(this.records)}\n`, 'utf8')
+    await rename(tempPath, this.filePath)
   }
 
   private async trashRecord(record: PendingDeleteRecord) {

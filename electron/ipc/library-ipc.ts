@@ -118,8 +118,12 @@ export function registerLibraryIpc(options: LibraryIpcOptions) {
   ipcMain.handle('library:move-local-folder-to-folder', (_event, sourceFolderPath: string, targetFolderPath: string) =>
     getLocalItemService().moveLocalFolderToFolder(sourceFolderPath, targetFolderPath, options.resolveMoveConflict),
   )
-  ipcMain.handle('library:move-local-items-to-folder', (_event, songIds: number[], folderPaths: string[], targetFolderPath: string) =>
-    getLocalItemService().moveLocalItemsToFolder(songIds, folderPaths, targetFolderPath, options.resolveMoveConflict),
+  ipcMain.handle('library:move-local-items-to-folder', (event, songIds: number[], folderPaths: string[], targetFolderPath: string, operationId?: string) =>
+    getLocalItemService().moveLocalItemsToFolder(songIds, folderPaths, targetFolderPath, options.resolveMoveConflict, operationId
+      ? (currentItem, progress, max) => {
+          event.sender.send('library:move-local-items-progress', { operationId, currentItem, progress, max })
+        }
+      : undefined),
   )
   ipcMain.handle('library:delete-songs-from-disk', async (_event, songIds: number[]) => {
     const songPaths = getSongService().getSongPaths(songIds)
@@ -226,6 +230,9 @@ export function registerLibraryIpc(options: LibraryIpcOptions) {
   ipcMain.handle('library:cancel-scan-folder', (_event, operationId: string) => {
     canceledLocalFolderScanOperationIds.add(operationId)
   })
+  ipcMain.handle('library:apply-artist-splits', (_event, splits) =>
+    getSongService().applyArtistSplits(splits),
+  )
   ipcMain.handle('data:export', async () => {
     const result = await showSaveDialog(options.getWindow(), {
       title: 'Export Data',

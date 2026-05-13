@@ -13,6 +13,7 @@ export const emptySnapshot: MusicData = {
   settings: {
     rootPath: '',
     useFilenameNotMusicName: false,
+    smartMultiArtistRecognition: true,
     showCount: true,
     themeColor: '#0078D7',
     nightMode: 'never',
@@ -146,10 +147,22 @@ export function patchPlaylistSongs(
   active: boolean,
 ): MusicData {
   const targetPlaylist = snapshot.playlists.find((playlist) => playlist.id === playlistId)
-  const nextSnapshot = targetPlaylist?.isBuiltIn ? patchSongsFavorite(snapshot, songIds, active) : snapshot
+  const isFavoritesPlaylist = playlistId === snapshot.favorites.playlistId
+  const nextSnapshot = isFavoritesPlaylist ? patchSongsFavorite(snapshot, songIds, active) : snapshot
+  const nextFavorites = isFavoritesPlaylist
+    ? {
+        ...nextSnapshot.favorites,
+        songIds: patchPlaylistSongState(
+          { ...targetPlaylist!, songIds: nextSnapshot.favorites.songIds, songCount: nextSnapshot.favorites.songIds.length },
+          songIds,
+          active,
+        ).songIds,
+      }
+    : nextSnapshot.favorites
 
   return {
     ...nextSnapshot,
+    favorites: nextFavorites,
     playlists: nextSnapshot.playlists.map((playlist) =>
       playlist.id === playlistId ? patchPlaylistSongState(playlist, songIds, active) : playlist,
     ),

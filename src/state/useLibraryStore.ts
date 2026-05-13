@@ -2,10 +2,12 @@ import { create } from 'zustand'
 
 import type {
   AppSettingsUpdate,
+  ArtistSplitResultItem,
   HiddenStorageItem,
   LibraryPlaylist,
   MusicData,
   LocalFolderSortCriterion,
+  MoveLocalItemsProgress,
   PendingLocalItemsDelete,
   PendingSongDelete,
   PlaylistSortCriterion,
@@ -42,6 +44,7 @@ interface LibraryStoreState {
   recentLoaded: boolean
   scanning: boolean
   scanProgress: ScanLibraryProgress | null
+  moveProgress: MoveLocalItemsProgress | null
   error: string | null
   clearError: () => void
   refreshShell: () => Promise<void>
@@ -53,6 +56,7 @@ interface LibraryStoreState {
   pickLibraryRoot: () => Promise<boolean>
   scanLibrary: () => Promise<ScanLibraryResult | null>
   scanLocalFolder: (folderPath: string) => Promise<ScanLibraryResult | null>
+  applyArtistSplits: (splits: ArtistSplitResultItem[]) => Promise<void>
   cancelLocalFolderScan: () => Promise<void>
   setSongFavorite: (songId: number, favorite: boolean) => Promise<void>
   setSongsFavorite: (songIds: number[], favorite: boolean) => Promise<void>
@@ -109,6 +113,7 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
   recentLoaded: false,
   scanning: false,
   scanProgress: null,
+  moveProgress: null,
   error: null,
   clearError: () => {
     set({ error: null })
@@ -393,6 +398,14 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
       await window.smplayer?.cancelScanLocalFolder(operationId)
     }
   },
+  applyArtistSplits: async (splits) => {
+    if (!window.smplayer || splits.length === 0) {
+      return
+    }
+
+    await window.smplayer.applyArtistSplits(splits)
+    await get().refresh({ songs: true, folders: false, recent: false })
+  },
   setSongFavorite: async (songId, favorite) => {
     if (!window.smplayer) {
       return
@@ -606,6 +619,13 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
       set((state) => ({
         snapshot: {
           ...state.snapshot,
+          favorites: playlistId === state.snapshot.favorites.playlistId
+            ? {
+                ...state.snapshot.favorites,
+                songIds,
+                sortCriterion: sortCriterion ?? state.snapshot.favorites.sortCriterion,
+              }
+            : state.snapshot.favorites,
           playlists: state.snapshot.playlists.map((playlist) =>
             playlist.id === playlistId
               ? {
@@ -770,13 +790,32 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
       return
     }
 
-    set({ error: null })
+    const operationId = crypto.randomUUID()
+    let removeProgressListener: (() => void) | null = null
+
+    set({
+      error: null,
+      moveProgress: {
+        operationId,
+        progress: 0,
+        max: songIds.length + folderPaths.length,
+        currentItem: folderPaths[0] ?? '',
+      },
+    })
 
     try {
-      await window.smplayer.moveLocalItemsToFolder(songIds, folderPaths, targetFolderPath)
+      removeProgressListener = window.smplayer.onMoveLocalItemsProgress((progress) => {
+        if (progress.operationId === operationId) {
+          set({ moveProgress: progress })
+        }
+      })
+      await window.smplayer.moveLocalItemsToFolder(songIds, folderPaths, targetFolderPath, operationId)
       await get().refresh({ songs: true, folders: true, recent: false })
     } catch (error) {
       set({ error: getErrorMessage(error) })
+    } finally {
+      removeProgressListener?.()
+      set({ moveProgress: null })
     }
   },
   createLocalFolder: async (rootPath, relativePath, name) => {

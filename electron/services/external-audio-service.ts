@@ -7,6 +7,7 @@ import { readAudioMetadataBatch } from './audio-metadata-reader.ts'
 import type { NowPlayingService } from './now-playing-service.ts'
 import type { SettingsRow, SettingsService } from './settings-service.ts'
 import { syncAlbums } from './album-sync.ts'
+import { SongArtistSync } from './song-artist-sync.ts'
 
 const METADATA_IMPORT_CONCURRENCY = 6
 
@@ -18,8 +19,7 @@ export class ExternalAudioService {
   private readonly savePlaybackSettings: (update: PlaybackSettingsUpdate) => void
 
   private readonly upsertMusicStatement
-  private readonly markSongArtistsInactiveStatement
-  private readonly upsertSongArtistStatement
+  private readonly songArtistSync
 
   constructor(
     db: DatabaseSync,
@@ -50,18 +50,7 @@ export class ExternalAudioService {
         State = excluded.State
       RETURNING Id
     `)
-    this.markSongArtistsInactiveStatement = this.db.prepare(`
-      UPDATE MusicArtist
-      SET State = ?
-      WHERE MusicId = ?
-    `)
-    this.upsertSongArtistStatement = this.db.prepare(`
-      INSERT INTO MusicArtist (MusicId, Name, Priority, State)
-      VALUES (?, ?, ?, ?)
-      ON CONFLICT DO UPDATE SET
-        Priority = excluded.Priority,
-        State = excluded.State
-    `)
+    this.songArtistSync = new SongArtistSync(this.db)
   }
 
   async addNextAndPlay(filePaths: string[]) {
@@ -92,15 +81,7 @@ export class ExternalAudioService {
           ACTIVE_STATE.active,
         ) as { Id: number }
 
-        this.markSongArtistsInactiveStatement.run(ACTIVE_STATE.inactive, musicRow.Id)
-        if (song.artist) {
-          this.upsertSongArtistStatement.run(
-            musicRow.Id,
-            song.artist,
-            0,
-            ACTIVE_STATE.active,
-          )
-        }
+        this.songArtistSync.sync(musicRow.Id, song.artists.length > 0 ? song.artists : [song.artist])
         openedSongIds.push(musicRow.Id)
       }
 

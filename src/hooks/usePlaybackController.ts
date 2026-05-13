@@ -70,6 +70,7 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
   const loadedTrackIdRef = useRef<number | null>(null)
   const pendingStartSecondsRef = useRef(0)
   const pendingAutoplayRef = useRef(false)
+  const loadingTrackIdRef = useRef<number | null>(null)
   const hydratedRef = useRef(false)
   const restoredPlaybackRef = useRef(false)
   const queueOverrideRef = useRef<number[] | null>(null)
@@ -231,7 +232,7 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
 
   const updateProgressFromAudio = useCallback((force = false) => {
     const audio = audioRef.current
-    if (!audio || isUserSeekingRef.current) {
+    if (!audio || isUserSeekingRef.current || loadingTrackIdRef.current != null) {
       return
     }
 
@@ -389,6 +390,7 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
 
       if (modeRef.current === 'repeat-one') {
         transitionStatus({ type: 'paused' })
+        loadingTrackIdRef.current = null
         await persistPlaybackSettings({ musicProgress: audio?.currentTime ?? progressSecondsRef.current })
         return
       }
@@ -396,6 +398,7 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
       const playbackSongIds = getPlaybackSongIds()
       if (playbackSongIds.length === 0) {
         transitionStatus({ type: 'idle' })
+        loadingTrackIdRef.current = null
         return
       }
 
@@ -409,6 +412,7 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
 
       if (nextTrackId == null) {
         transitionStatus({ type: 'paused' })
+        loadingTrackIdRef.current = null
         await persistPlaybackSettings({ musicProgress: 0 })
         return
       }
@@ -452,6 +456,7 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
 
       if (loadedTrackIdRef.current !== trackId) {
         clearStalledTimer()
+        loadingTrackIdRef.current = trackId
         loadedTrackIdRef.current = trackId
         audio.src = track.mediaUrl
         audio.load()
@@ -484,6 +489,7 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
     currentTrackIdRef,
     pendingStartSecondsRef,
     pendingAutoplayRef,
+    loadingTrackIdRef,
     volumeRef,
     isMutedRef,
     isUserSeekingRef,

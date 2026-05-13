@@ -16,8 +16,15 @@ export function InAppNotificationWithButton() {
       {hasActions ? (
         <div className="undoable-notification-actions">
           {notification.actions.map((action, index) => (
-            <button key={`${action.text}-${index}`} className="undoable-notification-action" type="button" onClick={() => void run(index)}>
-              {action.text}
+            <button
+              key={`${action.text}-${index}`}
+              className="undoable-notification-action"
+              type="button"
+              disabled={notification.runningActionIndex != null}
+              aria-busy={notification.runningActionIndex === index}
+              onClick={() => void run(index)}
+            >
+              {notification.runningActionIndex === index ? <span className="undoable-notification-spinner" aria-hidden="true" /> : action.text}
             </button>
           ))}
         </div>

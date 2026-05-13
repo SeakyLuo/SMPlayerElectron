@@ -13,8 +13,6 @@ export class PlaylistService {
   private readonly insertPlaylistStatement
   private readonly updatePlaylistNameStatement
   private readonly updatePlaylistStateStatement
-  private readonly updatePlaylistItemStateStatement
-  private readonly insertPlaylistItemStatement
   private readonly markPlaylistItemsInactiveStatement
   private readonly markPlaylistItemsBySongInactiveStatement
   private readonly cleanupInvalidPlaylistItemsStatement
@@ -46,15 +44,6 @@ export class PlaylistService {
       UPDATE Playlist
       SET State = ?
       WHERE Id = ?
-    `)
-    this.updatePlaylistItemStateStatement = this.db.prepare(`
-      UPDATE PlaylistItem
-      SET State = ?
-      WHERE PlaylistId = ? AND ItemId = ?
-    `)
-    this.insertPlaylistItemStatement = this.db.prepare(`
-      INSERT INTO PlaylistItem (PlaylistId, ItemId, State)
-      VALUES (?, ?, ?)
     `)
     this.markPlaylistItemsInactiveStatement = this.db.prepare(`
       UPDATE PlaylistItem
@@ -268,8 +257,7 @@ export class PlaylistService {
   }
 
   setSongFavorite(songId: number, favorite: boolean) {
-    const settings = this.settingsService.getSettings()
-    this.setPlaylistSongState(settings.MyFavorites, songId, favorite)
+    this.setSongsFavorite([songId], favorite)
   }
 
   setSongsFavorite(songIds: number[], favorite: boolean) {
@@ -344,7 +332,7 @@ export class PlaylistService {
   }
 
   addSongToPlaylist(playlistId: number, songId: number) {
-    this.setPlaylistSongState(playlistId, songId, true)
+    this.addSongsToPlaylist(playlistId, [songId])
   }
 
   addSongsToPlaylist(playlistId: number, songIds: number[]) {
@@ -360,7 +348,7 @@ export class PlaylistService {
   }
 
   removeSongFromPlaylist(playlistId: number, songId: number) {
-    this.setPlaylistSongState(playlistId, songId, false)
+    this.removeSongsFromPlaylist(playlistId, [songId])
   }
 
   removeSongsFromPlaylist(playlistId: number, songIds: number[]) {
@@ -376,6 +364,7 @@ export class PlaylistService {
   }
 
   reorderPlaylistSongs(playlistId: number, songIds: number[], sortCriterion?: PlaylistSortCriterion) {
+    const nextSongIds = uniqueSongIds(songIds)
     const currentSongIds = (
       this.getPlaylistSongIdsStatement.all(
         playlistId,
@@ -383,14 +372,15 @@ export class PlaylistService {
         ACTIVE_STATE.active,
       ) as unknown as Array<{ songId: number }>
     ).map((item) => Number(item.songId))
+    const currentSongIdSet = new Set(currentSongIds)
 
-    if (currentSongIds.length <= 1) {
+    if (currentSongIdSet.size <= 1) {
       return
     }
 
     if (
-      currentSongIds.length !== songIds.length ||
-      currentSongIds.some((songId) => !songIds.includes(songId))
+      currentSongIdSet.size !== nextSongIds.length ||
+      nextSongIds.some((songId) => !currentSongIdSet.has(songId))
     ) {
       throw new Error('Playlist reorder request is out of sync with the current playlist.')
     }
@@ -398,10 +388,7 @@ export class PlaylistService {
     this.db.exec('BEGIN')
     try {
       this.markPlaylistItemsInactiveStatement.run(ACTIVE_STATE.inactive, playlistId)
-
-      for (const songId of songIds) {
-        this.insertPlaylistItemStatement.run(playlistId, songId, ACTIVE_STATE.active)
-      }
+      this.insertPlaylistSongsInOrder(playlistId, nextSongIds)
 
       if (sortCriterion) {
         this.db.prepare(`
@@ -447,43 +434,74 @@ export class PlaylistService {
     return nextName
   }
 
-  private setPlaylistSongState(playlistId: number, songId: number, isActive: boolean) {
-    const nextState = isActive ? ACTIVE_STATE.active : ACTIVE_STATE.inactive
-    const result = this.updatePlaylistItemStateStatement.run(nextState, playlistId, songId)
-
-    if (isActive && result.changes === 0) {
-      this.insertPlaylistItemStatement.run(playlistId, songId, ACTIVE_STATE.active)
-    }
-  }
-
   private setPlaylistSongsState(playlistId: number, songIds: number[], isActive: boolean) {
-    const uniqueSongIds = [...new Set(songIds.map(Number))]
-    if (uniqueSongIds.length === 0) {
+    const uniqueIds = uniqueSongIds(songIds)
+    if (uniqueIds.length === 0) {
       return
     }
 
-    const placeholders = uniqueSongIds.map(() => '?').join(', ')
-    const nextState = isActive ? ACTIVE_STATE.active : ACTIVE_STATE.inactive
-    this.db.prepare(`
-      UPDATE PlaylistItem
-      SET State = ?
-      WHERE PlaylistId = ?
-        AND ItemId IN (${placeholders})
-    `).run(nextState, playlistId, ...uniqueSongIds)
-
+    const placeholders = uniqueIds.map(() => '?').join(', ')
     if (isActive) {
+      this.db.prepare(`
+        UPDATE PlaylistItem
+        SET State = ?
+        WHERE PlaylistId = ?
+          AND ItemId IN (${placeholders})
+      `).run(ACTIVE_STATE.inactive, playlistId, ...uniqueIds)
+
+      this.db.prepare(`
+        UPDATE PlaylistItem
+        SET State = ?
+        WHERE Id IN (
+          SELECT MAX(Id)
+          FROM PlaylistItem
+          WHERE PlaylistId = ?
+            AND ItemId IN (${placeholders})
+          GROUP BY ItemId
+        )
+      `).run(ACTIVE_STATE.active, playlistId, ...uniqueIds)
+
       this.db.prepare(`
         INSERT INTO PlaylistItem (PlaylistId, ItemId, State)
         SELECT ?, Music.Id, ?
         FROM Music
         WHERE Music.Id IN (${placeholders})
+          AND Music.State = ?
           AND NOT EXISTS (
             SELECT 1
             FROM PlaylistItem
             WHERE PlaylistItem.PlaylistId = ?
               AND PlaylistItem.ItemId = Music.Id
           )
-      `).run(playlistId, ACTIVE_STATE.active, ...uniqueSongIds, playlistId)
+      `).run(playlistId, ACTIVE_STATE.active, ...uniqueIds, ACTIVE_STATE.active, playlistId)
+      return
     }
+
+    this.db.prepare(`
+      UPDATE PlaylistItem
+      SET State = ?
+      WHERE PlaylistId = ?
+        AND ItemId IN (${placeholders})
+    `).run(ACTIVE_STATE.inactive, playlistId, ...uniqueIds)
   }
+
+  private insertPlaylistSongsInOrder(playlistId: number, songIds: number[]) {
+    const rows = songIds.map(() => `(?, ?)`).join(', ')
+    this.db.prepare(`
+      WITH OrderedSongs(SongId, Position) AS (
+        VALUES ${rows}
+      )
+      INSERT INTO PlaylistItem (PlaylistId, ItemId, State)
+      SELECT ?, OrderedSongs.SongId, ?
+      FROM OrderedSongs
+      JOIN Music
+        ON Music.Id = OrderedSongs.SongId
+       AND Music.State = ?
+      ORDER BY OrderedSongs.Position
+    `).run(...songIds.flatMap((songId, index) => [songId, index]), playlistId, ACTIVE_STATE.active, ACTIVE_STATE.active)
+  }
+}
+
+function uniqueSongIds(songIds: number[]) {
+  return [...new Set(songIds.map(Number))]
 }

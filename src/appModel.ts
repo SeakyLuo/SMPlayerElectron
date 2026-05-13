@@ -167,6 +167,21 @@ export function isClockMinuteInRange(current: number, start: number, end: number
   return current >= start || current < end
 }
 
+export function getNextClockMinuteDelay(targetMinutes: number[]) {
+  const now = new Date()
+  const nowTime = now.getTime()
+  const nextTimes = targetMinutes.map((targetMinute) => {
+    const target = new Date(now)
+    target.setHours(Math.floor(targetMinute / 60), targetMinute % 60, 0, 0)
+    if (target.getTime() <= nowTime) {
+      target.setDate(target.getDate() + 1)
+    }
+    return target.getTime()
+  })
+
+  return Math.min(...nextTimes) - nowTime
+}
+
 export function findBest<T>(items: T[], query: string, getCandidates: (item: T) => string[]) {
   let best: { item: T; score: number } | null = null
 

@@ -719,6 +719,25 @@
   display: grid;
 }
 
+@media (max-width: 1120px) {
+  .artists-page .artist-song-list.playlist-control-compact .now-playing-queue-item,
+  .artists-page .artist-song-list.playlist-control-compact .now-playing-queue-item:not(.has-album-column),
+  .artists-page .artist-song-list.playlist-control-compact .now-playing-queue-item.has-album-column {
+    grid-template-columns: 58px minmax(0, 1fr) 34px 20px;
+  }
+
+  .artists-page .artist-song-list.playlist-control-compact .now-playing-queue-item:hover,
+  .artists-page .artist-song-list.playlist-control-compact .now-playing-queue-item:focus-within {
+    grid-template-columns: 58px minmax(0, 1fr) max-content 20px;
+  }
+}
+
+@media (max-width: 800px) {
+  .artists-page .artist-song-list.playlist-control-compact .now-playing-queue-actions .now-playing-queue-action.favorite {
+    display: none;
+  }
+}
+
 .app-shell.nav-minimal .artists-master {
   padding: 8px 14px calc(var(--player-top-radius) + 8px);
   border-right: 0;
@@ -752,6 +771,11 @@
 }
 
 body.night-mode .app-shell .workspace:has(.artists-page) {
+  background: var(--night-shell-bg);
+}
+
+body.night-mode .app-shell .artists-detail-scroll-frame,
+body.night-mode .app-shell .artists-detail {
   background: var(--night-shell-bg);
 }
 
@@ -921,7 +945,7 @@ body.night-mode .app-shell .artist-album-copy a:hover {
 
 body.night-mode .app-shell .artist-album-section {
   border-color: var(--night-border);
-  background: rgba(255, 255, 255, 0.045);
+  background: var(--night-panel);
   box-shadow: 0 16px 38px rgba(0, 0, 0, 0.2);
 }
 

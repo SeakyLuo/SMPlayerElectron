@@ -99,12 +99,12 @@ export function CommandBar({
     childrenArray.forEach((_, index) => {
       const itemElement = itemRefs.current[index]
       if (itemElement) {
-        itemWidths.current[index] = Math.ceil(itemElement.getBoundingClientRect().width)
+        itemWidths.current[index] = getCommandBarItemOuterWidth(itemElement)
       }
     })
 
     const availableWidth = Math.max(0, primaryElement.clientWidth - overflowReserve)
-    const moreWidth = Math.ceil(moreRef.current?.getBoundingClientRect().width ?? 52)
+    const moreWidth = moreRef.current ? getCommandBarItemOuterWidth(moreRef.current) : 52
     const nextOverflowedIndexes = new Set<number>()
     let totalWidth = childrenArray.reduce<number>((total, _, index) => total + (itemWidths.current[index] ?? 0), 0)
     const reservedMoreWidth = overflowItems.length > 0 || totalWidth > availableWidth ? moreWidth : 0
@@ -184,7 +184,7 @@ export function CommandBar({
               canOverflow={false}
               onClick={(event) => {
                 const rect = event.currentTarget.getBoundingClientRect()
-                setOverflowPosition({ x: rect.left, y: rect.bottom + 4 })
+                setOverflowPosition({ x: rect.left, y: rect.bottom + 4, anchor: event.currentTarget })
               }}
             />
           </div>
@@ -250,6 +250,13 @@ function commandBarButtonToMenuFlyoutItem(
 
 function areIndexSetsEqual(left: Set<number>, right: Set<number>) {
   return left.size === right.size && [...left].every((item) => right.has(item))
+}
+
+function getCommandBarItemOuterWidth(element: HTMLElement) {
+  const childElement = element.firstElementChild as HTMLElement
+  const rect = childElement.getBoundingClientRect()
+  const style = window.getComputedStyle(childElement)
+  return Math.ceil(rect.width + Number.parseFloat(style.marginLeft) + Number.parseFloat(style.marginRight))
 }
 
 export function CommandBarButton({

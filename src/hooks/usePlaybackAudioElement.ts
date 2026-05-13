@@ -13,6 +13,7 @@ interface PlaybackAudioElementOptions {
   currentTrackIdRef: MutableRef<number | null>
   pendingStartSecondsRef: MutableRef<number>
   pendingAutoplayRef: MutableRef<boolean>
+  loadingTrackIdRef: MutableRef<number | null>
   volumeRef: MutableRef<number>
   isMutedRef: MutableRef<boolean>
   isUserSeekingRef: MutableRef<boolean>
@@ -47,6 +48,7 @@ export function usePlaybackAudioElement({
   currentTrackIdRef,
   pendingStartSecondsRef,
   pendingAutoplayRef,
+  loadingTrackIdRef,
   volumeRef,
   isMutedRef,
   isUserSeekingRef,
@@ -91,6 +93,9 @@ export function usePlaybackAudioElement({
 
       setDurationFromPlayback(nextDuration)
       persistResolvedDuration(currentTrackIdRef.current, nextDuration)
+      if (loadingTrackIdRef.current === currentTrackIdRef.current) {
+        loadingTrackIdRef.current = null
+      }
 
       let seekBeforeReady = false
       if (pendingStartSecondsRef.current > 0) {
@@ -161,7 +166,9 @@ export function usePlaybackAudioElement({
       stopProgressSync()
       clearStalledTimer()
       transitionStatus({ type: 'pause' })
-      void persistPlaybackSettings({ musicProgress: audio.currentTime })
+      if (loadingTrackIdRef.current == null) {
+        void persistPlaybackSettings({ musicProgress: audio.currentTime })
+      }
     }
 
     const handleCanPlay = () => {
@@ -282,6 +289,7 @@ export function usePlaybackAudioElement({
     finishCurrentTrack,
     isMutedRef,
     isUserSeekingRef,
+    loadingTrackIdRef,
     pendingAutoplayRef,
     pendingSeekSecondsRef,
     pendingStartSecondsRef,

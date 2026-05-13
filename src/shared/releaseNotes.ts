@@ -25,6 +25,10 @@ const text = {
     en: 'Start menu tiles are no longer supported in this version.',
     zh: '当前版本不再支持开始菜单磁贴。',
   },
+  multiArtistRecognition: {
+    en: 'Smart multi-artist recognition is enabled by default. Refreshing folders from Local now also updates multi-artist grouping, splitting supported artist separators when the library has enough evidence; unconfirmed splits are shown in update results for batch review.',
+    zh: '多歌手智能识别默认开启。在本地页面更新文件夹时会顺便更新多歌手归类；扫描会在音乐库证据足够时按支持的分隔符拆分歌手，未自动拆分的候选会显示在更新结果中供批量处理。',
+  },
   newUiComing: {
     en: 'A brand-new UI version is coming soon.',
     zh: '全新 UI 版本即将到来。',
@@ -328,7 +332,7 @@ const text = {
 } satisfies Record<string, ReleaseNoteText>
 
 const releaseNoteDefinitions: Array<{ version: string; items: Array<keyof typeof text> }> = [
-  { version: '3.0.0', items: ['modernUi', 'nightMode', 'removedNotificationLyrics', 'tilesUnsupported'] },
+  { version: '3.0.0', items: ['modernUi', 'nightMode', 'multiArtistRecognition', 'removedNotificationLyrics', 'tilesUnsupported'] },
   { version: '2.10.7', items: ['newUiComing', 'renameToSimpleMelodyPlayer', 'bugFixes'] },
   { version: '2.10.3', items: ['bugFixes'] },
   { version: '2.10.1', items: ['switchLanguageSupported', 'improvedVoiceAssistant'] },

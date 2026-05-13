@@ -20,7 +20,7 @@ interface MyFavoritesPageProps {
   onTogglePlayPause: () => void
   onAddSongToPlaylist: (playlistId: number, songId: number) => void
   onAddSongsToPlaylist: (playlistId: number, songIds: number[]) => void
-  onRemoveSongsFromFavorites: (songIds: number[]) => void
+  onRemoveSongsFromFavorites: (songIds: number[]) => void | Promise<void>
   onSortFavorites: (songIds: number[], sortCriterion: LibraryPlaylist['sortCriterion']) => void
   onToggleFavorite: (songId: number, favorite: boolean) => void
   onSetPreferred: (level: PreferenceLevel) => void

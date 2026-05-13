@@ -1191,7 +1191,11 @@ function RecentCollectionTimelineFrame({
       const scrollTop = scrollElement.getBoundingClientRect().top
       const items = [...scrollElement.querySelectorAll<HTMLElement>('[data-recent-timeline-date]')]
       const topItem = items.find((item) => item.getBoundingClientRect().bottom > scrollTop + 1) ?? items[0]
-      onTimelineLabelChange(topItem ? categorizeRecentDate(topItem.dataset.recentTimelineDate!, t) : '')
+      onTimelineLabelChange(
+        topItem && !topItem.classList.contains('recent-time-group-header')
+          ? categorizeRecentDate(topItem.dataset.recentTimelineDate!, t)
+          : '',
+      )
     }
     const scheduleUpdate = () => {
       window.cancelAnimationFrame(animationFrame)
@@ -1574,7 +1578,7 @@ function RecentSongGrid({
   useEffect(() => {
     if (onTimelineLabelChange) {
       const topRow = layout.rows.find((row) => row.top + row.height > effectiveScrollTop + 1)
-      onTimelineLabelChange(topRow?.label ?? '')
+      onTimelineLabelChange(topRow && topRow.kind !== 'header' ? topRow.label : '')
     }
   }, [effectiveScrollTop, layout.rows, onTimelineLabelChange])
 
@@ -1627,6 +1631,9 @@ function RecentSongGrid({
                   onToggleSelection={onToggleSelection}
                   onAddToPlaylistClick={(event, menuSong) => {
                     onOpenAddToMenu({ songIds: [menuSong.id], defaultPlaylistName: '', x: event.clientX, y: event.clientY })
+                  }}
+                  onMoreClick={(menuSong, x, y) => {
+                    onOpenMenu({ song: menuSong, x, y, canRemove })
                   }}
                   onContextMenu={(event, menuSong) => {
                     onOpenMenu({ song: menuSong, x: event.clientX, y: event.clientY, canRemove })

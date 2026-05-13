@@ -34,6 +34,7 @@ export interface SettingsRow {
   SaveLyricsImmediately: number
   PreserveInternetLyricsTimestamps: number
   UseFilenameNotMusicName: number
+  SmartMultiArtistRecognition: number
   MusicLibraryCriterion: number
   AlbumsCriterion: number
   SearchArtistsCriterion: number
@@ -88,6 +89,7 @@ export class SettingsService {
         SaveLyricsImmediately,
         PreserveInternetLyricsTimestamps,
         UseFilenameNotMusicName,
+        SmartMultiArtistRecognition,
         MusicLibraryCriterion,
         AlbumsCriterion,
         SearchArtistsCriterion,
@@ -126,6 +128,7 @@ export class SettingsService {
       UPDATE Settings
       SET
         UseFilenameNotMusicName = ?,
+        SmartMultiArtistRecognition = ?,
         ShowCount = ?,
         ThemeColor = ?,
         NightMode = ?,
@@ -216,6 +219,7 @@ export class SettingsService {
 
     this.updateAppSettingsStatement.run(
       Number(update.useFilenameNotMusicName ?? Boolean(settings.UseFilenameNotMusicName)),
+      Number(update.smartMultiArtistRecognition ?? Boolean(settings.SmartMultiArtistRecognition)),
       Number(update.showCount ?? Boolean(settings.ShowCount)),
       update.themeColor ?? settings.ThemeColor ?? '#5b87b6',
       toNightModeValue(update.nightMode ?? mapNightMode(settings.NightMode)),
@@ -292,6 +296,7 @@ export function toSettingsSnapshot(settings: SettingsRow): SettingsSnapshot {
   return {
     rootPath: settings.RootPath,
     useFilenameNotMusicName: Boolean(settings.UseFilenameNotMusicName),
+    smartMultiArtistRecognition: Boolean(settings.SmartMultiArtistRecognition),
     showCount: Boolean(settings.ShowCount),
     themeColor: settings.ThemeColor || '#0078D7',
     nightMode: mapNightMode(settings.NightMode),

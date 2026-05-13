@@ -3,14 +3,10 @@
   height: min(820px, calc(100vh - 48px));
 }
 
-.remote-share-dialog header p {
-  margin: 6px 0 0;
-  color: var(--muted);
-}
-
 .remote-share-body {
+  min-height: 0;
   overflow: auto;
-  padding: 6px 20px 22px;
+  padding: 0 28px 44px;
 }
 
 .remote-share-status-row,
@@ -193,7 +189,7 @@
   width: 38vw;
 }
 
-body.night-mode .app-shell .remote-share-dialog header p,
+body.night-mode .app-shell .remote-share-dialog .popup-dialog-title-block p,
 body.night-mode .app-shell .remote-share-muted,
 body.night-mode .app-shell .remote-share-message,
 body.night-mode .app-shell .remote-share-status-row span,

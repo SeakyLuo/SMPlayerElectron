@@ -316,6 +316,7 @@ export interface LibraryCounts {
 export interface SettingsSnapshot {
   rootPath: string
   useFilenameNotMusicName: boolean
+  smartMultiArtistRecognition: boolean
   showCount: boolean
   themeColor: string
   nightMode: NightMode
@@ -428,6 +429,16 @@ export interface ScanLibraryResult {
   filesAdded: string[]
   filesRemoved: string[]
   filesMoved: string[]
+  artistSplitsApplied: ArtistSplitResultItem[]
+  artistSplitSuggestions: ArtistSplitResultItem[]
+}
+
+export interface ArtistSplitResultItem {
+  songId: number
+  path: string
+  title: string
+  artist: string
+  artists: string[]
 }
 
 export type ScanLibraryProgressStage = 'checking' | 'updating'
@@ -445,6 +456,13 @@ export interface ScanLocalFolderPreparation {
   progressMax: number
 }
 
+export interface MoveLocalItemsProgress {
+  operationId: string
+  progress: number
+  max: number
+  currentItem: string
+}
+
 export interface DataTransferResult {
   canceled: boolean
   path: string | null
@@ -460,6 +478,7 @@ export interface PlaybackSettingsUpdate {
 
 export interface AppSettingsUpdate {
   useFilenameNotMusicName?: boolean
+  smartMultiArtistRecognition?: boolean
   showCount?: boolean
   themeColor?: string
   nightMode?: NightMode
@@ -546,7 +565,7 @@ export interface SmplayerApi {
   moveSongToFolder: (songId: number, folderPath: string) => Promise<void>
   moveSongsToFolder: (songIds: number[], folderPath: string) => Promise<void>
   moveLocalFolderToFolder: (sourceFolderPath: string, targetFolderPath: string) => Promise<void>
-  moveLocalItemsToFolder: (songIds: number[], folderPaths: string[], targetFolderPath: string) => Promise<void>
+  moveLocalItemsToFolder: (songIds: number[], folderPaths: string[], targetFolderPath: string, operationId?: string) => Promise<void>
   deleteSongsFromDisk: (songIds: number[]) => Promise<void>
   deleteLocalItems: (songIds: number[], folderPaths: string[]) => Promise<PendingLocalItemsDelete>
   updateLocalFolderSort: (folderPath: string, sortCriterion: LocalFolderSortCriterion) => Promise<void>
@@ -571,7 +590,9 @@ export interface SmplayerApi {
   prepareScanLocalFolder: (folderPath: string) => Promise<ScanLocalFolderPreparation>
   scanLocalFolder: (folderPath: string, operationId?: string, progressMax?: number) => Promise<ScanLibraryResult>
   cancelScanLocalFolder: (operationId: string) => Promise<void>
+  applyArtistSplits: (splits: ArtistSplitResultItem[]) => Promise<void>
   onScanLocalFolderProgress: (callback: (progress: ScanLibraryProgress) => void) => () => void
+  onMoveLocalItemsProgress: (callback: (progress: MoveLocalItemsProgress) => void) => () => void
   takePendingOpenFiles: () => Promise<number[]>
   exportData: () => Promise<DataTransferResult>
   importData: () => Promise<DataTransferResult>
