@@ -6,12 +6,29 @@ import type { HiddenItemService } from './hidden-item-service.ts'
 import type { HistoryService } from './history-service.ts'
 import type { PlaylistService } from './playlist-service.ts'
 import type { SongService } from './song-service.ts'
+import { syncAlbums } from './album-sync.ts'
 
 export interface SongMove {
   songId: number
   songPath: string
   targetPath: string
   replacedPath?: string
+}
+
+export interface DeletedSongState {
+  playlistItemIds: number[]
+  recentRecordIds: number[]
+}
+
+export interface DeletedLocalItemsState {
+  musicIds: number[]
+  musicArtistIds: number[]
+  folderIds: number[]
+  fileIds: number[]
+  playlistItemIds: number[]
+  recentRecordIds: number[]
+  hiddenStorageItemIds: number[]
+  preferenceItemIds: number[]
 }
 
 export class LocalItemStateService {
@@ -56,11 +73,159 @@ export class LocalItemStateService {
       this.playlistService.markPlaylistItemsBySongInactive(songId)
       this.historyService.removeRecentPlayed([songId])
       this.markFileByPathInactiveStatement.run(ACTIVE_STATE.inactive, songPath)
+      syncAlbums(this.db)
       this.db.exec('COMMIT')
     } catch (error) {
       this.db.exec('ROLLBACK')
       throw error
     }
+  }
+
+  captureDeletedSongState(songId: number): DeletedSongState {
+    const playlistItemIds = (this.db.prepare(`
+      SELECT Id AS id
+      FROM PlaylistItem
+      WHERE ItemId = ?
+        AND State = ?
+    `).all(songId, ACTIVE_STATE.active) as unknown as Array<{ id: number }>).map((row) => row.id)
+    const recentRecordIds = (this.db.prepare(`
+      SELECT Id AS id
+      FROM RecentRecord
+      WHERE Type = 0
+        AND ItemId = ?
+        AND State = ?
+    `).all(songId.toString(), ACTIVE_STATE.active) as unknown as Array<{ id: number }>).map((row) => row.id)
+
+    return { playlistItemIds, recentRecordIds }
+  }
+
+  isSongActive(songId: number) {
+    const row = this.db.prepare(`
+      SELECT Id AS id
+      FROM Music
+      WHERE Id = ?
+        AND State = ?
+      LIMIT 1
+    `).get(songId, ACTIVE_STATE.active) as { id: number } | undefined
+
+    return row !== undefined
+  }
+
+  restoreDeletedSong(songId: number, songPath: string, deletedState: DeletedSongState) {
+    this.db.exec('BEGIN')
+    try {
+      this.markSingleMusicInactiveStatement.run(ACTIVE_STATE.active, songId)
+      this.markSongArtistsInactiveStatement.run(ACTIVE_STATE.active, songId)
+      this.markFileByPathInactiveStatement.run(ACTIVE_STATE.active, songPath)
+      this.restoreRows('PlaylistItem', deletedState.playlistItemIds)
+      this.restoreRows('RecentRecord', deletedState.recentRecordIds)
+      syncAlbums(this.db)
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  captureDeletedLocalItemsState(songIds: number[], songPaths: string[], folderPaths: string[]): DeletedLocalItemsState {
+    const pathClauses = [
+      ...songPaths.map(() => 'Path = ?'),
+      ...folderPaths.flatMap(() => ['Path = ?', 'Path LIKE ?', 'Path LIKE ?']),
+    ]
+    const pathValues = [
+      ...songPaths,
+      ...folderPaths.flatMap((folderPath) => [folderPath, `${folderPath}\\%`, `${folderPath}/%`]),
+    ]
+    const songIdClause = songIds.length > 0 ? `Id IN (${songIds.map(() => '?').join(',')})` : ''
+    const musicWhere = [
+      songIdClause,
+      pathClauses.length > 0 ? `(${pathClauses.join(' OR ')})` : '',
+    ].filter(Boolean).join(' OR ')
+    const musicIds = this.selectIds('Music', `State = ? AND (${musicWhere})`, [
+      ACTIVE_STATE.active,
+      ...songIds,
+      ...pathValues,
+    ])
+    const folderWhere = folderPaths.flatMap(() => ['Path = ?', 'Path LIKE ?', 'Path LIKE ?']).join(' OR ')
+    const folderIds = folderPaths.length > 0
+      ? this.selectIds('Folder', `State = ? AND (${folderWhere})`, [
+          ACTIVE_STATE.active,
+          ...folderPaths.flatMap((folderPath) => [folderPath, `${folderPath}\\%`, `${folderPath}/%`]),
+        ])
+      : []
+    const fileIds = pathClauses.length > 0
+      ? this.selectIds('File', `State = ? AND (${pathClauses.join(' OR ')})`, [ACTIVE_STATE.active, ...pathValues])
+      : []
+    const musicPlaceholders = musicIds.map(() => '?').join(',')
+    const folderPlaceholders = folderIds.map(() => '?').join(',')
+
+    return {
+      musicIds,
+      musicArtistIds: musicIds.length > 0
+        ? this.selectIds('MusicArtist', `State = ? AND MusicId IN (${musicPlaceholders})`, [ACTIVE_STATE.active, ...musicIds])
+        : [],
+      folderIds,
+      fileIds,
+      playlistItemIds: musicIds.length > 0
+        ? this.selectIds('PlaylistItem', `State = ? AND ItemId IN (${musicPlaceholders})`, [ACTIVE_STATE.active, ...musicIds])
+        : [],
+      recentRecordIds: musicIds.length > 0
+        ? this.selectIds('RecentRecord', `State = ? AND Type = 0 AND ItemId IN (${musicPlaceholders})`, [
+            ACTIVE_STATE.active,
+            ...musicIds.map(String),
+          ])
+        : [],
+      hiddenStorageItemIds: pathClauses.length > 0
+        ? this.selectIds('HiddenStorageItem', `State = ? AND (${pathClauses.join(' OR ')})`, [ACTIVE_STATE.active, ...pathValues])
+        : [],
+      preferenceItemIds: folderIds.length > 0
+        ? this.selectIds('PreferenceItem', `State = ? AND Type = ? AND ItemId IN (${folderPlaceholders})`, [
+            ACTIVE_STATE.active,
+            4,
+            ...folderIds.map(String),
+          ])
+        : [],
+    }
+  }
+
+  restoreDeletedLocalItems(deletedState: DeletedLocalItemsState) {
+    this.db.exec('BEGIN')
+    try {
+      this.restoreRows('Music', deletedState.musicIds)
+      this.restoreRows('MusicArtist', deletedState.musicArtistIds)
+      this.restoreRows('Folder', deletedState.folderIds)
+      this.restoreRows('File', deletedState.fileIds)
+      this.restoreRows('PlaylistItem', deletedState.playlistItemIds)
+      this.restoreRows('RecentRecord', deletedState.recentRecordIds)
+      this.restoreRows('HiddenStorageItem', deletedState.hiddenStorageItemIds)
+      this.restoreRows('PreferenceItem', deletedState.preferenceItemIds)
+      syncAlbums(this.db)
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
+  }
+
+  hasActiveSongs(songIds: number[]) {
+    if (songIds.length === 0) {
+      return false
+    }
+
+    const placeholders = songIds.map(() => '?').join(',')
+    const row = this.db.prepare(`
+      SELECT Id AS id
+      FROM Music
+      WHERE Id IN (${placeholders})
+        AND State = ?
+      LIMIT 1
+    `).get(...songIds, ACTIVE_STATE.active) as { id: number } | undefined
+
+    return row !== undefined
+  }
+
+  hasActiveDeletedLocalItems(deletedState: DeletedLocalItemsState) {
+    return this.hasActiveRows('Music', deletedState.musicIds) || this.hasActiveRows('Folder', deletedState.folderIds)
   }
 
   hideSong(songId: number) {
@@ -71,6 +236,7 @@ export class LocalItemStateService {
       this.markSingleMusicInactiveStatement.run(ACTIVE_STATE.hidden, songId)
       this.markFileByPathInactiveStatement.run(ACTIVE_STATE.hidden, songPath)
       this.hiddenItemService.upsert('file', songPath)
+      syncAlbums(this.db)
       this.db.exec('COMMIT')
     } catch (error) {
       this.db.exec('ROLLBACK')
@@ -119,6 +285,7 @@ export class LocalItemStateService {
     this.db.exec('BEGIN')
     try {
       this.deleteSongsInsideTransaction(songIds, songPaths)
+      syncAlbums(this.db)
       this.db.exec('COMMIT')
     } catch (error) {
       this.db.exec('ROLLBACK')
@@ -133,6 +300,7 @@ export class LocalItemStateService {
       for (const folderPath of folderPaths) {
         this.deleteLocalFolderInsideTransaction(folderPath)
       }
+      syncAlbums(this.db)
       this.db.exec('COMMIT')
     } catch (error) {
       this.db.exec('ROLLBACK')
@@ -153,6 +321,7 @@ export class LocalItemStateService {
     this.db.exec('BEGIN')
     try {
       this.deleteLocalFolderInsideTransaction(folderPath)
+      syncAlbums(this.db)
       this.db.exec('COMMIT')
     } catch (error) {
       this.db.exec('ROLLBACK')
@@ -347,6 +516,44 @@ export class LocalItemStateService {
          OR Path LIKE ?
          OR Path LIKE ?
     `).run(ACTIVE_STATE.inactive, folderPath, `${folderPath}\\%`, `${folderPath}/%`)
+  }
+
+  private selectIds(tableName: 'Music' | 'MusicArtist' | 'Folder' | 'File' | 'PlaylistItem' | 'RecentRecord' | 'HiddenStorageItem' | 'PreferenceItem', where: string, values: Array<string | number>) {
+    return (this.db.prepare(`
+      SELECT Id AS id
+      FROM ${tableName}
+      WHERE ${where}
+    `).all(...values) as unknown as Array<{ id: number }>).map((row) => row.id)
+  }
+
+  private hasActiveRows(tableName: 'Music' | 'Folder', rowIds: number[]) {
+    if (rowIds.length === 0) {
+      return false
+    }
+
+    const placeholders = rowIds.map(() => '?').join(',')
+    const row = this.db.prepare(`
+      SELECT Id AS id
+      FROM ${tableName}
+      WHERE Id IN (${placeholders})
+        AND State = ?
+      LIMIT 1
+    `).get(...rowIds, ACTIVE_STATE.active) as { id: number } | undefined
+
+    return row !== undefined
+  }
+
+  private restoreRows(tableName: 'Music' | 'MusicArtist' | 'Folder' | 'File' | 'PlaylistItem' | 'RecentRecord' | 'HiddenStorageItem' | 'PreferenceItem', rowIds: number[]) {
+    if (rowIds.length === 0) {
+      return
+    }
+
+    const placeholders = rowIds.map(() => '?').join(',')
+    this.db.prepare(`
+      UPDATE ${tableName}
+      SET State = ?
+      WHERE Id IN (${placeholders})
+    `).run(ACTIVE_STATE.active, ...rowIds)
   }
 
   private replacePathReferences(originalPath: string, nextPath: string) {

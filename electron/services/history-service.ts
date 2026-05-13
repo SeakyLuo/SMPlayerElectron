@@ -5,6 +5,7 @@ import type {
   RecentArtistPlayback,
   RecentPlaylistPlayback,
   SearchHistoryEntry,
+  SearchHistoryType,
 } from '../../src/shared/contracts.ts'
 import { ACTIVE_STATE } from './constants.ts'
 import { toSearchHistoryEntry, type SearchHistoryRow } from './row-mappers.ts'
@@ -63,6 +64,7 @@ export class HistoryService {
       SELECT
         Id AS id,
         Query AS query,
+        Type AS type,
         SearchedAt AS searchedAt
       FROM SearchHistory
       ORDER BY datetime(SearchedAt) DESC, Id DESC
@@ -74,10 +76,11 @@ export class HistoryService {
     this.deleteSearchHistoryByQueryStatement = this.db.prepare(`
       DELETE FROM SearchHistory
       WHERE Query = ? COLLATE NOCASE
+        AND Type = ?
     `)
     this.insertSearchHistoryStatement = this.db.prepare(`
-      INSERT INTO SearchHistory (Query, SearchedAt)
-      VALUES (?, ?)
+      INSERT INTO SearchHistory (Query, Type, SearchedAt)
+      VALUES (?, ?, ?)
     `)
     this.clearSearchHistoryStatement = this.db.prepare('DELETE FROM SearchHistory')
     this.markSongPlayedStatement = this.db.prepare(`
@@ -230,7 +233,7 @@ export class HistoryService {
     this.updateSearchStateStatement.run(query.trim())
   }
 
-  addRecentSearch(query: string): SearchHistoryEntry | null {
+  addRecentSearch(query: string, type: SearchHistoryType = 'sidebar'): SearchHistoryEntry | null {
     const nextQuery = query.trim()
     this.saveSearchQuery(nextQuery)
 
@@ -242,12 +245,13 @@ export class HistoryService {
 
     this.db.exec('BEGIN')
     try {
-      this.deleteSearchHistoryByQueryStatement.run(nextQuery)
-      const result = this.insertSearchHistoryStatement.run(nextQuery, searchedAt)
+      this.deleteSearchHistoryByQueryStatement.run(nextQuery, type)
+      const result = this.insertSearchHistoryStatement.run(nextQuery, type, searchedAt)
       this.db.exec('COMMIT')
       return {
         id: Number(result.lastInsertRowid),
         query: nextQuery,
+        type,
         searchedAt,
       }
     } catch (error) {
@@ -268,11 +272,11 @@ export class HistoryService {
   restoreRecentSearch(entry: SearchHistoryEntry) {
     this.db.exec('BEGIN')
     try {
-      this.deleteSearchHistoryByQueryStatement.run(entry.query)
+      this.deleteSearchHistoryByQueryStatement.run(entry.query, entry.type)
       this.db.prepare(`
-        INSERT INTO SearchHistory (Id, Query, SearchedAt)
-        VALUES (?, ?, ?)
-      `).run(entry.id, entry.query, entry.searchedAt)
+        INSERT INTO SearchHistory (Id, Query, Type, SearchedAt)
+        VALUES (?, ?, ?, ?)
+      `).run(entry.id, entry.query, entry.type, entry.searchedAt)
       this.db.exec('COMMIT')
     } catch (error) {
       this.db.exec('ROLLBACK')

@@ -16,10 +16,12 @@ import { SettingsPage } from './pages/SettingsPage'
 import { AlbumDetailRoute } from './AppRouteComponents'
 import { createLocalMusicDataSource } from './data/musicDataSource'
 import { resolveRestoredPage } from './appModel'
-import type { LibrarySong, MusicData } from './shared/contracts'
+import type { LibrarySong, MusicData, SearchHistoryType } from './shared/contracts'
 import type { Translator } from './shared/i18n'
 import type { PlaybackCommands } from './hooks/usePlaybackCommands'
 import type { PlaybackController } from './hooks/usePlaybackController'
+import { useDeleteSongFromDisk } from './hooks/useDeleteSongFromDisk'
+import { useDeleteLocalItems } from './hooks/useDeleteLocalItems'
 import { useLibraryStore } from './state/useLibraryStore'
 import { useUndoableNotificationStore } from './state/useUndoableNotificationStore'
 import { usePreferenceStore } from './state/usePreferenceStore'
@@ -84,7 +86,7 @@ interface AppRoutesContext {
   setCompactArtistTitle: (title: string) => void
   setShowNowPlayingFullPage: (show: boolean) => void
   showCount: boolean
-  commitSearchQuery: (query: string) => Promise<void>
+  commitSearchQuery: (query: string, type?: SearchHistoryType) => Promise<void>
   localRelativePath: string
   setLocalRelativePath: (relativePath: string) => void
   commitDirectorySearchQuery: (query: string, folderRelativePath: string) => void
@@ -92,7 +94,6 @@ interface AppRoutesContext {
   submittedSearchQuery: string
   searchResultsLoading: boolean
   searchFolderPath: string
-  searchFolderName: string
 }
 
 interface AppRoutesProps {
@@ -121,7 +122,6 @@ export function AppRoutes({ context }: AppRoutesProps) {
     submittedSearchQuery,
     searchResultsLoading,
     searchFolderPath,
-    searchFolderName,
   } = context
   const location = useLocation()
   const navigate = useNavigate()
@@ -136,7 +136,6 @@ export function AppRoutes({ context }: AppRoutesProps) {
   const addSongsToPlaylist = useLibraryStore((state) => state.addSongsToPlaylist)
   const replaceNowPlaying = useLibraryStore((state) => state.replaceNowPlaying)
   const createPlaylist = useLibraryStore((state) => state.createPlaylist)
-  const deleteSongFromDisk = useLibraryStore((state) => state.deleteSongFromDisk)
   const recordRecentAlbumPlayed = useLibraryStore((state) => state.recordRecentAlbumPlayed)
   const recordRecentArtistPlayed = useLibraryStore((state) => state.recordRecentArtistPlayed)
   const addRecentSearch = useLibraryStore((state) => state.addRecentSearch)
@@ -145,14 +144,13 @@ export function AppRoutes({ context }: AppRoutesProps) {
   const removeRecentPlayed = useLibraryStore((state) => state.removeRecentPlayed)
   const restoreRecentPlayed = useLibraryStore((state) => state.restoreRecentPlayed)
   const clearRecentPlayed = useLibraryStore((state) => state.clearRecentPlayed)
+  const removeRecentSearch = useLibraryStore((state) => state.removeRecentSearch)
   const removeRecentSearches = useLibraryStore((state) => state.removeRecentSearches)
   const clearRecentSearches = useLibraryStore((state) => state.clearRecentSearches)
   const createLocalFolder = useLibraryStore((state) => state.createLocalFolder)
   const renameLocalFolder = useLibraryStore((state) => state.renameLocalFolder)
-  const deleteLocalFolder = useLibraryStore((state) => state.deleteLocalFolder)
   const hideLocalFolder = useLibraryStore((state) => state.hideLocalFolder)
   const moveLocalItemsToFolder = useLibraryStore((state) => state.moveLocalItemsToFolder)
-  const deleteLocalItems = useLibraryStore((state) => state.deleteLocalItems)
   const updateLocalFolderSort = useLibraryStore((state) => state.updateLocalFolderSort)
   const resumeHiddenStorageItem = useLibraryStore((state) => state.resumeHiddenStorageItem)
   const saveViewState = useLibraryStore((state) => state.saveViewState)
@@ -164,9 +162,12 @@ export function AppRoutes({ context }: AppRoutesProps) {
   const removeSongsFromPlaylist = useLibraryStore((state) => state.removeSongsFromPlaylist)
   const reorderPlaylistSongs = useLibraryStore((state) => state.reorderPlaylistSongs)
   const showUndoableNotification = useUndoableNotificationStore((state) => state.show)
+  const deleteSongFromDisk = useDeleteSongFromDisk(t)
+  const deleteLocalItems = useDeleteLocalItems(t)
   const routeSearchParams = useMemo(() => new URLSearchParams(location.search), [location.search])
   const targetArtistQuery = routeSearchParams.get('artist')
   const targetAlbumQuery = routeSearchParams.get('album')
+  const pageSearchQuery = routeSearchParams.get('search') ?? ''
   const localMusicDataSource = useMemo(
     () => createLocalMusicDataSource(snapshot, updateSettings),
     [snapshot, updateSettings],
@@ -212,7 +213,7 @@ export function AppRoutes({ context }: AppRoutesProps) {
                     error={error}
                     selectedTrackId={playback.currentTrackId}
                     isPlaying={playback.isPlaying}
-                    searchQuery=""
+                    searchQuery={pageSearchQuery}
                     onPickLibraryRoot={() => {
                       void pickLibraryRoot()
                     }}
@@ -251,7 +252,7 @@ export function AppRoutes({ context }: AppRoutesProps) {
                     }}
                     onRevealSong={revealItem}
                     onDeleteSongFromDisk={(songId) => {
-                      void deleteSongFromDisk(songId)
+                      void deleteSongFromDisk(songsById.get(songId)!)
                     }}
                   />
                 </RequireLibraryData>
@@ -266,7 +267,7 @@ export function AppRoutes({ context }: AppRoutesProps) {
                   songs={visibleSongs}
                   selectedTrackId={playback.currentTrackId}
                   isPlaying={playback.isPlaying}
-                  searchQuery=""
+                  searchQuery={pageSearchQuery}
                   error={error}
                   playlists={snapshot.playlists}
                   favoritePlaylistId={snapshot.favorites.playlistId}
@@ -308,10 +309,17 @@ export function AppRoutes({ context }: AppRoutesProps) {
                   }}
                   onRevealSong={revealItem}
                   onDeleteSongFromDisk={(songId) => {
-                    void deleteSongFromDisk(songId)
+                    void deleteSongFromDisk(songsById.get(songId)!)
                   }}
+                  recentSearches={snapshot.search.recentSearches}
                   onRecordSearch={(query) => {
-                    void addRecentSearch(query)
+                    void addRecentSearch(query, 'artists')
+                  }}
+                  onRemoveRecentSearch={(entryId) => {
+                    void removeRecentSearch(entryId)
+                  }}
+                  onRemoveRecentSearches={(entryIds) => {
+                    void removeRecentSearches(entryIds)
                   }}
                   onCompactTitleChange={setCompactArtistTitle}
                   />
@@ -389,8 +397,15 @@ export function AppRoutes({ context }: AppRoutesProps) {
                     onRecordAlbumPlayed={(album) => {
                       void recordRecentAlbumPlayed(album)
                     }}
+                    recentSearches={snapshot.search.recentSearches}
                     onRecordSearch={(query) => {
-                      void addRecentSearch(query)
+                      void addRecentSearch(query, 'albums')
+                    }}
+                    onRemoveRecentSearch={(entryId) => {
+                      void removeRecentSearch(entryId)
+                    }}
+                    onRemoveRecentSearches={(entryIds) => {
+                      void removeRecentSearches(entryIds)
                     }}
                     />
                   )}
@@ -491,7 +506,7 @@ export function AppRoutes({ context }: AppRoutesProps) {
                     void replaceNowPlaying(snapshot.nowPlaying.songIds.filter((songId: number) => !songIds.includes(songId)))
                   }}
                   onDeleteSongFromDisk={(songId) => {
-                    void deleteSongFromDisk(songId)
+                    void deleteSongFromDisk(songsById.get(songId)!)
                   }}
                   onClearQueue={() => {
                     void clearNowPlaying()
@@ -526,6 +541,9 @@ export function AppRoutes({ context }: AppRoutesProps) {
                   onPlayTrack={(trackId, queueSongIds) => {
                     void playbackCommands.playTrackInQueue(trackId, queueSongIds)
                   }}
+                  onAddNextAndPlay={(songId) => {
+                    void playbackCommands.addNextAndPlay(songId)
+                  }}
                   onMoveToMusicOrPlay={(songId) => {
                     void playbackCommands.moveToMusicOrPlay(songId)
                   }}
@@ -552,7 +570,7 @@ export function AppRoutes({ context }: AppRoutesProps) {
                   }}
                   onRevealSong={revealItem}
                   onDeleteSongFromDisk={(songId) => {
-                    void deleteSongFromDisk(songId)
+                    void deleteSongFromDisk(songsById.get(songId)!)
                   }}
                   onRemoveRecentPlayed={(songIds) => {
                     void removeRecentPlayed(songIds)
@@ -569,8 +587,8 @@ export function AppRoutes({ context }: AppRoutesProps) {
                   onClearRecentSearches={() => {
                     void clearRecentSearches()
                   }}
-                  onSearch={(query) => {
-                    void commitSearchQuery(query)
+                  onSearch={(entry) => {
+                    void commitSearchQuery(entry.query, entry.type)
                   }}
                   />
                 </RequireLibraryData>
@@ -630,9 +648,6 @@ export function AppRoutes({ context }: AppRoutesProps) {
                   onRenameFolder={async (folderPath, name) => {
                     await renameLocalFolder(folderPath, name)
                   }}
-                  onDeleteFolder={async (folderPath) => {
-                    await deleteLocalFolder(folderPath)
-                  }}
                   onHideFolder={async (folderPath) => {
                     await hideLocalFolder(folderPath)
                   }}
@@ -652,7 +667,7 @@ export function AppRoutes({ context }: AppRoutesProps) {
                     void setSongFavorite(songId, favorite)
                   }}
                   onDeleteSongFromDisk={(songId) => {
-                    void deleteSongFromDisk(songId)
+                    void deleteSongFromDisk(songsById.get(songId)!)
                   }}
                   onMoveLocalItemsToFolder={async (songIds, folderPaths, targetFolderPath) => {
                     await moveLocalItemsToFolder(songIds, folderPaths, targetFolderPath)
@@ -821,7 +836,6 @@ export function AppRoutes({ context }: AppRoutesProps) {
                   favoritePlaylistId={snapshot.favorites.playlistId}
                   rootPath={snapshot.settings.rootPath}
                   searchFolderPath={searchFolderPath}
-                  searchFolderName={searchFolderName}
                   selectedTrackId={playback.currentTrackId}
                   isPlaying={playback.isPlaying}
                   showCount={showCount}
@@ -858,7 +872,7 @@ export function AppRoutes({ context }: AppRoutesProps) {
                   }}
                   onRevealSong={revealItem}
                   onDeleteSongFromDisk={(songId) => {
-                    void deleteSongFromDisk(songId)
+                    void deleteSongFromDisk(songsById.get(songId)!)
                   }}
                   onToggleFavorite={(songId, favorite) => {
                     void setSongFavorite(songId, favorite)
@@ -871,6 +885,9 @@ export function AppRoutes({ context }: AppRoutesProps) {
                   }}
                   onSearchDirectory={(query, folderRelativePath) => {
                     commitDirectorySearchQuery(query, folderRelativePath)
+                  }}
+                  onRecordArtistPlayed={(artist) => {
+                    void recordRecentArtistPlayed(artist)
                   }}
                   />
                 </RequireLibraryData>

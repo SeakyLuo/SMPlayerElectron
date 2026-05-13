@@ -7,7 +7,7 @@ import { Icon, type IconName } from './icons'
 import { MenuFlyout } from './MenuFlyout'
 import { getPlaylistCardMenuItems } from './PlaylistMenuItems'
 import { RenameDialog } from './RenameDialog'
-import type { LibraryPlaylist, SearchHistoryEntry } from '../shared/contracts'
+import type { LibraryPlaylist, SearchHistoryEntry, SearchHistoryType } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
 
 interface NavLinkItem {
@@ -46,7 +46,7 @@ interface SidebarProps {
   searchQuery: string
   recentSearches: SearchHistoryEntry[]
   onSearchChange: (value: string) => void
-  onSearchCommit: (value: string) => void
+  onSearchCommit: (value: string, type?: SearchHistoryType) => void
   onRecentSearchRemove: (entryId: number) => void
   onRecentSearchesClear: () => void
   onSearchClear: () => void
@@ -58,7 +58,7 @@ interface SidebarProps {
   onDeletePlaylist: (playlistId: number) => void
   onRenamePlaylist: (playlistId: number, name: string) => void
   onReorderPlaylists: (playlistIds: number[]) => void
-  onQuickPlayPlaylist: (playlistId: number) => void
+  onRandomPlayPlaylist: (playlistId: number) => void
   getRestoredNavTarget: (target: string) => string
 }
 
@@ -83,7 +83,7 @@ export function Sidebar({
   onDeletePlaylist,
   onRenamePlaylist,
   onReorderPlaylists,
-  onQuickPlayPlaylist,
+  onRandomPlayPlaylist,
   getRestoredNavTarget,
 }: SidebarProps) {
   const [isSearchFocused, setIsSearchFocused] = useState(false)
@@ -99,7 +99,7 @@ export function Sidebar({
   const location = useLocation()
   const navigate = useNavigate()
 
-  const visibleRecentSearches = recentSearches.slice(0, 10)
+  const visibleRecentSearches = recentSearches.filter((entry) => entry.type === 'sidebar').slice(0, 10)
   const customPlaylists = useMemo(() => playlists.filter((playlist) => !playlist.isBuiltIn), [playlists])
   const customPlaylistIds = useMemo(() => customPlaylists.map((playlist) => playlist.id), [customPlaylists])
   const isPlaylistRoute = location.pathname.startsWith('/playlists')
@@ -138,8 +138,8 @@ export function Sidebar({
     onToggleCollapsed()
   }
 
-  const commitSearch = (query: string) => {
-    onSearchCommit(query)
+  const commitSearch = (query: string, type: SearchHistoryType = 'sidebar') => {
+    onSearchCommit(query, type)
     setIsSearchFocused(false)
     searchInputRef.current?.blur()
     onNavigate()
@@ -233,7 +233,7 @@ export function Sidebar({
       }}
       onScroll={hideCollapsedTooltip}
     >
-      <div className="sidebar-titlebar">
+      <div className={canGoBack ? 'sidebar-titlebar has-back-button' : 'sidebar-titlebar'}>
         {canGoBack ? (
           <button
             className="sidebar-back-button"
@@ -350,7 +350,7 @@ export function Sidebar({
                         }}
                         onClick={() => {
                           onSearchChange(entry.query)
-                          commitSearch(entry.query)
+                          commitSearch(entry.query, entry.type)
                         }}
                       >
                         <span>{entry.query}</span>
@@ -475,22 +475,22 @@ export function Sidebar({
                   </span>
                   <span className="playlist-nav-child-label">{playlist.name}</span>
                   <button
-                    className="playlist-nav-child-quick-play"
+                    className="playlist-nav-child-random-play"
                     type="button"
-                    title={t('nowPlaying.quickPlay')}
-                    aria-label={`${t('nowPlaying.quickPlay')} ${playlist.name}`}
+                    title={t('nowPlaying.randomPlay')}
+                    aria-label={`${t('nowPlaying.randomPlay')} ${playlist.name}`}
                     draggable={false}
                     disabled={playlist.songIds.length === 0}
                     onClick={(event) => {
                       event.preventDefault()
                       event.stopPropagation()
-                      onQuickPlayPlaylist(playlist.id)
+                      onRandomPlayPlaylist(playlist.id)
                     }}
                     onDragStart={(event) => {
                       event.preventDefault()
                     }}
                   >
-                    <Icon name="play" />
+                    <Icon name="shuffle" />
                   </button>
                 </div>
               ))}

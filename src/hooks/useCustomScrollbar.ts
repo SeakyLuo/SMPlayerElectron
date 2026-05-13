@@ -71,6 +71,7 @@ export function useCustomScrollbar({
     }
 
     event.preventDefault()
+    scrollFrame.classList.add('is-custom-scrollbar-dragging')
     const maxScrollTop = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight)
     const thumbHeight = Number.parseFloat(getComputedStyle(scrollFrame).getPropertyValue('--custom-scrollbar-thumb-height'))
     const trackRange = Math.max(1, scrollbarTrack.clientHeight - thumbHeight)
@@ -81,11 +82,14 @@ export function useCustomScrollbar({
       scrollContainer.scrollTop = startScrollTop + (moveEvent.clientY - startY) * scrollPerPixel
     }
     const onPointerUp = () => {
+      scrollFrame.classList.remove('is-custom-scrollbar-dragging')
       window.removeEventListener('pointermove', onPointerMove)
       window.removeEventListener('pointerup', onPointerUp)
+      window.removeEventListener('pointercancel', onPointerUp)
     }
 
     window.addEventListener('pointermove', onPointerMove)
     window.addEventListener('pointerup', onPointerUp)
+    window.addEventListener('pointercancel', onPointerUp)
   }
 }

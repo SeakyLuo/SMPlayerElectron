@@ -16,8 +16,8 @@
 }
 
 .app-shell:not(.nav-minimal) .workspace:not(.is-immersive-route) {
-  height: calc(100vh - var(--player-height));
-  max-height: calc(100vh - var(--player-height));
+  height: calc(100vh - var(--player-height) + var(--player-top-radius));
+  max-height: calc(100vh - var(--player-height) + var(--player-top-radius));
 }
 
 .workspace.is-immersive-route .workspace-header,
@@ -38,15 +38,15 @@
 }
 
 .workspace.is-immersive-route .workspace-content {
-  flex: 0 0 calc(100% - var(--player-height));
-  max-height: calc(100% - var(--player-height));
+  flex: 0 0 calc(100% - var(--player-height) + var(--player-top-radius));
+  max-height: calc(100% - var(--player-height) + var(--player-top-radius));
   overflow: auto;
   scrollbar-gutter: auto;
 }
 
 .app-shell.nav-minimal .workspace.is-immersive-route .workspace-content {
-  flex: 0 0 calc(100% - var(--player-height) - 40px);
-  max-height: calc(100% - var(--player-height) - 40px);
+  flex: 0 0 calc(100% - var(--player-height) - 40px + var(--player-top-radius));
+  max-height: calc(100% - var(--player-height) - 40px + var(--player-top-radius));
 }
 
 .workspace.is-headerless-route .workspace-content {
@@ -62,8 +62,8 @@
 }
 
 .app-shell.nav-minimal .workspace:not(.is-immersive-route) {
-  height: calc(100vh - 32px - var(--player-height));
-  max-height: calc(100vh - 32px - var(--player-height));
+  height: calc(100vh - 32px - var(--player-height) + var(--player-top-radius));
+  max-height: calc(100vh - 32px - var(--player-height) + var(--player-top-radius));
 }
 
 .app-shell.nav-minimal .workspace.is-immersive-route {

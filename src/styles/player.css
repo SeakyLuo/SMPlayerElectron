@@ -14,7 +14,7 @@
   min-height: 0;
   padding: 10px 16px;
   border: 1px solid rgba(255, 255, 255, 0.66);
-  border-radius: 18px 18px 0 0;
+  border-radius: var(--player-top-radius) var(--player-top-radius) 0 0;
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.88), rgba(var(--accent-rgb), 0.1)),
     linear-gradient(90deg, rgba(var(--player-cover-rgb, var(--accent-rgb)), 0.24), transparent 42%),
@@ -144,8 +144,8 @@ body.night-mode .app-shell .player-track:focus-visible {
 }
 
 .player-artwork-overlay svg {
-  width: 28px;
-  height: 28px;
+  width: 36px;
+  height: 36px;
   filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.34));
 }
 
@@ -263,6 +263,16 @@ body.night-mode .app-shell .progress-row span {
   border: 1px solid transparent;
   padding: 7px;
   color: var(--text-strong);
+}
+
+.transport-button.skip {
+  width: 36px;
+  height: 36px;
+  padding: 6px;
+}
+
+.transport-button.skip svg {
+  stroke-width: 2.55;
 }
 
 body.night-mode .app-shell .transport-button,
@@ -588,7 +598,7 @@ body.night-mode .app-shell .volume-slider-tooltip::after {
   border-right: 0;
   border-bottom: 0;
   border-left: 0;
-  border-radius: 18px 18px 0 0;
+  border-radius: var(--player-top-radius) var(--player-top-radius) 0 0;
   background:
     linear-gradient(135deg, rgba(var(--player-cover-rgb, var(--accent-rgb)), 0.24), rgba(255, 255, 255, 0.66) 54%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.74), rgba(246, 250, 254, 0.7)),

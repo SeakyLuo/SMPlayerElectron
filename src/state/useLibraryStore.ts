@@ -6,6 +6,8 @@ import type {
   LibraryPlaylist,
   MusicData,
   LocalFolderSortCriterion,
+  PendingLocalItemsDelete,
+  PendingSongDelete,
   PlaylistSortCriterion,
   ScanLibraryResult,
   ScanLibraryProgress,
@@ -66,14 +68,16 @@ interface LibraryStoreState {
   reorderPlaylistSongs: (playlistId: number, songIds: number[], sortCriterion?: PlaylistSortCriterion) => Promise<void>
   replaceNowPlaying: (songIds: number[]) => Promise<void>
   removeSongFromNowPlaying: (songId: number) => Promise<void>
-  deleteSongFromDisk: (songId: number) => Promise<void>
+  deleteSongFromDisk: (songId: number) => Promise<PendingSongDelete | null>
+  undoDeleteSongFromDisk: (deleteId: string) => Promise<void>
+  commitDeleteSongFromDisk: (deleteId: string) => Promise<void>
   hideSong: (songId: number) => Promise<void>
   moveSongToFolder: (songId: number, folderPath: string) => Promise<void>
   moveSongsToFolder: (songIds: number[], folderPath: string) => Promise<void>
   moveLocalFolderToFolder: (sourceFolderPath: string, targetFolderPath: string) => Promise<void>
   moveLocalItemsToFolder: (songIds: number[], folderPaths: string[], targetFolderPath: string) => Promise<void>
   createLocalFolder: (rootPath: string, relativePath: string, name: string) => Promise<ScanLibraryResult | null>
-  deleteLocalItems: (songIds: number[], folderPaths: string[]) => Promise<void>
+  deleteLocalItems: (songIds: number[], folderPaths: string[]) => Promise<PendingLocalItemsDelete | null>
   updateLocalFolderSort: (folderPath: string, sortCriterion: LocalFolderSortCriterion) => Promise<void>
   renameLocalFolder: (folderPath: string, name: string) => Promise<void>
   deleteLocalFolder: (folderPath: string) => Promise<void>
@@ -82,7 +86,7 @@ interface LibraryStoreState {
   resumeHiddenStorageItemByPath: (path: string) => Promise<void>
   clearNowPlaying: () => Promise<void>
   saveSearchQuery: (query: string) => Promise<void>
-  addRecentSearch: (query: string) => Promise<void>
+  addRecentSearch: (query: string, type?: SearchHistoryEntry['type']) => Promise<void>
   removeRecentSearch: (entryId: number) => Promise<void>
   removeRecentSearches: (entryIds: number[]) => Promise<void>
   restoreRecentSearch: (entry: SearchHistoryEntry) => Promise<void>
@@ -664,14 +668,43 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
   },
   deleteSongFromDisk: async (songId) => {
     if (!window.smplayer) {
+      return null
+    }
+
+    set({ error: null })
+
+    try {
+      const pendingDelete = await window.smplayer.deleteSongFromDisk(songId)
+      await get().refresh({ songs: true, folders: true, recent: false })
+      return pendingDelete
+    } catch (error) {
+      set({ error: getErrorMessage(error) })
+      return null
+    }
+  },
+  undoDeleteSongFromDisk: async (deleteId) => {
+    if (!window.smplayer) {
       return
     }
 
     set({ error: null })
 
     try {
-      await window.smplayer.deleteSongFromDisk(songId)
+      await window.smplayer.undoDeleteSongFromDisk(deleteId)
       await get().refresh({ songs: true, folders: true, recent: false })
+    } catch (error) {
+      set({ error: getErrorMessage(error) })
+    }
+  },
+  commitDeleteSongFromDisk: async (deleteId) => {
+    if (!window.smplayer) {
+      return
+    }
+
+    set({ error: null })
+
+    try {
+      await window.smplayer.commitDeleteSongFromDisk(deleteId)
     } catch (error) {
       set({ error: getErrorMessage(error) })
     }
@@ -767,16 +800,18 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
   },
   deleteLocalItems: async (songIds, folderPaths) => {
     if (!window.smplayer || songIds.length + folderPaths.length === 0) {
-      return
+      return null
     }
 
     set({ error: null })
 
     try {
-      await window.smplayer.deleteLocalItems(songIds, folderPaths)
+      const pendingDelete = await window.smplayer.deleteLocalItems(songIds, folderPaths)
       await get().refresh({ songs: true, folders: true, recent: false })
+      return pendingDelete
     } catch (error) {
       set({ error: getErrorMessage(error) })
+      return null
     }
   },
   updateLocalFolderSort: async (folderPath, sortCriterion) => {
@@ -916,7 +951,7 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
       set({ error: getErrorMessage(error) })
     }
   },
-  addRecentSearch: async (query) => {
+  addRecentSearch: async (query, type = 'sidebar') => {
     if (!window.smplayer) {
       return
     }
@@ -935,7 +970,7 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
     }))
 
     try {
-      const entry = await window.smplayer.addRecentSearch(query)
+      const entry = await window.smplayer.addRecentSearch(query, type)
       if (entry) {
         set((state) => ({
           snapshot: {
@@ -945,7 +980,7 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
               recentSearches: [
                 entry,
                 ...state.snapshot.search.recentSearches.filter(
-                  (recentSearch) => recentSearch.query.toLocaleLowerCase() !== entry.query.toLocaleLowerCase(),
+                  (recentSearch) => recentSearch.type !== entry.type || recentSearch.query.toLocaleLowerCase() !== entry.query.toLocaleLowerCase(),
                 ),
               ],
             },

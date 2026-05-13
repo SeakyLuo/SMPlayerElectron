@@ -37,6 +37,7 @@ let mainWindow: BrowserWindow | null = null
 let libraryService: DataService | null = null
 let remotePlayServer: RemotePlayServer | null = null
 let isQuitting = false
+let committingPendingDeletesBeforeQuit = false
 const windowController = new WindowController()
 const trayController = new TrayController({
   getWindow: () => mainWindow,
@@ -140,6 +141,7 @@ app.on('open-file', (event, filePath) => {
 app.whenReady().then(async () => {
   app.setPath('userData', await resolveUserDataPath())
   libraryService = new DataService(app.getPath('userData'))
+  await libraryService.pendingSongDeleteService.commitAll()
   trayController.updateWindowsJumpList()
   remotePlayServer = new RemotePlayServer(
     libraryService.remoteStore,
@@ -214,7 +216,14 @@ app.whenReady().then(async () => {
   })
 })
 
-app.on('before-quit', () => {
+app.on('before-quit', (event) => {
+  if (!committingPendingDeletesBeforeQuit && libraryService?.pendingSongDeleteService.hasPending()) {
+    event.preventDefault()
+    committingPendingDeletesBeforeQuit = true
+    void libraryService.pendingSongDeleteService.commitAll().finally(() => app.quit())
+    isQuitting = true
+    return
+  }
   isQuitting = true
   libraryService?.flush()
   void remotePlayServer?.stop()

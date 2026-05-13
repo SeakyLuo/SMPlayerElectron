@@ -7,12 +7,13 @@ import { Icon } from '../components/icons'
 import { InputDialog } from '../components/InputDialog'
 import { LoadingState } from '../components/LoadingState'
 import { MenuFlyout } from '../components/MenuFlyout'
-import { getAddToPlaylistMenuFlyoutItem, type MenuFlyoutItem, type MenuFlyoutPosition } from '../components/MenuFlyoutHelper'
+import { getAddToPlaylistMenuFlyoutItem, getAddToPlaylistMenuFlyoutItems, type MenuFlyoutItem, type MenuFlyoutPosition } from '../components/MenuFlyoutHelper'
 import { MusicMenuFlyout } from '../components/MusicMenuFlyout'
 import { MultiSelectCommandBar } from '../components/MultiSelectCommandBar'
 import { RemoveDialog } from '../components/RemoveDialog'
 import { useFolderPreferenceMenuItem } from '../hooks/useFolderPreferenceMenuItem'
 import { useCustomScrollbar } from '../hooks/useCustomScrollbar'
+import { useSongsAddedUndo } from '../hooks/useSongsAddedUndo'
 import type { LibraryFolder, LibraryPlaylist, LibrarySong, ScanLibraryProgress, ScanLibraryResult } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
 import { useLibraryStore } from '../state/useLibraryStore'
@@ -73,7 +74,6 @@ interface LocalPageProps {
   onRevealFolder: (folderPath: string) => void | Promise<void>
   onCreateFolder: (relativePath: string, name: string) => void | Promise<void>
   onRenameFolder: (folderPath: string, name: string) => void | Promise<void>
-  onDeleteFolder: (folderPath: string) => void | Promise<void>
   onHideFolder: (folderPath: string) => void | Promise<void>
   onAddSongToPlaylist: (playlistId: number, songId: number) => void
   onAddSongsToPlaylist: (playlistId: number, songIds: number[]) => void
@@ -142,7 +142,6 @@ export function LocalPage({
   onRevealFolder,
   onCreateFolder,
   onRenameFolder,
-  onDeleteFolder,
   onHideFolder,
   onAddSongToPlaylist,
   onAddSongsToPlaylist,
@@ -180,6 +179,7 @@ export function LocalPage({
   const showUndo = (message: string, action: () => void | Promise<void>) => {
     showUndoableNotification(message, t('common.undo'), action)
   }
+  const { addToNowPlayingWithUndo, showAddToPlaylistUndo } = useSongsAddedUndo(songs, t)
   const [folderMenu, setFolderMenu] = useState<LocalFolderMenuState | null>(null)
   const [songMenu, setSongMenu] = useState<LocalSongMenuState | null>(null)
   const [folderAddMenu, setFolderAddMenu] = useState<LocalFolderMenuState | null>(null)
@@ -520,7 +520,7 @@ export function LocalPage({
       title: t('local.deleteFolder'),
       message: t('local.deleteFolderConfirm', { name: folder.name }),
       onConfirm: async () => {
-        await onDeleteFolder(folder.path)
+        await onDeleteLocalItems([], [folder.path])
         setRemoveDialog(null)
         setFolderMenu(null)
       },
@@ -1264,32 +1264,34 @@ export function LocalPage({
           onClose={() => {
             setSelectionAddMenu(null)
           }}
-          items={[
-            getAddToPlaylistMenuFlyoutItem({
-              playlists: playablePlaylists,
-              songIds: selectedQueueSongIds,
-              t,
-              defaultPlaylistName: currentNode.name,
-              includeNowPlaying: true,
-              includeFavorites: getNotFavoriteSongIds(selectedQueueSongIds).length > 0,
-              onAddToNowPlaying: () => {
-                onAddSongsToNowPlaying(selectedQueueSongIds)
-                HideMultiSelectAfterOperation()
-              },
-              onToggleFavorite: () => {
-                addSongsToFavorites(getNotFavoriteSongIds(selectedQueueSongIds))
-                HideMultiSelectAfterOperation()
-              },
-              onCreatePlaylist: (name) => {
-                onCreatePlaylistWithSongs(name, selectedQueueSongIds)
-                HideMultiSelectAfterOperation()
-              },
-              onAddToPlaylist: (playlistId) => {
-                onAddSongsToPlaylist(playlistId, selectedQueueSongIds)
-                HideMultiSelectAfterOperation()
-              },
-            }),
-          ].filter((item) => item != null) as MenuFlyoutItem[]}
+          items={getAddToPlaylistMenuFlyoutItems({
+            playlists: playablePlaylists,
+            songIds: selectedQueueSongIds,
+            t,
+            defaultPlaylistName: currentNode.name,
+            includeNowPlaying: true,
+            includeFavorites: getNotFavoriteSongIds(selectedQueueSongIds).length > 0,
+            onAddToNowPlaying: () => {
+              addToNowPlayingWithUndo(selectedQueueSongIds)
+              HideMultiSelectAfterOperation()
+            },
+            onToggleFavorite: () => {
+              const nextFavoriteSongIds = getNotFavoriteSongIds(selectedQueueSongIds)
+              addSongsToFavorites(nextFavoriteSongIds)
+              showAddToPlaylistUndo(favoritePlaylistId, nextFavoriteSongIds, t('common.myFavorites'))
+              HideMultiSelectAfterOperation()
+            },
+            onCreatePlaylist: (name) => {
+              onCreatePlaylistWithSongs(name, selectedQueueSongIds)
+              HideMultiSelectAfterOperation()
+            },
+            onAddToPlaylist: (playlistId) => {
+              const targetPlaylist = playlists.find((playlist) => playlist.id === playlistId)!
+              onAddSongsToPlaylist(playlistId, selectedQueueSongIds)
+              showAddToPlaylistUndo(playlistId, selectedQueueSongIds, targetPlaylist.name)
+              HideMultiSelectAfterOperation()
+            },
+          })}
         />
       ) : null}
       {selectionMoveMenu ? (
@@ -1323,22 +1325,20 @@ export function LocalPage({
           onClose={() => {
             setFolderAddMenu(null)
           }}
-          items={[
-            getAddToPlaylistMenuFlyoutItem({
-              playlists: playablePlaylists,
-              songIds: folderAddMenu.folder.subtreeSongIds,
-              t,
-              defaultPlaylistName: folderAddMenu.folder.name,
-              includeNowPlaying: true,
-              includeFavorites: getNotFavoriteSongIds(folderAddMenu.folder.subtreeSongIds).length > 0,
-              onAddToNowPlaying: () => addFolderSongsToNowPlaying(folderAddMenu.folder),
-              onToggleFavorite: () => {
-                addSongsToFavorites(getNotFavoriteSongIds(folderAddMenu.folder.subtreeSongIds))
-              },
-              onCreatePlaylist: (name) => onCreatePlaylistWithSongs(name, folderAddMenu.folder.subtreeSongIds),
-              onAddToPlaylist: (playlistId) => addFolderSongsToPlaylist(folderAddMenu.folder, playlistId),
-            }),
-          ].filter((item) => item != null) as MenuFlyoutItem[]}
+          items={getAddToPlaylistMenuFlyoutItems({
+            playlists: playablePlaylists,
+            songIds: folderAddMenu.folder.subtreeSongIds,
+            t,
+            defaultPlaylistName: folderAddMenu.folder.name,
+            includeNowPlaying: true,
+            includeFavorites: getNotFavoriteSongIds(folderAddMenu.folder.subtreeSongIds).length > 0,
+            onAddToNowPlaying: () => addFolderSongsToNowPlaying(folderAddMenu.folder),
+            onToggleFavorite: () => {
+              addSongsToFavorites(getNotFavoriteSongIds(folderAddMenu.folder.subtreeSongIds))
+            },
+            onCreatePlaylist: (name) => onCreatePlaylistWithSongs(name, folderAddMenu.folder.subtreeSongIds),
+            onAddToPlaylist: (playlistId) => addFolderSongsToPlaylist(folderAddMenu.folder, playlistId),
+          })}
         />
       ) : null}
       {songAddMenu ? (
@@ -1347,20 +1347,18 @@ export function LocalPage({
           onClose={() => {
             setSongAddMenu(null)
           }}
-          items={[
-            getAddToPlaylistMenuFlyoutItem({
-              playlists: playablePlaylists,
-              songIds: [songAddMenu.song.id],
-              t,
-              defaultPlaylistName: songAddMenu.song.title,
-              includeNowPlaying: true,
-              includeFavorites: !songAddMenu.song.favorite,
-              onAddToNowPlaying: () => addSongToNowPlaying(songAddMenu.song),
-              onToggleFavorite: () => onToggleFavorite(songAddMenu.song.id, true),
-              onCreatePlaylist: (name) => onCreatePlaylistWithSongs(name, [songAddMenu.song.id]),
-              onAddToPlaylist: (playlistId) => onAddSongToPlaylist(playlistId, songAddMenu.song.id),
-            }),
-          ].filter((item) => item != null) as MenuFlyoutItem[]}
+          items={getAddToPlaylistMenuFlyoutItems({
+            playlists: playablePlaylists,
+            songIds: [songAddMenu.song.id],
+            t,
+            defaultPlaylistName: songAddMenu.song.title,
+            includeNowPlaying: true,
+            includeFavorites: !songAddMenu.song.favorite,
+            onAddToNowPlaying: () => addSongToNowPlaying(songAddMenu.song),
+            onToggleFavorite: () => onToggleFavorite(songAddMenu.song.id, true),
+            onCreatePlaylist: (name) => onCreatePlaylistWithSongs(name, [songAddMenu.song.id]),
+            onAddToPlaylist: (playlistId) => onAddSongToPlaylist(playlistId, songAddMenu.song.id),
+          })}
         />
       ) : null}
       {songMenu ? (

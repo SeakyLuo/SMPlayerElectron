@@ -1,6 +1,6 @@
 import type { PlaybackMode } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
-import { DEFAULT_ALBUM_ARTWORK_URL } from './DefaultAlbumArtwork'
+import { DEFAULT_ALBUM_ARTWORK_URL } from '../shared/staticAssets'
 
 export const DEFAULT_ARTWORK_URL = DEFAULT_ALBUM_ARTWORK_URL
 

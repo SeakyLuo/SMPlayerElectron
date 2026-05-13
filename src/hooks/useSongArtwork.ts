@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 
 const artworkUrlCache = new Map<number, string>()
 const artworkRequestCache = new Map<number, Promise<string>>()
-const resolvedArtworkSongIds = new Set<number>()
 const artworkBatchSongIds = new Set<number>()
 const artworkBatchResolvers = new Map<number, Array<{
   resolve: (artworkUrl: string) => void
@@ -14,24 +13,24 @@ function isGeneratedSongArtworkUrl(artworkUrl: string) {
   return artworkUrl.startsWith('smplayer-artwork://')
 }
 
-function isVersionedSongArtworkUrl(artworkUrl: string) {
-  return isGeneratedSongArtworkUrl(artworkUrl) && artworkUrl.includes('?v=')
-}
-
 function canPrimeArtworkUrl(artworkUrl: string) {
-  return artworkUrl !== '' && (!isGeneratedSongArtworkUrl(artworkUrl) || isVersionedSongArtworkUrl(artworkUrl))
+  return artworkUrl !== ''
 }
 
 function canUseArtworkUrl(songId: number, artworkUrl: string) {
-  return artworkUrl !== '' && (!isGeneratedSongArtworkUrl(artworkUrl) || isVersionedSongArtworkUrl(artworkUrl) || resolvedArtworkSongIds.has(songId))
+  return artworkUrl !== '' && (!isGeneratedSongArtworkUrl(artworkUrl) || artworkUrlCache.get(songId) === artworkUrl)
 }
 
-function versionArtworkUrl(artworkUrl: string, version: number) {
-  if (!artworkUrl || version === 0) {
+function getUsableArtworkUrl(songId: number, artworkUrl: string) {
+  if (artworkUrl && !isGeneratedSongArtworkUrl(artworkUrl)) {
     return artworkUrl
   }
 
-  return `${artworkUrl}${artworkUrl.includes('?') ? '&' : '?'}v=${version}`
+  if (artworkUrlCache.has(songId)) {
+    return artworkUrlCache.get(songId)!
+  }
+
+  return ''
 }
 
 function requestBatchedArtworkSnapshot(songId: number) {
@@ -63,7 +62,6 @@ function flushArtworkBatch() {
       for (const songId of requestSongIds) {
         const artworkUrl = snapshotsBySongId.get(songId) ?? ''
         artworkUrlCache.set(songId, artworkUrl)
-        resolvedArtworkSongIds.add(songId)
         artworkRequestCache.delete(songId)
         const resolvers = artworkBatchResolvers.get(songId)!
         artworkBatchResolvers.delete(songId)
@@ -87,7 +85,6 @@ function flushArtworkBatch() {
 export function primeSongArtwork(songId: number, artworkUrl: string) {
   if (canPrimeArtworkUrl(artworkUrl)) {
     artworkUrlCache.set(songId, artworkUrl)
-    resolvedArtworkSongIds.add(songId)
   }
 }
 
@@ -98,10 +95,7 @@ export async function resolveSongArtwork(songId: number, artworkUrl = '', force 
   }
 
   if (!force && artworkUrlCache.has(songId)) {
-    const cachedArtworkUrl = artworkUrlCache.get(songId)!
-    if (!isGeneratedSongArtworkUrl(cachedArtworkUrl) || resolvedArtworkSongIds.has(songId)) {
-      return cachedArtworkUrl
-    }
+    return artworkUrlCache.get(songId)!
   }
 
   if (!force && artworkRequestCache.has(songId)) {
@@ -118,12 +112,7 @@ export async function resolveSongArtworks(songIds: number[], force = false) {
   const uniqueSongIds = [...new Set(songIds)]
   const missingSongIds = force
     ? uniqueSongIds
-    : uniqueSongIds.filter((songId) => {
-        if (!artworkUrlCache.has(songId)) {
-          return true
-        }
-        return isGeneratedSongArtworkUrl(artworkUrlCache.get(songId)!) && !resolvedArtworkSongIds.has(songId)
-      })
+    : uniqueSongIds.filter((songId) => !artworkUrlCache.has(songId))
 
   if (missingSongIds.length > 0) {
     const pendingRequests: Promise<string>[] = []
@@ -141,7 +130,6 @@ export async function resolveSongArtworks(songIds: number[], force = false) {
           const snapshotsBySongId = new Map(snapshots.map((snapshot) => [snapshot.songId, snapshot.artworkUrl]))
           for (const songId of requestSongIds) {
             artworkUrlCache.set(songId, snapshotsBySongId.get(songId) ?? '')
-            resolvedArtworkSongIds.add(songId)
             artworkRequestCache.delete(songId)
           }
         })
@@ -168,22 +156,17 @@ export async function resolveSongArtworks(songIds: number[], force = false) {
 
 export function useSongArtwork(songId: number | null | undefined, artworkUrl = '') {
   const [resolvedArtworkUrl, setResolvedArtworkUrl] = useState(() =>
-    songId == null || !canUseArtworkUrl(songId, artworkUrl) ? '' : artworkUrl,
+    songId == null ? '' : getUsableArtworkUrl(songId, artworkUrl),
   )
-  const [version, setVersion] = useState(0)
-  const refreshedSongIdRef = useRef<number | null>(null)
 
   useEffect(() => {
     if (songId == null) {
       setResolvedArtworkUrl('')
-      setVersion(0)
       return
     }
 
     let isDisposed = false
-    setVersion(0)
-    refreshedSongIdRef.current = null
-    setResolvedArtworkUrl(canUseArtworkUrl(songId, artworkUrl) ? artworkUrl : '')
+    setResolvedArtworkUrl(getUsableArtworkUrl(songId, artworkUrl))
 
     void resolveSongArtwork(songId, artworkUrl).then((nextArtworkUrl) => {
       if (!isDisposed) {
@@ -200,21 +183,13 @@ export function useSongArtwork(songId: number | null | undefined, artworkUrl = '
     if (songId == null) {
       return
     }
-    if (refreshedSongIdRef.current === songId) {
-      return
-    }
-
-    refreshedSongIdRef.current = songId
     void resolveSongArtwork(songId, '', true).then((nextArtworkUrl) => {
       setResolvedArtworkUrl(nextArtworkUrl)
-      if (nextArtworkUrl && nextArtworkUrl !== resolvedArtworkUrl) {
-        setVersion((current) => current + 1)
-      }
     })
   }
 
   return {
-    artworkUrl: versionArtworkUrl(resolvedArtworkUrl, version),
+    artworkUrl: resolvedArtworkUrl,
     baseArtworkUrl: resolvedArtworkUrl,
     refreshArtwork,
   }

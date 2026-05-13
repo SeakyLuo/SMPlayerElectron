@@ -7,6 +7,7 @@ import type {
   PreferenceEntityType,
   PreferenceLevel,
   SearchHistoryEntry,
+  SearchHistoryType,
 } from '../../src/shared/contracts'
 import type { DataService } from '../services/data-service'
 
@@ -66,7 +67,9 @@ export function registerDataIpc(options: DataIpcOptions) {
   )
   ipcMain.handle('queue:clear', () => getNowPlayingService().writeSongIds([]))
   ipcMain.handle('search:save-query', (_event, query: string) => getHistoryService().saveSearchQuery(query))
-  ipcMain.handle('search:add-recent', (_event, query: string) => getHistoryService().addRecentSearch(query))
+  ipcMain.handle('search:add-recent', (_event, query: string, type?: SearchHistoryType) =>
+    getHistoryService().addRecentSearch(query, type),
+  )
   ipcMain.handle('search:remove-recent', (_event, entryId: number) =>
     getHistoryService().removeRecentSearch(entryId),
   )

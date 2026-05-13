@@ -5,6 +5,9 @@ interface PlaybackShortcutsOptions {
   onPlayNext: () => void
   onPlayPrevious: () => void
   onSeekBySeconds: (offsetSeconds: number) => void
+  onToggleShuffle: () => void
+  onToggleRepeat: () => void
+  onToggleRepeatOne: () => void
 }
 
 export function usePlaybackShortcuts({
@@ -12,6 +15,9 @@ export function usePlaybackShortcuts({
   onPlayNext,
   onPlayPrevious,
   onSeekBySeconds,
+  onToggleShuffle,
+  onToggleRepeat,
+  onToggleRepeatOne,
 }: PlaybackShortcutsOptions) {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -30,6 +36,27 @@ export function usePlaybackShortcuts({
         event.preventDefault()
         onTogglePlayPause()
         return
+      }
+
+      if (event.altKey && !event.ctrlKey && !event.metaKey) {
+        const key = event.key.toLocaleLowerCase()
+        if (key === 's') {
+          event.preventDefault()
+          onToggleShuffle()
+          return
+        }
+
+        if (key === 'r') {
+          event.preventDefault()
+          onToggleRepeat()
+          return
+        }
+
+        if (event.key === '1') {
+          event.preventDefault()
+          onToggleRepeatOne()
+          return
+        }
       }
 
       if (event.altKey || event.metaKey) {
@@ -65,5 +92,5 @@ export function usePlaybackShortcuts({
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [onPlayNext, onPlayPrevious, onSeekBySeconds, onTogglePlayPause])
+  }, [onPlayNext, onPlayPrevious, onSeekBySeconds, onTogglePlayPause, onToggleRepeat, onToggleRepeatOne, onToggleShuffle])
 }

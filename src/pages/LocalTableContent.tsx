@@ -7,11 +7,12 @@ import { LOCAL_FOLDER_TYPE_ICON_URL } from '../components/LocalFolderCard'
 import type { LibrarySong } from '../shared/contracts'
 import { getSongArtists } from '../shared/artists'
 import type { Translator } from '../shared/i18n'
+import { COLORFUL_ICON_URL } from '../shared/staticAssets'
 import type { FolderNode } from './localFolderModel'
 import { LocalSongQuickJump, LocalTableSectionHeader } from './LocalPageQuickJump'
 import { getFolderListItemKey, getSongListItemKey, joinClassNames } from './localPageModel'
 
-const LOCAL_FILE_TYPE_ICON_URL = '/colorful_no_bg.png'
+const LOCAL_FILE_TYPE_ICON_URL = COLORFUL_ICON_URL
 
 export function LocalTableContent({
   frameRef,

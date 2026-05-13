@@ -2,6 +2,7 @@ import type {
   LibraryFolder,
   LibraryPlaylist,
   SearchHistoryEntry,
+  SearchHistoryType,
 } from '../../src/shared/contracts.ts'
 
 export interface PlaylistRow {
@@ -25,13 +26,21 @@ export interface SongArtistRow {
 export interface SearchHistoryRow {
   id: number
   query: string
+  type: string
   searchedAt: string
+}
+
+const searchHistoryTypes = new Set<SearchHistoryType>(['sidebar', 'artists', 'albums', 'songs', 'playlists', 'folders'])
+
+function toSearchHistoryType(value: string): SearchHistoryType {
+  return searchHistoryTypes.has(value as SearchHistoryType) ? value as SearchHistoryType : 'sidebar'
 }
 
 export function toSearchHistoryEntry(row: SearchHistoryRow): SearchHistoryEntry {
   return {
     id: Number(row.id),
     query: row.query,
+    type: toSearchHistoryType(row.type),
     searchedAt: row.searchedAt,
   }
 }

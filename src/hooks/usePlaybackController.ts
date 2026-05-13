@@ -235,6 +235,10 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
       return
     }
 
+    if (pendingStartSecondsRef.current > 0 && audio.currentTime < pendingStartSecondsRef.current - 0.25) {
+      return
+    }
+
     const nextProgressSeconds = audio.currentTime
     if (pendingSeekSecondsRef.current != null && Math.abs(nextProgressSeconds - pendingSeekSecondsRef.current) > 0.25) {
       return
@@ -437,7 +441,9 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
       currentQueueIndexRef.current = queueIndex > -1 ? queueIndex : null
       setCurrentTrackId(trackId)
       setCurrentQueueIndex(queueIndex > -1 ? queueIndex : null)
-      setProgressFromPlayback(options.startAt)
+      if (options.startAt <= 0) {
+        setProgressFromPlayback(0)
+      }
       setDurationFromPlayback(track.duration)
       transitionStatus({ type: 'load-track', autoplay: options.autoplay })
       pendingStartSecondsRef.current = options.startAt
@@ -585,7 +591,6 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
         musicProgress: audio.currentTime,
       })
 
-      transitionStatus({ type: 'play-requested' })
       try {
         await audio.play()
       } catch {
@@ -617,7 +622,6 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
       return
     }
 
-    transitionStatus({ type: 'play-requested' })
     try {
       await audio.play()
     } catch {
@@ -893,6 +897,9 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
       void playPrevious()
     },
     onSeekBySeconds: seekBySeconds,
+    onToggleShuffle: toggleShuffle,
+    onToggleRepeat: toggleRepeat,
+    onToggleRepeatOne: toggleRepeatOne,
   })
 
   useGlobalPlaybackCommands({

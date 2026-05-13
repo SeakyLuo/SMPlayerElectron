@@ -21,7 +21,7 @@ export function transitionPlaybackStatus(
     case 'idle':
       return 'idle'
     case 'load-track':
-      return transition.autoplay ? 'loading' : 'ready'
+      return 'loading'
     case 'ready':
       return 'ready'
     case 'play-requested':

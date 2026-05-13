@@ -10,9 +10,9 @@ interface ArtworkImageProps {
 }
 
 export function ArtworkImage({ src, className, title, onError, renderFallback }: ArtworkImageProps) {
-  const [failedSrc, setFailedSrc] = useState('')
+  const [failedSrcs, setFailedSrcs] = useState<Set<string>>(new Set())
 
-  if (!src || src === failedSrc) {
+  if (!src || failedSrcs.has(src)) {
     return renderFallback()
   }
 
@@ -22,7 +22,7 @@ export function ArtworkImage({ src, className, title, onError, renderFallback }:
       src={src}
       alt={`${title} artwork`}
       onError={() => {
-        setFailedSrc(src)
+        setFailedSrcs((current) => new Set(current).add(src))
         onError?.()
       }}
     />

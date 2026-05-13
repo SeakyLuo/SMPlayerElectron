@@ -9,12 +9,13 @@ import { CustomScrollbar } from '../components/CustomScrollbar'
 import { Icon } from '../components/icons'
 import { LoadingState } from '../components/LoadingState'
 import { MenuFlyout } from '../components/MenuFlyout'
-import { getAddToPlaylistMenuFlyoutItem, getPreferenceMenuFlyoutItem, type MenuFlyoutItem, type MenuFlyoutPosition } from '../components/MenuFlyoutHelper'
+import { getAddToPlaylistMenuFlyoutItem, getAddToPlaylistMenuFlyoutItems, getPreferenceMenuFlyoutItem, type MenuFlyoutItem, type MenuFlyoutPosition } from '../components/MenuFlyoutHelper'
 import { MusicMenuFlyout, type MusicMenuFlyoutState } from '../components/MusicMenuFlyout'
 import { MultiSelectCommandBar } from '../components/MultiSelectCommandBar'
+import { PageSearchHistoryPanel } from '../components/PageSearchHistoryPanel'
 import { RenameDialog } from '../components/RenameDialog'
 import { PlaylistControlItem } from '../components/PlaylistControlItem'
-import type { LibraryPlaylist, LibrarySong, PreferenceItemSnapshot, PreferenceSettingsSnapshot } from '../shared/contracts'
+import type { LibraryPlaylist, LibrarySong, PreferenceItemSnapshot, PreferenceSettingsSnapshot, SearchHistoryEntry } from '../shared/contracts'
 import { formatDuration } from '../shared/formatters'
 import type { Translator } from '../shared/i18n'
 import { getQuickJumpTooltip } from '../shared/quickJumpTooltip'
@@ -24,6 +25,7 @@ import { usePreferenceStore } from '../state/usePreferenceStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
 import { useSongArtwork } from '../hooks/useSongArtwork'
 import { useCustomScrollbar } from '../hooks/useCustomScrollbar'
+import { useSongsAddedUndo } from '../hooks/useSongsAddedUndo'
 import {
   ARTIST_OVERSCAN_ROWS,
   ARTIST_QUICK_JUMP_KEYS,
@@ -68,7 +70,10 @@ interface ArtistsPageProps {
   onRecordArtistPlayed: (artist: string) => void
   onRevealSong: (songPath: string) => void | Promise<void>
   onDeleteSongFromDisk: (songId: number) => void
+  recentSearches: SearchHistoryEntry[]
   onRecordSearch?: (query: string) => void
+  onRemoveRecentSearch: (entryId: number) => void
+  onRemoveRecentSearches: (entryIds: number[]) => void
   onCompactTitleChange?: (title: string) => void
   routeBase?: string
 }
@@ -99,7 +104,10 @@ export function ArtistsPage({
   onRecordArtistPlayed,
   onRevealSong,
   onDeleteSongFromDisk,
+  recentSearches,
   onRecordSearch,
+  onRemoveRecentSearch,
+  onRemoveRecentSearches,
   onCompactTitleChange,
   routeBase = '',
 }: ArtistsPageProps) {
@@ -125,12 +133,11 @@ export function ArtistsPage({
   const [artistDetailScrollTop, setArtistDetailScrollTop] = useState(0)
   const [artistDetailViewportHeight, setArtistDetailViewportHeight] = useState(640)
   const [artistAlbumListOffsetTop, setArtistAlbumListOffsetTop] = useState(0)
-  const [loadingArtistName, setLoadingArtistName] = useState('')
   const [isCompactArtistLayout, setIsCompactArtistLayout] = useState(() => window.matchMedia(ARTIST_COMPACT_QUERY).matches)
   const location = useLocation()
   const navigate = useNavigate()
-  const refresh = useLibraryStore((state) => state.refresh)
   const showNotification = useUndoableNotificationStore((state) => state.showMessage)
+  const { addToNowPlayingWithUndo, showAddToPlaylistUndo } = useSongsAddedUndo(songs, t)
   const artistGroups = useMemo(() => buildArtistGroups(songs, t), [songs, t])
   const favoriteSongIdSet = useMemo(() => new Set(songs.filter((song) => song.favorite).map((song) => song.id)), [songs])
   const visibleArtists = artistGroups
@@ -141,7 +148,12 @@ export function ArtistsPage({
   const visibleArtistSearchSuggestions = artistSearch.trim()
     ? artistSearchSuggestions.slice(0, 8)
     : []
+  const artistSearchHistoryEntries = useMemo(
+    () => recentSearches.filter((entry) => entry.type === 'artists').slice(0, 10),
+    [recentSearches],
+  )
   const showArtistSearchSuggestions = artistSearchFocused && visibleArtistSearchSuggestions.length > 0
+  const showArtistSearchHistory = artistSearchFocused && !artistSearch.trim() && artistSearchHistoryEntries.length > 0
   const selectedArtist =
     visibleArtists.find((artist) => artist.name === selectedArtistName) ?? null
   const selectedArtistSongs = useMemo(() => selectedArtist?.songs ?? [], [selectedArtist])
@@ -200,6 +212,7 @@ export function ArtistsPage({
     type: GroupContextMenuState['type'],
     label: string,
     groupSongs: LibrarySong[],
+    showLocateArtist = false,
   ) => {
     event.preventDefault()
     event.stopPropagation()
@@ -208,6 +221,7 @@ export function ArtistsPage({
       type,
       label,
       songs: groupSongs,
+      showLocateArtist,
       x: event.clientX,
       y: event.clientY,
     })
@@ -251,7 +265,7 @@ export function ArtistsPage({
   const scrollToArtist = (artistName: string) => {
     const artistIndex = artistGroups.findIndex((artist) => artist.name === artistName)
     if (artistIndex > -1 && artistListRef.current) {
-      artistListRef.current.scrollTo({ top: artistIndex * ARTIST_ROW_HEIGHT, behavior: 'smooth' })
+      artistListRef.current.scrollTo({ top: artistIndex * ARTIST_ROW_HEIGHT })
     }
   }
 
@@ -263,18 +277,6 @@ export function ArtistsPage({
 
     artistListRef.current?.scrollTo({
       top: targetIndex * ARTIST_ROW_HEIGHT,
-    })
-  }
-
-  const reloadArtist = (artistName: string) => {
-    if (loadingArtistName === artistName) {
-      showNotification(t('nowPlaying.loading'), 2400)
-      return
-    }
-
-    setLoadingArtistName(artistName)
-    void refresh().finally(() => {
-      setLoadingArtistName('')
     })
   }
 
@@ -412,6 +414,23 @@ export function ArtistsPage({
               </button>
             ))}
           </div>
+        </>
+      ) : showArtistSearchHistory ? (
+        <>
+          <div className="dropdown-dismiss-layer" onPointerDown={() => setArtistSearchFocused(false)} />
+          <PageSearchHistoryPanel
+            entries={artistSearchHistoryEntries}
+            t={t}
+            onSelect={(query) => {
+              setArtistSearchFocused(false)
+              setAppBarSearchOpen(false)
+              chooseArtist(query)
+            }}
+            onRemove={onRemoveRecentSearch}
+            onClear={() => {
+              onRemoveRecentSearches(artistSearchHistoryEntries.map((entry) => entry.id))
+            }}
+          />
         </>
       ) : null}
     </div>
@@ -590,24 +609,44 @@ export function ArtistsPage({
               ) : null}
               {renderedArtists.map((artist) => (
                 <div className="artist-virtual-row" key={artist.name}>
-                  <button
+                  <div
+                    role="button"
+                    tabIndex={0}
                     className={clsx('artist-list-item', {
                       'is-active': artist.name === selectedArtist?.name,
                     })}
-                    type="button"
                     title={artist.name}
                     onClick={() => {
                       openArtistDetail(artist.name)
-                  }}
-                  onContextMenu={(event) => {
-                    openGroupMenu(event, 'artist', artist.name, artist.songs)
-                  }}
-                >
-                    <ArtistListArtwork artist={artist} />
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        openArtistDetail(artist.name)
+                      }
+                    }}
+                    onContextMenu={(event) => {
+                      openGroupMenu(event, 'artist', artist.name, artist.songs)
+                    }}
+                  >
+                    <ArtistListArtwork
+                      artist={artist}
+                      playLabel={t('nowPlaying.randomPlay')}
+                      onPlay={() => {
+                        onRecordArtistPlayed(artist.name)
+                        playShuffledSongs(artist.songs)
+                      }}
+                    />
                     <span className="artist-list-copy">
                       <strong>{artist.name}</strong>
+                      <small>
+                        {t('artists.artistSummary', {
+                          albums: artist.albumCount,
+                          songs: artist.songs.length,
+                        })}
+                      </small>
                     </span>
-                  </button>
+                  </div>
                 </div>
               ))}
               {artistBottomSpacerHeight > 0 ? (
@@ -679,16 +718,15 @@ export function ArtistsPage({
                   title={t('player.more')}
                   disabled={selectedArtistSongs.length === 0}
                   onClick={(event) => {
-                    openGroupMenu(event, 'artist', selectedArtist.name, selectedArtistSongs)
+                    openGroupMenu(event, 'artist', selectedArtist.name, selectedArtistSongs, true)
                   }}
                   onContextMenu={(event) => {
-                    openGroupMenu(event, 'artist', selectedArtist.name, selectedArtistSongs)
+                    openGroupMenu(event, 'artist', selectedArtist.name, selectedArtistSongs, true)
                   }}
                 >
                   <Icon name="moreHorizontal" />
                 </button>
               </div>
-              {loadingArtistName === selectedArtist.name ? <div className="artist-detail-progress" aria-label={t('nowPlaying.loading')} /> : null}
             </header>
 
             <div className="artist-album-list" ref={artistAlbumListRef}>
@@ -751,7 +789,6 @@ export function ArtistsPage({
                           dropPosition={null}
                           draggable={false}
                           showAlbum={false}
-                          showArtist={false}
                           onPlayTrack={onPlayTrack}
                           onTogglePlayPause={onTogglePlayPause}
                           onToggleFavorite={onToggleFavorite}
@@ -760,8 +797,10 @@ export function ArtistsPage({
                           }}
                           onAddToPlaylistClick={(contextSong, x, y) => {
                             setGroupMenu(null)
-                            setSongContextMenu({
-                              song: contextSong,
+                            setSongContextMenu(null)
+                            setAddToMenu({
+                              songIds: [contextSong.id],
+                              defaultPlaylistName: contextSong.title,
                               x,
                               y,
                             })
@@ -771,6 +810,7 @@ export function ArtistsPage({
                           }}
                           onContextMenu={(contextSong, x, y) => {
                             setGroupMenu(null)
+                            setAddToMenu(null)
                             setSongContextMenu({
                               song: contextSong,
                               x,
@@ -869,9 +909,6 @@ export function ArtistsPage({
           onLocateArtist={(artistName) => {
             scrollToArtist(artistName)
           }}
-          onReloadArtist={() => {
-            reloadArtist(groupMenu.label)
-          }}
           onSeeAlbum={(albumName) => {
             navigate(getAlbumRoute(routeBase, albumName))
           }}
@@ -906,34 +943,36 @@ export function ArtistsPage({
           onClose={() => {
             setAddToMenu(null)
           }}
-          items={[
-            getAddToPlaylistMenuFlyoutItem({
-              playlists: customPlaylists,
-              songIds: addToMenu.songIds,
-              t,
-              defaultPlaylistName: addToMenu.defaultPlaylistName,
-              includeNowPlaying: true,
-              includeFavorites: addToMenu.songIds.some((songId) => !favoriteSongIdSet.has(songId)),
-              onAddToNowPlaying: () => {
-                onAddSongsToNowPlaying(addToMenu.songIds)
-              },
-              onToggleFavorite: () => {
-                addSongsToFavorites(addToMenu.songIds.filter((songId) => !favoriteSongIdSet.has(songId)))
-              },
-              onRequestCreatePlaylist: () => {
-                setPlaylistNameDialog({
-                  defaultName: addToMenu.defaultPlaylistName,
-                  songIds: addToMenu.songIds,
-                })
-              },
-              onCreatePlaylist: (name) => {
-                onCreatePlaylistWithSongs(name, addToMenu.songIds)
-              },
-              onAddToPlaylist: (playlistId) => {
-                onAddSongsToPlaylist(playlistId, addToMenu.songIds)
-              },
-            }),
-          ].filter((item) => item != null)}
+          items={getAddToPlaylistMenuFlyoutItems({
+            playlists: customPlaylists,
+            songIds: addToMenu.songIds,
+            t,
+            defaultPlaylistName: addToMenu.defaultPlaylistName,
+            includeNowPlaying: true,
+            includeFavorites: addToMenu.songIds.some((songId) => !favoriteSongIdSet.has(songId)),
+            onAddToNowPlaying: () => {
+              addToNowPlayingWithUndo(addToMenu.songIds)
+            },
+            onToggleFavorite: () => {
+              const nextFavoriteSongIds = addToMenu.songIds.filter((songId) => !favoriteSongIdSet.has(songId))
+              addSongsToFavorites(nextFavoriteSongIds)
+              showAddToPlaylistUndo(favoritePlaylistId, nextFavoriteSongIds, t('common.myFavorites'))
+            },
+            onRequestCreatePlaylist: () => {
+              setPlaylistNameDialog({
+                defaultName: addToMenu.defaultPlaylistName,
+                songIds: addToMenu.songIds,
+              })
+            },
+            onCreatePlaylist: (name) => {
+              onCreatePlaylistWithSongs(name, addToMenu.songIds)
+            },
+            onAddToPlaylist: (playlistId) => {
+              const targetPlaylist = playlists.find((playlist) => playlist.id === playlistId)!
+              onAddSongsToPlaylist(playlistId, addToMenu.songIds)
+              showAddToPlaylistUndo(playlistId, addToMenu.songIds, targetPlaylist.name)
+            },
+          })}
         />
       ) : null}
       {playlistNameDialog ? (
@@ -958,6 +997,7 @@ interface GroupContextMenuState {
   type: 'artist' | 'album'
   label: string
   songs: LibrarySong[]
+  showLocateArtist: boolean
   x: number
   y: number
 }
@@ -975,7 +1015,6 @@ function ArtistGroupContextMenu({
   onPlaySongs,
   onSelectSongs,
   onLocateArtist,
-  onReloadArtist,
   onSeeAlbum,
 }: {
   menu: GroupContextMenuState
@@ -990,7 +1029,6 @@ function ArtistGroupContextMenu({
   onPlaySongs: (songIds: number[]) => void
   onSelectSongs: (songIds: number[]) => void
   onLocateArtist: (artistName: string) => void
-  onReloadArtist: (artistName: string) => void
   onSeeAlbum: (albumName: string) => void
 }) {
   const songIds = useMemo(() => menu.songs.map((song) => song.id), [menu.songs])
@@ -1082,24 +1120,16 @@ function ArtistGroupContextMenu({
           onUpdated: refreshPreferenceItem,
         }),
         ...(menu.type === 'artist'
-          ? [
-              {
-                key: 'reload-artist',
-                text: t('artists.reload'),
-                icon: 'refresh',
-                onClick: () => {
-                  onReloadArtist(menu.label)
-                },
-              },
-              {
+          ? menu.showLocateArtist
+            ? [{
                 key: 'locate-artist',
                 text: t('artists.locateArtist'),
                 icon: 'nowPlaying',
                 onClick: () => {
                   onLocateArtist(menu.label)
                 },
-              },
-            ] satisfies MenuFlyoutItem[]
+              }] satisfies MenuFlyoutItem[]
+            : []
           : [{
               key: 'see-album',
               text: t('context.seeAlbum'),
@@ -1113,20 +1143,42 @@ function ArtistGroupContextMenu({
   )
 }
 
-function ArtistListArtwork({ artist }: { artist: ArtistGroup }) {
+function ArtistListArtwork({ artist, playLabel, onPlay }: { artist: ArtistGroup; playLabel: string; onPlay: () => void }) {
   const { artworkUrl, refreshArtwork } = useSongArtwork(artist.artworkSongId, artist.artworkUrl)
   return (
-    <ArtworkImage
-      className="artist-list-artwork"
-      src={artworkUrl}
-      title={artist.name}
-      onError={refreshArtwork}
-      renderFallback={() => (
-        <span className="artist-list-avatar" aria-hidden="true">
-          <Icon name="users" />
-        </span>
-      )}
-    />
+    <span className="artist-list-artwork-shell">
+      <ArtworkImage
+        className="artist-list-artwork"
+        src={artworkUrl}
+        title={artist.name}
+        onError={refreshArtwork}
+        renderFallback={() => (
+          <span className="artist-list-avatar" aria-hidden="true">
+            <DefaultAlbumArtwork className="artist-list-avatar-image" />
+          </span>
+        )}
+      />
+      <span
+        role="button"
+        tabIndex={0}
+        className="artist-list-hover-play"
+        aria-label={playLabel}
+        title={playLabel}
+        onClick={(event) => {
+          event.stopPropagation()
+          onPlay()
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            event.stopPropagation()
+            onPlay()
+          }
+        }}
+      >
+        <Icon name="play" />
+      </span>
+    </span>
   )
 }
 

@@ -173,10 +173,79 @@
   box-sizing: border-box;
   cursor: pointer;
   outline: none;
+  overflow: hidden;
+  touch-action: pan-y;
   transition:
     background-color 120ms ease,
     box-shadow 120ms ease,
     color 120ms ease;
+}
+
+.now-playing-queue-item.is-touch-reorderable {
+  touch-action: none;
+}
+
+.now-playing-queue-surface {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  background: rgba(246, 249, 252, 0.98);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.now-playing-queue-item.is-swiping .now-playing-queue-surface {
+  opacity: 1;
+}
+
+.now-playing-queue-item > :not(.now-playing-queue-swipe-action) {
+  transform: translateX(var(--queue-swipe-offset, 0));
+  transition: transform 170ms ease;
+}
+
+.now-playing-queue-item > :not(.now-playing-queue-swipe-action):not(.now-playing-queue-surface) {
+  position: relative;
+  z-index: 2;
+}
+
+.now-playing-queue-item.is-swiping > :not(.now-playing-queue-swipe-action) {
+  transition: none;
+}
+
+.now-playing-queue-swipe-action {
+  position: absolute;
+  inset-block: 0;
+  z-index: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 108px;
+  padding: 0 20px;
+  border: 0;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 650;
+  opacity: 0;
+  cursor: pointer;
+  pointer-events: none;
+  transition: opacity 90ms ease;
+}
+
+.now-playing-queue-item.is-swiping .now-playing-queue-swipe-action {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.now-playing-queue-swipe-action svg {
+  width: 18px;
+  height: 18px;
+}
+
+.now-playing-queue-swipe-remove {
+  right: 0;
+  justify-content: flex-end;
+  background: #c63d3d;
 }
 
 .now-playing-queue-item:not(.has-album-column) {
@@ -252,7 +321,7 @@
   width: 56px;
   height: 56px;
   border-radius: 6px;
-  overflow: hidden;
+  overflow: visible;
   background: rgba(255, 255, 255, 0.7);
 }
 
@@ -646,6 +715,13 @@
   font-size: 14px;
 }
 
+@media (max-width: 720px) and (pointer: coarse) {
+  .app-shell.nav-minimal .now-playing-queue-actions .now-playing-queue-action.is-play-next-action,
+  .playlist-control-compact .now-playing-queue-actions .now-playing-queue-action.is-play-next-action {
+    display: none;
+  }
+}
+
 .playlist-control-compact .now-playing-queue-item.is-drop-before::before,
 .playlist-control-compact .now-playing-queue-item.is-drop-after::after {
   left: 8px;
@@ -726,6 +802,10 @@ body.night-mode .app-shell .now-playing-random-options-separator {
 body.night-mode .app-shell .now-playing-queue-item {
   border-bottom-color: var(--night-border);
   color: var(--night-text);
+}
+
+body.night-mode .app-shell .now-playing-queue-surface {
+  background: var(--night-panel);
 }
 
 body.night-mode .app-shell .now-playing-queue-item:hover,

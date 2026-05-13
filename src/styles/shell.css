@@ -11,6 +11,7 @@
 .app-shell {
   position: relative;
   --player-height: 120px;
+  --player-top-radius: 18px;
   --shell-padding: 14px;
   --sidebar-player-gap: 0px;
   --sidebar-width: 320px;

@@ -71,7 +71,6 @@ export function MyFavoritesPage({
         artworkUrl={artworkUrl}
         removable
         showAlbum
-        showArtist
         canClear={songs.length > 0}
         canSetPreferred
         sortCriterion={sortCriterion}

@@ -6,6 +6,7 @@ import { ACTIVE_STATE, AUDIO_EXTENSIONS } from './constants.ts'
 import { readAudioMetadataBatch } from './audio-metadata-reader.ts'
 import type { NowPlayingService } from './now-playing-service.ts'
 import type { SettingsRow, SettingsService } from './settings-service.ts'
+import { syncAlbums } from './album-sync.ts'
 
 const METADATA_IMPORT_CONCURRENCY = 6
 
@@ -92,17 +93,18 @@ export class ExternalAudioService {
         ) as { Id: number }
 
         this.markSongArtistsInactiveStatement.run(ACTIVE_STATE.inactive, musicRow.Id)
-        song.artists.forEach((artist, index) => {
+        if (song.artist) {
           this.upsertSongArtistStatement.run(
             musicRow.Id,
-            artist,
-            index,
+            song.artist,
+            0,
             ACTIVE_STATE.active,
           )
-        })
+        }
         openedSongIds.push(musicRow.Id)
       }
 
+      syncAlbums(this.db)
       this.insertAfterCurrentSong(openedSongIds, settings)
       this.db.exec('COMMIT')
     } catch (error) {

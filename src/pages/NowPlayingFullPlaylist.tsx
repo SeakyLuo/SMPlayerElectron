@@ -217,6 +217,57 @@ export function NowPlayingFullPlaylist({
     return event.clientY > rect.top + rect.height / 2 ? 'after' : 'before'
   }
 
+  const getTouchDropTarget = (clientX: number, clientY: number) => {
+    const row = document.elementsFromPoint(clientX, clientY).find((element): element is HTMLElement =>
+      element instanceof HTMLElement && element.classList.contains('now-playing-queue-item'),
+    )
+    if (!row) {
+      return null
+    }
+
+    const queueIndex = Number(row.dataset.queueIndex)
+    if (!Number.isInteger(queueIndex)) {
+      return null
+    }
+
+    const rect = row.getBoundingClientRect()
+    return {
+      queueIndex,
+      position: clientY > rect.top + rect.height / 2 ? 'after' as const : 'before' as const,
+    }
+  }
+
+  const moveQueueSong = (draggedQueueIndex: number, targetQueueIndex: number, insertAfter: boolean) => {
+    if (draggedQueueIndex === targetQueueIndex) {
+      return
+    }
+
+    const nextSongIds = songs.map((song) => song.id)
+    const [draggedSongId] = nextSongIds.splice(draggedQueueIndex, 1)
+    const targetIndex = draggedQueueIndex < targetQueueIndex + (insertAfter ? 1 : 0)
+      ? targetQueueIndex + (insertAfter ? 1 : 0) - 1
+      : targetQueueIndex + (insertAfter ? 1 : 0)
+    nextSongIds.splice(targetIndex, 0, draggedSongId!)
+    onReplaceQueue(nextSongIds)
+  }
+
+  const moveTouchQueueDrag = (clientX: number, clientY: number) => {
+    const target = getTouchDropTarget(clientX, clientY)
+    setDropIndicator(target)
+  }
+
+  const completeTouchQueueDrag = (clientX: number, clientY: number) => {
+    const draggedQueueIndex = draggedQueueIndexRef.current
+    draggedQueueIndexRef.current = null
+    const target = getTouchDropTarget(clientX, clientY)
+    setDropIndicator(null)
+    if (draggedQueueIndex == null || !target) {
+      return
+    }
+
+    moveQueueSong(draggedQueueIndex, target.queueIndex, target.position === 'after')
+  }
+
   const reverseSelection = () => {
     setSelectedQueueIndexes((current) => {
       const next = new Set<number>()
@@ -283,6 +334,7 @@ export function NowPlayingFullPlaylist({
                 selectionMode={multiSelect}
                 dropPosition={dropIndicator?.queueIndex === queueIndex ? dropIndicator.position : null}
                 queueSongIds={queueSongIds}
+                touchReorderIndex={queueIndex}
                 onPlayTrack={(trackId, nextQueueSongIds) => {
                   onPlayTrack(trackId, nextQueueSongIds, queueIndex)
                 }}
@@ -341,15 +393,19 @@ export function NowPlayingFullPlaylist({
                     return
                   }
 
-                  const nextSongIds = queueSongIds.slice()
-                  const [draggedSongId] = nextSongIds.splice(draggedQueueIndex, 1)
-                  const targetIndex = draggedQueueIndex < queueIndex + (insertAfter ? 1 : 0)
-                    ? queueIndex + (insertAfter ? 1 : 0) - 1
-                    : queueIndex + (insertAfter ? 1 : 0)
-                  nextSongIds.splice(targetIndex, 0, draggedSongId!)
-                  onReplaceQueue(nextSongIds)
+                  moveQueueSong(draggedQueueIndex, queueIndex, insertAfter)
                 }}
                 onDragEnd={() => {
+                  draggedQueueIndexRef.current = null
+                  setDropIndicator(null)
+                }}
+                onTouchReorderStart={() => {
+                  draggedQueueIndexRef.current = queueIndex
+                  setDropIndicator(null)
+                }}
+                onTouchReorderMove={moveTouchQueueDrag}
+                onTouchReorderEnd={completeTouchQueueDrag}
+                onTouchReorderCancel={() => {
                   draggedQueueIndexRef.current = null
                   setDropIndicator(null)
                 }}
@@ -414,9 +470,7 @@ export function NowPlayingFullPlaylist({
             folders,
             currentPlaylistName: t('common.nowPlaying'),
             excludePlaylistName: '',
-            queueSongIds,
             currentTrackId: selectedTrackId,
-            songIndex: songMenu.queueIndex,
             isPlaying,
             t,
             onPlay: () => {

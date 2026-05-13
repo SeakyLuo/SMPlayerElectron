@@ -17,7 +17,7 @@ export interface AlbumGroup {
   duration: number
 }
 
-export const ARTIST_ROW_HEIGHT = 48
+export const ARTIST_ROW_HEIGHT = 64
 export const ARTIST_OVERSCAN_ROWS = 10
 const ARTIST_ALBUM_CARD_HEADER_HEIGHT = 112
 const ARTIST_ALBUM_SONG_ROW_HEIGHT = 48

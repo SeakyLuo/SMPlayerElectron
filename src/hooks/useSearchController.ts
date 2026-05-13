@@ -1,10 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
 import type { NavigateFunction } from 'react-router-dom'
+import type { SearchHistoryType } from '../shared/contracts'
 
 interface SearchControllerOptions {
   navigate: NavigateFunction
   saveSearchQuery: (query: string) => Promise<void>
-  addRecentSearch: (query: string) => Promise<void>
+  addRecentSearch: (query: string, type?: SearchHistoryType) => Promise<void>
+}
+
+function getSearchRoute(query: string, type: SearchHistoryType) {
+  const encodedQuery = encodeURIComponent(query)
+
+  return {
+    sidebar: '/search',
+    artists: `/artists?artist=${encodedQuery}`,
+    albums: `/albums?album=${encodedQuery}`,
+    songs: `/songs?search=${encodedQuery}`,
+    playlists: `/playlists?search=${encodedQuery}`,
+    folders: '/search?type=folders',
+  }[type]
 }
 
 export function useSearchController({ navigate, saveSearchQuery, addRecentSearch }: SearchControllerOptions) {
@@ -25,7 +39,7 @@ export function useSearchController({ navigate, saveSearchQuery, addRecentSearch
     return clearSearchResultTimer
   }, [])
 
-  const commitSearchQuery = async (value: string) => {
+  const commitSearchQuery = async (value: string, type: SearchHistoryType = 'sidebar') => {
     const nextQuery = value.trim()
     clearSearchResultTimer()
 
@@ -39,14 +53,14 @@ export function useSearchController({ navigate, saveSearchQuery, addRecentSearch
       return
     }
 
-    navigate('/search')
+    navigate(getSearchRoute(nextQuery, type))
     setSearchResultsLoading(true)
     searchResultTimerRef.current = window.setTimeout(() => {
       setSearchResultQuery(nextQuery)
       setSearchResultsLoading(false)
       searchResultTimerRef.current = null
     }, 40)
-    void addRecentSearch(nextQuery)
+    void addRecentSearch(nextQuery, type)
   }
 
   const commitDirectorySearchQuery = (value: string, folderRelativePath: string) => {
@@ -61,7 +75,7 @@ export function useSearchController({ navigate, saveSearchQuery, addRecentSearch
     setSearchResultQuery(nextQuery)
     setSearchResultsLoading(false)
     navigate(`/search?folder=${encodeURIComponent(folderRelativePath)}`)
-    void addRecentSearch(nextQuery)
+    void addRecentSearch(nextQuery, 'folders')
   }
 
   return {

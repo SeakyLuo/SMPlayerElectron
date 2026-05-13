@@ -1,16 +1,17 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 
 import { AlbumArtControl } from '../components/AlbumArtControl'
-import { AppBarBottomPortal, AppBarPortal } from '../components/AppBarPortal'
+import { AppBarBottomPortal } from '../components/AppBarPortal'
 import { requestTextDialog } from '../components/dialogService'
 import { Icon } from '../components/icons'
 import { MenuFlyout } from '../components/MenuFlyout'
-import { getAddToPlaylistMenuFlyoutItem, getPreferenceMenuFlyoutItem, type MenuFlyoutItem } from '../components/MenuFlyoutHelper'
+import { getAddToPlaylistMenuFlyoutItem, getAddToPlaylistMenuFlyoutItems, getPreferenceMenuFlyoutItem, type MenuFlyoutItem } from '../components/MenuFlyoutHelper'
 import { MusicMenuFlyout, type MusicMenuFlyoutState } from '../components/MusicMenuFlyout'
 import { MultiSelectCommandBar } from '../components/MultiSelectCommandBar'
 import { PlaylistControlItem } from '../components/PlaylistControlItem'
 import { useRevealItem } from '../hooks/useRevealItem'
+import { useSongsAddedUndo } from '../hooks/useSongsAddedUndo'
 import type { AppSettingsUpdate, LibraryFolder, LibraryPlaylist, LibrarySong, PreferenceItemSnapshot, PreferenceSettingsSnapshot, SearchSortCriterion } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
 import {
@@ -55,7 +56,6 @@ interface SearchPageProps {
   favoritePlaylistId: number
   rootPath: string
   searchFolderPath: string
-  searchFolderName: string
   selectedTrackId: number | null
   isPlaying: boolean
   showCount: boolean
@@ -74,6 +74,7 @@ interface SearchPageProps {
   onUpdateSettings: (update: AppSettingsUpdate) => void
   onOpenLocalFolder: (folderRelativePath: string) => void
   onSearchDirectory: (query: string, folderRelativePath: string) => void
+  onRecordArtistPlayed: (artist: string) => void
 }
 
 interface SearchResultContextMenuState {
@@ -95,6 +96,12 @@ export type SearchCriteria = Record<SearchResultType, SearchSortCriterion>
 
 const ARTIST_PREVIEW_LIMIT = 10
 const SONG_PREVIEW_LIMIT = 5
+const searchFilterKeys = new Set<SearchFilterKey>(['all', 'artists', 'albums', 'songs', 'playlists', 'folders'])
+
+function isSearchFilterKey(value: string | null): value is SearchFilterKey {
+  return value !== null && searchFilterKeys.has(value as SearchFilterKey)
+}
+
 export function SearchPage({
   t,
   query,
@@ -106,7 +113,6 @@ export function SearchPage({
   favoritePlaylistId,
   rootPath,
   searchFolderPath,
-  searchFolderName,
   selectedTrackId,
   isPlaying,
   showCount,
@@ -125,9 +131,11 @@ export function SearchPage({
   onUpdateSettings,
   onOpenLocalFolder,
   onSearchDirectory,
+  onRecordArtistPlayed,
 }: SearchPageProps) {
   const revealItem = useRevealItem()
   const navigate = useNavigate()
+  const location = useLocation()
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
   const [activeFilter, setActiveFilter] = useState<SearchFilterKey>('all')
   const [songContextMenu, setSongContextMenu] = useState<MusicMenuFlyoutState | null>(null)
@@ -143,9 +151,9 @@ export function SearchPage({
     (state) => state.snapshot.settings.hideMultiSelectCommandBarAfterOperation,
   )
   const refreshPreferences = usePreferenceStore((state) => state.refresh)
+  const { addToNowPlayingWithUndo, showAddToPlaylistUndo } = useSongsAddedUndo(songs, t)
   const normalizedQuery = query.trim().toLocaleLowerCase()
   const normalizedRequestedQuery = requestedQuery.trim().toLocaleLowerCase()
-  const deferredNormalizedQuery = useDeferredValue(normalizedQuery)
   const searchableSongs = useMemo(
     () => searchFolderPath ? songs.filter((song) => isSongUnderFolder(song.path, searchFolderPath)) : songs,
     [searchFolderPath, songs],
@@ -155,8 +163,8 @@ export function SearchPage({
     [folders, searchFolderPath],
   )
   const results = useMemo(
-    () => buildSearchResults(searchableSongs, searchableFolders, playlists, rootPath, deferredNormalizedQuery, t),
-    [deferredNormalizedQuery, playlists, rootPath, searchableFolders, searchableSongs, t],
+    () => buildSearchResults(searchableSongs, searchableFolders, playlists, rootPath, normalizedQuery, t),
+    [normalizedQuery, playlists, rootPath, searchableFolders, searchableSongs, t],
   )
   const sortedResults = useMemo(
     () => ({
@@ -218,6 +226,14 @@ export function SearchPage({
   const favoriteSongIdSet = useMemo(() => new Set(songs.filter((song) => song.favorite).map((song) => song.id)), [songs])
   const playlistsById = useMemo(() => new Map(playlists.map((playlist) => [playlist.id, playlist])), [playlists])
   const localFolderIndex = useMemo(() => buildFolderIndex(songs, folders, rootPath), [folders, rootPath, songs])
+  const searchTypeParam = useMemo(() => {
+    const value = new URLSearchParams(location.search).get('type')
+    return isSearchFilterKey(value) ? value : 'all'
+  }, [location.search])
+
+  useEffect(() => {
+    setActiveFilter(searchTypeParam)
+  }, [searchTypeParam])
 
   const isExpanded = (section: string) => expandedSections.has(section)
   const toggleExpanded = (section: string) => {
@@ -238,6 +254,17 @@ export function SearchPage({
     if (filter !== activeFilter) {
       searchPageRef.current!.scrollTop = 0
       setActiveFilter(filter)
+      const searchParams = new URLSearchParams(location.search)
+      if (filter === 'all') {
+        searchParams.delete('type')
+      } else {
+        searchParams.set('type', filter)
+      }
+      const nextSearch = searchParams.toString()
+      navigate(nextSearch ? `/search?${nextSearch}` : '/search', { replace: true })
+      if (query.trim()) {
+        void useLibraryStore.getState().addRecentSearch(query, filter === 'all' ? 'sidebar' : filter)
+      }
     }
   }
   const openCardContextMenu = (sectionKey: SearchResultType, card: SearchResult, x: number, y: number) => {
@@ -286,13 +313,18 @@ export function SearchPage({
       clearSongSelection()
     }
   }
-  const toggleSearchSelectionMode = () => {
-    setSearchSelectionMode((current) => !current)
-    clearSongSelection()
-  }
   const playSelectedSongs = () => {
     const shuffledSongIds = shuffleSongIds(selectedSearchSongIdsForOperation)
     if (shuffledSongIds.length > 0) {
+      onPlayTrack(shuffledSongIds[0]!, shuffledSongIds)
+    }
+  }
+  const playSearchResultCard = (sectionKey: SearchResultType, card: SearchResult) => {
+    const shuffledSongIds = shuffleSongIds(card.songIds)
+    if (shuffledSongIds.length > 0) {
+      if (sectionKey === 'artists') {
+        onRecordArtistPlayed(card.title)
+      }
       onPlayTrack(shuffledSongIds[0]!, shuffledSongIds)
     }
   }
@@ -339,16 +371,6 @@ export function SearchPage({
     <section className="page-panel search-page" ref={searchPageRef}>
       {hasResults ? (
         <>
-          <AppBarPortal>
-            <button
-              type="button"
-              className={searchSelectionMode ? 'search-multi-select-button search-appbar-multi-select-button is-active' : 'search-multi-select-button search-appbar-multi-select-button'}
-              onClick={toggleSearchSelectionMode}
-            >
-              <Icon name="menu" />
-              <span>{t('common.multiSelect')}</span>
-            </button>
-          </AppBarPortal>
           <AppBarBottomPortal>
             <SearchResultTabs
               activeFilter={activeFilter}
@@ -374,11 +396,6 @@ export function SearchPage({
         </div>
       ) : (
         <div className="search-result-stack">
-          {searchFolderName ? (
-            <div className="search-directory-context">
-              {t('search.directoryResultOf', { query: requestedQuery, folder: searchFolderName })}
-            </div>
-          ) : null}
           <div className="search-result-toolbar">
             <SearchResultTabs
               activeFilter={activeFilter}
@@ -386,14 +403,6 @@ export function SearchPage({
               t={t}
               onChange={changeActiveFilter}
             />
-            <button
-              type="button"
-              className={searchSelectionMode ? 'search-multi-select-button is-active' : 'search-multi-select-button'}
-              onClick={toggleSearchSelectionMode}
-            >
-              <Icon name="menu" />
-              <span>{t('common.multiSelect')}</span>
-            </button>
           </div>
           {showArtists ? (
             <SearchResultSection
@@ -411,6 +420,8 @@ export function SearchPage({
               onSortChange={updateSortCriterion}
               onOpenContextMenu={openCardContextMenu}
               onOpenLocalFolder={onOpenLocalFolder}
+              onPlayCard={playSearchResultCard}
+              playCardLabel={t('nowPlaying.randomPlay')}
               selectionMode={searchSelectionMode}
               selectedCardKeys={selectedCardKeys}
               onToggleSelection={toggleCardSelection}
@@ -480,6 +491,9 @@ export function SearchPage({
                       setSongContextMenu(null)
                       setCardContextMenu(null)
                       setSongAddMenu({ songIds: [contextSong.id], defaultPlaylistName: contextSong.title, x, y })
+                    }}
+                    onPlayNextClick={(contextSong) => {
+                      onPlayNext(contextSong.id)
                     }}
                     onContextMenu={(contextSong, x, y) => {
                       setSongAddMenu(null)
@@ -605,7 +619,9 @@ export function SearchPage({
                 setSongAddMenu(null)
               }}
               items={(() => {
-                const addToItem = getAddToPlaylistMenuFlyoutItem({
+                const items: MenuFlyoutItem[] = []
+
+                items.push(...getAddToPlaylistMenuFlyoutItems({
                   playlists,
                   songIds: songAddMenu.songIds,
                   t,
@@ -613,11 +629,13 @@ export function SearchPage({
                   includeNowPlaying: true,
                   includeFavorites: songAddMenu.songIds.some((songId) => !favoriteSongIdSet.has(songId)),
                   onAddToNowPlaying: () => {
-                    onAddSongsToNowPlaying(songAddMenu.songIds)
+                    addToNowPlayingWithUndo(songAddMenu.songIds)
                     hideSongSelectionAfterOperation()
                   },
                   onToggleFavorite: () => {
-                    onAddSongsToPlaylist(favoritePlaylistId, songAddMenu.songIds.filter((songId) => !favoriteSongIdSet.has(songId)))
+                    const nextFavoriteSongIds = songAddMenu.songIds.filter((songId) => !favoriteSongIdSet.has(songId))
+                    onAddSongsToPlaylist(favoritePlaylistId, nextFavoriteSongIds)
+                    showAddToPlaylistUndo(favoritePlaylistId, nextFavoriteSongIds, t('common.myFavorites'))
                     hideSongSelectionAfterOperation()
                   },
                   onCreatePlaylist: (name) => {
@@ -625,16 +643,18 @@ export function SearchPage({
                     hideSongSelectionAfterOperation()
                   },
                   onAddToPlaylist: (playlistId) => {
+                    const targetPlaylist = playlists.find((playlist) => playlist.id === playlistId)!
                     if (songAddMenu.songIds.length === 1) {
                       onAddSongToPlaylist(playlistId, songAddMenu.songIds[0]!)
                     } else {
                       onAddSongsToPlaylist(playlistId, songAddMenu.songIds)
                     }
+                    showAddToPlaylistUndo(playlistId, songAddMenu.songIds, targetPlaylist.name)
                     hideSongSelectionAfterOperation()
                   },
-                })
+                }))
 
-                return addToItem ? [addToItem] : []
+                return items
               })()}
             />
           ) : null}
@@ -652,6 +672,7 @@ export function SearchPage({
                 t,
                 onSelect: selectCardFromMenu,
                 onPlayTrack,
+                onRecordArtistPlayed,
                 onAddSongsToNowPlaying,
                 onCreatePlaylistWithSongs,
                 onAddSongsToPlaylist,
@@ -710,6 +731,7 @@ function getSearchResultMenuItems({
   t,
   onSelect,
   onPlayTrack,
+  onRecordArtistPlayed,
   onAddSongsToNowPlaying,
   onCreatePlaylistWithSongs,
   onAddSongsToPlaylist,
@@ -727,6 +749,7 @@ function getSearchResultMenuItems({
   t: Translator
   onSelect: (sectionKey: SearchResultType, card: SearchResult) => void
   onPlayTrack: (trackId: number, queueSongIds: number[]) => void
+  onRecordArtistPlayed: (artist: string) => void
   onAddSongsToNowPlaying: (songIds: number[]) => void
   onCreatePlaylistWithSongs: (name: string, songIds: number[]) => void
   onAddSongsToPlaylist: (playlistId: number, songIds: number[]) => void
@@ -746,6 +769,9 @@ function getSearchResultMenuItems({
       onClick: () => {
         const shuffledSongIds = shuffleSongIds(card.songIds)
         if (shuffledSongIds.length > 0) {
+          if (sectionKey === 'artists') {
+            onRecordArtistPlayed(card.title)
+          }
           onPlayTrack(shuffledSongIds[0]!, shuffledSongIds)
         }
       },

@@ -92,7 +92,7 @@ body.night-mode .app-shell .sidebar {
 }
 
 .sidebar-app-name {
-  margin-left: 48px;
+  margin-left: 0;
   min-width: 0;
   color: var(--text-strong);
   font-size: 14px;
@@ -104,6 +104,10 @@ body.night-mode .app-shell .sidebar {
   transition:
     opacity 120ms ease,
     transform 180ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.sidebar-titlebar.has-back-button .sidebar-app-name {
+  margin-left: 48px;
 }
 
 body.night-mode .app-shell .sidebar-app-name,

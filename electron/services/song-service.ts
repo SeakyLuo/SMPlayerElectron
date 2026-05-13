@@ -10,6 +10,8 @@ import { normalizeArtists } from '../../src/shared/artists.ts'
 import { ACTIVE_STATE } from './constants.ts'
 import type { Id3TagService } from './id3-tag-service.ts'
 import type { SongArtistRow } from './row-mappers.ts'
+import { normalizeArtistTagValues, normalizeTagText } from './tag-text.ts'
+import { syncAlbums } from './album-sync.ts'
 
 export class SongService {
   private readonly db: DatabaseSync
@@ -88,11 +90,14 @@ export class SongService {
       playCount: number
     }
     const artistRows = this.db.prepare(`
-      SELECT MusicId AS songId, Name AS name
+      SELECT MusicArtist.MusicId AS songId, MusicArtist.Name AS name
       FROM MusicArtist
+      INNER JOIN Music
+        ON Music.Id = MusicArtist.MusicId
+       AND MusicArtist.Name = TRIM(Music.Artist)
       WHERE MusicId = ?
-        AND State = ?
-      ORDER BY Priority, Id
+        AND MusicArtist.State = ?
+      ORDER BY MusicArtist.Priority, MusicArtist.Id
     `).all(songId, ACTIVE_STATE.active) as unknown as SongArtistRow[]
     const artists = normalizeArtists(
       artistRows.filter((row) => row.songId === songId).map((row) => row.name),
@@ -114,20 +119,17 @@ export class SongService {
       return {
         songId,
         path: song.path,
-        title: common.title?.trim() || song.title,
-        subtitle: common.subtitle?.trim() || '',
-        artist: normalizeArtists([
-          ...(common.artists ?? []),
-          common.artist,
-        ]).join(', ') || song.artist,
+        title: normalizeTagText(common.title) || song.title,
+        subtitle: normalizeTagText(common.subtitle),
+        artist: normalizeArtists(normalizeArtistTagValues(common.artists ?? [], common.artist)).join(', ') || song.artist,
         artists: artists.length > 0 ? artists : normalizeArtists([song.artist]),
-        album: common.album?.trim() || song.album,
-        albumArtist: common.albumartist?.trim() || '',
-        publisher: common.publisher?.trim() || '',
+        album: normalizeTagText(common.album) || song.album,
+        albumArtist: normalizeTagText(common.albumartist),
+        publisher: normalizeTagText(common.publisher),
         trackNumber: common.track.no ?? 0,
         year: common.year ?? 0,
-        genre: (common.genre ?? []).join(', '),
-        composers: (common.composer ?? []).join(', '),
+        genre: (common.genre ?? []).map(normalizeTagText).join(', '),
+        composers: (common.composer ?? []).map(normalizeTagText).join(', '),
         duration: this.resolveDurationSeconds(metadata.format, 0) || song.duration,
         bitrate: metadata.format.bitrate ? Math.round(metadata.format.bitrate) : 0,
         fileSize: fileStats.size,
@@ -204,9 +206,10 @@ export class SongService {
         ACTIVE_STATE.active,
       )
       this.markSongArtistsInactiveStatement.run(ACTIVE_STATE.inactive, songId)
-      artists.forEach((artistName, index) => {
-        this.upsertSongArtistStatement.run(songId, artistName, index, ACTIVE_STATE.active)
-      })
+      if (artist) {
+        this.upsertSongArtistStatement.run(songId, artist, 0, ACTIVE_STATE.active)
+      }
+      syncAlbums(this.db)
       this.db.exec('COMMIT')
     } catch (error) {
       this.db.exec('ROLLBACK')

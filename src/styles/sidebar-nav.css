@@ -503,7 +503,7 @@ body.night-mode .app-shell .playlist-nav-children::-webkit-scrollbar-thumb:hover
     transform 180ms cubic-bezier(0.2, 0, 0, 1);
 }
 
-.playlist-nav-child-quick-play {
+.playlist-nav-child-random-play {
   display: grid;
   place-items: center;
   width: 28px;
@@ -521,27 +521,27 @@ body.night-mode .app-shell .playlist-nav-children::-webkit-scrollbar-thumb:hover
     color 120ms ease;
 }
 
-.playlist-nav-child:hover .playlist-nav-child-quick-play,
-.playlist-nav-child:focus-within .playlist-nav-child-quick-play {
+.playlist-nav-child:hover .playlist-nav-child-random-play,
+.playlist-nav-child:focus-within .playlist-nav-child-random-play {
   opacity: 1;
   pointer-events: auto;
 }
 
-.playlist-nav-child-quick-play:hover,
-.playlist-nav-child-quick-play:focus-visible {
+.playlist-nav-child-random-play:hover,
+.playlist-nav-child-random-play:focus-visible {
   background: rgba(var(--accent-rgb), 0.16);
   color: var(--accent-strong);
 }
 
-.playlist-nav-child-quick-play:disabled {
+.playlist-nav-child-random-play:disabled {
   cursor: default;
   opacity: 0;
   pointer-events: none;
 }
 
-.playlist-nav-child-quick-play svg {
-  width: 14px;
-  height: 14px;
+.playlist-nav-child-random-play svg {
+  width: 18px;
+  height: 18px;
 }
 
 .sidebar.is-collapsed .nav-tag svg {

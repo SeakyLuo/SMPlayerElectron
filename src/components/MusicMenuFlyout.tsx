@@ -117,8 +117,6 @@ export function MusicMenuFlyout({
             },
             playlists,
             folders,
-            queueSongIds,
-            playbackSongIds: nowPlayingSongIds,
             currentTrackId,
             isPlaying,
             t,

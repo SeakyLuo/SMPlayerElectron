@@ -18,6 +18,7 @@ import { ScanService } from './scan-service.ts'
 import { HiddenItemService } from './hidden-item-service.ts'
 import { LocalItemService } from './local-item-service.ts'
 import { ExternalAudioService } from './external-audio-service.ts'
+import { PendingSongDeleteService } from './pending-song-delete-service.ts'
 
 const NOW_PLAYING_JSON_FILENAME = 'NowPlaying.json'
 export class DataService {
@@ -37,6 +38,7 @@ export class DataService {
   readonly hiddenItemService: HiddenItemService
   readonly localItemService: LocalItemService
   readonly externalAudioService: ExternalAudioService
+  readonly pendingSongDeleteService: PendingSongDeleteService
   private readonly thumbnailCachePath: string
 
   private readonly getActivePlaylistStatement
@@ -45,6 +47,8 @@ export class DataService {
 
   constructor(userDataPath: string) {
     this.db = new DatabaseSync(join(userDataPath, SMPLAYER_DB_NAME))
+    initializeSchema(this.db)
+
     this.remoteStore = new RemoteStore(this.db)
     this.preferenceService = new PreferenceService(this.db)
     this.historyService = new HistoryService(this.db)
@@ -58,8 +62,6 @@ export class DataService {
       this.id3TagService.writeSongArtwork(songPath, picture),
     )
 
-    initializeSchema(this.db)
-
     this.songService = new SongService(this.db, this.id3TagService)
     this.localItemService = new LocalItemService(
       this.db,
@@ -68,6 +70,7 @@ export class DataService {
       this.historyService,
       this.hiddenItemService,
     )
+    this.pendingSongDeleteService = new PendingSongDeleteService(userDataPath, this.songService, this.localItemService)
     this.externalAudioService = new ExternalAudioService(
       this.db,
       this.settingsService,

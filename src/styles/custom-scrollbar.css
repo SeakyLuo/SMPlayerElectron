@@ -28,6 +28,7 @@
 
 .custom-scrollbar-frame.has-custom-scrollbar:hover > .custom-scrollbar,
 .custom-scrollbar-frame.has-custom-scrollbar:focus-within > .custom-scrollbar,
+.custom-scrollbar-frame.has-custom-scrollbar.is-custom-scrollbar-dragging > .custom-scrollbar,
 .custom-scrollbar-frame.has-custom-scrollbar > .custom-scrollbar:hover {
   opacity: 1;
   pointer-events: auto;

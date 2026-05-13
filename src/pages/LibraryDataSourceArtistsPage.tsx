@@ -116,6 +116,9 @@ export function MusicDataSourceArtistsPage({
       onRecordArtistPlayed={() => {}}
       onRevealSong={onRevealSong}
       onDeleteSongFromDisk={onDeleteSongFromDisk}
+      recentSearches={[]}
+      onRemoveRecentSearch={() => {}}
+      onRemoveRecentSearches={() => {}}
       routeBase={routeBase}
     />
   )

@@ -9,6 +9,7 @@ import type { Translator } from '../shared/i18n'
 interface GridViewHolderProps {
   playlist: LibraryPlaylist
   songs: LibrarySong[]
+  subtitle?: ReactNode
   selected: boolean
   dragging: boolean
   t: Translator
@@ -22,11 +23,13 @@ interface GridViewHolderProps {
   showDragHandle?: boolean
   style?: CSSProperties
   onContextMenu?: (x: number, y: number) => void
+  timelineDate?: string
 }
 
 export function GridViewHolder({
   playlist,
   songs,
+  subtitle,
   selected,
   dragging,
   t,
@@ -40,6 +43,7 @@ export function GridViewHolder({
   showDragHandle = true,
   style,
   onContextMenu,
+  timelineDate,
 }: GridViewHolderProps) {
   const artworkUrls = usePlaylistArtwork(songs)
   const openOnKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -66,6 +70,7 @@ export function GridViewHolder({
       ref={cardRef}
       tabIndex={0}
       className={`grid-view-holder${selected ? ' is-selected' : ''}${dragging ? ' is-dragging' : ''}${dragOverlay ? ' is-drag-overlay' : ''}${showDragHandle ? '' : ' is-static'}`}
+      data-recent-timeline-date={timelineDate}
       style={style}
       title={playlist.name}
       onClick={onOpen}
@@ -89,7 +94,7 @@ export function GridViewHolder({
         artworkUrls={getPlaylistArtworkDisplayUrls(artworkUrls)}
         fallbackIcon="playlists"
         selectedMark={selectedMark}
-        subtitle={t('playlists.songCount', { count: playlist.songCount })}
+        subtitle={subtitle ?? t('playlists.songCount', { count: playlist.songCount })}
         title={playlist.name}
       />
       {showDragHandle ? (

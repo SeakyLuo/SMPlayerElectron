@@ -241,14 +241,12 @@ export function getNowPlayingFullMoreItems({
     }),
     { key: 'play-artist', text: t('detail.playArtist'), icon: 'users', onClick: onPlayArtist },
     { key: 'play-album', text: t('detail.playAlbum'), icon: 'albums', onClick: onPlayAlbum },
-    ...(isCompact
-      ? [{
-        key: 'view',
-        text: t('context.view'),
-        icon: 'view',
-        submenu: viewItems,
-      } satisfies MenuFlyoutItem]
-      : viewItems),
+    {
+      key: 'view',
+      text: t('context.view'),
+      icon: 'view',
+      submenu: viewItems,
+    },
   )
 
   return items

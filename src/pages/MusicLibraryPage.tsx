@@ -19,6 +19,7 @@ import { getQuickJumpTooltip } from '../shared/quickJumpTooltip'
 import { compareLocalText, getLocalTextQuickJumpBucket, LOCAL_TEXT_QUICK_JUMP_KEYS } from '../shared/textCompare'
 import { useSongArtwork } from '../hooks/useSongArtwork'
 import { useCustomScrollbar } from '../hooks/useCustomScrollbar'
+import { useSongsAddedUndo } from '../hooks/useSongsAddedUndo'
 
 interface MusicLibraryPageProps {
   snapshot: MusicData
@@ -96,7 +97,6 @@ export function MusicLibraryPage({
   onToggleFavorite,
   onAddSongToPlaylist,
   onAddSongsToPlaylist,
-  onAddSongsToNowPlaying,
   onCreatePlaylistWithSongs,
   onRevealSong,
   onDeleteSongFromDisk,
@@ -152,6 +152,7 @@ export function MusicLibraryPage({
       )
   const customPlaylists = snapshot.playlists.filter((playlist) => !playlist.isBuiltIn)
   const favoriteSongIdSet = useMemo(() => new Set(snapshot.favorites.songIds), [snapshot.favorites.songIds])
+  const { addToNowPlayingWithUndo, showAddToPlaylistUndo } = useSongsAddedUndo(snapshot.songs, t)
   const quickJumpMap = useMemo(
     () => buildQuickJumpMap(visibleSongs, quickJumpColumn, t),
     [quickJumpColumn, t, visibleSongs],
@@ -665,16 +666,20 @@ export function MusicLibraryPage({
               includeFavorites: effectiveSelectedSongIds.some((songId) => !favoriteSongIdSet.has(songId)),
               defaultPlaylistName: t('common.songs'),
               onAddToNowPlaying: () => {
-                onAddSongsToNowPlaying(effectiveSelectedSongIds)
+                addToNowPlayingWithUndo(effectiveSelectedSongIds)
               },
               onToggleFavorite: () => {
-                addSongsToFavorites(effectiveSelectedSongIds.filter((songId) => !favoriteSongIdSet.has(songId)))
+                const nextFavoriteSongIds = effectiveSelectedSongIds.filter((songId) => !favoriteSongIdSet.has(songId))
+                addSongsToFavorites(nextFavoriteSongIds)
+                showAddToPlaylistUndo(snapshot.favorites.playlistId, nextFavoriteSongIds, t('common.myFavorites'))
               },
               onCreatePlaylist: (name) => {
                 onCreatePlaylistWithSongs(name, effectiveSelectedSongIds)
               },
               onAddToPlaylist: (playlistId) => {
+                const targetPlaylist = snapshot.playlists.find((playlist) => playlist.id === playlistId)!
                 onAddSongsToPlaylist(playlistId, effectiveSelectedSongIds)
+                showAddToPlaylistUndo(playlistId, effectiveSelectedSongIds, targetPlaylist.name)
               },
             }),
           ].filter((item) => item != null)}

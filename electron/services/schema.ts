@@ -1,5 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite'
 
+import { syncAlbums } from './album-sync.ts'
+
 function columnExists(db: DatabaseSync, tableName: string, columnName: string) {
   const rows = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>
 
@@ -85,10 +87,19 @@ export function initializeSchema(db: DatabaseSync) {
       Name TEXT DEFAULT '',
       Artist TEXT DEFAULT '',
       Album TEXT DEFAULT '',
+      AlbumId INTEGER DEFAULT 0,
       ThumbnailPath TEXT DEFAULT '',
       Duration INTEGER DEFAULT 0,
       PlayCount INTEGER DEFAULT 0,
       DateAdded TEXT DEFAULT '',
+      State INTEGER DEFAULT 1
+    );
+
+    CREATE TABLE IF NOT EXISTS Album (
+      Id INTEGER PRIMARY KEY AUTOINCREMENT,
+      Name TEXT NOT NULL,
+      Artist TEXT DEFAULT '',
+      ArtworkPath TEXT DEFAULT '',
       State INTEGER DEFAULT 1
     );
 
@@ -172,6 +183,7 @@ export function initializeSchema(db: DatabaseSync) {
     CREATE TABLE IF NOT EXISTS SearchHistory (
       Id INTEGER PRIMARY KEY AUTOINCREMENT,
       Query TEXT NOT NULL,
+      Type TEXT DEFAULT 'sidebar',
       SearchedAt TEXT DEFAULT ''
     );
 
@@ -223,13 +235,15 @@ export function initializeSchema(db: DatabaseSync) {
     VALUES (1, '');
 
     CREATE UNIQUE INDEX IF NOT EXISTS idx_music_path ON Music(Path);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_album_name
+      ON Album(Name COLLATE NOCASE);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_music_artist_music_name
       ON MusicArtist(MusicId, Name COLLATE NOCASE);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_folder_path ON Folder(Path);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_file_path ON File(Path);
     CREATE INDEX IF NOT EXISTS idx_playlist_name ON Playlist(Name);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_search_history_query_nocase
-      ON SearchHistory(Query COLLATE NOCASE);
+      ON SearchHistory(Query COLLATE NOCASE, Type);
 
     CREATE INDEX IF NOT EXISTS idx_music_artist_name ON MusicArtist(Name COLLATE NOCASE);
     CREATE INDEX IF NOT EXISTS idx_music_artist_music ON MusicArtist(MusicId);
@@ -245,6 +259,7 @@ export function initializeSchema(db: DatabaseSync) {
   `)
 
   renameColumnIfPresent(db, 'Music', 'ArtworkPath', 'ThumbnailPath')
+  addColumnIfMissing(db, 'Music', 'AlbumId', `AlbumId INTEGER DEFAULT 0`)
   addColumnIfMissing(db, 'Music', 'ThumbnailPath', `ThumbnailPath TEXT DEFAULT ''`)
   addColumnIfMissing(db, 'RemoteSetting', 'DeviceId', `DeviceId TEXT DEFAULT ''`)
   addColumnIfMissing(db, 'RemoteSetting', 'DeviceName', `DeviceName TEXT DEFAULT ''`)
@@ -271,6 +286,16 @@ export function initializeSchema(db: DatabaseSync) {
   addColumnIfMissing(db, 'RemoteHost', 'CreateTime', `CreateTime TEXT DEFAULT ''`)
   addColumnIfMissing(db, 'RemoteHost', 'UpdateTime', `UpdateTime TEXT DEFAULT ''`)
   addColumnIfMissing(db, 'RemoteHost', 'LastConnectedTime', `LastConnectedTime TEXT DEFAULT ''`)
+  addColumnIfMissing(db, 'SearchHistory', 'Type', `Type TEXT DEFAULT 'sidebar'`)
+
+  db.exec(`
+    DROP INDEX IF EXISTS idx_search_history_query_nocase;
+    UPDATE SearchHistory
+    SET Type = 'sidebar'
+    WHERE Type = 'all';
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_search_history_query_nocase
+      ON SearchHistory(Query COLLATE NOCASE, Type);
+  `)
 
   for (const [columnName, columnDefinition] of [
     ['LastReleaseNotesVersion', `LastReleaseNotesVersion TEXT DEFAULT ''`],
@@ -304,16 +329,41 @@ export function initializeSchema(db: DatabaseSync) {
       ON RemoteHost(HostId)
       WHERE HostId <> '';
 
+    UPDATE MusicArtist
+    SET State = 0
+    WHERE MusicId IN (
+      SELECT Id
+      FROM Music
+    );
+
     INSERT OR IGNORE INTO MusicArtist (MusicId, Name, Priority, State)
-    SELECT Id, Artist, 0, State
+    SELECT Id, TRIM(Artist), 0, State
     FROM Music
     WHERE NULLIF(TRIM(Artist), '') IS NOT NULL;
 
-    INSERT OR IGNORE INTO SearchHistory (Query, SearchedAt)
-    SELECT ItemId, Time
+    UPDATE MusicArtist
+    SET
+      Priority = 0,
+      State = (
+        SELECT Music.State
+        FROM Music
+        WHERE Music.Id = MusicArtist.MusicId
+      )
+    WHERE EXISTS (
+      SELECT 1
+      FROM Music
+      WHERE Music.Id = MusicArtist.MusicId
+        AND NULLIF(TRIM(Music.Artist), '') IS NOT NULL
+        AND MusicArtist.Name = TRIM(Music.Artist)
+    );
+
+    INSERT OR IGNORE INTO SearchHistory (Query, Type, SearchedAt)
+    SELECT ItemId, 'sidebar', Time
     FROM RecentRecord
     WHERE Type = 2
       AND State = 1
       AND NULLIF(TRIM(ItemId), '') IS NOT NULL;
   `)
+
+  syncAlbums(db)
 }

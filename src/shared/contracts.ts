@@ -179,8 +179,11 @@ export interface MyFavoritesSnapshot {
 export interface SearchHistoryEntry {
   id: number
   query: string
+  type: SearchHistoryType
   searchedAt: string
 }
+
+export type SearchHistoryType = 'sidebar' | 'artists' | 'albums' | 'songs' | 'playlists' | 'folders'
 
 export interface SearchSnapshot {
   lastQuery: string
@@ -232,6 +235,17 @@ export interface SongArtworkPickResult {
   artworkUrl: string
   sourceName: string
   error?: 'no-artwork' | 'error'
+}
+
+export interface PendingSongDelete {
+  id: string
+  songId: number
+}
+
+export interface PendingLocalItemsDelete {
+  id: string
+  songIds: number[]
+  folderPaths: string[]
 }
 
 export interface SongPropertiesSnapshot {
@@ -525,14 +539,16 @@ export interface SmplayerApi {
   pickSongArtworkSource: () => Promise<SongArtworkPickResult>
   saveSongArtwork: (songId: number, sourcePath: string) => Promise<void>
   deleteSongArtwork: (songId: number) => Promise<void>
-  deleteSongFromDisk: (songId: number) => Promise<void>
+  deleteSongFromDisk: (songId: number) => Promise<PendingSongDelete>
+  undoDeleteSongFromDisk: (deleteId: string) => Promise<void>
+  commitDeleteSongFromDisk: (deleteId: string) => Promise<void>
   hideSong: (songId: number) => Promise<void>
   moveSongToFolder: (songId: number, folderPath: string) => Promise<void>
   moveSongsToFolder: (songIds: number[], folderPath: string) => Promise<void>
   moveLocalFolderToFolder: (sourceFolderPath: string, targetFolderPath: string) => Promise<void>
   moveLocalItemsToFolder: (songIds: number[], folderPaths: string[], targetFolderPath: string) => Promise<void>
   deleteSongsFromDisk: (songIds: number[]) => Promise<void>
-  deleteLocalItems: (songIds: number[], folderPaths: string[]) => Promise<void>
+  deleteLocalItems: (songIds: number[], folderPaths: string[]) => Promise<PendingLocalItemsDelete>
   updateLocalFolderSort: (folderPath: string, sortCriterion: LocalFolderSortCriterion) => Promise<void>
   renameLocalFolder: (folderPath: string, name: string) => Promise<void>
   deleteLocalFolder: (folderPath: string) => Promise<void>
@@ -582,7 +598,7 @@ export interface SmplayerApi {
   removeSongFromNowPlaying: (songId: number) => Promise<void>
   clearNowPlaying: () => Promise<void>
   saveSearchQuery: (query: string) => Promise<void>
-  addRecentSearch: (query: string) => Promise<SearchHistoryEntry | null>
+  addRecentSearch: (query: string, type?: SearchHistoryType) => Promise<SearchHistoryEntry | null>
   removeRecentSearch: (entryId: number) => Promise<void>
   removeRecentSearches: (entryIds: number[]) => Promise<void>
   restoreRecentSearch: (entry: SearchHistoryEntry) => Promise<void>

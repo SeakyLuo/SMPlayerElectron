@@ -7,6 +7,8 @@ import type { HiddenItemService } from './hidden-item-service.ts'
 import type { HistoryService } from './history-service.ts'
 import {
   LocalItemStateService,
+  type DeletedLocalItemsState,
+  type DeletedSongState,
   type SongMove,
 } from './local-item-state-service.ts'
 import type { PlaylistService } from './playlist-service.ts'
@@ -14,6 +16,7 @@ import type { SongService } from './song-service.ts'
 
 export type MoveConflictAction = 'replace' | 'keep-both' | 'skip'
 export type MoveConflictResolver = (sourcePath: string, targetPath: string) => Promise<MoveConflictAction>
+export type { DeletedLocalItemsState, DeletedSongState }
 
 export class LocalItemService {
   private readonly songService: SongService
@@ -38,6 +41,34 @@ export class LocalItemService {
 
   deleteSong(songId: number) {
     this.stateService.deleteSong(songId)
+  }
+
+  captureDeletedSongState(songId: number) {
+    return this.stateService.captureDeletedSongState(songId)
+  }
+
+  restoreDeletedSong(songId: number, songPath: string, deletedState: DeletedSongState) {
+    this.stateService.restoreDeletedSong(songId, songPath, deletedState)
+  }
+
+  isSongActive(songId: number) {
+    return this.stateService.isSongActive(songId)
+  }
+
+  hasActiveSongs(songIds: number[]) {
+    return this.stateService.hasActiveSongs(songIds)
+  }
+
+  captureDeletedLocalItemsState(songIds: number[], songPaths: string[], folderPaths: string[]) {
+    return this.stateService.captureDeletedLocalItemsState(songIds, songPaths, folderPaths)
+  }
+
+  restoreDeletedLocalItems(deletedState: DeletedLocalItemsState) {
+    this.stateService.restoreDeletedLocalItems(deletedState)
+  }
+
+  hasActiveDeletedLocalItems(deletedState: DeletedLocalItemsState) {
+    return this.stateService.hasActiveDeletedLocalItems(deletedState)
   }
 
   hideSong(songId: number) {

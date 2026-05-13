@@ -3,11 +3,12 @@ import { useEffect, useMemo, useState, type DragEvent, type KeyboardEvent, type 
 import { resolveSongArtworks } from '../hooks/useSongArtwork'
 import type { LibrarySong } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
+import { FOLDER_ICON_URL } from '../shared/staticAssets'
 import { getOriginalFolderThumbnailCandidateGroups, type FolderNode } from '../pages/localFolderModel'
 import { GridArtworkCardContent } from './GridArtworkCardContent'
 import { Icon } from './icons'
 
-export const LOCAL_FOLDER_TYPE_ICON_URL = '/folder.png'
+export const LOCAL_FOLDER_TYPE_ICON_URL = FOLDER_ICON_URL
 
 const localFolderThumbnailUrlsCache = new Map<string, string[]>()
 
