@@ -36,6 +36,7 @@ export function registerLibraryIpc(options: LibraryIpcOptions) {
   const getSettingsService = () => getLibraryService().settingsService
   const getScanService = () => getLibraryService().scanService
 
+  ipcMain.handle('library:get-shell', () => getMusicQueryService().getShellSnapshot())
   ipcMain.handle('library:get-settings', () => getMusicQueryService().getSettings())
   ipcMain.handle('library:get-counts', () => getMusicQueryService().getCounts())
   ipcMain.handle('library:get-songs', () => getMusicQueryService().getSongs())

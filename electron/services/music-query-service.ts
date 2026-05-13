@@ -3,6 +3,7 @@ import type { DatabaseSync } from 'node:sqlite'
 
 import type {
   LibraryCounts,
+  LibraryShellSnapshot,
   LibraryFolder,
   LibraryPlaylist,
   LibrarySong,
@@ -165,6 +166,17 @@ export class MusicQueryService {
 
   getSettings(): SettingsSnapshot {
     return toSettingsSnapshot(this.settingsService.getSettings())
+  }
+
+  getShellSnapshot(): LibraryShellSnapshot {
+    return {
+      settings: this.getSettings(),
+      counts: this.getCounts(),
+      playlists: this.getPlaylists(),
+      favorites: this.getFavorites(),
+      nowPlaying: this.getNowPlaying(),
+      search: this.getSearch(),
+    }
   }
 
   getCounts(): LibraryCounts {

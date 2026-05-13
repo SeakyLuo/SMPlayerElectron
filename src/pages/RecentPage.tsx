@@ -1,5 +1,4 @@
-import clsx from 'clsx'
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { AppBarPortal } from '../components/AppBarPortal'
@@ -15,16 +14,26 @@ import { MenuFlyout } from '../components/MenuFlyout'
 import { getAddToPlaylistMenuFlyoutItem, getMusicMenuFlyoutItems } from '../components/MenuFlyoutHelper'
 import { MultiSelectCommandBar } from '../components/MultiSelectCommandBar'
 import { MusicDialog } from '../components/MusicDialog'
-import { getSongArtists } from '../shared/artists'
 import type { LibraryPlaylist, LibrarySong, PreferredLanguage, PreferenceItemSnapshot, PreferenceSettingsSnapshot, RecentAlbumPlayback, RecentArtistPlayback, RecentLibrarySong, RecentPlaylistPlayback, SearchHistoryEntry } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
+import { useRecentScrollbar } from '../hooks/useRecentScrollbar'
+import {
+  buildRecentAlbumViews,
+  buildRecentArtistViews,
+  buildRecentPlaylistViews,
+  categorizeRecentDate,
+  dateValue,
+  formatRecentDateTime,
+  type RecentAlbumView,
+  type RecentArtistView,
+  type RecentPlaylistView,
+} from './recentPageModel'
+import { RecentPlayedFilterBar, RecentTabButton, type RecentPlayedFilter, type RecentTab } from './RecentControls'
+import { RecentSearchList } from './RecentSearchList'
 import { removeQueueRange } from '../shared/queueUndo'
 import { useLibraryStore } from '../state/useLibraryStore'
 import { usePreferenceStore } from '../state/usePreferenceStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
-
-type RecentTab = 'added' | 'played' | 'searches'
-type RecentPlayedFilter = 'songs' | 'artists' | 'albums' | 'playlists'
 
 interface RecentPageProps {
   songs: LibrarySong[]
@@ -75,28 +84,6 @@ interface RecentAddToMenuState {
   y: number
 }
 
-interface RecentPlaylistView {
-  playlist: LibraryPlaylist
-  songs: LibrarySong[]
-  playedAt: string
-}
-
-interface RecentAlbumView {
-  name: string
-  artist: string
-  songs: LibrarySong[]
-  artworkUrl: string
-  songIds: number[]
-  playedAt: string
-}
-
-interface RecentArtistView {
-  name: string
-  songs: LibrarySong[]
-  artworkUrl: string
-  playedAt: string
-}
-
 function getParentFolderPath(filePath: string) {
   const index = Math.max(filePath.lastIndexOf('\\'), filePath.lastIndexOf('/'))
   return filePath.slice(0, index)
@@ -109,86 +96,6 @@ const RECENT_GRID_ROW_HEIGHT = 136
 const RECENT_GRID_COMPACT_ROW_HEIGHT = 104
 const RECENT_GRID_BOTTOM_PADDING = 92
 const RECENT_GRID_OVERSCAN_ROWS = 3
-const RECENT_SEARCH_ROW_HEIGHT = 56
-const RECENT_SEARCH_BOTTOM_PADDING = 92
-const RECENT_SEARCH_OVERSCAN_ROWS = 8
-
-function useRecentScrollbar(
-  scrollFrameRef: RefObject<HTMLDivElement | null>,
-  scrollContainerRef: RefObject<HTMLDivElement | null>,
-  scrollbarTrackRef: RefObject<HTMLDivElement | null>,
-  contentHeight: number,
-) {
-  useLayoutEffect(() => {
-    const scrollFrame = scrollFrameRef.current
-    const scrollContainer = scrollContainerRef.current
-    if (!scrollFrame || !scrollContainer) {
-      return
-    }
-
-    let animationFrame = 0
-    const updateScrollbar = () => {
-      const maxScrollTop = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight)
-      const trackHeight = scrollContainer.clientHeight
-      const thumbHeight = maxScrollTop > 0
-        ? Math.max(38, Math.round((trackHeight / scrollContainer.scrollHeight) * trackHeight))
-        : trackHeight
-      const thumbTop = maxScrollTop > 0
-        ? Math.round((scrollContainer.scrollTop / maxScrollTop) * Math.max(0, trackHeight - thumbHeight))
-        : 0
-
-      scrollFrame.style.setProperty('--recent-scrollbar-thumb-height', `${thumbHeight}px`)
-      scrollFrame.style.setProperty('--recent-scrollbar-thumb-top', `${thumbTop}px`)
-      scrollFrame.classList.toggle('has-scrollbar', maxScrollTop > 1)
-    }
-    const scheduleUpdate = () => {
-      window.cancelAnimationFrame(animationFrame)
-      animationFrame = window.requestAnimationFrame(updateScrollbar)
-    }
-
-    updateScrollbar()
-    scrollContainer.addEventListener('scroll', scheduleUpdate, { passive: true })
-    const resizeObserver = new ResizeObserver(scheduleUpdate)
-    resizeObserver.observe(scrollFrame)
-    resizeObserver.observe(scrollContainer)
-    window.addEventListener('resize', scheduleUpdate)
-
-    return () => {
-      window.cancelAnimationFrame(animationFrame)
-      scrollContainer.removeEventListener('scroll', scheduleUpdate)
-      resizeObserver.disconnect()
-      window.removeEventListener('resize', scheduleUpdate)
-    }
-  }, [contentHeight, scrollFrameRef, scrollContainerRef])
-
-  return (event: ReactPointerEvent<HTMLDivElement>) => {
-    const scrollFrame = scrollFrameRef.current
-    const scrollContainer = scrollContainerRef.current
-    const scrollbarTrack = scrollbarTrackRef.current
-    if (!scrollFrame || !scrollContainer || !scrollbarTrack) {
-      return
-    }
-
-    event.preventDefault()
-    const maxScrollTop = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight)
-    const thumbHeight = Number.parseFloat(getComputedStyle(scrollFrame).getPropertyValue('--recent-scrollbar-thumb-height'))
-    const trackRange = Math.max(1, scrollbarTrack.clientHeight - thumbHeight)
-    const scrollPerPixel = maxScrollTop / trackRange
-    const startY = event.clientY
-    const startScrollTop = scrollContainer.scrollTop
-    const onPointerMove = (moveEvent: PointerEvent) => {
-      scrollContainer.scrollTop = startScrollTop + (moveEvent.clientY - startY) * scrollPerPixel
-    }
-    const onPointerUp = () => {
-      window.removeEventListener('pointermove', onPointerMove)
-      window.removeEventListener('pointerup', onPointerUp)
-    }
-
-    window.addEventListener('pointermove', onPointerMove)
-    window.addEventListener('pointerup', onPointerUp)
-  }
-}
-
 export function RecentPage({
   songs,
   recentSongs,
@@ -807,60 +714,6 @@ export function RecentPage({
   )
 }
 
-function RecentTabButton({
-  active,
-  count,
-  label,
-  showCount,
-  onClick,
-}: {
-  active: boolean
-  count: number
-  label: string
-  showCount: boolean
-  onClick: () => void
-}) {
-  return (
-    <button type="button" className={active ? 'is-active' : ''} onClick={onClick}>
-      <span>{label}</span>
-      {showCount ? <strong>{count}</strong> : null}
-    </button>
-  )
-}
-
-function RecentPlayedFilterBar({
-  activeFilter,
-  t,
-  onChange,
-}: {
-  activeFilter: RecentPlayedFilter
-  t: Translator
-  onChange: (filter: RecentPlayedFilter) => void
-}) {
-  const filters: Array<{ key: RecentPlayedFilter; label: string; icon?: 'songs' | 'users' | 'albums' | 'playlists' }> = [
-    { key: 'songs', label: t('common.songs'), icon: 'songs' },
-    { key: 'artists', label: t('common.artists'), icon: 'users' },
-    { key: 'albums', label: t('common.albums'), icon: 'albums' },
-    { key: 'playlists', label: t('common.playlists'), icon: 'playlists' },
-  ]
-
-  return (
-    <div className="recent-played-filters" role="tablist" aria-label={t('recent.played')}>
-      {filters.map((filter) => (
-        <button
-          type="button"
-          className={filter.key === activeFilter ? 'is-active' : ''}
-          key={filter.key}
-          onClick={() => onChange(filter.key)}
-        >
-          {filter.icon ? <Icon name={filter.icon} /> : null}
-          <span>{filter.label}</span>
-        </button>
-      ))}
-    </div>
-  )
-}
-
 function RecentPlayedPanel({
   songs,
   playlists,
@@ -1322,133 +1175,6 @@ function RecentSongGrid({
   )
 }
 
-function RecentSearchList({
-  entries,
-  multiSelect,
-  selectedEntryIds,
-  t,
-  preferredLanguage,
-  loading,
-  onSearch,
-  onToggleSelection,
-  onRemove,
-}: {
-  entries: SearchHistoryEntry[]
-  multiSelect: boolean
-  selectedEntryIds: Set<number>
-  t: Translator
-  preferredLanguage: PreferredLanguage
-  loading: boolean
-  onSearch: (query: string) => void
-  onToggleSelection: (entryId: number) => void
-  onRemove: (entryId: number) => void
-}) {
-  const listRef = useRef<HTMLDivElement | null>(null)
-  const listScrollFrameRef = useRef<HTMLDivElement | null>(null)
-  const listScrollbarTrackRef = useRef<HTMLDivElement | null>(null)
-  const [scrollTop, setScrollTop] = useState(0)
-  const [viewportHeight, setViewportHeight] = useState(640)
-  const listHeight = entries.length * RECENT_SEARCH_ROW_HEIGHT
-  const effectiveScrollTop = Math.min(scrollTop, Math.max(0, listHeight - viewportHeight))
-  const startIndex = Math.max(
-    0,
-    Math.floor(effectiveScrollTop / RECENT_SEARCH_ROW_HEIGHT) - RECENT_SEARCH_OVERSCAN_ROWS,
-  )
-  const endIndex = Math.min(
-    entries.length,
-    Math.ceil((effectiveScrollTop + viewportHeight) / RECENT_SEARCH_ROW_HEIGHT) + RECENT_SEARCH_OVERSCAN_ROWS,
-  )
-  const renderedEntries = entries.slice(startIndex, endIndex)
-  const topSpacerHeight = startIndex * RECENT_SEARCH_ROW_HEIGHT
-  const bottomSpacerHeight = (entries.length - endIndex) * RECENT_SEARCH_ROW_HEIGHT + RECENT_SEARCH_BOTTOM_PADDING
-  const onListScrollbarPointerDown = useRecentScrollbar(
-    listScrollFrameRef,
-    listRef,
-    listScrollbarTrackRef,
-    listHeight,
-  )
-
-  useEffect(() => {
-    const list = listRef.current
-    if (!list) {
-      return
-    }
-
-    const resizeObserver = new ResizeObserver(() => {
-      setViewportHeight(list.clientHeight)
-    })
-
-    setViewportHeight(list.clientHeight)
-    resizeObserver.observe(list)
-
-    return () => {
-      resizeObserver.disconnect()
-    }
-  }, [])
-
-  if (entries.length === 0) {
-    return loading ? <LoadingState t={t} compact /> : null
-  }
-
-  return (
-    <div className="recent-search-scroll-frame" ref={listScrollFrameRef}>
-      <div
-        className="recent-search-list"
-        ref={listRef}
-        onScroll={(event) => {
-          setScrollTop(event.currentTarget.scrollTop)
-        }}
-      >
-        {topSpacerHeight > 0 ? <div className="recent-search-spacer" style={{ height: topSpacerHeight }} /> : null}
-        {renderedEntries.map((entry) => (
-          <div
-            className={clsx('recent-search-row', {
-              'is-selected': selectedEntryIds.has(entry.id),
-            })}
-            key={entry.id}
-          >
-            <button
-              type="button"
-              className="recent-search-row-main"
-              onClick={() => {
-                if (multiSelect) {
-                  onToggleSelection(entry.id)
-                } else {
-                  onSearch(entry.query)
-                }
-              }}
-            >
-              {multiSelect ? (
-                <span className="playlist-control-item-selection-mark">
-                  {selectedEntryIds.has(entry.id) ? <Icon name="check" /> : null}
-                </span>
-              ) : null}
-              <span>{entry.query}</span>
-              <RecentSearchTime value={entry.searchedAt} preferredLanguage={preferredLanguage} />
-            </button>
-            {!multiSelect ? (
-              <button
-                type="button"
-                className="recent-search-remove"
-                aria-label={t('sidebar.removeRecentSearch', { query: entry.query })}
-                onClick={() => {
-                  onRemove(entry.id)
-                }}
-              >
-                <Icon name="close" />
-              </button>
-            ) : null}
-          </div>
-        ))}
-        {bottomSpacerHeight > 0 ? <div className="recent-search-spacer" style={{ height: bottomSpacerHeight }} /> : null}
-      </div>
-      <div className="recent-scrollbar" ref={listScrollbarTrackRef} aria-hidden="true">
-        <div className="recent-scrollbar-thumb" onPointerDown={onListScrollbarPointerDown} />
-      </div>
-    </div>
-  )
-}
-
 function toggleSetItem<T>(source: Set<T>, item: T) {
   const next = new Set(source)
   if (next.has(item)) {
@@ -1459,170 +1185,3 @@ function toggleSetItem<T>(source: Set<T>, item: T) {
   return next
 }
 
-function RecentSearchTime({ value, preferredLanguage }: { value: string; preferredLanguage: PreferredLanguage }) {
-  const label = formatRecentDateTime(value, preferredLanguage)
-  return label ? <small>{label}</small> : null
-}
-
-function buildRecentPlaylistViews(
-  playlists: LibraryPlaylist[],
-  songs: LibrarySong[],
-  recentPlaylists: RecentPlaylistPlayback[],
-) {
-  const songsById = new Map(songs.map((song) => [song.id, song]))
-  const playlistsById = new Map(playlists.map((playlist) => [playlist.id, playlist]))
-
-  const views: RecentPlaylistView[] = []
-  for (const recentPlaylist of recentPlaylists) {
-    const playlist = playlistsById.get(recentPlaylist.playlistId)
-    if (playlist) {
-      views.push({
-        playlist,
-        songs: playlist.songIds.map((songId) => songsById.get(songId)).filter((song) => song !== undefined),
-        playedAt: recentPlaylist.playedAt,
-      })
-    }
-  }
-
-  return views
-}
-
-function buildRecentAlbumViews(songs: LibrarySong[], recentAlbums: RecentAlbumPlayback[], t: Translator) {
-  const songsByAlbum = new Map<string, LibrarySong[]>()
-  for (const song of songs) {
-    const albumName = song.album || t('common.albumUnknown')
-    const albumSongs = songsByAlbum.get(albumName)
-    if (albumSongs) {
-      albumSongs.push(song)
-    } else {
-      songsByAlbum.set(albumName, [song])
-    }
-  }
-
-  const views: RecentAlbumView[] = []
-  for (const recentAlbum of recentAlbums) {
-    const albumName = recentAlbum.album
-    const albumSongs = songsByAlbum.get(albumName)
-    if (albumSongs) {
-      views.push({
-        name: albumName,
-        artist: getRecentAlbumArtistLabel(albumSongs, t),
-        songs: albumSongs,
-        artworkUrl: albumSongs.find((song) => song.artworkUrl)?.artworkUrl ?? '',
-        songIds: albumSongs.map((song) => song.id),
-        playedAt: recentAlbum.playedAt,
-      })
-    }
-  }
-
-  return views
-}
-
-function buildRecentArtistViews(songs: LibrarySong[], recentArtists: RecentArtistPlayback[], t: Translator) {
-  const songsByArtist = new Map<string, LibrarySong[]>()
-  for (const song of songs) {
-    for (const artistName of getSongArtists(song, t('common.artistUnknown'))) {
-      const artistSongs = songsByArtist.get(artistName)
-      if (artistSongs) {
-        artistSongs.push(song)
-      } else {
-        songsByArtist.set(artistName, [song])
-      }
-    }
-  }
-
-  const views: RecentArtistView[] = []
-  for (const recentArtist of recentArtists) {
-    const artistSongs = songsByArtist.get(recentArtist.artist)
-    if (artistSongs) {
-      views.push({
-        name: recentArtist.artist,
-        songs: artistSongs,
-        artworkUrl: artistSongs.find((song) => song.artworkUrl)?.artworkUrl ?? '',
-        playedAt: recentArtist.playedAt,
-      })
-    }
-  }
-
-  return views
-}
-
-function getRecentAlbumArtistLabel(songs: LibrarySong[], t: Translator) {
-  const artists = [...new Set(songs.flatMap((song) => getSongArtists(song, t('common.artistUnknown'))))]
-
-  if (artists.length >= 3) {
-    return t('albums.artistsAndMore', { first: artists[0]!, second: artists[1]!, count: artists.length })
-  }
-
-  return artists.join(t('albums.artistSeparator'))
-}
-
-function dateValue(value: string) {
-  return new Date(value).getTime()
-}
-
-function categorizeRecentDate(value: string, t: Translator) {
-  const date = new Date(value)
-  const now = new Date()
-
-  if (sameCalendarDate(date, now)) {
-    return t('recent.time.today')
-  }
-
-  const yesterday = new Date(now)
-  yesterday.setDate(now.getDate() - 1)
-  if (sameCalendarDate(date, yesterday)) {
-    return t('recent.time.yesterday')
-  }
-
-  const recent7Days = new Date(now)
-  recent7Days.setDate(now.getDate() - 7)
-  if (date > recent7Days) {
-    return t('recent.time.recent7Days')
-  }
-
-  if (date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth()) {
-    return t('recent.time.thisMonth')
-  }
-
-  const recent30Days = new Date(now)
-  recent30Days.setDate(now.getDate() - 30)
-  if (date > recent30Days) {
-    return t('recent.time.recent30Days')
-  }
-
-  if (date.getFullYear() === now.getFullYear()) {
-    return t(`recent.time.month${date.getMonth() + 1}`)
-  }
-
-  return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}`
-}
-
-function sameCalendarDate(left: Date, right: Date) {
-  return left.getFullYear() === right.getFullYear() &&
-    left.getMonth() === right.getMonth() &&
-    left.getDate() === right.getDate()
-}
-
-function formatRecentDateTime(value: string, preferredLanguage: PreferredLanguage) {
-  if (!value) {
-    return ''
-  }
-
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return ''
-  }
-
-  return date.toLocaleString(resolveDateLocale(preferredLanguage), {
-    year: 'numeric',
-    month: 'numeric',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
-function resolveDateLocale(preferredLanguage: PreferredLanguage) {
-  return preferredLanguage === 'system' ? undefined : preferredLanguage
-}

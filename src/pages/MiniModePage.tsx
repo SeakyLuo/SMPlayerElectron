@@ -1,12 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent } from 'react'
 
-import {
-  DEFAULT_ARTWORK_URL,
-  getRepeatOneTitle,
-  getRepeatTitle,
-  type MediaControlTrack,
-  type VoiceAssistantResponse,
-} from '../components/MediaControl'
+import type { MediaControlTrack, VoiceAssistantResponse } from '../components/MediaControl'
+import { DEFAULT_ARTWORK_URL, getRepeatOneTitle, getRepeatTitle } from '../components/mediaControlModel'
 import { VoiceAssistantFlyout, type VoiceAssistantFlyoutHandle } from '../components/VoiceAssistantFlyout'
 import { Icon, type IconName } from '../components/icons'
 import { getVolumeIconName } from '../components/volumeIcon'

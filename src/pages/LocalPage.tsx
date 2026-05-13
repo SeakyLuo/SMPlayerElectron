@@ -1,47 +1,39 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent } from 'react'
 
-import { CommandBar, CommandBarButton } from '../components/CommandBar'
-import { CustomScrollbar } from '../components/CustomScrollbar'
-import { GridViewMusicItemControl } from '../components/GridViewMusicItemControl'
-import { Icon } from '../components/icons'
-import { InputDialog } from '../components/InputDialog'
-import { LoadingState } from '../components/LoadingState'
-import { LocalFolderCard, LOCAL_FOLDER_TYPE_ICON_URL } from '../components/LocalFolderCard'
 import { MenuFlyout } from '../components/MenuFlyout'
 import { getAddToPlaylistMenuFlyoutItem, type MenuFlyoutItem, type MenuFlyoutPosition } from '../components/MenuFlyoutHelper'
-import { MusicMenuFlyout } from '../components/MusicMenuFlyout'
-import { MultiSelectCommandBar } from '../components/MultiSelectCommandBar'
-import { PlaylistControlItem } from '../components/PlaylistControlItem'
-import { RemoveDialog } from '../components/RemoveDialog'
 import { useFolderPreferenceMenuItem } from '../hooks/useFolderPreferenceMenuItem'
 import { useCustomScrollbar } from '../hooks/useCustomScrollbar'
-import type { LibraryFolder, LibraryPlaylist, LibrarySong, LocalFolderSortCriterion, ScanLibraryProgress, ScanLibraryResult } from '../shared/contracts'
-import { getSongArtists } from '../shared/artists'
+import type { LibraryFolder, LibraryPlaylist, LibrarySong, ScanLibraryProgress, ScanLibraryResult } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
-import { PlaybackCommands } from '../shared/PlaybackCommands'
-import { getQuickJumpTooltip } from '../shared/quickJumpTooltip'
-import { getLocalTextQuickJumpBucket, LOCAL_TEXT_QUICK_JUMP_KEYS } from '../shared/textCompare'
 import { useLibraryStore } from '../state/useLibraryStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
 import {
-  buildFolderChain,
   buildFolderIndex,
   createFolderNode,
   getParentPath,
   getSongFolderRelativePath,
   localSortModeFromCriterion,
   matchesSongSearch,
-  normalizePath,
   shuffleSongIds,
   sortFolders,
   sortSongs,
   type FolderNode,
 } from './localFolderModel'
+import { LocalPageDialogs } from './LocalPageDialogs'
+import { LocalFolderNotFoundState, LocalNoRootState } from './LocalEmptyState'
+import { LocalPageMainContent } from './LocalPageMainContent'
+import {
+  areSetsEqual,
+  buildLocalSongQuickJumpMap,
+  getLocalSongQuickJumpBasisName,
+  getRefreshFolderErrorMessage,
+  getRefreshResultMessage,
+  hasRefreshResultChanges,
+  type LocalSortMode,
+} from './localPageModel'
 
-type LocalSortMode = LocalFolderSortCriterion
 const LOCAL_COMPACT_BREAKPOINT = 720
-const LOCAL_FILE_TYPE_ICON_URL = '/colorful_no_bg.png'
 
 interface LocalPageProps {
   songs: LibrarySong[]
@@ -86,15 +78,6 @@ interface LocalPageProps {
   onHiddenFoldersListButtonClick: () => void
 }
 
-interface FolderChainDropPayload {
-  songIds: number[]
-  folderPaths: string[]
-}
-
-interface FolderChainMenuState extends MenuFlyoutPosition {
-  folder: FolderNode
-}
-
 interface LocalFolderMenuState extends MenuFlyoutPosition {
   folder: FolderNode
 }
@@ -119,641 +102,6 @@ interface FolderUpdateResultDialogState {
 
 interface FolderUpdateResultSongMenuState extends MenuFlyoutPosition {
   song: LibrarySong
-}
-
-function getFolderListItemKey(folderPath: string) {
-  return `folder:${folderPath}`
-}
-
-function getSongListItemKey(songId: number) {
-  return `song:${songId}`
-}
-
-function joinClassNames(...classNames: Array<string | false>) {
-  return classNames.filter(Boolean).join(' ')
-}
-
-function areSetsEqual<T>(left: Set<T>, right: Set<T>) {
-  return left.size === right.size && [...left].every((item) => right.has(item))
-}
-
-function getFileTitle(filePath: string) {
-  const fileName = normalizePath(filePath).split('/').at(-1) ?? filePath
-  const extensionIndex = fileName.lastIndexOf('.')
-  return extensionIndex > 0 ? fileName.slice(0, extensionIndex) : fileName
-}
-
-function getRefreshChangeMessage(
-  paths: string[],
-  singleKey: string,
-  multipleKey: string,
-  t: Translator,
-) {
-  if (paths.length === 0) {
-    return ''
-  }
-
-  return paths.length === 1
-    ? t(singleKey, { name: getFileTitle(paths[0]!) })
-    : t(multipleKey, { count: paths.length })
-}
-
-function getRefreshResultMessage(result: ScanLibraryResult, t: Translator) {
-  const messages = [
-    getRefreshChangeMessage(result.filesAdded, 'local.refreshAddedOne', 'local.refreshAddedMultiple', t),
-    getRefreshChangeMessage(result.filesRemoved, 'local.refreshRemovedOne', 'local.refreshRemovedMultiple', t),
-    getRefreshChangeMessage(result.filesMoved, 'local.refreshMovedOne', 'local.refreshMovedMultiple', t),
-  ].filter(Boolean)
-
-  return messages.length > 0 ? messages.join(t('common.comma')) : t('local.refreshNoChange')
-}
-
-function hasRefreshResultChanges(result: ScanLibraryResult) {
-  return result.filesAdded.length > 0 || result.filesRemoved.length > 0 || result.filesMoved.length > 0
-}
-
-function getUpdateResultFileTitle(filePath: string, folderPath: string) {
-  const normalizedFilePath = normalizePath(filePath)
-  const normalizedFolderPath = normalizePath(folderPath)
-  const filePathKey = normalizedFilePath.toLocaleLowerCase()
-  const folderPathKey = normalizedFolderPath.toLocaleLowerCase()
-  const relativePath = filePathKey.startsWith(`${folderPathKey}/`)
-    ? normalizedFilePath.slice(normalizedFolderPath.length + 1)
-    : normalizedFilePath
-  const extensionIndex = relativePath.lastIndexOf('.')
-  return extensionIndex > 0 ? relativePath.slice(0, extensionIndex) : relativePath
-}
-
-function getUpdateResultFileItems(filePaths: string[], folderPath: string) {
-  const items = filePaths.map((filePath) => ({
-    path: filePath,
-    title: getUpdateResultFileTitle(filePath, folderPath),
-  }))
-  const titleCounts = new Map<string, number>()
-  for (const item of items) {
-    titleCounts.set(item.title, (titleCounts.get(item.title) ?? 0) + 1)
-  }
-
-  return items.map((item) => ({
-    ...item,
-    title: titleCounts.get(item.title)! > 1 ? item.path : item.title,
-  }))
-}
-
-function getPathKey(filePath: string) {
-  return normalizePath(filePath).toLocaleLowerCase()
-}
-
-function findSongByPath(songs: LibrarySong[], songPath: string) {
-  const targetPathKey = getPathKey(songPath)
-  return songs.find((song) => getPathKey(song.path) === targetPathKey) ?? null
-}
-
-function getRefreshFolderErrorMessage(error: string, t: Translator) {
-  const notFoundPrefix = 'Folder not found: '
-  const accessDeniedPrefix = 'Cannot access folder: '
-  if (error.startsWith(notFoundPrefix)) {
-    return t('local.updateFolderNotFound', { path: error.slice(notFoundPrefix.length) })
-  }
-  if (error.startsWith(accessDeniedPrefix)) {
-    return t('local.updateFolderAccessDenied', { path: error.slice(accessDeniedPrefix.length) })
-  }
-
-  return error
-}
-
-function getRefreshProgressMessage(progress: ScanLibraryProgress | null, t: Translator) {
-  if (!progress) {
-    return t('local.updateFolderLoading')
-  }
-
-  if (progress.stage === 'updating') {
-    return t('local.updateFolderUpdatingLibrary')
-  }
-
-  return progress.folderName
-    ? t('local.updateFolderChecking', { name: progress.folderName })
-    : t('local.updateFolderLoading')
-}
-
-function scrollCurrentFolderToTop() {
-  document.querySelector<HTMLElement>('.local-scroll-shell, .local-table-shell')?.scrollTo({
-    top: 0,
-  })
-}
-
-function FolderUpdateResultDialog({
-  t,
-  result,
-  folder,
-  songs,
-  selectedTrackId,
-  songMenuOpen,
-  onPlaySong,
-  onOpenSongMenu,
-  onClose,
-}: {
-  t: Translator
-  result: ScanLibraryResult
-  folder: FolderNode
-  songs: LibrarySong[]
-  selectedTrackId: number | null
-  songMenuOpen: boolean
-  onPlaySong: (songId: number) => void
-  onOpenSongMenu: (song: LibrarySong, x: number, y: number) => void
-  onClose: () => void
-}) {
-  const closeButtonRef = useRef<HTMLButtonElement | null>(null)
-  const groups = [
-    { key: 'added', label: t('local.refreshAddedGroup', { count: result.filesAdded.length }), items: getUpdateResultFileItems(result.filesAdded, folder.path), playable: true },
-    { key: 'removed', label: t('local.refreshRemovedGroup', { count: result.filesRemoved.length }), items: getUpdateResultFileItems(result.filesRemoved, folder.path), playable: false },
-    { key: 'moved', label: t('local.refreshMovedGroup', { count: result.filesMoved.length }), items: getUpdateResultFileItems(result.filesMoved, folder.path), playable: true },
-  ].filter((group) => group.items.length > 0)
-
-  useEffect(() => {
-    closeButtonRef.current?.focus()
-  }, [])
-
-  useEffect(() => {
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !songMenuOpen) {
-        onClose()
-      }
-    }
-
-    document.addEventListener('keydown', closeOnEscape)
-    return () => {
-      document.removeEventListener('keydown', closeOnEscape)
-    }
-  }, [onClose, songMenuOpen])
-
-  return (
-    <div className="folder-update-result-overlay" role="presentation">
-      <section className="folder-update-result-dialog" role="dialog" aria-modal="true" aria-labelledby="folder-update-result-title">
-        <div className="folder-update-result-header">
-          <h3 id="folder-update-result-title">{t('local.updateResultOfFolder', { name: folder.name })}</h3>
-          <button ref={closeButtonRef} type="button" className="folder-update-result-close" aria-label={t('common.close')} title={t('common.close')} onClick={onClose}>
-            <Icon name="close" />
-          </button>
-        </div>
-        <div className="folder-update-result-groups">
-          {groups.map((group) => (
-            <section className="folder-update-result-group" key={group.key}>
-              <h4>{group.label}</h4>
-              <div className="folder-update-result-list">
-                {group.items.map((item, index) => {
-                  if (!group.playable) {
-                    return (
-                      <div
-                        className="folder-update-result-item is-disabled"
-                        key={`${group.key}-${item.path}-${index}`}
-                        title={item.path}
-                      >
-                        <span className="folder-update-result-playing-icon" aria-hidden="true" />
-                        <span className="folder-update-result-path">{item.title}</span>
-                      </div>
-                    )
-                  }
-
-                  const song = findSongByPath(songs, item.path)!
-                  const isPlaying = song.id === selectedTrackId
-                  const itemClassName = joinClassNames(
-                    'folder-update-result-item',
-                    isPlaying && 'is-playing',
-                  )
-
-                  return (
-                    <button
-                      type="button"
-                      className={itemClassName}
-                      key={`${group.key}-${item.path}-${index}`}
-                      title={item.path}
-                      onClick={() => {
-                        onPlaySong(song.id)
-                      }}
-                      onContextMenu={(event) => {
-                        event.preventDefault()
-                        onOpenSongMenu(song, event.clientX, event.clientY)
-                      }}
-                    >
-                      <span className="folder-update-result-playing-icon" aria-hidden="true">
-                        {isPlaying ? <Icon name="play" /> : null}
-                      </span>
-                      <span className="folder-update-result-path">{item.title}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            </section>
-          ))}
-        </div>
-      </section>
-    </div>
-  )
-}
-
-export function FolderChainListView({
-  songs,
-  folders,
-  t,
-  rootPath,
-  currentRelativePath,
-  onDropLocalItems,
-  onOpenFolder,
-  onOpenFolderMenu,
-}: {
-  songs: LibrarySong[]
-  folders: LibraryFolder[]
-  t: Translator
-  rootPath: string
-  currentRelativePath: string
-  onDropLocalItems?: (payload: FolderChainDropPayload, targetRelativePath: string) => void | Promise<void>
-  onOpenFolder: (targetRelativePath: string) => void
-  onOpenFolderMenu?: (targetRelativePath: string, x: number, y: number) => void
-}) {
-  const [openedFolderChainItem, setOpenedFolderChainItem] = useState<{ path: string; left: number; top: number } | null>(null)
-  const folderChainListRef = useRef<HTMLElement | null>(null)
-  const folderChainDragRef = useRef({ active: false, dragged: false, startX: 0, scrollLeft: 0 })
-  const { nodes } = useMemo(
-    () => buildFolderIndex(songs, folders, rootPath),
-    [folders, songs, rootPath],
-  )
-  const folderChain = useMemo(
-    () => buildFolderChain(currentRelativePath, nodes),
-    [currentRelativePath, nodes],
-  )
-  useLayoutEffect(() => {
-    const folderChainList = folderChainListRef.current as HTMLElement
-    const scrollToEnd = () => {
-      folderChainList.scrollLeft = folderChainList.scrollWidth
-    }
-
-    scrollToEnd()
-    const animationFrame = window.requestAnimationFrame(scrollToEnd)
-    const resizeObserver = new ResizeObserver(scrollToEnd)
-    resizeObserver.observe(folderChainList)
-    return () => {
-      window.cancelAnimationFrame(animationFrame)
-      resizeObserver.disconnect()
-    }
-  }, [currentRelativePath, folderChain.length])
-
-  useEffect(() => {
-    const folderChainList = folderChainListRef.current!
-    const scrollFolderChain = (event: WheelEvent) => {
-      const rawDelta = event.deltaX !== 0 ? event.deltaX : event.deltaY
-      if (rawDelta === 0) {
-        return
-      }
-
-      const deltaScale = event.deltaMode === WheelEvent.DOM_DELTA_LINE
-        ? 16
-        : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
-          ? folderChainList.clientWidth
-          : 1
-      event.preventDefault()
-      folderChainList.scrollLeft += rawDelta * deltaScale
-    }
-
-    folderChainList.addEventListener('wheel', scrollFolderChain, { passive: false })
-    return () => {
-      folderChainList.removeEventListener('wheel', scrollFolderChain)
-    }
-  }, [])
-
-  const dropLocalItems = (event: DragEvent, targetRelativePath: string) => {
-    if (!onDropLocalItems) {
-      return
-    }
-
-    const rawPayload = event.dataTransfer.getData('application/x-smplayer-local-items')
-    if (!rawPayload) {
-      return
-    }
-
-    event.preventDefault()
-    void onDropLocalItems(JSON.parse(rawPayload) as FolderChainDropPayload, targetRelativePath)
-    setOpenedFolderChainItem(null)
-  }
-
-  const stopFolderChainDrag = (event: ReactPointerEvent<HTMLElement>) => {
-    if (!folderChainDragRef.current.active) {
-      return
-    }
-
-    folderChainDragRef.current.active = false
-    event.currentTarget.releasePointerCapture(event.pointerId)
-  }
-
-  return (
-    <>
-      {openedFolderChainItem != null ? (
-        <button
-          aria-label={t('local.path')}
-          className="folder-chain-flyout-overlay"
-          type="button"
-          onClick={() => {
-            setOpenedFolderChainItem(null)
-          }}
-        />
-      ) : null}
-      <nav
-        ref={folderChainListRef}
-        className="folder-chain-list-view"
-        aria-label={t('local.path')}
-        onClickCapture={(event) => {
-          if (folderChainDragRef.current.dragged) {
-            event.preventDefault()
-            event.stopPropagation()
-            folderChainDragRef.current.dragged = false
-          }
-        }}
-        onPointerDown={(event) => {
-          if (event.button !== 0) {
-            return
-          }
-
-          folderChainDragRef.current = {
-            active: true,
-            dragged: false,
-            startX: event.clientX,
-            scrollLeft: event.currentTarget.scrollLeft,
-          }
-          event.currentTarget.setPointerCapture(event.pointerId)
-        }}
-        onPointerMove={(event) => {
-          const dragState = folderChainDragRef.current
-          if (!dragState.active) {
-            return
-          }
-
-          const deltaX = event.clientX - dragState.startX
-          if (Math.abs(deltaX) > 3) {
-            dragState.dragged = true
-          }
-          event.currentTarget.scrollLeft = dragState.scrollLeft - deltaX
-        }}
-        onPointerUp={stopFolderChainDrag}
-        onPointerCancel={stopFolderChainDrag}
-        onLostPointerCapture={stopFolderChainDrag}
-      >
-        {folderChain.map((folderChainItem) => {
-          const isFlyoutOpen = openedFolderChainItem?.path === folderChainItem.path
-          const hasChildFolders = folderChainItem.children.length > 0
-          const segmentClassName = [
-            'folder-chain-item',
-            folderChainItem.isCurrentItem ? 'is-current' : '',
-            isFlyoutOpen ? 'is-open' : '',
-          ].filter(Boolean).join(' ')
-
-          return (
-            <span
-              className={segmentClassName}
-              key={folderChainItem.path || rootPath}
-            >
-              {folderChainItem.isCurrentItem ? (
-                <button
-                  className="folder-chain-item-path-button"
-                  type="button"
-                  onContextMenu={(event) => {
-                    event.preventDefault()
-                    onOpenFolderMenu?.(folderChainItem.path, event.clientX, event.clientY)
-                  }}
-                  onClick={() => {
-                    scrollCurrentFolderToTop()
-                    setOpenedFolderChainItem(null)
-                  }}
-                >
-                  {folderChainItem.name}
-                </button>
-              ) : (
-                <button
-                  className="folder-chain-item-path-button"
-                  type="button"
-                  onDragOver={(event) => {
-                    event.preventDefault()
-                    event.dataTransfer.dropEffect = 'move'
-                  }}
-                  onDrop={(event) => dropLocalItems(event, folderChainItem.path)}
-                  onContextMenu={(event) => {
-                    event.preventDefault()
-                    onOpenFolderMenu?.(folderChainItem.path, event.clientX, event.clientY)
-                  }}
-                  onClick={() => {
-                    onOpenFolder(folderChainItem.path)
-                    setOpenedFolderChainItem(null)
-                  }}
-                >
-                  {folderChainItem.name}
-                </button>
-              )}
-              {hasChildFolders ? (
-                <button
-                  aria-label={folderChainItem.name}
-                  className="folder-chain-item-dropdown-button"
-                  type="button"
-                  onClick={(event) => {
-                    const segmentRect = event.currentTarget.parentElement!.getBoundingClientRect()
-                    setOpenedFolderChainItem((current) =>
-                      current?.path === folderChainItem.path
-                        ? null
-                        : {
-                          path: folderChainItem.path,
-                          left: Math.max(8, Math.min(segmentRect.left, window.innerWidth - 196)),
-                          top: segmentRect.bottom + 4,
-                        },
-                    )
-                  }}
-                >
-                  <Icon name={isFlyoutOpen ? 'chevronDown' : 'chevronRight'} />
-                </button>
-              ) : null}
-              {hasChildFolders && isFlyoutOpen && openedFolderChainItem ? (
-                <div
-                  className="folder-chain-item-flyout"
-                  style={{
-                    left: openedFolderChainItem.left,
-                    top: openedFolderChainItem.top,
-                  }}
-                >
-                  {folderChainItem.children.map((child) => (
-                    <button
-                      className={child.isHighlighted ? 'folder-chain-item-flyout-button is-highlighted' : 'folder-chain-item-flyout-button'}
-                      key={child.path}
-                      title={child.path}
-                      type="button"
-                      onDragOver={(event) => {
-                        event.preventDefault()
-                        event.dataTransfer.dropEffect = 'move'
-                      }}
-                      onDrop={(event) => dropLocalItems(event, child.path)}
-                      onContextMenu={(event) => {
-                        event.preventDefault()
-                        onOpenFolderMenu?.(child.path, event.clientX, event.clientY)
-                      }}
-                      onClick={() => {
-                        onOpenFolder(child.path)
-                        setOpenedFolderChainItem(null)
-                      }}
-                    >
-                      {child.name}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </span>
-          )
-        })}
-      </nav>
-    </>
-  )
-}
-
-export function LocalTitleGrid({
-  songs,
-  folders,
-  playlists,
-  favoritePlaylistId,
-  t,
-  rootPath,
-  currentRelativePath,
-  onHiddenFoldersListButtonClick,
-  onDropLocalItems,
-  onOpenFolder,
-  onRevealFolder,
-  onSearchDirectory,
-  onPlayTrack,
-  onAddSongsToNowPlaying,
-  onCreatePlaylistWithSongs,
-  onAddSongsToPlaylist,
-}: {
-  songs: LibrarySong[]
-  folders: LibraryFolder[]
-  playlists: LibraryPlaylist[]
-  favoritePlaylistId: number
-  t: Translator
-  rootPath: string
-  currentRelativePath: string
-  onHiddenFoldersListButtonClick: () => void
-  onDropLocalItems?: (payload: FolderChainDropPayload, targetRelativePath: string) => void | Promise<void>
-  onOpenFolder: (targetRelativePath: string) => void
-  onRevealFolder: (folderPath: string) => void | Promise<void>
-  onSearchDirectory: (query: string, folderRelativePath: string) => void
-  onPlayTrack: (trackId: number, queueSongIds: number[]) => void
-  onAddSongsToNowPlaying: (songIds: number[]) => void
-  onCreatePlaylistWithSongs: (name: string, songIds: number[]) => void
-  onAddSongsToPlaylist: (playlistId: number, songIds: number[]) => void
-}) {
-  const [folderChainMenu, setFolderChainMenu] = useState<FolderChainMenuState | null>(null)
-  const [searchTargetFolder, setSearchTargetFolder] = useState<FolderNode | null>(null)
-  const { getFolderPreferenceMenuItem } = useFolderPreferenceMenuItem(t)
-  const { nodes } = useMemo(
-    () => buildFolderIndex(songs, folders, rootPath),
-    [folders, rootPath, songs],
-  )
-  const searchDirectory = (folder: FolderNode, query: string) => {
-    onSearchDirectory(query, folder.relativePath)
-    setSearchTargetFolder(null)
-    setFolderChainMenu(null)
-  }
-  const playablePlaylists = playlists.filter((playlist) => !playlist.isBuiltIn || playlist.name === t('common.myFavorites'))
-  const favoriteSongIdSet = useMemo(() => new Set(songs.filter((song) => song.favorite).map((song) => song.id)), [songs])
-  const addSongsToFavorites = (songIds: number[]) => {
-    onAddSongsToPlaylist(favoritePlaylistId, songIds)
-  }
-  const getNotFavoriteSongIds = (songIds: number[]) => songIds.filter((songId) => !favoriteSongIdSet.has(songId))
-  return (
-    <div className="local-title-grid">
-      <div className="current-path-grid">
-        <span className="current-path-text-block">{t('local.currentPath')}</span>
-      </div>
-      <FolderChainListView
-        songs={songs}
-        folders={folders}
-        t={t}
-        rootPath={rootPath}
-        currentRelativePath={currentRelativePath}
-        onDropLocalItems={onDropLocalItems}
-        onOpenFolder={onOpenFolder}
-        onOpenFolderMenu={(targetRelativePath, x, y) => {
-          setFolderChainMenu({ folder: nodes.get(targetRelativePath)!, x, y })
-        }}
-      />
-      <button
-        className="hidden-folders-list-button"
-        title={t('local.hiddenFolders')}
-        type="button"
-        onClick={onHiddenFoldersListButtonClick}
-      >
-        <Icon name="hiddenFolders" />
-      </button>
-      {folderChainMenu ? (
-        <MenuFlyout
-          position={folderChainMenu}
-          onClose={() => {
-            setFolderChainMenu(null)
-          }}
-          items={[
-            {
-              key: 'chain-shuffle-folder',
-              text: t('nowPlaying.randomPlay'),
-              icon: 'shuffle',
-              onClick: () => {
-                const shuffledSongIds = shuffleSongIds(folderChainMenu.folder.subtreeSongIds)
-                if (shuffledSongIds.length > 0) {
-                  onPlayTrack(shuffledSongIds[0]!, shuffledSongIds)
-                }
-              },
-            },
-            getAddToPlaylistMenuFlyoutItem({
-              playlists: playablePlaylists,
-              songIds: folderChainMenu.folder.subtreeSongIds,
-              t,
-              defaultPlaylistName: folderChainMenu.folder.name,
-              includeNowPlaying: true,
-              includeFavorites: getNotFavoriteSongIds(folderChainMenu.folder.subtreeSongIds).length > 0,
-              onAddToNowPlaying: () => onAddSongsToNowPlaying(folderChainMenu.folder.subtreeSongIds),
-              onToggleFavorite: () => {
-                addSongsToFavorites(getNotFavoriteSongIds(folderChainMenu.folder.subtreeSongIds))
-              },
-              onCreatePlaylist: (name) => onCreatePlaylistWithSongs(name, folderChainMenu.folder.subtreeSongIds),
-              onAddToPlaylist: (playlistId) => onAddSongsToPlaylist(playlistId, folderChainMenu.folder.subtreeSongIds),
-            }),
-            getFolderPreferenceMenuItem(folderChainMenu.folder, 'chain'),
-            {
-              key: 'chain-show-in-explorer',
-              text: t('context.reveal'),
-              pendingText: t('context.openingLocal'),
-              icon: 'local',
-              onClick: () => onRevealFolder(folderChainMenu.folder.path),
-            },
-            {
-              key: 'chain-search-directory',
-              text: t('local.searchDirectory'),
-              icon: 'search',
-              onClick: () => {
-                setSearchTargetFolder(folderChainMenu.folder)
-              },
-            },
-          ].filter((item) => item != null) as MenuFlyoutItem[]}
-        />
-      ) : null}
-      {searchTargetFolder ? (
-        <InputDialog
-          t={t}
-          title={t('local.searchDirectoryPrompt', { name: searchTargetFolder.name })}
-          defaultValue=""
-          validate={(query) => query ? '' : t('local.searchQueryEmpty')}
-          onCancel={() => {
-            setSearchTargetFolder(null)
-          }}
-          onConfirm={(query) => {
-            searchDirectory(searchTargetFolder, query)
-          }}
-        />
-      ) : null}
-    </div>
-  )
 }
 
 export function LocalPage({
@@ -1431,41 +779,11 @@ export function LocalPage({
   }
 
   if (!rootPath) {
-    return (
-      <section className="page-panel local-page">
-        {loading ? (
-          <LoadingState t={t} />
-        ) : (
-          <div className="empty-state">
-          <h3>{t('local.noRoot')}</h3>
-          <p>{t('local.noRootCopy')}</p>
-          <button className="local-command" type="button" onClick={onPickLibraryRoot}>
-            <Icon name="folder" />
-            {t('library.chooseFolder')}
-          </button>
-          </div>
-        )}
-      </section>
-    )
+    return <LocalNoRootState loading={loading} t={t} onPickLibraryRoot={onPickLibraryRoot} />
   }
 
   if (!currentNode) {
-    return (
-      <section className="page-panel local-page">
-        {loading ? (
-          <LoadingState t={t} />
-        ) : (
-          <div className="empty-state">
-          <h3>{t('local.folderNotFound')}</h3>
-          <p>{t('local.folderNotFoundDescription')}</p>
-          <Link className="local-command" to="/local">
-            <Icon name="arrowLeft" />
-            {t('local.backToRoot')}
-          </Link>
-          </div>
-        )}
-      </section>
-    )
+    return <LocalFolderNotFoundState loading={loading} t={t} />
   }
 
   const showFolderItems = !showLocalSectionHeaders || foldersExpanded
@@ -1485,129 +803,72 @@ export function LocalPage({
 
   return (
     <section className="page-panel local-page">
-      <div className="local-toolbar">
-        <CommandBar
-          className="local-commandbar"
-          overflowReserve={isCompactLayout ? 44 : 0}
-          overflowLabel={t('player.more')}
-          overflowItems={isCompactLayout ? [
-            {
-              key: 'hidden-folders',
-              text: t('local.viewHiddenFolders'),
-              icon: 'hiddenFolders',
-              onClick: onHiddenFoldersListButtonClick,
-            },
-          ] : []}
-          content={(
-            <p>
-              {t('local.headerStats', {
-                folders: childFolders.length,
-                songs: currentSongs.length,
-              })}
-            </p>
-          )}
-        >
-          <CommandBarButton
-            icon="shuffle"
-            label={t('nowPlaying.randomPlay')}
-            onClick={playShuffled}
-          />
-          <CommandBarButton
-            icon="refresh"
-            label={scanning ? t('library.scanning') : isCompactLayout ? t('local.updateFolderShort') : t('local.updateFolder')}
-            onClick={() => {
-              void refreshFolderWithResult(currentNode)
-            }}
-            disabled={scanning}
-          />
-          <CommandBarButton
-            icon="sort"
-            label={t('common.sort')}
-            onClick={(event) => {
-              showSortMenu(event)
-            }}
-          />
-          <CommandBarButton
-            icon="folder"
-            label={t('local.newFolder')}
-            onClick={createFolder}
-          />
-          <CommandBarButton
-            icon="multiSelect"
-            label={t('albums.multiSelect')}
-            active={multiSelect}
-            onClick={() => {
-              if (multiSelect) {
-                return
-              }
-              setMultiSelect(true)
-              setLocalNotification('')
-            }}
-          />
-          {multiSelect ? (
-            <CommandBarButton
-              icon="trash"
-              label={t('context.deleteFromDisk')}
-              disabled={selectedLocalItemCount === 0}
-              onClick={() => {
-                void deleteSelectedItems()
-              }}
-            />
-          ) : null}
-        </CommandBar>
-      </div>
-
-      {loading ? <div className="root-banner">{t('library.refreshing')}</div> : null}
-      {error ? <div className="error-banner">{error}</div> : null}
-      {localNotification ? <div className="root-banner">{localNotification}</div> : null}
-      {scanning ? (
-        <div className="local-refresh-overlay" role="status" aria-live="polite">
-          <span
-            className="local-refresh-progress-ring"
-            style={{ '--local-refresh-progress-angle': refreshProgressAngle } as CSSProperties}
-            aria-hidden="true"
-          >
-            <span className="local-refresh-progress-value">{refreshProgressPercent}%</span>
-          </span>
-          <p>{getRefreshProgressMessage(scanProgress, t)}</p>
-          {scanProgress?.canCancel ? (
-            <button type="button" className="local-refresh-stop-button" onClick={onCancelRefreshFolder}>
-              {t('common.pause')}
-            </button>
-          ) : null}
-        </div>
-      ) : null}
-
-      <MultiSelectCommandBar
-        visible={multiSelect}
-        selectedCount={selectedLocalItemCount}
+      <LocalPageMainContent
+        childFolders={childFolders}
+        currentSongs={currentSongs}
+        nodes={nodes}
+        songs={songs}
+        songsById={songsById}
+        playablePlaylists={playablePlaylists}
+        selectedFolderPaths={selectedFolderPaths}
+        selectedSongIds={selectedSongIds}
+        selectedTrackId={selectedTrackId}
+        selectedListItemKey={selectedListItemKey}
+        isPlaying={isPlaying}
+        multiSelect={multiSelect}
+        isCompactLayout={isCompactLayout}
+        showLocalSectionHeaders={showLocalSectionHeaders}
+        showFolderItems={showFolderItems}
+        showSongItems={showSongItems}
+        foldersExpanded={foldersExpanded}
+        songsExpanded={songsExpanded}
+        showSongQuickJump={showSongQuickJump}
+        songQuickJumpBasisName={songQuickJumpBasisName}
+        songQuickJumpMap={songQuickJumpMap}
+        effectiveViewMode={effectiveViewMode}
+        currentRelativePath={currentRelativePath}
+        queueSongIds={queueSongIds}
+        selectedQueueSongIds={selectedQueueSongIds}
+        selectedLocalItemCount={selectedLocalItemCount}
+        loading={loading}
+        scanning={scanning}
+        scanProgress={scanProgress}
+        refreshProgressAngle={refreshProgressAngle}
+        refreshProgressPercent={refreshProgressPercent}
+        error={error}
+        localNotification={localNotification}
+        searchQuery={searchQuery}
         t={t}
-        playlists={playablePlaylists}
-        showPlay={selectedQueueSongIds.length > 0}
-        showAddTo={selectedQueueSongIds.length > 0}
-        onPlay={() => {
-          onPlayTrack(selectedQueueSongIds[0]!, selectedQueueSongIds)
+        localSongItemRefs={localSongItemRefs}
+        localScrollFrameRef={localScrollFrameRef}
+        localScrollShellRef={localScrollShellRef}
+        localScrollbarTrackRef={localScrollbarTrackRef}
+        localTableScrollFrameRef={localTableScrollFrameRef}
+        localTableShellRef={localTableShellRef}
+        localTableScrollbarTrackRef={localTableScrollbarTrackRef}
+        onLocalScrollbarPointerDown={onLocalScrollbarPointerDown}
+        onLocalTableScrollbarPointerDown={onLocalTableScrollbarPointerDown}
+        onHiddenFoldersListButtonClick={onHiddenFoldersListButtonClick}
+        onCancelRefreshFolder={onCancelRefreshFolder}
+        onPlayShuffled={playShuffled}
+        onRefreshCurrentFolder={() => {
+          void refreshFolderWithResult(currentNode)
         }}
-        onAddToPlaylistMenuClick={(event) => {
-          const rect = event.currentTarget.getBoundingClientRect()
-          setSelectionAddMenu({ x: rect.left, y: rect.top - 8 })
+        onShowSortMenu={showSortMenu}
+        onCreateFolder={createFolder}
+        onEnableMultiSelect={() => {
+          if (multiSelect) {
+            return
+          }
+          setMultiSelect(true)
+          setLocalNotification('')
         }}
-        onRemove={() => {
+        onDeleteSelectedItems={() => {
           void deleteSelectedItems()
         }}
-        removeLabel={t('context.deleteFromDisk')}
-        extraActions={[
-          {
-            key: 'move-to-folder',
-            text: t('context.moveToFolder'),
-            icon: 'folder',
-            disabled: selectedLocalItemCount === 0 || selectedMoveTargetFolders.length === 0,
-            onClick: (event) => {
-              const rect = event.currentTarget.getBoundingClientRect()
-              setSelectionMoveMenu({ x: rect.left, y: rect.top - 8 })
-            },
-          },
-        ]}
+        onOpenSelectionAddMenu={(x, y) => setSelectionAddMenu({ x, y })}
+        onOpenSelectionMoveMenu={(x, y) => setSelectionMoveMenu({ x, y })}
+        selectedMoveTargetFolders={selectedMoveTargetFolders}
         onSelectAll={() => {
           setSelectedFolderPaths(new Set(childFolders.map((folder) => folder.relativePath)))
           setSelectedSongIds(new Set(visibleSongIds))
@@ -1622,561 +883,44 @@ export function LocalPage({
           setSelectedFolderPaths(new Set())
           setSelectedSongIds(new Set())
         }}
-        onCancel={() => {
+        onCancelSelection={() => {
           ClearMultiSelectStatus()
         }}
+        onToggleFoldersExpanded={() => setFoldersExpanded((current) => !current)}
+        onToggleSongsExpanded={() => setSongsExpanded((current) => !current)}
+        onSelectListItem={setSelectedListItemKey}
+        onOpenFolder={openFolder}
+        onShuffleFolder={shuffleFolder}
+        onOpenFolderAddMenu={(folder, x, y) => setFolderAddMenu({ folder, x, y })}
+        onRefreshFolder={(folder) => {
+          void refreshFolderWithResult(folder)
+        }}
+        onSearchFolder={searchDirectory}
+        onRevealFolder={(folder) => {
+          void onRevealFolder(folder.path)
+        }}
+        onToggleFolderSelection={toggleFolderSelection}
+        onDragFolderStart={(event, folder) => {
+          event.dataTransfer.setData('application/x-smplayer-local-items', JSON.stringify(dragPayloadForFolder(folder)))
+          event.dataTransfer.effectAllowed = 'move'
+        }}
+        onDropFolder={(event, folder) => {
+          void moveDraggedItems(event, folder)
+        }}
+        onOpenFolderMenu={(folder, x, y) => setFolderMenu({ folder, x, y })}
+        onPlayTrack={onPlayTrack}
+        onTogglePlayPause={onTogglePlayPause}
+        onMoveToMusicOrPlay={onMoveToMusicOrPlay}
+        onPlayNext={onPlayNext}
+        onToggleSongSelection={toggleSongSelection}
+        onOpenSongAddMenu={(song, x, y) => setSongAddMenu({ song, x, y })}
+        onOpenSongMenu={(song, x, y) => setSongMenu({ song, x, y })}
+        onDragSongStart={(event, song) => {
+          event.dataTransfer.setData('application/x-smplayer-local-items', JSON.stringify(dragPayloadForSong(song)))
+          event.dataTransfer.effectAllowed = 'move'
+        }}
+        onJumpToSongKey={jumpToLocalSongKey}
       />
-
-      {childFolders.length === 0 && currentSongs.length === 0 ? (
-        loading || scanning ? (
-          <LoadingState t={t} />
-        ) : songs.length === 0 || searchQuery.trim() ? (
-        <div className="empty-state">
-          <h3>
-            {songs.length === 0
-              ? t('local.noSongsScanned')
-              : t('local.noSongsBranch', { query: searchQuery })}
-          </h3>
-          <p>
-            {songs.length === 0
-              ? t('local.scanPopulate')
-              : t('local.searchHelp')}
-          </p>
-          {songs.length === 0 ? (
-            <Link className="local-command" to="/settings">
-              <Icon name="settings" />
-              {t('local.goToSettings')}
-            </Link>
-          ) : null}
-        </div>
-        ) : (
-          <div className="local-empty-folder" aria-hidden="true" />
-        )
-      ) : effectiveViewMode === 'grid' ? (
-        <div className="local-scroll-frame custom-scrollbar-frame" ref={localScrollFrameRef}>
-          <div className="local-scroll-shell custom-scrollbar-container" ref={localScrollShellRef}>
-            {childFolders.length > 0 ? (
-            showLocalSectionHeaders ? (
-              <LocalContentSection
-                count={childFolders.length}
-                expanded={foldersExpanded}
-                title={t('common.folders')}
-                onToggle={() => setFoldersExpanded((current) => !current)}
-              >
-                <div className="local-folder-grid">
-                  {childFolders.map((folder) => (
-                    <LocalFolderCard
-                      folder={folder}
-                      key={folder.relativePath}
-                      selected={selectedFolderPaths.has(folder.relativePath)}
-                      multiSelect={multiSelect}
-                      nodes={nodes}
-                      songsById={songsById}
-                      t={t}
-                      variant={isCompactLayout ? 'list' : 'grid'}
-                      onPlayFolder={shuffleFolder}
-                      onAddFolder={(event, folder) => {
-                        setFolderAddMenu({ folder, x: event.clientX, y: event.clientY })
-                      }}
-                      onRefreshFolder={(folder) => {
-                        void refreshFolderWithResult(folder)
-                      }}
-                      onSearchFolder={searchDirectory}
-                      onRevealFolder={(folder) => {
-                        void onRevealFolder(folder.path)
-                      }}
-                      onOpenFolder={openFolder}
-                      onToggleSelection={toggleFolderSelection}
-                      onDragStart={(event, folder) => {
-                        event.dataTransfer.setData('application/x-smplayer-local-items', JSON.stringify(dragPayloadForFolder(folder)))
-                        event.dataTransfer.effectAllowed = 'move'
-                      }}
-                      onDrop={(event, folder) => {
-                        void moveDraggedItems(event, folder)
-                      }}
-                      onOpenFolderMenu={(folder, x, y) => {
-                        setFolderMenu({ folder, x, y })
-                      }}
-                    />
-                  ))}
-                </div>
-              </LocalContentSection>
-            ) : (
-              <div className="local-folder-grid">
-                {childFolders.map((folder) => (
-                  <LocalFolderCard
-                    folder={folder}
-                    key={folder.relativePath}
-                    selected={selectedFolderPaths.has(folder.relativePath)}
-                    multiSelect={multiSelect}
-                    nodes={nodes}
-                    songsById={songsById}
-                    t={t}
-                    variant={isCompactLayout ? 'list' : 'grid'}
-                    onPlayFolder={shuffleFolder}
-                    onAddFolder={(event, folder) => {
-                      setFolderAddMenu({ folder, x: event.clientX, y: event.clientY })
-                    }}
-                    onRefreshFolder={(folder) => {
-                      void refreshFolderWithResult(folder)
-                    }}
-                    onSearchFolder={searchDirectory}
-                    onRevealFolder={(folder) => {
-                      void onRevealFolder(folder.path)
-                    }}
-                    onOpenFolder={openFolder}
-                    onToggleSelection={toggleFolderSelection}
-                    onDragStart={(event, folder) => {
-                      event.dataTransfer.setData('application/x-smplayer-local-items', JSON.stringify(dragPayloadForFolder(folder)))
-                      event.dataTransfer.effectAllowed = 'move'
-                    }}
-                    onDrop={(event, folder) => {
-                      void moveDraggedItems(event, folder)
-                    }}
-                    onOpenFolderMenu={(folder, x, y) => {
-                      setFolderMenu({ folder, x, y })
-                    }}
-                  />
-                ))}
-              </div>
-            )
-          ) : null}
-            {currentSongs.length > 0 ? (
-            showLocalSectionHeaders ? (
-              <LocalContentSection
-                count={currentSongs.length}
-                expanded={songsExpanded}
-                title={t('local.allSongs')}
-                onToggle={() => setSongsExpanded((current) => !current)}
-              >
-                <div className={showSongQuickJump ? 'local-song-grid-shell has-quick-jump' : 'local-song-grid-shell'}>
-                  {showSongQuickJump ? (
-                    <LocalSongQuickJump
-                      basisName={songQuickJumpBasisName}
-                      enabledKeys={songQuickJumpMap}
-                      t={t}
-                      visible={showSongQuickJump}
-                      onJump={jumpToLocalSongKey}
-                    />
-                  ) : null}
-                  <div className={isCompactLayout ? 'playlist-control-compact local-compact-song-list' : 'local-song-grid'}>
-                  {currentSongs.map((song, index) => (
-                    <div
-                      className={isCompactLayout ? 'local-compact-song-row' : 'local-song-grid-item'}
-                      key={song.id}
-                      ref={(element) => {
-                        localSongItemRefs.current[index] = element
-                      }}
-                    >
-                      {isCompactLayout ? (
-                        <PlaylistControlItem
-                          song={song}
-                          selected={selectedSongIds.has(song.id)}
-                          current={song.id === selectedTrackId}
-                          playing={song.id === selectedTrackId && isPlaying}
-                          selectionMode={multiSelect}
-                          dropPosition={null}
-                          queueSongIds={queueSongIds}
-                          t={t}
-                          showAlbum={false}
-                          onPlayTrack={onPlayTrack}
-                          onTogglePlayPause={onTogglePlayPause}
-                          onToggleSelection={() => toggleSongSelection(song.id)}
-                          onAddToPlaylistClick={(song, x, y) => {
-                            setSongAddMenu({ song, x, y })
-                          }}
-                          onContextMenu={(song, x, y) => {
-                            setSongMenu({ song, x, y })
-                          }}
-                          onDragStart={(event) => {
-                            event.dataTransfer.setData('application/x-smplayer-local-items', JSON.stringify(dragPayloadForSong(song)))
-                            event.dataTransfer.effectAllowed = 'move'
-                          }}
-                        />
-                      ) : (
-                        <GridViewMusicItemControl
-                          song={song}
-                          selected={selectedSongIds.has(song.id)}
-                          current={song.id === selectedTrackId}
-                          playing={song.id === selectedTrackId && isPlaying}
-                          multiSelect={multiSelect}
-                          queueSongIds={queueSongIds}
-                          t={t}
-                          variant="local"
-                          draggable
-                          onPlayTrack={onPlayTrack}
-                          onTogglePlayPause={onTogglePlayPause}
-                          onToggleSelection={toggleSongSelection}
-                          onAddToPlaylistClick={(event, song) => {
-                            setSongAddMenu({ song, x: event.clientX, y: event.clientY })
-                          }}
-                          onDragStart={(event, song) => {
-                            event.dataTransfer.setData('application/x-smplayer-local-items', JSON.stringify(dragPayloadForSong(song)))
-                            event.dataTransfer.effectAllowed = 'move'
-                          }}
-                          onContextMenu={(event, song) => {
-                            setSongMenu({ song, x: event.clientX, y: event.clientY })
-                          }}
-                        />
-                      )}
-                    </div>
-                  ))}
-                  </div>
-                </div>
-              </LocalContentSection>
-            ) : (
-              <div className={showSongQuickJump ? 'local-song-grid-shell has-quick-jump' : 'local-song-grid-shell'}>
-                {showSongQuickJump ? (
-                  <LocalSongQuickJump
-                    basisName={songQuickJumpBasisName}
-                    enabledKeys={songQuickJumpMap}
-                    t={t}
-                    visible={showSongQuickJump}
-                    onJump={jumpToLocalSongKey}
-                  />
-                ) : null}
-                <div className={isCompactLayout ? 'playlist-control-compact local-compact-song-list' : 'local-song-grid'}>
-                {currentSongs.map((song, index) => (
-                  <div
-                    className={isCompactLayout ? 'local-compact-song-row' : 'local-song-grid-item'}
-                    key={song.id}
-                    ref={(element) => {
-                      localSongItemRefs.current[index] = element
-                    }}
-                  >
-                    {isCompactLayout ? (
-                      <PlaylistControlItem
-                        song={song}
-                        selected={selectedSongIds.has(song.id)}
-                        current={song.id === selectedTrackId}
-                        playing={song.id === selectedTrackId && isPlaying}
-                        selectionMode={multiSelect}
-                        dropPosition={null}
-                        queueSongIds={queueSongIds}
-                        t={t}
-                        showAlbum={false}
-                        onPlayTrack={onPlayTrack}
-                        onTogglePlayPause={onTogglePlayPause}
-                        onToggleSelection={() => toggleSongSelection(song.id)}
-                        onAddToPlaylistClick={(song, x, y) => {
-                          setSongAddMenu({ song, x, y })
-                        }}
-                        onContextMenu={(song, x, y) => {
-                          setSongMenu({ song, x, y })
-                        }}
-                        onDragStart={(event) => {
-                          event.dataTransfer.setData('application/x-smplayer-local-items', JSON.stringify(dragPayloadForSong(song)))
-                          event.dataTransfer.effectAllowed = 'move'
-                        }}
-                      />
-                    ) : (
-                      <GridViewMusicItemControl
-                        song={song}
-                        selected={selectedSongIds.has(song.id)}
-                        current={song.id === selectedTrackId}
-                        playing={song.id === selectedTrackId && isPlaying}
-                        multiSelect={multiSelect}
-                        queueSongIds={queueSongIds}
-                        t={t}
-                        variant="local"
-                        draggable
-                        onPlayTrack={onPlayTrack}
-                        onTogglePlayPause={onTogglePlayPause}
-                        onToggleSelection={toggleSongSelection}
-                        onAddToPlaylistClick={(event, song) => {
-                          setSongAddMenu({ song, x: event.clientX, y: event.clientY })
-                        }}
-                        onDragStart={(event, song) => {
-                          event.dataTransfer.setData('application/x-smplayer-local-items', JSON.stringify(dragPayloadForSong(song)))
-                          event.dataTransfer.effectAllowed = 'move'
-                        }}
-                        onContextMenu={(event, song) => {
-                          setSongMenu({ song, x: event.clientX, y: event.clientY })
-                        }}
-                      />
-                    )}
-                  </div>
-                ))}
-                </div>
-              </div>
-            )
-            ) : null}
-          </div>
-          <CustomScrollbar
-            scrollbarTrackRef={localScrollbarTrackRef}
-            onThumbPointerDown={onLocalScrollbarPointerDown}
-          />
-        </div>
-      ) : (
-        <div className="local-scroll-frame custom-scrollbar-frame" ref={localTableScrollFrameRef}>
-          <div className="table-shell local-table-shell custom-scrollbar-container" ref={localTableShellRef}>
-            <table className="music-table">
-            <thead>
-              <tr>
-                <th>{t('common.name')}</th>
-                <th>{t('common.artist')}</th>
-                <th>{t('common.album')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {showLocalSectionHeaders && childFolders.length > 0 ? (
-                <LocalTableSectionHeader
-                  count={childFolders.length}
-                  expanded={foldersExpanded}
-                  title={t('common.folders')}
-                  onToggle={() => setFoldersExpanded((current) => !current)}
-                />
-              ) : null}
-              {showFolderItems ? childFolders.map((folder) => (
-                <tr
-                  key={folder.relativePath}
-                  className={joinClassNames(
-                    'local-table-folder-row',
-                    !multiSelect && selectedListItemKey === getFolderListItemKey(folder.relativePath) && 'is-selected',
-                    multiSelect && selectedFolderPaths.has(folder.relativePath) && 'is-selected',
-                  )}
-                  draggable
-                  onDragStart={(event) => {
-                    event.dataTransfer.setData('application/x-smplayer-local-items', JSON.stringify(dragPayloadForFolder(folder)))
-                    event.dataTransfer.effectAllowed = 'move'
-                  }}
-                  onDragOver={(event) => {
-                    event.preventDefault()
-                    event.dataTransfer.dropEffect = 'move'
-                  }}
-                  onDrop={(event) => {
-                    void moveDraggedItems(event, folder)
-                  }}
-                  onClick={() => {
-                    if (multiSelect) {
-                      toggleFolderSelection(folder.relativePath)
-                    } else {
-                      setSelectedListItemKey(getFolderListItemKey(folder.relativePath))
-                    }
-                  }}
-                  onDoubleClick={() => {
-                    if (!multiSelect) {
-                      openFolder(folder.relativePath)
-                    }
-                  }}
-                  onContextMenu={(event) => {
-                    event.preventDefault()
-                    setFolderMenu({ folder, x: event.clientX, y: event.clientY })
-                  }}
-                >
-                  <td className="local-table-name-cell local-table-folder-name-cell" colSpan={3}>
-                    {multiSelect ? (
-                      <span className={selectedFolderPaths.has(folder.relativePath) ? 'local-check is-selected' : 'local-check'}>
-                        {selectedFolderPaths.has(folder.relativePath) ? <Icon name="check" /> : null}
-                      </span>
-                    ) : null}
-                    <button className="table-link table-link-button" type="button">
-                      <img className="local-table-type-icon" src={LOCAL_FOLDER_TYPE_ICON_URL} alt="" />
-                      <span className="local-table-primary-text">{folder.name}</span>
-                    </button>
-                    <span className="local-table-folder-summary">
-                      {t('local.folderSongsCompact', { count: folder.directSongIds.length })}
-                    </span>
-                    <Icon name="chevronRight" />
-                    {!multiSelect ? (
-                      <span className="local-table-item-actions">
-                        <button
-                          type="button"
-                          title={t('local.playAllButtonTooltip')}
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            shuffleFolder(folder)
-                          }}
-                        >
-                          <Icon name="shuffle" />
-                        </button>
-                        <button
-                          type="button"
-                          title={t('context.addToPlaylist')}
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            setFolderAddMenu({ folder, x: event.clientX, y: event.clientY })
-                          }}
-                        >
-                          <Icon name="plus" />
-                        </button>
-                        <button
-                          type="button"
-                          title={t('local.updateFolder')}
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            void refreshFolderWithResult(folder)
-                          }}
-                        >
-                          <Icon name="refresh" />
-                        </button>
-                        <button
-                          type="button"
-                          title={t('local.searchFolderButtonTooltip')}
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            searchDirectory(folder)
-                          }}
-                        >
-                          <Icon name="search" />
-                        </button>
-                        <button
-                          type="button"
-                          title={t('local.openLocalButtonTooltip')}
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            onRevealFolder(folder.path)
-                          }}
-                        >
-                          <Icon name="local" />
-                        </button>
-                      </span>
-                    ) : null}
-                  </td>
-                </tr>
-              )) : null}
-              {showLocalSectionHeaders && currentSongs.length > 0 ? (
-                <LocalTableSectionHeader
-                  count={currentSongs.length}
-                  expanded={songsExpanded}
-                  title={t('local.allSongs')}
-                  onToggle={() => setSongsExpanded((current) => !current)}
-                />
-              ) : null}
-              {showSongItems && showSongQuickJump ? (
-                <tr className="local-table-quick-jump-row">
-                  <td colSpan={3}>
-                    <LocalSongQuickJump
-                      basisName={songQuickJumpBasisName}
-                      enabledKeys={songQuickJumpMap}
-                      t={t}
-                      visible={showSongQuickJump}
-                      onJump={jumpToLocalSongKey}
-                    />
-                  </td>
-                </tr>
-              ) : null}
-              {showSongItems ? currentSongs.map((song, index) => (
-                <tr
-                  key={`${currentNode.relativePath}-${song.id}`}
-                  ref={(element) => {
-                    localSongItemRefs.current[index] = element
-                  }}
-                  className={joinClassNames(
-                    'local-table-song-row',
-                    song.id === selectedTrackId && 'is-current',
-                    !multiSelect && selectedListItemKey === getSongListItemKey(song.id) && 'is-selected',
-                    multiSelect && selectedSongIds.has(song.id) && 'is-selected',
-                  )}
-                  draggable
-                  onDragStart={(event) => {
-                    event.dataTransfer.setData('application/x-smplayer-local-items', JSON.stringify(dragPayloadForSong(song)))
-                    event.dataTransfer.effectAllowed = 'move'
-                  }}
-                  onClick={() => {
-                    if (multiSelect) {
-                      toggleSongSelection(song.id)
-                    } else {
-                      setSelectedListItemKey(getSongListItemKey(song.id))
-                    }
-                  }}
-                  onDoubleClick={() => {
-                    if (!multiSelect) {
-                      onPlayTrack(song.id, queueSongIds)
-                    }
-                  }}
-                  onContextMenu={(event) => {
-                    event.preventDefault()
-                    setSongMenu({ song, x: event.clientX, y: event.clientY })
-                  }}
-                >
-                  <td className="local-table-name-cell local-table-song-name-cell">
-                    {multiSelect ? (
-                      <span className={selectedSongIds.has(song.id) ? 'local-check is-selected' : 'local-check'}>
-                        {selectedSongIds.has(song.id) ? <Icon name="check" /> : null}
-                      </span>
-                    ) : null}
-                    <span className="local-table-row-icon">
-                      {song.id === selectedTrackId ? (
-                        <Icon name="play" />
-                      ) : (
-                        <img className="local-table-type-icon" src={LOCAL_FILE_TYPE_ICON_URL} alt="" />
-                      )}
-                    </span>
-                    <span className="local-table-primary-text">{song.title}</span>
-                    {!multiSelect ? (
-                      <span className="local-table-item-actions local-table-song-actions">
-                        <button
-                          type="button"
-                          title={t('context.play')}
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            if (song.id === selectedTrackId && isPlaying) {
-                              onTogglePlayPause()
-                            } else {
-                              onMoveToMusicOrPlay(song.id)
-                            }
-                          }}
-                        >
-                          <Icon name={song.id === selectedTrackId && isPlaying ? 'pause' : 'play'} />
-                        </button>
-                        <button
-                          type="button"
-                          title={t('context.addToPlaylist')}
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            setSongAddMenu({ song, x: event.clientX, y: event.clientY })
-                          }}
-                        >
-                          <Icon name="plus" />
-                        </button>
-                        <button
-                          type="button"
-                          title={t('context.playNext')}
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            onPlayNext(song.id)
-                          }}
-                        >
-                          <Icon name="playNext" />
-                        </button>
-                      </span>
-                    ) : null}
-                  </td>
-                  <td className="local-table-artist-cell">
-                    {getSongArtists(song, t('common.artistUnknown')).map((artist, index) => (
-                      <span key={artist}>
-                        {index > 0 ? ', ' : null}
-                        <Link
-                          className="table-link"
-                          to={`/artists?artist=${encodeURIComponent(artist)}`}
-                          onClick={(event) => event.stopPropagation()}
-                        >
-                          {artist}
-                        </Link>
-                      </span>
-                    ))}
-                  </td>
-                  <td className="local-table-album-cell">
-                    <Link
-                      className="table-link"
-                      to={`/albums?album=${encodeURIComponent(song.album || t('common.albumUnknown'))}`}
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      {song.album || t('common.albumUnknown')}
-                    </Link>
-                  </td>
-                </tr>
-              )) : null}
-            </tbody>
-            </table>
-          </div>
-          <CustomScrollbar
-            scrollbarTrackRef={localTableScrollbarTrackRef}
-            onThumbPointerDown={onLocalTableScrollbarPointerDown}
-          />
-        </div>
-      )}
       {folderMenu ? (
         <MenuFlyout
           position={folderMenu}
@@ -2386,237 +1130,38 @@ export function LocalPage({
           ].filter((item) => item != null) as MenuFlyoutItem[]}
         />
       ) : null}
-      {songMenu ? (
-        <MusicMenuFlyout
-          menu={songMenu}
-          playlists={playlists}
-          queueSongIds={queueSongIds}
-          currentTrackId={selectedTrackId}
-          isPlaying={isPlaying}
-          t={t}
-          onClose={() => {
-            setSongMenu(null)
-          }}
-          onPlayTrack={onPlayTrack}
-          onMoveToMusicOrPlay={onMoveToMusicOrPlay}
-          onTogglePlayPause={onTogglePlayPause}
-          onPlayNext={onPlayNext}
-          onRevealSong={onRevealSong}
-          onDeleteSongFromDisk={onDeleteSongFromDisk}
-          onToggleFavorite={onToggleFavorite}
-          onAddSongToPlaylist={onAddSongToPlaylist}
-          showSelect
-          showMoveToFolder
-          showHideFile
-          onSelectSong={selectSong}
-        />
-      ) : null}
-      {folderUpdateResultDialog ? (
-        <FolderUpdateResultDialog
-          t={t}
-          result={folderUpdateResultDialog.result}
-          folder={folderUpdateResultDialog.folder}
-          songs={songs}
-          selectedTrackId={selectedTrackId}
-          songMenuOpen={folderUpdateResultSongMenu != null}
-          onPlaySong={(songId) => {
-            void PlaybackCommands.addNextAndPlay(songId)
-          }}
-          onOpenSongMenu={(song, x, y) => {
-            setFolderUpdateResultSongMenu({ song, x, y })
-          }}
-          onClose={() => {
-            setFolderUpdateResultDialog(null)
-            setFolderUpdateResultSongMenu(null)
-          }}
-        />
-      ) : null}
-      {folderUpdateResultSongMenu ? (
-        <MusicMenuFlyout
-          menu={folderUpdateResultSongMenu}
-          playlists={playlists}
-          queueSongIds={queueSongIds}
-          currentTrackId={selectedTrackId}
-          isPlaying={isPlaying}
-          t={t}
-          onClose={() => {
-            setFolderUpdateResultSongMenu(null)
-          }}
-          onPlayTrack={onPlayTrack}
-          onMoveToMusicOrPlay={onMoveToMusicOrPlay}
-          onTogglePlayPause={onTogglePlayPause}
-          onPlayNext={onPlayNext}
-          onRevealSong={onRevealSong}
-          onDeleteSongFromDisk={onDeleteSongFromDisk}
-          onToggleFavorite={onToggleFavorite}
-          onAddSongToPlaylist={onAddSongToPlaylist}
-          showSelect={false}
-          showMusicProperties={false}
-          showDelete={false}
-          menuLayer="dialog"
-        />
-      ) : null}
-      {inputDialog ? (
-        <InputDialog
-          t={t}
-          title={inputDialog.title}
-          defaultValue={inputDialog.defaultValue}
-          validate={inputDialog.validate}
-          onCancel={() => {
-            setInputDialog(null)
-          }}
-          onConfirm={(value) => {
-            void inputDialog.onConfirm(value)
-          }}
-        />
-      ) : null}
-      {removeDialog ? (
-        <RemoveDialog
-          t={t}
-          title={removeDialog.title}
-          message={removeDialog.message}
-          onCancel={() => {
-            setRemoveDialog(null)
-          }}
-          onConfirm={() => {
-            void removeDialog.onConfirm()
-          }}
-        />
-      ) : null}
+      <LocalPageDialogs
+        t={t}
+        songs={songs}
+        playlists={playlists}
+        queueSongIds={queueSongIds}
+        selectedTrackId={selectedTrackId}
+        isPlaying={isPlaying}
+        songMenu={songMenu}
+        folderUpdateResultDialog={folderUpdateResultDialog}
+        folderUpdateResultSongMenu={folderUpdateResultSongMenu}
+        inputDialog={inputDialog}
+        removeDialog={removeDialog}
+        onCloseSongMenu={() => setSongMenu(null)}
+        onCloseFolderUpdateResultDialog={() => {
+          setFolderUpdateResultDialog(null)
+          setFolderUpdateResultSongMenu(null)
+        }}
+        onCloseFolderUpdateResultSongMenu={() => setFolderUpdateResultSongMenu(null)}
+        onOpenFolderUpdateResultSongMenu={(song, x, y) => setFolderUpdateResultSongMenu({ song, x, y })}
+        onCloseInputDialog={() => setInputDialog(null)}
+        onCloseRemoveDialog={() => setRemoveDialog(null)}
+        onPlayTrack={onPlayTrack}
+        onMoveToMusicOrPlay={onMoveToMusicOrPlay}
+        onTogglePlayPause={onTogglePlayPause}
+        onPlayNext={onPlayNext}
+        onRevealSong={onRevealSong}
+        onDeleteSongFromDisk={onDeleteSongFromDisk}
+        onToggleFavorite={onToggleFavorite}
+        onAddSongToPlaylist={onAddSongToPlaylist}
+        onSelectSong={selectSong}
+      />
     </section>
   )
 }
 
-function LocalContentSection({
-  title,
-  count,
-  expanded,
-  children,
-  onToggle,
-}: {
-  title: string
-  count: number
-  expanded: boolean
-  children: ReactNode
-  onToggle: () => void
-}) {
-  return (
-    <section className={expanded ? 'local-content-section is-expanded' : 'local-content-section'}>
-      <button className={expanded ? 'local-content-section-header is-expanded' : 'local-content-section-header'} type="button" onClick={onToggle}>
-        <Icon name={expanded ? 'chevronDown' : 'chevronRight'} />
-        <span>{title}</span>
-        <span className="local-content-section-count">{count}</span>
-      </button>
-      {expanded ? children : null}
-    </section>
-  )
-}
-
-function LocalTableSectionHeader({
-  title,
-  count,
-  expanded,
-  onToggle,
-}: {
-  title: string
-  count: number
-  expanded: boolean
-  onToggle: () => void
-}) {
-  return (
-    <tr className="local-table-section-row">
-      <td colSpan={3}>
-        <button className={expanded ? 'local-content-section-header is-expanded' : 'local-content-section-header'} type="button" onClick={onToggle}>
-          <Icon name={expanded ? 'chevronDown' : 'chevronRight'} />
-          <span>{title}</span>
-          <span className="local-content-section-count">{count}</span>
-        </button>
-      </td>
-    </tr>
-  )
-}
-
-function LocalSongQuickJump({
-  basisName,
-  enabledKeys,
-  t,
-  visible,
-  onJump,
-}: {
-  basisName: string
-  enabledKeys: Map<string, number>
-  t: Translator
-  visible: boolean
-  onJump: (key: string) => void
-}) {
-  if (!visible) {
-    return null
-  }
-
-  return (
-    <nav className="local-song-quick-jump" aria-label={t('common.search')}>
-      {LOCAL_TEXT_QUICK_JUMP_KEYS.map((key) => {
-        const enabled = enabledKeys.has(key)
-
-        return (
-          <button
-            disabled={!enabled}
-            key={key}
-            title={getQuickJumpTooltip(key, enabled, t('common.songs'), basisName, t)}
-            type="button"
-            onClick={() => {
-              onJump(key)
-            }}
-          >
-            {key}
-          </button>
-        )
-      })}
-    </nav>
-  )
-}
-
-function buildLocalSongQuickJumpMap(
-  songs: LibrarySong[],
-  sortMode: LocalSortMode,
-  currentSortMode: LocalSortMode,
-  t: Translator,
-) {
-  const indexes = new Map<string, number>()
-  const quickJumpSortMode = sortMode === 'reverse' ? currentSortMode : sortMode
-
-  songs.forEach((song, index) => {
-    const bucket = getLocalTextQuickJumpBucket(getLocalSongQuickJumpValue(song, quickJumpSortMode, t))
-    if (!indexes.has(bucket)) {
-      indexes.set(bucket, index)
-    }
-  })
-
-  return indexes
-}
-
-function getLocalSongQuickJumpValue(song: LibrarySong, sortMode: LocalSortMode, t: Translator) {
-  switch (sortMode) {
-    case 'artist':
-      return getSongArtists(song, t('common.artistUnknown'))[0] ?? ''
-    case 'album':
-      return song.album || t('common.albumUnknown')
-    case 'reverse':
-    case 'title':
-      return song.title
-  }
-}
-
-function getLocalSongQuickJumpBasisName(sortMode: LocalSortMode, currentSortMode: LocalSortMode, t: Translator) {
-  const quickJumpSortMode = sortMode === 'reverse' ? currentSortMode : sortMode
-
-  switch (quickJumpSortMode) {
-    case 'artist':
-      return t('common.artist')
-    case 'album':
-      return t('common.album')
-    case 'reverse':
-    case 'title':
-      return t('musicLibrary.titleHeader')
-  }
-}
