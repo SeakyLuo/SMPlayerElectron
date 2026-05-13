@@ -8,6 +8,7 @@ import { MediaControl } from './components/MediaControl'
 import { RenameDialog } from './components/RenameDialog'
 import { ReleaseNotesDialog } from './components/ReleaseNotesDialog'
 import { Sidebar } from './components/Sidebar'
+import { shuffleSongIds } from './components/headeredPlaylistModel'
 import { Icon } from './components/icons'
 import { InAppNotificationWithButton } from './components/InAppNotificationWithButton'
 import { useAppWindowController, useWindowControlsLight } from './hooks/useAppWindowController'
@@ -18,8 +19,10 @@ import { useRevealItem } from './hooks/useRevealItem'
 import { useReleaseNotesVersion } from './hooks/useReleaseNotesVersion'
 import { useScrollbarHoverClass } from './hooks/useScrollbarHoverClass'
 import { useCustomScrollbar } from './hooks/useCustomScrollbar'
+import { useDeleteSongFromDisk } from './hooks/useDeleteSongFromDisk'
 import { useSearchController } from './hooks/useSearchController'
 import { useTrackNotification } from './hooks/useTrackNotification'
+import { useTouchContextMenu } from './hooks/useTouchContextMenu'
 import { useVoiceAssistantController } from './hooks/useVoiceAssistantController'
 import { useUndoableNotificationStore } from './state/useUndoableNotificationStore'
 import { LocalTitleGrid } from './pages/LocalTitleGrid'
@@ -55,6 +58,8 @@ import { usePreferenceStore } from './state/usePreferenceStore'
 import './App.css'
 
 function App() {
+  useTouchContextMenu()
+
   const [initialLoadComplete, setInitialLoadComplete] = useState(false)
   const [resolvedArtwork, setResolvedArtwork] = useState<{ trackId: number; artworkUrl: string } | null>(null)
   const [isNavigationCollapsed, setIsNavigationCollapsed] = useState(() => {
@@ -111,8 +116,8 @@ function App() {
   const addSongToPlaylist = useLibraryStore((state) => state.addSongToPlaylist)
   const addSongsToPlaylist = useLibraryStore((state) => state.addSongsToPlaylist)
   const reorderPlaylists = useLibraryStore((state) => state.reorderPlaylists)
+  const recordRecentPlaylistPlayed = useLibraryStore((state) => state.recordRecentPlaylistPlayed)
   const replaceNowPlaying = useLibraryStore((state) => state.replaceNowPlaying)
-  const deleteSongFromDisk = useLibraryStore((state) => state.deleteSongFromDisk)
   const moveLocalItemsToFolder = useLibraryStore((state) => state.moveLocalItemsToFolder)
   const clearNowPlaying = useLibraryStore((state) => state.clearNowPlaying)
   const saveSearchQuery = useLibraryStore((state) => state.saveSearchQuery)
@@ -316,6 +321,7 @@ function App() {
     () => createTranslator(snapshot.settings.preferredLanguage),
     [snapshot.settings.preferredLanguage],
   )
+  const deleteSongFromDisk = useDeleteSongFromDisk(t)
   const songsById = useMemo(
     () => new Map(snapshot.songs.map((song) => [song.id, song])),
     [snapshot.songs],
@@ -345,10 +351,10 @@ function App() {
       }
     : {
         id: null,
-        title: '',
+        title: pageLoading ? t('nowPlaying.loading') : '',
         artist: '',
         artworkUrl: '',
-        isLoading: false,
+        isLoading: pageLoading,
         favorite: false,
       }
 
@@ -512,9 +518,10 @@ function App() {
     await playbackCommands.setMusicAndPlay(songIds)
   }
 
-  async function quickPlayPlaylist(playlistId: number) {
+  async function randomPlayPlaylist(playlistId: number) {
     const playlist = snapshot.playlists.find((item) => item.id === playlistId)!
-    await playbackCommands.setMusicAndPlay(playlist.songIds)
+    await recordRecentPlaylistPlayed(playlistId)
+    await playbackCommands.setMusicAndPlay(shuffleSongIds(playlist.songIds))
   }
 
   const voiceAssistant = useVoiceAssistantController({
@@ -717,12 +724,12 @@ function App() {
         onReorderPlaylists={(playlistIds) => {
           void reorderPlaylists(playlistIds)
         }}
-        onQuickPlayPlaylist={(playlistId) => {
-          void quickPlayPlaylist(playlistId)
+        onRandomPlayPlaylist={(playlistId) => {
+          void randomPlayPlaylist(playlistId)
         }}
         onSearchChange={setSearchInput}
-        onSearchCommit={(value) => {
-          void commitSearchQuery(value)
+        onSearchCommit={(value, type) => {
+          void commitSearchQuery(value, type)
         }}
         onSearchClear={() => {
           setSearchInput('')
@@ -903,7 +910,6 @@ function App() {
               submittedSearchQuery,
               searchResultsLoading,
               searchFolderPath,
-              searchFolderName,
             }}
           />
         </main>
@@ -959,7 +965,7 @@ function App() {
             void replaceNowPlaying(snapshot.nowPlaying.songIds.filter((songId) => !songIds.includes(songId)))
           }}
           onDeleteSongFromDisk={(songId) => {
-            void deleteSongFromDisk(songId)
+            void deleteSongFromDisk(songsById.get(songId)!)
           }}
           onClearQueue={() => {
             void clearNowPlaying()

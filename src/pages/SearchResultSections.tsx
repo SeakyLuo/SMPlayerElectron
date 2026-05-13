@@ -85,6 +85,8 @@ export function SearchResultSection({
   onSortChange,
   onOpenContextMenu,
   onOpenLocalFolder,
+  onPlayCard,
+  playCardLabel = '',
   selectionMode = false,
   selectedCardKeys,
   onToggleSelection,
@@ -103,6 +105,8 @@ export function SearchResultSection({
   onSortChange: (section: SearchResultType, criterion: SearchSortCriterion) => void
   onOpenContextMenu: (sectionKey: SearchResultType, card: SearchResult, x: number, y: number) => void
   onOpenLocalFolder?: (folderRelativePath: string) => void
+  onPlayCard?: (sectionKey: SearchResultType, card: SearchResult) => void
+  playCardLabel?: string
   selectionMode?: boolean
   selectedCardKeys?: Set<string>
   onToggleSelection?: (sectionKey: SearchResultType, card: SearchResult) => void
@@ -129,9 +133,17 @@ export function SearchResultSection({
         {(expanded ? cards : cards.slice(0, previewLimit)).map((card) => {
           const cardKey = getSearchResultCardKey(sectionKey, card)
           const selected = selectedCardKeys?.has(cardKey) ?? false
+          const isArtistCard = sectionKey === 'artists'
+          const showArtworkPlay = isArtistCard && !selectionMode && card.songIds.length > 0 && onPlayCard
+          const cardClassName = [
+            'search-result-card',
+            isArtistCard ? 'artist-view-holder' : `search-result-card-${sectionKey}`,
+            selectionMode ? 'is-selecting' : '',
+            selected ? 'is-selected' : '',
+          ].filter(Boolean).join(' ')
           return (
             <Link
-              className={`search-result-card${selectionMode ? ' is-selecting' : ''}${selected ? ' is-selected' : ''}`}
+              className={cardClassName}
               key={cardKey}
               to={card.path}
               onClick={(event) => {
@@ -155,7 +167,34 @@ export function SearchResultSection({
                   {selected ? <Icon name="check" /> : null}
                 </span>
               ) : null}
-              <SearchArtwork title={card.title} artworkUrl={card.artworkUrl} />
+              {showArtworkPlay ? (
+                <span className="search-card-artwork-shell">
+                  <SearchArtwork title={card.title} artworkUrl={card.artworkUrl} />
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    className="artist-list-hover-play search-artist-hover-play"
+                    aria-label={playCardLabel}
+                    title={playCardLabel}
+                    onClick={(event) => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      onPlayCard(sectionKey, card)
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        event.stopPropagation()
+                        onPlayCard(sectionKey, card)
+                      }
+                    }}
+                  >
+                    <Icon name="play" />
+                  </span>
+                </span>
+              ) : (
+                <SearchArtwork title={card.title} artworkUrl={card.artworkUrl} />
+              )}
               <strong>{card.title}</strong>
               <span>{card.subtitle}</span>
             </Link>
@@ -542,7 +581,7 @@ export function SearchSectionHeader({
               onToggleExpanded(sectionKey)
             }}
           >
-            <Icon name="albums" />
+            <Icon name="grid" />
             <span>{expanded ? viewLessLabel : viewAllLabel}</span>
           </button>
         ) : null}

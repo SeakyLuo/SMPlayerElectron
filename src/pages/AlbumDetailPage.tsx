@@ -69,7 +69,6 @@ export function AlbumDetailPage({
         favoritePlaylistId={favoritePlaylistId}
         artworkUrl={artworkUrl}
         showAlbum={false}
-        showArtist
         canEditArtwork={canEditArtwork}
         canSetPreferred={canSetPreferred}
         preferenceType="album"

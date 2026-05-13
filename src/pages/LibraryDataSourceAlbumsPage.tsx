@@ -148,6 +148,9 @@ export function MusicDataSourceAlbumsPage({
         })
       }}
       onRecordAlbumPlayed={() => {}}
+      recentSearches={[]}
+      onRemoveRecentSearch={() => {}}
+      onRemoveRecentSearches={() => {}}
       routeBase={routeBase}
     />
   )

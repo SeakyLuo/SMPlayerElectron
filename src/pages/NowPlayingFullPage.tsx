@@ -2,7 +2,7 @@ import clsx from 'clsx'
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent } from 'react'
 
 import { AlbumArtControl } from '../components/AlbumArtControl'
-import { DEFAULT_ALBUM_ARTWORK_URL } from '../components/DefaultAlbumArtwork'
+import { DEFAULT_ALBUM_ARTWORK_URL } from '../shared/staticAssets'
 import { requestTextDialog } from '../components/dialogService'
 import { Icon } from '../components/icons'
 import { MenuFlyout } from '../components/MenuFlyout'
@@ -200,7 +200,7 @@ export function NowPlayingFullPage({
     [displayLyricsLines],
   )
   const previewLyricIndex = isLyricPreviewing ? lyricPreviewIndex : null
-  const isPlayerBarPinned = showPlaylistPanel || dialogMode !== null || moreMenu !== null
+  const isPlayerBarPinned = dialogMode !== null || moreMenu !== null
   const immersiveNightActive = nightMode === 'on' || (
     nightMode === 'auto' &&
     isMinuteInNightRange(currentClockMinute, timeToMinute(nightModeStartTime), timeToMinute(nightModeEndTime))

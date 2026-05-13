@@ -3,8 +3,9 @@ import type { MouseEvent, ReactNode } from 'react'
 import { ArtworkImage } from './ArtworkImage'
 import { DefaultAlbumArtwork } from './DefaultAlbumArtwork'
 import { Icon, type IconName } from './icons'
+import { COLORFUL_BACKGROUND_URL } from '../shared/staticAssets'
 
-const NOT_FOUND_ARTWORK_URL = '/colorful_bg_wide.png'
+const NOT_FOUND_ARTWORK_URL = COLORFUL_BACKGROUND_URL
 
 export interface GridArtworkAction {
   key: string

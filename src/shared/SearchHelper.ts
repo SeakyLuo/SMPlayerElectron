@@ -132,13 +132,21 @@ export function buildSearchResults(
   normalizedQuery: string,
   t: Translator,
 ) {
-  const matchedSongs = normalizedQuery
-    ? songs
-        .map((song) => ({ entity: song, score: matchSong(song, normalizedQuery, t) }))
-        .filter((result) => result.score > 0)
-        .sort(sortByScoreThenTitle)
-        .map((result) => result.entity)
-    : []
+  if (!normalizedQuery) {
+    return {
+      artists: [],
+      albums: [],
+      songs: [],
+      playlists: [],
+      folders: [],
+    }
+  }
+
+  const matchedSongs = songs
+    .map((song) => ({ entity: song, score: matchSong(song, normalizedQuery, t) }))
+    .filter((result) => result.score > 0)
+    .sort(sortByScoreThenTitle)
+    .map((result) => result.entity)
   const matchedSongIds = new Set(matchedSongs.map((song) => song.id))
   const artists = buildArtistResults(songs, matchedSongs, normalizedQuery, t)
   const albums = buildAlbumResults(songs, matchedSongs, normalizedQuery, t)

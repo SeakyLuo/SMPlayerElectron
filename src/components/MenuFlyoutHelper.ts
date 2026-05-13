@@ -150,8 +150,7 @@ export function getAddToPlaylistMenuFlyoutItem({
       return true
     }
 
-    const playlistSongIds = new Set(playlist.songIds)
-    return !playlistSongIds.has(songIds[0]!)
+    return !playlist.songIds.includes(songIds[0]!)
   })
   const submenu: MenuFlyoutItem[] = []
 
@@ -222,6 +221,10 @@ export function getAddToPlaylistMenuFlyoutItem({
   } satisfies MenuFlyoutItem
 }
 
+export function getAddToPlaylistMenuFlyoutItems(options: Parameters<typeof getAddToPlaylistMenuFlyoutItem>[0]) {
+  return getAddToPlaylistMenuFlyoutItem(options)?.submenu ?? []
+}
+
 export function getMusicMenuFlyoutItems({
   song,
   option,
@@ -229,11 +232,7 @@ export function getMusicMenuFlyoutItems({
   folders = [],
   currentPlaylistName,
   excludePlaylistName,
-  queueSongIds,
-  playbackSongIds,
   currentTrackId,
-  currentTrackIndex,
-  songIndex: targetSongIndex,
   isPlaying,
   t,
   onPlay,
@@ -264,11 +263,7 @@ export function getMusicMenuFlyoutItems({
   folders?: LibraryFolder[]
   currentPlaylistName?: string
   excludePlaylistName?: string
-  queueSongIds: number[]
-  playbackSongIds?: number[]
   currentTrackId: number | null
-  currentTrackIndex?: number | null
-  songIndex?: number
   isPlaying: boolean
   t: Translator
   onPlay: () => void
@@ -304,23 +299,17 @@ export function getMusicMenuFlyoutItems({
     showMoveToFolder: option?.showMoveToFolder ?? false,
     showAlbumArt: option?.showAlbumArt ?? true,
   }
-  const playbackQueueSongIds = playbackSongIds ?? queueSongIds
-  const songIndex = targetSongIndex ?? queueSongIds.indexOf(song.id)
-  const currentIndex =
-    currentTrackIndex != null && currentTrackIndex > -1 && playbackQueueSongIds[currentTrackIndex] === currentTrackId
-      ? currentTrackIndex
-      : currentTrackId == null
-        ? -1
-        : playbackQueueSongIds.indexOf(currentTrackId)
+  const isCurrentMenuSong = song.id === currentTrackId
+  const canPlayNext = currentTrackId !== null && !isCurrentMenuSong
   const items: MenuFlyoutItem[] = []
 
   items.push(
-    songIndex > -1 && currentIndex === songIndex && isPlaying
+    isCurrentMenuSong && isPlaying
       ? { key: 'pause', text: t('context.pause'), icon: 'pause', onClick: onPause }
       : { key: 'play', text: t('context.play'), icon: 'play', onClick: onPlay },
   )
 
-  if (currentIndex !== -1 && currentIndex !== songIndex && currentIndex !== songIndex - 1) {
+  if (canPlayNext) {
     items.push({ key: 'play-next', text: t('context.playNext'), icon: 'playNext', onClick: onPlayNext })
   }
 
@@ -413,16 +402,26 @@ export function getMusicMenuFlyoutItems({
     items.push({ key: 'hide-file', text: t('context.hideFile'), icon: 'close', onClick: onHide })
   }
 
+  const viewItems: MenuFlyoutItem[] = []
   if (normalizedOption.showMusicProperties) {
     if (normalizedOption.showSeeArtistsAndSeeAlbum) {
-      items.push({ key: 'see-artist', text: t('context.seeArtist'), icon: 'users', onClick: () => onSeeArtist(song.artist) })
-      items.push({ key: 'see-album', text: t('context.seeAlbum'), icon: 'albums', onClick: onSeeAlbum })
+      viewItems.push({ key: 'see-artist', text: t('context.seeArtist'), icon: 'users', onClick: () => onSeeArtist(song.artist) })
+      viewItems.push({ key: 'see-album', text: t('context.seeAlbum'), icon: 'albums', onClick: onSeeAlbum })
     }
-    items.push({ key: 'see-music-info', text: t('context.seeMusicInfo'), icon: 'info', keepOpen: true, onClick: onSeeMusicInfo })
-    items.push({ key: 'see-lyrics', text: t('context.seeLyrics'), icon: 'lyrics', keepOpen: true, onClick: onSeeLyrics })
+    viewItems.push({ key: 'see-music-info', text: t('context.seeMusicInfo'), icon: 'info', keepOpen: true, onClick: onSeeMusicInfo })
+    viewItems.push({ key: 'see-lyrics', text: t('context.seeLyrics'), icon: 'lyrics', keepOpen: true, onClick: onSeeLyrics })
     if (normalizedOption.showAlbumArt) {
-      items.push({ key: 'see-album-art', text: t('context.seeAlbumArt'), icon: 'pictures', keepOpen: true, onClick: onSeeAlbumArt })
+      viewItems.push({ key: 'see-album-art', text: t('context.seeAlbumArt'), icon: 'pictures', keepOpen: true, onClick: onSeeAlbumArt })
     }
+  }
+
+  if (viewItems.length > 0) {
+    items.push({
+      key: 'view',
+      text: t('context.view'),
+      icon: 'view',
+      submenu: viewItems,
+    })
   }
 
   return items

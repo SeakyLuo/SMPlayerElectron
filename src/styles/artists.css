@@ -14,13 +14,12 @@
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  padding: 16px 14px;
+  padding: 16px 14px calc(var(--player-top-radius) + 8px);
   border-right: 1px solid rgba(86, 98, 113, 0.18);
   background: transparent;
 }
 
-.artists-progress,
-.artist-detail-progress {
+.artists-progress {
   position: relative;
   height: 3px;
   overflow: hidden;
@@ -32,15 +31,7 @@
   margin: 8px 0 0;
 }
 
-.artist-detail-progress {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 8px;
-}
-
-.artists-progress::after,
-.artist-detail-progress::after {
+.artists-progress::after {
   content: "";
   position: absolute;
   inset: 0 auto 0 0;
@@ -219,8 +210,13 @@
   min-height: 0;
 }
 
-.artists-master-scrollbar {
-  display: none;
+.artists-master-scroll-frame > .custom-scrollbar {
+  right: -8px;
+}
+
+.artists-master-scroll-frame .custom-scrollbar-thumb {
+  right: 2px;
+  left: 2px;
 }
 
 .artists-quick-jump {
@@ -272,7 +268,9 @@
   gap: 0;
   min-height: 0;
   overflow: auto;
-  scrollbar-gutter: stable;
+  box-sizing: border-box;
+  padding-right: 0;
+  scrollbar-gutter: auto;
 }
 
 .artists-virtual-spacer,
@@ -283,80 +281,203 @@
 .artist-virtual-row {
   display: flex;
   align-items: center;
-  height: 48px;
+  height: 88px;
 }
 
 .artist-list-item {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
+  grid-template-columns: 64px minmax(0, 1fr);
+  grid-template-rows: auto auto;
   align-items: center;
-  gap: 10px;
+  column-gap: 14px;
+  row-gap: 2px;
   width: 100%;
-  height: 44px;
+  min-height: 86px;
   box-sizing: border-box;
-  padding: 4px 8px;
-  border: 0;
-  border-radius: 12px;
+  padding: 11px 14px;
+  border: 1px solid transparent;
+  border-radius: 10px;
   background: transparent;
   color: var(--text-strong);
   text-align: left;
   cursor: pointer;
+  transition: transform 120ms ease, background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
 }
 
-.artist-list-item:hover {
-  background: rgba(var(--accent-rgb), 0.08);
+.artist-list-item:hover,
+.artist-list-item:focus-visible {
+  background: var(--surface-card-hover);
+  border-color: transparent;
+  box-shadow: var(--card-hover-shadow);
+  outline: none;
+  transform: translateY(-1px);
 }
 
-.artist-list-item.is-active {
-  background: rgba(var(--accent-rgb), 0.12);
+.artist-list-item.is-active,
+.artist-list-item.is-selected {
+  background: var(--surface-card-selected);
+  border-color: rgba(var(--accent-rgb), 0.42);
+  box-shadow: 0 14px 30px rgba(var(--accent-rgb), 0.16);
+}
+
+.artist-list-artwork-shell {
+  position: relative;
+  display: block;
+  grid-row: 1 / span 2;
+  width: 64px;
+  height: 64px;
 }
 
 .artist-list-avatar {
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--accent) 18%, #aeb5bf 82%);
-  color: #fff;
+  width: 64px;
+  height: 64px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface-artwork);
+  color: var(--text-muted);
+  box-shadow: var(--artwork-shadow);
+  transition: box-shadow 120ms ease, transform 120ms ease;
 }
 
-.artist-list-avatar svg {
-  width: 17px;
-  height: 17px;
+.artist-list-avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .artist-list-artwork {
   flex: 0 0 auto;
-  width: 34px;
-  height: 34px;
+  width: 64px;
+  height: 64px;
   border-radius: 8px;
   object-fit: cover;
-  background: rgba(129, 139, 152, 0.14);
+  background: var(--surface-artwork);
+  box-shadow: var(--artwork-shadow);
+  transition: box-shadow 120ms ease, transform 120ms ease;
+}
+
+.artist-list-item:hover .artist-list-artwork,
+.artist-list-item:focus-visible .artist-list-artwork,
+.artist-list-item:hover .artist-list-avatar,
+.artist-list-item:focus-visible .artist-list-avatar {
+  box-shadow: 0 12px 24px rgba(32, 45, 63, 0.2);
+  transform: translateY(-1px);
+}
+
+.artists-master .artist-list-item {
+  grid-template-columns: 48px minmax(0, 1fr);
+  min-height: 62px;
+  column-gap: 12px;
+  row-gap: 0;
+  padding: 5px 6px;
+}
+
+.artists-master .artist-virtual-row {
+  height: 64px;
+}
+
+.artists-master .artist-list-item:hover,
+.artists-master .artist-list-item:focus-visible {
+  transform: none;
+}
+
+.artists-master .artist-list-artwork-shell,
+.artists-master .artist-list-avatar,
+.artists-master .artist-list-artwork {
+  width: 48px;
+  height: 48px;
+}
+
+.artists-master .artist-list-item:hover .artist-list-artwork,
+.artists-master .artist-list-item:focus-visible .artist-list-artwork,
+.artists-master .artist-list-item:hover .artist-list-avatar,
+.artists-master .artist-list-item:focus-visible .artist-list-avatar {
+  transform: none;
+}
+
+.artists-master .artist-list-copy strong {
+  line-height: 1.2;
+}
+
+.artists-master .artist-list-copy small {
+  line-height: 1.15;
+}
+
+.artist-list-hover-play {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(30, 34, 40, 0.72);
+  color: #fff;
+  box-shadow: 0 12px 28px rgba(14, 22, 32, 0.28);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  transition:
+    opacity 120ms ease,
+    background-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.artist-list-hover-play:hover,
+.artist-list-hover-play:focus-visible {
+  background: rgba(20, 24, 30, 0.82);
+  box-shadow: 0 14px 32px rgba(14, 22, 32, 0.28);
+  opacity: 1;
+  outline: none;
+  transform: translate(-50%, -50%) scale(1.1);
+}
+
+.artist-list-item:hover .artist-list-hover-play,
+.artist-list-item:focus-visible .artist-list-hover-play,
+.artist-view-holder:hover .artist-list-hover-play,
+.artist-view-holder:focus-visible .artist-list-hover-play,
+.artist-list-artwork-shell:focus-within .artist-list-hover-play,
+.search-card-artwork-shell:focus-within .artist-list-hover-play {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.artist-list-hover-play svg {
+  width: 19px;
+  height: 19px;
 }
 
 .artist-list-copy {
+  display: contents;
   min-width: 0;
 }
 
 .artist-list-copy strong,
 .artist-list-copy small {
   display: block;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .artist-list-copy strong {
-  font-size: 14px;
-  font-weight: 520;
-  line-height: 34px;
+  color: var(--text-strong);
+  font-size: 15px;
+  font-weight: 720;
 }
 
 .artist-list-copy small {
-  margin-top: 2px;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .artists-detail-scroll-frame {
@@ -364,6 +485,12 @@
   display: flex;
   min-width: 0;
   min-height: 0;
+  background: rgba(248, 251, 254, 0.96);
+}
+
+.artists-detail-scroll-frame > .custom-scrollbar {
+  right: 4px;
+  bottom: 0;
 }
 
 .artists-detail {
@@ -371,7 +498,7 @@
   min-width: 0;
   min-height: 0;
   overflow: auto;
-  padding: 0 28px 22px;
+  padding: 0 28px 0;
 }
 
 .artists-detail.is-empty {
@@ -582,8 +709,18 @@
   border-top: 1px solid rgba(126, 139, 154, 0.16);
 }
 
+.artists-page .artist-song-list.playlist-control-compact .now-playing-queue-item,
+.artists-page .artist-song-list.playlist-control-compact .now-playing-queue-item:not(.has-album-column),
+.artists-page .artist-song-list.playlist-control-compact .now-playing-queue-item.has-album-column {
+  grid-template-columns: 58px minmax(0, 1fr) 136px 50px;
+}
+
+.artists-page .artist-song-list.playlist-control-compact .now-playing-queue-actions .now-playing-queue-action:not(:last-child) {
+  display: grid;
+}
+
 .app-shell.nav-minimal .artists-master {
-  padding: 8px 14px 0 14px;
+  padding: 8px 14px calc(var(--player-top-radius) + 8px);
   border-right: 0;
 }
 
@@ -612,43 +749,6 @@
   display: none;
   width: 0;
   height: 0;
-}
-
-.app-shell.nav-minimal .artists-master-scrollbar {
-  position: absolute;
-  top: 0;
-  right: -5px;
-  bottom: 4px;
-  z-index: 2;
-  display: block;
-  width: 9px;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 140ms ease;
-}
-
-.app-shell.nav-minimal .artists-master-scroll-frame.has-scrollbar:hover .artists-master-scrollbar,
-.app-shell.nav-minimal .artists-master-scroll-frame.has-scrollbar:focus-within .artists-master-scrollbar,
-.app-shell.nav-minimal .artists-master-scroll-frame.has-scrollbar .artists-master-scrollbar:hover {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.app-shell.nav-minimal .artists-master-scrollbar-thumb {
-  position: absolute;
-  left: 2px;
-  right: 2px;
-  top: var(--artists-master-scrollbar-thumb-top, 0);
-  height: var(--artists-master-scrollbar-thumb-height, 40px);
-  border-radius: 999px;
-  background: rgba(91, 105, 122, 0.5);
-  cursor: default;
-}
-
-.app-shell.nav-minimal .artists-master-scrollbar-thumb:hover {
-  left: 1px;
-  right: 1px;
-  background: rgba(67, 80, 96, 0.68);
 }
 
 body.night-mode .app-shell .workspace:has(.artists-page) {

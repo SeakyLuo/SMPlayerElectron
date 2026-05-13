@@ -92,17 +92,25 @@ export function usePlaybackAudioElement({
       setDurationFromPlayback(nextDuration)
       persistResolvedDuration(currentTrackIdRef.current, nextDuration)
 
+      let seekBeforeReady = false
       if (pendingStartSecondsRef.current > 0) {
-        audio.currentTime = clamp(
+        const nextStartSeconds = clamp(
           pendingStartSecondsRef.current,
           0,
           nextDuration || pendingStartSecondsRef.current,
         )
-        setProgressFromPlayback(audio.currentTime)
+        pendingSeekSecondsRef.current = nextStartSeconds
+        audio.currentTime = nextStartSeconds
+        setProgressFromPlayback(nextStartSeconds)
         pendingStartSecondsRef.current = 0
+        seekBeforeReady = true
       }
 
       const shouldAutoplay = pendingAutoplayRef.current
+      if (seekBeforeReady) {
+        return
+      }
+
       pendingAutoplayRef.current = false
 
       if (shouldAutoplay) {
@@ -138,7 +146,6 @@ export function usePlaybackAudioElement({
     const handlePlay = () => {
       setIsPlaying(true)
       transitionStatus({ type: 'playing' })
-      startProgressSync()
     }
 
     const handlePlaying = () => {
@@ -184,22 +191,32 @@ export function usePlaybackAudioElement({
 
     const handleSeeking = () => {
       clearStalledTimer()
-      if (!isUserSeekingRef.current) {
+      if (!isUserSeekingRef.current && pendingSeekSecondsRef.current == null) {
         transitionStatus({ type: 'seeking' })
       }
     }
 
-    const handleSeeked = () => {
+    const handleSeeked = async () => {
       clearStalledTimer()
       pendingSeekSecondsRef.current = null
       updateProgressFromAudio()
+      if (pendingAutoplayRef.current) {
+        pendingAutoplayRef.current = false
+        try {
+          await audio.play()
+        } catch {
+          await recoverFromPlaybackFailure()
+        }
+        return
+      }
+
       if (!audio.paused) {
         transitionStatus({ type: 'playing' })
         startProgressSync()
         return
       }
 
-      transitionStatus({ type: 'seeked', paused: true })
+      transitionStatus({ type: 'ready' })
     }
 
     const handlePlaybackFailure = () => {

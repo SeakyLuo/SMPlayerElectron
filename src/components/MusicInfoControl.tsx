@@ -78,7 +78,9 @@ export function MusicInfoControl({
       </CommandBar>
       <div className="song-dialog-body music-info-control-scroll-viewer MusicInfoController">
         {loading || !properties ? (
-          <div className="song-dialog-loading-placeholder" aria-label={t('nowPlaying.loading')} />
+          <div className="song-dialog-loading-placeholder" role="status" aria-label={t('nowPlaying.loading')}>
+            <div className="song-dialog-loading" aria-hidden="true" />
+          </div>
         ) : (
           <div className="song-dialog-property-list music-info-control-properties-grid MusicInfoControlPropertiesGrid">
             <PropertyRow label={t('table.title')} className="TitlePropertyRow" labelClassName="TitleTextBlock">

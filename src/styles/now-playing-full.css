@@ -442,6 +442,11 @@ body.night-mode .app-shell .now-playing-full-page .now-playing-full-player-bar .
   opacity: 1;
 }
 
+.now-playing-full-player-exit .player-artwork-overlay svg {
+  width: 36px;
+  height: 36px;
+}
+
 .now-playing-full-player-exit .album-swatch {
   display: block;
   background: transparent;

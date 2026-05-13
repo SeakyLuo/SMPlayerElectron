@@ -3,7 +3,7 @@
   min-height: 0;
   gap: 0;
   overflow: visible;
-  padding-bottom: 22px;
+  padding: 6px 24px 22px;
 }
 
 .search-result-stack {
@@ -11,12 +11,6 @@
   flex-direction: column;
   gap: 18px;
   padding: 2px 0 22px;
-}
-
-.search-directory-context {
-  color: var(--text-muted);
-  font-size: 14px;
-  font-weight: 650;
 }
 
 .search-result-toolbar {
@@ -68,39 +62,6 @@
   opacity: 0.46;
   cursor: default;
   box-shadow: none;
-}
-
-.search-multi-select-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 36px;
-  padding: 0 14px;
-  border: 1px solid var(--border-control);
-  border-radius: 9px;
-  background: var(--surface-control);
-  color: var(--text-strong);
-  box-shadow: 0 8px 18px rgba(72, 88, 112, 0.08);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 650;
-  cursor: pointer;
-}
-
-.search-multi-select-button:hover,
-.search-multi-select-button.is-active {
-  background: rgba(var(--accent-rgb), 0.1);
-  color: var(--accent-strong);
-}
-
-.search-multi-select-button svg {
-  width: 16px;
-  height: 16px;
-}
-
-.search-appbar-multi-select-button {
-  display: none;
 }
 
 .search-loading-state {
@@ -273,6 +234,49 @@
   color: var(--accent-strong);
 }
 
+.artist-view-holder {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.artist-view-holder:hover,
+.artist-view-holder:focus-visible {
+  background: var(--surface-card-hover);
+  border-color: transparent;
+  box-shadow: var(--card-hover-shadow);
+  color: var(--text-strong);
+}
+
+.artist-view-holder:hover strong,
+.artist-view-holder:hover span,
+.artist-view-holder:focus-visible strong,
+.artist-view-holder:focus-visible span {
+  color: inherit;
+}
+
+.artist-view-holder .search-card-artwork {
+  box-shadow: var(--artwork-shadow);
+  transition:
+    box-shadow 120ms ease,
+    transform 120ms ease;
+}
+
+.artist-view-holder:hover .search-card-artwork,
+.artist-view-holder:focus-visible .search-card-artwork {
+  box-shadow: 0 12px 24px rgba(32, 45, 63, 0.2);
+  transform: translateY(-1px);
+}
+
+.search-artist-hover-play {
+  z-index: 1;
+  color: #fff;
+}
+
+.search-result-section:has(.artist-view-holder) .search-card-row {
+  gap: 2px 12px;
+}
+
 .search-result-card.is-selecting {
   cursor: default;
 }
@@ -315,6 +319,18 @@
   border-radius: 8px;
   object-fit: cover;
   background: var(--surface-artwork);
+}
+
+.search-card-artwork-shell {
+  position: relative;
+  display: block;
+  grid-row: 1 / span 2;
+  width: 64px;
+  height: 64px;
+}
+
+.search-card-artwork-shell .search-card-artwork {
+  grid-row: auto;
 }
 
 .search-card-artwork-fallback {
@@ -389,39 +405,12 @@
 }
 
 .app-shell.nav-minimal .search-page {
-  padding: 6px 0 2px 8px;
+  padding: 6px 8px 2px;
 }
 
 .app-shell.nav-minimal .search-result-stack {
   gap: 16px;
   padding: 0 0 12px;
-}
-
-.app-shell.nav-minimal .search-result-toolbar > .search-multi-select-button {
-  display: none;
-}
-
-.app-shell.nav-minimal .search-appbar-multi-select-button {
-  flex: 0 0 auto;
-  display: inline-flex;
-  min-width: 40px;
-  min-height: 40px;
-  height: 40px;
-  padding: 0 10px;
-  gap: 7px;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--text-strong);
-  box-shadow: none;
-  font-size: 14px;
-  font-weight: 720;
-}
-
-.app-shell.nav-minimal .search-appbar-multi-select-button:hover,
-.app-shell.nav-minimal .search-appbar-multi-select-button.is-active {
-  background: var(--surface-control-hover);
-  color: var(--accent-strong);
 }
 
 .app-shell.nav-minimal .search-result-tabs {
@@ -481,7 +470,6 @@ body.night-mode .app-shell .search-page {
   color: var(--night-text);
 }
 
-body.night-mode .app-shell .search-directory-context,
 body.night-mode .app-shell .search-loading-state,
 body.night-mode .app-shell .search-result-card span {
   color: var(--night-muted);
@@ -494,7 +482,6 @@ body.night-mode .app-shell .search-result-card strong {
 }
 
 body.night-mode .app-shell .search-result-tabs button,
-body.night-mode .app-shell .search-multi-select-button,
 body.night-mode .app-shell .search-section-actions > button,
 body.night-mode .app-shell .search-sort-trigger {
   border-color: var(--night-border);
@@ -504,8 +491,6 @@ body.night-mode .app-shell .search-sort-trigger {
 }
 
 body.night-mode .app-shell .search-result-tabs button:hover:not(:disabled),
-body.night-mode .app-shell .search-multi-select-button:hover,
-body.night-mode .app-shell .search-multi-select-button.is-active,
 body.night-mode .app-shell .search-section-actions > button:hover:not(:disabled),
 body.night-mode .app-shell .search-sort-trigger:hover,
 body.night-mode .app-shell .search-sort-trigger[aria-expanded='true'] {
@@ -586,7 +571,6 @@ body.night-mode .app-shell .search-page .empty-state p {
   color: var(--night-muted);
 }
 
-body.night-mode .app-shell.nav-minimal .search-appbar-multi-select-button,
 body.night-mode .app-shell.nav-minimal .search-result-tabs button {
   border-color: var(--night-border);
   background: rgba(255, 255, 255, 0.055);
@@ -594,8 +578,6 @@ body.night-mode .app-shell.nav-minimal .search-result-tabs button {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055);
 }
 
-body.night-mode .app-shell.nav-minimal .search-appbar-multi-select-button:hover,
-body.night-mode .app-shell.nav-minimal .search-appbar-multi-select-button.is-active,
 body.night-mode .app-shell.nav-minimal .search-result-tabs button:hover:not(:disabled),
 body.night-mode .app-shell.nav-minimal .search-result-tabs button.is-active {
   border-color: rgba(var(--accent-rgb), 0.34);

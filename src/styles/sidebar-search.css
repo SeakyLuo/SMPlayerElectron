@@ -254,7 +254,7 @@ body.night-mode .app-shell .search-history-panel {
   gap: 8px;
   min-height: 30px;
   padding: 0 8px;
-  color: var(--text-subtle);
+  color: color-mix(in srgb, var(--text-muted) 58%, transparent);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0;
@@ -264,14 +264,14 @@ body.night-mode .app-shell .search-history-panel {
 body.night-mode .app-shell .search-history-header,
 body.night-mode .app-shell .search-history-header button,
 body.night-mode .app-shell .search-history-remove {
-  color: var(--night-muted);
+  color: color-mix(in srgb, var(--night-muted) 62%, transparent);
 }
 
 .search-history-header button,
 .search-history-remove {
   border: none;
   background: transparent;
-  color: var(--text-muted);
+  color: color-mix(in srgb, var(--text-muted) 62%, transparent);
   cursor: pointer;
 }
 
@@ -307,6 +307,7 @@ body.night-mode .app-shell .search-history-item:hover {
 .search-history-select {
   display: flex;
   align-items: center;
+  gap: 8px;
   width: 100%;
   min-width: 0;
   height: 38px;
@@ -329,6 +330,14 @@ body.night-mode .app-shell .search-history-select {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.search-history-select small {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 520;
 }
 
 .search-history-remove {

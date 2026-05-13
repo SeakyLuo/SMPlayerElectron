@@ -355,7 +355,6 @@ export function PlaylistsPage({
           artworkUrl={selectedPlaylistSongs.find((song) => song.artworkUrl)?.artworkUrl ?? ''}
           removable
           showAlbum
-          showArtist
           canRename={!selectedPlaylist.isBuiltIn}
           canDelete={!selectedPlaylist.isBuiltIn}
           canClear={selectedPlaylistSongs.length > 0}

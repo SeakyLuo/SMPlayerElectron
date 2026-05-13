@@ -10,16 +10,18 @@ import { CustomScrollbar } from '../components/CustomScrollbar'
 import { Icon } from '../components/icons'
 import { LoadingState } from '../components/LoadingState'
 import { MenuFlyout } from '../components/MenuFlyout'
-import { getAddToPlaylistMenuFlyoutItem, getPreferenceMenuFlyoutItem, type MenuFlyoutItem, type MenuFlyoutPosition } from '../components/MenuFlyoutHelper'
+import { getAddToPlaylistMenuFlyoutItem, getAddToPlaylistMenuFlyoutItems, getPreferenceMenuFlyoutItem, type MenuFlyoutItem, type MenuFlyoutPosition } from '../components/MenuFlyoutHelper'
 import { MultiSelectCommandBar } from '../components/MultiSelectCommandBar'
+import { PageSearchHistoryPanel } from '../components/PageSearchHistoryPanel'
 import { getSongArtists } from '../shared/artists'
-import type { AlbumSortCriterion, AppSettingsUpdate, LibraryPlaylist, LibrarySong, PreferenceItemSnapshot, PreferenceSettingsSnapshot } from '../shared/contracts'
+import type { AlbumSortCriterion, AppSettingsUpdate, LibraryPlaylist, LibrarySong, PreferenceItemSnapshot, PreferenceSettingsSnapshot, SearchHistoryEntry } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
 import { getQuickJumpTooltip } from '../shared/quickJumpTooltip'
 import { compareLocalText, getLocalTextQuickJumpBucket, LOCAL_TEXT_QUICK_JUMP_KEYS } from '../shared/textCompare'
 import { useLibraryStore } from '../state/useLibraryStore'
 import { usePreferenceStore } from '../state/usePreferenceStore'
 import { useCustomScrollbar } from '../hooks/useCustomScrollbar'
+import { useSongsAddedUndo } from '../hooks/useSongsAddedUndo'
 
 const ALBUM_TILE_TRACK_WIDTH = 180
 const ALBUM_COLUMN_GAP = 30
@@ -52,7 +54,10 @@ interface AlbumsPageProps {
   onCreatePlaylistWithSongs: (name: string, songIds: number[]) => void
   onUpdateSettings: (update: AppSettingsUpdate) => void
   onRecordAlbumPlayed: (album: string) => void
+  recentSearches: SearchHistoryEntry[]
   onRecordSearch?: (query: string) => void
+  onRemoveRecentSearch: (entryId: number) => void
+  onRemoveRecentSearches: (entryIds: number[]) => void
   routeBase?: string
 }
 
@@ -69,7 +74,10 @@ export function AlbumsPage({
   onCreatePlaylistWithSongs,
   onUpdateSettings,
   onRecordAlbumPlayed,
+  recentSearches,
   onRecordSearch,
+  onRemoveRecentSearch,
+  onRemoveRecentSearches,
   routeBase = '',
 }: AlbumsPageProps) {
   const navigate = useNavigate()
@@ -100,6 +108,7 @@ export function AlbumsPage({
     (state) => state.snapshot.settings.hideMultiSelectCommandBarAfterOperation,
   )
   const refreshPreferences = usePreferenceStore((state) => state.refresh)
+  const { addToNowPlayingWithUndo, showAddToPlaylistUndo } = useSongsAddedUndo(songs, t)
 
   const albums = useMemo(() => buildAlbumViews(songs, t), [songs, t])
   const baseVisibleAlbums = useMemo<AlbumView[]>(() => {
@@ -114,7 +123,12 @@ export function AlbumsPage({
   const albumSearchSuggestions = searchDraft.trim()
     ? searchAlbums(albums, searchDraft).slice(0, 8)
     : []
+  const albumSearchHistoryEntries = useMemo(
+    () => recentSearches.filter((entry) => entry.type === 'albums').slice(0, 10),
+    [recentSearches],
+  )
   const showAlbumSearchSuggestions = searchFocused && albumSearchSuggestions.length > 0
+  const showAlbumSearchHistory = searchFocused && !searchDraft.trim() && albumSearchHistoryEntries.length > 0
   const selectedAlbums = useMemo(
     () => visibleAlbums.filter((album) => selectedAlbumNames.has(album.name)),
     [selectedAlbumNames, visibleAlbums],
@@ -419,6 +433,26 @@ export function AlbumsPage({
             ))}
           </div>
         </>
+      ) : showAlbumSearchHistory ? (
+        <>
+          <div className="dropdown-dismiss-layer" onPointerDown={() => setSearchFocused(false)} />
+          <PageSearchHistoryPanel
+            entries={albumSearchHistoryEntries}
+            t={t}
+            onSelect={(query) => {
+              setSearchDraft(query)
+              setSearchQuery(query)
+              onRecordSearch?.(query)
+              setSearchFocused(false)
+              setAppBarSearchOpen(false)
+              scrollAlbumsToTop()
+            }}
+            onRemove={onRemoveRecentSearch}
+            onClear={() => {
+              onRemoveRecentSearches(albumSearchHistoryEntries.map((entry) => entry.id))
+            }}
+          />
+        </>
       ) : null}
     </div>
   )
@@ -632,32 +666,34 @@ export function AlbumsPage({
           onClose={() => {
             setAddToMenu(null)
           }}
-          items={[
-            getAddToPlaylistMenuFlyoutItem({
-              playlists: customPlaylists,
-              songIds: addToMenu.songIds,
-              t,
-              defaultPlaylistName: addToMenu.defaultPlaylistName,
-              includeNowPlaying: true,
-              includeFavorites: addToMenu.songIds.some((songId) => !favoriteSongIdSet.has(songId)),
-              onAddToNowPlaying: () => {
-                onAddSongsToNowPlaying(addToMenu.songIds)
-                hideSelectionAfterOperation()
-              },
-              onToggleFavorite: () => {
-                addSongsToFavorites(addToMenu.songIds.filter((songId) => !favoriteSongIdSet.has(songId)))
-                hideSelectionAfterOperation()
-              },
-              onCreatePlaylist: (name) => {
-                onCreatePlaylistWithSongs(name, addToMenu.songIds)
-                hideSelectionAfterOperation()
-              },
-              onAddToPlaylist: (playlistId) => {
-                onAddSongsToPlaylist(playlistId, addToMenu.songIds)
-                hideSelectionAfterOperation()
-              },
-            }),
-          ].filter((item) => item != null)}
+          items={getAddToPlaylistMenuFlyoutItems({
+            playlists: customPlaylists,
+            songIds: addToMenu.songIds,
+            t,
+            defaultPlaylistName: addToMenu.defaultPlaylistName,
+            includeNowPlaying: true,
+            includeFavorites: addToMenu.songIds.some((songId) => !favoriteSongIdSet.has(songId)),
+            onAddToNowPlaying: () => {
+              addToNowPlayingWithUndo(addToMenu.songIds)
+              hideSelectionAfterOperation()
+            },
+            onToggleFavorite: () => {
+              const nextFavoriteSongIds = addToMenu.songIds.filter((songId) => !favoriteSongIdSet.has(songId))
+              addSongsToFavorites(nextFavoriteSongIds)
+              showAddToPlaylistUndo(favoritePlaylistId, nextFavoriteSongIds, t('common.myFavorites'))
+              hideSelectionAfterOperation()
+            },
+            onCreatePlaylist: (name) => {
+              onCreatePlaylistWithSongs(name, addToMenu.songIds)
+              hideSelectionAfterOperation()
+            },
+            onAddToPlaylist: (playlistId) => {
+              const targetPlaylist = playlists.find((playlist) => playlist.id === playlistId)!
+              onAddSongsToPlaylist(playlistId, addToMenu.songIds)
+              showAddToPlaylistUndo(playlistId, addToMenu.songIds, targetPlaylist.name)
+              hideSelectionAfterOperation()
+            },
+          })}
         />
       ) : null}
 
@@ -820,12 +856,7 @@ function getAlbumArtists(songs: LibrarySong[], t: Translator) {
 
 function getAlbumArtistLabel(songs: LibrarySong[], t: Translator) {
   const artists = getAlbumArtists(songs, t)
-
-  if (artists.length >= 3) {
-    return t('albums.artistsAndMore', { first: artists[0], second: artists[1], count: artists.length })
-  }
-
-  return artists.join(t('albums.artistSeparator'))
+  return artists[0] ?? t('common.artistUnknown')
 }
 
 function searchAlbums(albums: AlbumView[], query: string): AlbumView[] {

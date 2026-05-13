@@ -157,9 +157,10 @@ export function formatRecentDateTime(value: string, preferredLanguage: Preferred
   if (Number.isNaN(date.getTime())) {
     return ''
   }
+  const now = new Date()
 
   return date.toLocaleString(resolveDateLocale(preferredLanguage), {
-    year: 'numeric',
+    ...(date.getFullYear() === now.getFullYear() ? {} : { year: 'numeric' as const }),
     month: 'numeric',
     day: 'numeric',
     hour: '2-digit',

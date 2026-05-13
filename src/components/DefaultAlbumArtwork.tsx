@@ -1,4 +1,5 @@
-export const DEFAULT_ALBUM_ARTWORK_URL = '/app-icon.png'
+export { DEFAULT_ALBUM_ARTWORK_URL } from '../shared/staticAssets'
+import { DEFAULT_ALBUM_ARTWORK_URL } from '../shared/staticAssets'
 
 interface DefaultAlbumArtworkProps {
   className: string

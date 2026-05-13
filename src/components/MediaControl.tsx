@@ -243,7 +243,7 @@ export function MediaControlButtons({
       <div className="player-center">
         <div className="transport-row">
           <button
-            className="transport-button"
+            className="transport-button skip"
             type="button"
             aria-label={t('player.previous')}
             title={t('player.previous')}
@@ -263,7 +263,7 @@ export function MediaControlButtons({
             {isLoading ? <span className="player-loading-spinner" aria-hidden="true" /> : <Icon name={isPlaying ? 'pause' : 'play'} />}
           </button>
           <button
-            className="transport-button"
+            className="transport-button skip"
             type="button"
             aria-label={t('player.next')}
             title={t('player.next')}
@@ -1027,14 +1027,12 @@ function getPlayerMoreMenuItems({
       t,
       onUpdated: onPreferenceChanged,
     }),
-    ...(isCompact
-      ? [{
-        key: 'view',
-        text: t('context.view'),
-        icon: 'view',
-        submenu: viewItems,
-      } satisfies MenuFlyoutItem]
-      : viewItems),
+    {
+      key: 'view',
+      text: t('context.view'),
+      icon: 'view',
+      submenu: viewItems,
+    },
     {
       key: isWindowFullScreen ? 'exit-full-screen' : 'full-screen',
       text: isWindowFullScreen ? t('nowPlaying.exitFullScreenItem') : t('nowPlaying.fullScreen'),

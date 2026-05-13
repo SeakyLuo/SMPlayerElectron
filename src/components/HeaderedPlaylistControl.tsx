@@ -4,16 +4,18 @@ import { extractArtworkColorRgb, getDefaultArtworkColorRgb } from '../shared/art
 import type { LibraryPlaylist, LibrarySong, PlaylistSortCriterion, PreferenceEntityType, PreferenceItemSnapshot, PreferenceLevel, PreferenceSettingsSnapshot } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
 import { removeQueueRange } from '../shared/queueUndo'
+import { COLORFUL_BACKGROUND_URL } from '../shared/staticAssets'
 import { useLibraryStore } from '../state/useLibraryStore'
 import { usePreferenceStore } from '../state/usePreferenceStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
+import { useDeleteSongFromDisk } from '../hooks/useDeleteSongFromDisk'
 import { AppBarPortal } from './AppBarPortal'
 import { ArtworkImage } from './ArtworkImage'
 import { CommandBar, CommandBarButton } from './CommandBar'
 import { DefaultAlbumArtwork } from './DefaultAlbumArtwork'
 import { requestConfirmDialog, requestTextDialog } from './dialogService'
 import { MenuFlyout } from './MenuFlyout'
-import { getAddToPlaylistMenuFlyoutItem, getMusicMenuFlyoutItems, getPreferenceMenuFlyoutItem, type MenuFlyoutItem, type MenuFlyoutPosition } from './MenuFlyoutHelper'
+import { getAddToPlaylistMenuFlyoutItems, getMusicMenuFlyoutItems, getPreferenceMenuFlyoutItem, type MenuFlyoutItem, type MenuFlyoutPosition } from './MenuFlyoutHelper'
 import { MultiSelectCommandBar } from './MultiSelectCommandBar'
 import { PlaylistControlItem } from './PlaylistControlItem'
 import { MusicDialog } from './MusicDialog'
@@ -37,7 +39,6 @@ interface HeaderedPlaylistControlProps {
   artworkUrl: string
   removable?: boolean
   showAlbum?: boolean
-  showArtist?: boolean
   canRename?: boolean
   canDelete?: boolean
   canClear?: boolean
@@ -130,7 +131,7 @@ function HeaderedPlaylistCover({
         ))}
         {artworkUrls.length === 3 ? (
           <span className="headered-playlist-cover-mosaic-fallback">
-            <img src="/colorful_bg_wide.png" alt="" />
+            <img src={COLORFUL_BACKGROUND_URL} alt="" />
           </span>
         ) : null}
       </span>
@@ -164,7 +165,6 @@ export function HeaderedPlaylistControl({
   artworkUrl,
   removable = false,
   showAlbum = false,
-  showArtist = true,
   canRename = false,
   canDelete = false,
   canClear = false,
@@ -212,7 +212,7 @@ export function HeaderedPlaylistControl({
     (state) => state.snapshot.settings.hideMultiSelectCommandBarAfterOperation,
   )
   const hideSong = useLibraryStore((state) => state.hideSong)
-  const deleteSongFromDisk = useLibraryStore((state) => state.deleteSongFromDisk)
+  const deleteSongFromDisk = useDeleteSongFromDisk(translateCaption)
   const createPlaylist = useLibraryStore((state) => state.createPlaylist)
   const resumeHiddenStorageItemByPath = useLibraryStore((state) => state.resumeHiddenStorageItemByPath)
   const folders = useLibraryStore((state) => state.snapshot.folders)
@@ -702,7 +702,7 @@ export function HeaderedPlaylistControl({
       <section className={`PlaylistControl headered-playlist-list${showAlbum ? ' has-album' : ''}`}>
         <div className="headered-playlist-list-header">
           <span aria-hidden="true" />
-          <span>{showArtist ? captionFor('songArtist') : captionFor('name')}</span>
+          <span>{captionFor('songArtist')}</span>
           <span aria-hidden="true" />
           {showAlbum ? <span>{captionFor('album')}</span> : null}
           <span>{captionFor('duration')}</span>
@@ -727,7 +727,6 @@ export function HeaderedPlaylistControl({
               queueSongIds={queueSongIds}
               draggable={false}
               showAlbum={showAlbum}
-              showArtist={showArtist}
               onToggleSelection={() => {
                 toggleSongSelection(song.id)
               }}
@@ -800,57 +799,65 @@ export function HeaderedPlaylistControl({
           onClose={() => {
             setAddToMenu(null)
           }}
-          items={[
-            getAddToPlaylistMenuFlyoutItem({
-              playlists,
-              songIds: addToMenu.songIds,
-              t: translateCaption,
-              defaultPlaylistName,
-              currentPlaylistName,
-              excludePlaylistName: currentSavedPlaylist?.name ?? '',
-              includeNowPlaying: currentPlaylistName !== translateCaption('common.nowPlaying'),
-              includeFavorites: currentPlaylistName !== translateCaption('common.myFavorites'),
-              onAddToNowPlaying: () => {
-                const insertedIndex = nowPlayingSongIds.length
-                void replaceNowPlaying([...nowPlayingSongIds, ...addToMenu.songIds])
-                showUndo(
-                  addToMenu.songIds.length === 1
-                    ? translateCaption('notification.songAddedTo', {
-                        title: songs.find((song) => song.id === addToMenu.songIds[0])!.title,
-                        target: translateCaption('common.nowPlaying'),
-                      })
-                    : translateCaption('notification.songsAddedTo', { count: addToMenu.songIds.length, target: translateCaption('common.nowPlaying') }),
-                  () => replaceNowPlaying(removeQueueRange(useLibraryStore.getState().snapshot.nowPlaying.songIds, insertedIndex, addToMenu.songIds.length)),
-                )
-                hideSelectionAfterOperation()
-              },
-              onToggleFavorite: () => {
-                void addSongsToPlaylist(favoritePlaylistId, addToMenu.songIds)
-                showUndo(
-                  addToMenu.songIds.length === 1
-                    ? translateCaption('notification.songAddedTo', {
-                        title: songs.find((song) => song.id === addToMenu.songIds[0])!.title,
-                        target: translateCaption('common.myFavorites'),
-                      })
-                    : translateCaption('notification.songsAddedTo', { count: addToMenu.songIds.length, target: translateCaption('common.myFavorites') }),
-                  () => removeSongsFromPlaylist(favoritePlaylistId, addToMenu.songIds),
-                )
-                hideSelectionAfterOperation()
-              },
-              onCreatePlaylist: (name) => {
-                void createPlaylist(name, addToMenu.songIds)
-                hideSelectionAfterOperation()
-              },
-              onAddToPlaylist: (playlistId) => {
-                if (addToMenu.songIds.length === 1) {
-                  onAddSongToPlaylist(playlistId, addToMenu.songIds[0]!)
-                } else {
-                  onAddSongsToPlaylist?.(playlistId, addToMenu.songIds)
-                }
-                hideSelectionAfterOperation()
-              },
-            }),
-          ].filter((item): item is NonNullable<typeof item> => item != null)}
+          items={getAddToPlaylistMenuFlyoutItems({
+            playlists,
+            songIds: addToMenu.songIds,
+            t: translateCaption,
+            defaultPlaylistName,
+            currentPlaylistName,
+            excludePlaylistName: currentSavedPlaylist?.name ?? '',
+            includeNowPlaying: currentPlaylistName !== translateCaption('common.nowPlaying'),
+            includeFavorites: currentPlaylistName !== translateCaption('common.myFavorites'),
+            onAddToNowPlaying: () => {
+              const insertedIndex = nowPlayingSongIds.length
+              void replaceNowPlaying([...nowPlayingSongIds, ...addToMenu.songIds])
+              showUndo(
+                addToMenu.songIds.length === 1
+                  ? translateCaption('notification.songAddedTo', {
+                      title: songs.find((song) => song.id === addToMenu.songIds[0])!.title,
+                      target: translateCaption('common.nowPlaying'),
+                    })
+                  : translateCaption('notification.songsAddedTo', { count: addToMenu.songIds.length, target: translateCaption('common.nowPlaying') }),
+                () => replaceNowPlaying(removeQueueRange(useLibraryStore.getState().snapshot.nowPlaying.songIds, insertedIndex, addToMenu.songIds.length)),
+              )
+              hideSelectionAfterOperation()
+            },
+            onToggleFavorite: () => {
+              void addSongsToPlaylist(favoritePlaylistId, addToMenu.songIds)
+              showUndo(
+                addToMenu.songIds.length === 1
+                  ? translateCaption('notification.songAddedTo', {
+                      title: songs.find((song) => song.id === addToMenu.songIds[0])!.title,
+                      target: translateCaption('common.myFavorites'),
+                    })
+                  : translateCaption('notification.songsAddedTo', { count: addToMenu.songIds.length, target: translateCaption('common.myFavorites') }),
+                () => removeSongsFromPlaylist(favoritePlaylistId, addToMenu.songIds),
+              )
+              hideSelectionAfterOperation()
+            },
+            onCreatePlaylist: (name) => {
+              void createPlaylist(name, addToMenu.songIds)
+              hideSelectionAfterOperation()
+            },
+            onAddToPlaylist: (playlistId) => {
+              const targetPlaylist = playlists.find((playlist) => playlist.id === playlistId)!
+              if (addToMenu.songIds.length === 1) {
+                onAddSongToPlaylist(playlistId, addToMenu.songIds[0]!)
+              } else {
+                onAddSongsToPlaylist?.(playlistId, addToMenu.songIds)
+              }
+              showUndo(
+                addToMenu.songIds.length === 1
+                  ? translateCaption('notification.songAddedTo', {
+                      title: songs.find((song) => song.id === addToMenu.songIds[0])!.title,
+                      target: targetPlaylist.name,
+                    })
+                  : translateCaption('notification.songsAddedTo', { count: addToMenu.songIds.length, target: targetPlaylist.name }),
+                () => removeSongsFromPlaylist(playlistId, addToMenu.songIds),
+              )
+              hideSelectionAfterOperation()
+            },
+          })}
         />
       ) : null}
 
@@ -889,16 +896,15 @@ export function HeaderedPlaylistControl({
           onClose={() => {
             setPreferenceMenu(null)
           }}
-          items={[
-            getPreferenceMenuFlyoutItem({
+          items={getPreferenceMenuFlyoutItem({
               type: preferenceType!,
               itemId: preferenceItemId!,
               name: preferenceDisplayName,
               preferenceItem: headerPreferenceItem,
               t,
               onUpdated: refreshHeaderPreferenceItem,
-            }),
-          ]}
+              onSetPreference: onSetPreferred,
+            }).submenu ?? []}
         />
       ) : null}
       {songMenu ? (
@@ -919,10 +925,7 @@ export function HeaderedPlaylistControl({
             folders,
             currentPlaylistName,
             excludePlaylistName: currentSavedPlaylist?.name ?? '',
-            queueSongIds,
-            playbackSongIds: nowPlayingSongIds,
             currentTrackId: selectedTrackId,
-            songIndex: songMenu.songIndex,
             isPlaying,
             t: translateCaption,
             onPlay: () => {
@@ -1012,7 +1015,7 @@ export function HeaderedPlaylistControl({
                 confirmText: translateCaption('playlists.delete'),
               }).then((confirmed) => {
                 if (confirmed) {
-                  void deleteSongFromDisk(songMenu.song.id)
+                  void deleteSongFromDisk(songMenu.song)
                 }
               })
             },

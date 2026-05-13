@@ -26,9 +26,21 @@ export function registerMediaProtocolSchemes() {
 }
 
 export function registerMediaProtocols(getLibraryService: () => DataService) {
-  protocol.registerFileProtocol('smplayer-media', (request, callback) => {
+  protocol.handle('smplayer-media', async (request) => {
     const songId = getProtocolSongId(request.url)
-    callback({ path: getLibraryService().songService.getSongPath(songId) })
+    const fileUrl = getLibraryService().songService.getSongFileUrl(songId)
+    const response = await net.fetch(fileUrl, {
+      headers: request.headers,
+      bypassCustomProtocolHandlers: true,
+    })
+    const headers = new Headers(response.headers)
+    headers.set('access-control-allow-origin', '*')
+
+    return new Response(response.body, {
+      headers,
+      status: response.status,
+      statusText: response.statusText,
+    })
   })
 
   protocol.handle('smplayer-artwork', async (request) => {

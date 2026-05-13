@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react'
+
 import { AlbumArtControl } from './AlbumArtControl'
 import { Icon } from './icons'
 import type { MenuFlyoutPosition } from './MenuFlyoutHelper'
@@ -15,28 +17,32 @@ export function AlbumTile({
   multiSelect,
   selected,
   t,
+  subtitle,
   onOpenAlbum,
   onPlayAlbum,
   onAddAlbum,
   onToggleSelection,
   onOpenContextMenu,
+  timelineDate,
 }: {
   album: AlbumTileData
   multiSelect: boolean
   selected: boolean
   t: Translator
+  subtitle?: ReactNode
   onOpenAlbum: () => void
   onPlayAlbum: () => void
   onAddAlbum: (position: MenuFlyoutPosition) => void
   onToggleSelection: () => void
   onOpenContextMenu: (position: MenuFlyoutPosition) => void
+  timelineDate?: string
 }) {
   const content = (
     <>
       <AlbumArtControl title={album.name} artworkUrl={album.artworkUrl} songId={album.songIds[0]} />
       <div className="album-tile-copy">
         <strong title={album.name}>{album.name}</strong>
-        <span title={album.artist}>{album.artist}</span>
+        <span title={typeof subtitle === 'string' ? subtitle : album.artist}>{subtitle ?? album.artist}</span>
       </div>
     </>
   )
@@ -48,6 +54,7 @@ export function AlbumTile({
         multiSelect ? 'is-selection-mode' : '',
         selected ? 'is-selected' : '',
       ].filter(Boolean).join(' ')}
+      data-recent-timeline-date={timelineDate}
       onContextMenu={(event) => {
         event.preventDefault()
         onOpenContextMenu({ x: event.clientX, y: event.clientY })

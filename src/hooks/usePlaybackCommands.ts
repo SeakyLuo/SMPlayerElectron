@@ -7,7 +7,9 @@ import {
   playNext as buildPlayNextQueue,
   setMusicAndPlayFromPlaylist,
 } from '../shared/mediaHelper'
+import { createTranslator } from '../shared/i18n'
 import { useLibraryStore } from '../state/useLibraryStore'
+import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
 
 interface PlaybackCommandRuntime {
   playTrack: (trackId: number, queueSongIds?: number[], queueIndex?: number) => Promise<void>
@@ -26,9 +28,14 @@ export interface PlaybackCommands {
   playOrAddNext: (songId: number) => Promise<void>
 }
 
+function sameSongIds(left: number[], right: number[]) {
+  return left.length === right.length && left.every((songId, index) => songId === right[index])
+}
+
 export function usePlaybackCommands(runtime: PlaybackCommandRuntime): PlaybackCommands {
   const nowPlayingSongIds = useLibraryStore((state) => state.snapshot.nowPlaying.songIds)
   const replaceNowPlaying = useLibraryStore((state) => state.replaceNowPlaying)
+  const showUndoableNotification = useUndoableNotificationStore((state) => state.show)
   const { currentQueueIndex, currentTrackId, mode, playTrack: playRuntimeTrack } = runtime
 
   return useMemo(() => {
@@ -52,6 +59,7 @@ export function usePlaybackCommands(runtime: PlaybackCommandRuntime): PlaybackCo
     }
 
     const playNext = async (songId: number, queueIndex = -1) => {
+      const previousSongIds = nowPlayingSongIds
       const nextSongIds = buildPlayNextQueue(
         nowPlayingSongIds,
         songId,
@@ -59,7 +67,18 @@ export function usePlaybackCommands(runtime: PlaybackCommandRuntime): PlaybackCo
         queueIndex,
         currentQueueIndex ?? -1,
       )
+      if (sameSongIds(previousSongIds, nextSongIds)) {
+        return
+      }
+
       await replaceNowPlaying(nextSongIds)
+
+      const snapshot = useLibraryStore.getState().snapshot
+      const t = createTranslator(snapshot.settings.preferredLanguage)
+      const song = snapshot.songs.find((item) => item.id === songId)!
+      showUndoableNotification(t('notification.playNext', { title: song.title }), t('common.undo'), () =>
+        replaceNowPlaying(previousSongIds),
+      )
     }
 
     const addNextAndPlay = async (songId: number) => {
@@ -123,5 +142,6 @@ export function usePlaybackCommands(runtime: PlaybackCommandRuntime): PlaybackCo
     mode,
     playRuntimeTrack,
     replaceNowPlaying,
+    showUndoableNotification,
   ])
 }

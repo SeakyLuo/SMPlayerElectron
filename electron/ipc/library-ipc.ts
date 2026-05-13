@@ -1,7 +1,7 @@
 import { copyFile, mkdir } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 
-import { app, dialog, ipcMain, shell, type BrowserWindow, type OpenDialogOptions, type SaveDialogOptions } from 'electron'
+import { app, dialog, ipcMain, session, shell, type BrowserWindow, type OpenDialogOptions, type SaveDialogOptions } from 'electron'
 
 import type {
   HiddenStorageItem,
@@ -78,25 +78,33 @@ export function registerLibraryIpc(options: LibraryIpcOptions) {
   ipcMain.handle('library:pick-album-artwork-source', async () =>
     pickArtworkSource(options, false),
   )
-  ipcMain.handle('library:save-album-artwork', (_event, albumName: string, sourcePath: string) =>
-    getArtworkService().saveAlbumArtwork(albumName, sourcePath),
-  )
-  ipcMain.handle('library:delete-album-artwork', (_event, albumName: string) =>
-    getArtworkService().deleteAlbumArtwork(albumName),
-  )
+  ipcMain.handle('library:save-album-artwork', async (_event, albumName: string, sourcePath: string) => {
+    await getArtworkService().saveAlbumArtwork(albumName, sourcePath)
+    await session.defaultSession.clearCache()
+  })
+  ipcMain.handle('library:delete-album-artwork', async (_event, albumName: string) => {
+    await getArtworkService().deleteAlbumArtwork(albumName)
+    await session.defaultSession.clearCache()
+  })
   ipcMain.handle('library:pick-song-artwork-source', async () =>
     pickArtworkSource(options, true),
   )
-  ipcMain.handle('library:save-song-artwork', (_event, songId: number, sourcePath: string) =>
-    getArtworkService().saveSongArtwork(songId, sourcePath),
-  )
-  ipcMain.handle('library:delete-song-artwork', (_event, songId: number) =>
-    getArtworkService().deleteSongArtwork(songId),
-  )
+  ipcMain.handle('library:save-song-artwork', async (_event, songId: number, sourcePath: string) => {
+    await getArtworkService().saveSongArtwork(songId, sourcePath)
+    await session.defaultSession.clearCache()
+  })
+  ipcMain.handle('library:delete-song-artwork', async (_event, songId: number) => {
+    await getArtworkService().deleteSongArtwork(songId)
+    await session.defaultSession.clearCache()
+  })
   ipcMain.handle('library:delete-song-from-disk', async (_event, songId: number) => {
-    const songPath = getSongService().getSongPath(songId)
-    await options.trashPathIfExists(songPath)
-    getLocalItemService().deleteSong(songId)
+    return getLibraryService().pendingSongDeleteService.begin(songId)
+  })
+  ipcMain.handle('library:undo-delete-song-from-disk', async (_event, deleteId: string) => {
+    await getLibraryService().pendingSongDeleteService.undo(deleteId)
+  })
+  ipcMain.handle('library:commit-delete-song-from-disk', async (_event, deleteId: string) => {
+    await getLibraryService().pendingSongDeleteService.commit(deleteId)
   })
   ipcMain.handle('library:hide-song', (_event, songId: number) => {
     getLocalItemService().hideSong(songId)
@@ -122,16 +130,7 @@ export function registerLibraryIpc(options: LibraryIpcOptions) {
   })
   ipcMain.handle('library:delete-local-items', async (_event, songIds: number[], folderPaths: string[]) => {
     const songPaths = getSongService().getSongPaths(songIds)
-    const standaloneSongPaths = songPaths.filter((songPath) => !folderPaths.some((folderPath) =>
-        songPath.startsWith(`${folderPath}\\`) || songPath.startsWith(`${folderPath}/`),
-      ))
-    for (const songPath of standaloneSongPaths) {
-      await options.trashPathIfExists(songPath)
-    }
-    for (const folderPath of folderPaths) {
-      await options.trashPathIfExists(folderPath)
-    }
-    getLocalItemService().deleteLocalItems(songIds, folderPaths, songPaths)
+    return getLibraryService().pendingSongDeleteService.beginLocalItems(songIds, songPaths, folderPaths)
   })
   ipcMain.handle('library:update-local-folder-sort', (_event, folderPath: string, sortCriterion: LocalFolderSortCriterion) =>
     getLocalItemService().updateLocalFolderSort(folderPath, sortCriterion),

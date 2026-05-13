@@ -7,6 +7,7 @@ import { ACTIVE_STATE, AUDIO_EXTENSIONS } from './constants.ts'
 import { pruneThumbnailCache } from './artwork-cache.ts'
 import { readAudioMetadataBatch, type ScannedSong } from './audio-metadata-reader.ts'
 import type { SettingsRow } from './settings-service.ts'
+import { syncAlbums } from './album-sync.ts'
 
 const METADATA_SCAN_CONCURRENCY = 6
 export const SCAN_CANCELED_ERROR_MESSAGE = 'Scan canceled'
@@ -135,6 +136,7 @@ export class ScanService {
 
       const folderIds = this.upsertScannedFolders(rootPath, folders)
       this.upsertScannedSongs(scannedSongs, folderIds)
+      syncAlbums(this.db)
       this.cleanupSideEffects(settings)
 
       this.db.exec('COMMIT')
@@ -256,6 +258,7 @@ export class ScanService {
 
       const folderIds = this.upsertScannedFolders(rootPath, folders)
       this.upsertScannedSongs(scannedSongs, folderIds)
+      syncAlbums(this.db)
       this.cleanupSideEffects(settings)
       this.db.exec('COMMIT')
     } catch (error) {
@@ -327,14 +330,14 @@ export class ScanService {
       ) as { Id: number }
 
       this.markSongArtistsInactiveStatement.run(ACTIVE_STATE.inactive, musicRow.Id)
-      song.artists.forEach((artist, index) => {
+      if (song.artist) {
         this.upsertSongArtistStatement.run(
           musicRow.Id,
-          artist,
-          index,
+          song.artist,
+          0,
           ACTIVE_STATE.active,
         )
-      })
+      }
 
       this.upsertFileStatement.get(
         song.path,

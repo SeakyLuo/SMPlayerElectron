@@ -100,6 +100,7 @@ function MenuFlyoutSubmenu({
 }) {
   const triggerRef = useRef<HTMLSpanElement | null>(null)
   const panelRef = useRef<HTMLDivElement | null>(null)
+  const [active, setActive] = useState(false)
   const [layout, setLayout] = useState({
     left: -10000,
     top: 8,
@@ -139,31 +140,39 @@ function MenuFlyoutSubmenu({
   }
 
   useLayoutEffect(() => {
-    updateLayout()
-  }, [submenuLength, menuBoundaryHeight])
+    if (active) {
+      updateLayout()
+    }
+  }, [active, submenuLength, menuBoundaryHeight])
 
   return (
     <div
       className="library-context-submenu"
-      onFocus={updateLayout}
-      onPointerEnter={updateLayout}
+      onFocus={() => {
+        setActive(true)
+      }}
+      onPointerEnter={() => {
+        setActive(true)
+      }}
     >
       <span ref={triggerRef}>
         {item.icon ? <Icon name={item.icon} /> : <span />}
         <span>{item.text}</span>
         <Icon name="chevronRight" />
       </span>
-      <div
-        ref={panelRef}
-        className={`library-context-submenu-panel${layout.scrollable ? ' is-scrollable' : ''}`}
-        style={{
-          '--submenu-left': `${layout.left}px`,
-          '--submenu-top': `${layout.top}px`,
-          '--submenu-max-height': `${layout.maxHeight}px`,
-        } as CSSProperties}
-      >
-        {item.submenu!.map((subitem) => renderMenuItem(subitem, menuBoundaryHeight, onClose))}
-      </div>
+      {active ? (
+        <div
+          ref={panelRef}
+          className={`library-context-submenu-panel${layout.scrollable ? ' is-scrollable' : ''}`}
+          style={{
+            '--submenu-left': `${layout.left}px`,
+            '--submenu-top': `${layout.top}px`,
+            '--submenu-max-height': `${layout.maxHeight}px`,
+          } as CSSProperties}
+        >
+          {item.submenu!.map((subitem) => renderMenuItem(subitem, menuBoundaryHeight, onClose))}
+        </div>
+      ) : null}
     </div>
   )
 }

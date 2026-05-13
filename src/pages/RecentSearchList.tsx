@@ -1,10 +1,10 @@
 import clsx from 'clsx'
 import { useEffect, useRef, useState } from 'react'
 
-import { Icon } from '../components/icons'
+import { Icon, type IconName } from '../components/icons'
 import { LoadingState } from '../components/LoadingState'
 import { useRecentScrollbar } from '../hooks/useRecentScrollbar'
-import type { PreferredLanguage, SearchHistoryEntry } from '../shared/contracts'
+import type { PreferredLanguage, SearchHistoryEntry, SearchHistoryType } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
 import { formatRecentDateTime } from './recentPageModel'
 
@@ -29,7 +29,7 @@ export function RecentSearchList({
   t: Translator
   preferredLanguage: PreferredLanguage
   loading: boolean
-  onSearch: (query: string) => void
+  onSearch: (entry: SearchHistoryEntry) => void
   onToggleSelection: (entryId: number) => void
   onRemove: (entryId: number) => void
 }) {
@@ -90,46 +90,55 @@ export function RecentSearchList({
         }}
       >
         {topSpacerHeight > 0 ? <div className="recent-search-spacer" style={{ height: topSpacerHeight }} /> : null}
-        {renderedEntries.map((entry) => (
-          <div
-            className={clsx('recent-search-row', {
-              'is-selected': selectedEntryIds.has(entry.id),
-            })}
-            key={entry.id}
-          >
-            <button
-              type="button"
-              className="recent-search-row-main"
-              onClick={() => {
-                if (multiSelect) {
-                  onToggleSelection(entry.id)
-                } else {
-                  onSearch(entry.query)
-                }
-              }}
+        {renderedEntries.map((entry) => {
+          const searchTypeIcon = getSearchTypeIcon(entry.type)
+
+          return (
+            <div
+              className={clsx('recent-search-row', {
+                'is-selected': selectedEntryIds.has(entry.id),
+              })}
+              key={entry.id}
             >
-              {multiSelect ? (
-                <span className="playlist-control-item-selection-mark">
-                  {selectedEntryIds.has(entry.id) ? <Icon name="check" /> : null}
-                </span>
-              ) : null}
-              <span>{entry.query}</span>
-              <RecentSearchTime value={entry.searchedAt} preferredLanguage={preferredLanguage} />
-            </button>
-            {!multiSelect ? (
               <button
                 type="button"
-                className="recent-search-remove"
-                aria-label={t('sidebar.removeRecentSearch', { query: entry.query })}
+                className="recent-search-row-main"
                 onClick={() => {
-                  onRemove(entry.id)
+                  if (multiSelect) {
+                    onToggleSelection(entry.id)
+                  } else {
+                    onSearch(entry)
+                  }
                 }}
               >
-                <Icon name="close" />
+                {multiSelect ? (
+                  <span className="playlist-control-item-selection-mark">
+                    {selectedEntryIds.has(entry.id) ? <Icon name="check" /> : null}
+                  </span>
+                ) : null}
+                <span className="recent-search-type-icon">
+                  <Icon name={searchTypeIcon} />
+                </span>
+                <span className="recent-search-query">{entry.query}</span>
+                <span className="recent-search-meta">
+                  <RecentSearchTime value={entry.searchedAt} preferredLanguage={preferredLanguage} />
+                </span>
               </button>
-            ) : null}
-          </div>
-        ))}
+              {!multiSelect ? (
+                <button
+                  type="button"
+                  className="recent-search-remove"
+                  aria-label={t('sidebar.removeRecentSearch', { query: entry.query })}
+                  onClick={() => {
+                    onRemove(entry.id)
+                  }}
+                >
+                  <Icon name="close" />
+                </button>
+              ) : null}
+            </div>
+          )
+        })}
         {bottomSpacerHeight > 0 ? <div className="recent-search-spacer" style={{ height: bottomSpacerHeight }} /> : null}
       </div>
       <div className="recent-scrollbar" ref={listScrollbarTrackRef} aria-hidden="true">
@@ -142,4 +151,17 @@ export function RecentSearchList({
 function RecentSearchTime({ value, preferredLanguage }: { value: string; preferredLanguage: PreferredLanguage }) {
   const label = formatRecentDateTime(value, preferredLanguage)
   return label ? <small>{label}</small> : null
+}
+
+function getSearchTypeIcon(type: SearchHistoryEntry['type']): IconName {
+  const icons: Record<SearchHistoryType, IconName> = {
+    sidebar: 'search',
+    artists: 'users',
+    albums: 'albums',
+    songs: 'songs',
+    playlists: 'playlists',
+    folders: 'folder',
+  }
+
+  return icons[type]
 }

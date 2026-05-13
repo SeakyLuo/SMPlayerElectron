@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 
 import type {
@@ -33,6 +32,7 @@ import {
   toSettingsSnapshot,
   type SettingsService,
 } from './settings-service.ts'
+import { normalizeTagText } from './tag-text.ts'
 
 const RECENT_PLAYED_LIMIT = 1000
 const RECENT_RECORD_TYPE = {
@@ -112,6 +112,7 @@ export class MusicQueryService {
       INNER JOIN Music
         ON Music.Id = MusicArtist.MusicId
        AND Music.State = ?
+       AND MusicArtist.Name = TRIM(Music.Artist)
       WHERE MusicArtist.State = ?
       ORDER BY MusicArtist.Priority, MusicArtist.Id
     `)
@@ -154,7 +155,7 @@ export class MusicQueryService {
            AND Music.State = ?
           WHERE MusicArtist.State = ?
         ) AS artists,
-        (SELECT COUNT(DISTINCT NULLIF(Album, '')) FROM Music WHERE State = ?) AS albums,
+        (SELECT COUNT(*) FROM Album WHERE State = ?) AS albums,
         (SELECT COUNT(*) FROM Folder WHERE State = ?) AS folders
     `)
     this.getActiveSongPathRowsStatement = this.db.prepare(`
@@ -325,17 +326,22 @@ export class MusicQueryService {
     song: StoredLibrarySong,
     artistsBySongId: Map<number, string[]>,
   ): LibrarySong {
-    const artists = normalizeArtists(artistsBySongId.get(song.id) ?? [song.artist])
+    const title = normalizeTagText(song.title)
+    const artist = normalizeTagText(song.artist)
+    const album = normalizeTagText(song.album)
+    const artists = normalizeArtists(
+      (artistsBySongId.get(song.id) ?? [artist]).map(normalizeTagText),
+    )
 
     return {
       id: song.id,
       path: song.path,
       mediaUrl: this.getSongMediaUrl(song.id),
-      artworkUrl: this.getSongArtworkUrl(song.id, song.thumbnailPath),
-      title: song.title,
-      artist: song.artist,
+      artworkUrl: this.getSongArtworkUrl(song.id),
+      title,
+      artist,
       artists,
-      album: song.album,
+      album,
       duration: song.duration,
       playCount: song.playCount,
       dateAdded: this.normalizeStoredDate(song.dateAdded),
@@ -347,13 +353,8 @@ export class MusicQueryService {
     return `smplayer-media://song/${songId}`
   }
 
-  private getSongArtworkUrl(songId: number, cacheKey = '') {
-    if (!cacheKey) {
-      return `smplayer-artwork://song/${songId}`
-    }
-
-    const revision = createHash('sha1').update(cacheKey).digest('hex').slice(0, 12)
-    return `smplayer-artwork://song/${songId}?v=${revision}`
+  private getSongArtworkUrl(songId: number) {
+    return `smplayer-artwork://song/${songId}`
   }
 
   private normalizeStoredDate(value: unknown) {

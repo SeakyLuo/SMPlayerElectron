@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto'
 import { readFile, stat } from 'node:fs/promises'
 import { extname } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
@@ -40,7 +39,7 @@ export class ArtworkService {
 
     return {
       songId,
-      artworkUrl: result.fileUrl ? this.getSongArtworkUrl(songId, result.cacheKey) : '',
+      artworkUrl: result.fileUrl ? this.getSongArtworkUrl(songId) : '',
       source: result.source,
     }
   }
@@ -67,7 +66,7 @@ export class ArtworkService {
       const result = await this.resolveSongArtworkFile(rowsBySongId.get(songId)!)
       return {
         songId,
-        artworkUrl: result.fileUrl ? this.getSongArtworkUrl(songId, result.cacheKey) : '',
+        artworkUrl: result.fileUrl ? this.getSongArtworkUrl(songId) : '',
         source: result.source,
       }
     })
@@ -78,6 +77,12 @@ export class ArtworkService {
       UPDATE Music
       SET ThumbnailPath = ?
       WHERE Album = ?
+        AND State = ?
+    `).run(thumbnailPath, albumName, ACTIVE_STATE.active)
+    this.db.prepare(`
+      UPDATE Album
+      SET ArtworkPath = ?
+      WHERE Name = ?
         AND State = ?
     `).run(thumbnailPath, albumName, ACTIVE_STATE.active)
   }
@@ -110,6 +115,12 @@ export class ArtworkService {
       WHERE Album = ?
         AND State = ?
     `).run(thumbnailPath, albumName, ACTIVE_STATE.active)
+    this.db.prepare(`
+      UPDATE Album
+      SET ArtworkPath = ?
+      WHERE Name = ?
+        AND State = ?
+    `).run(thumbnailPath, albumName, ACTIVE_STATE.active)
   }
 
   async deleteAlbumArtwork(albumName: string) {
@@ -128,6 +139,12 @@ export class ArtworkService {
       UPDATE Music
       SET ThumbnailPath = ''
       WHERE Album = ?
+        AND State = ?
+    `).run(albumName, ACTIVE_STATE.active)
+    this.db.prepare(`
+      UPDATE Album
+      SET ArtworkPath = ''
+      WHERE Name = ?
         AND State = ?
     `).run(albumName, ACTIVE_STATE.active)
   }
@@ -288,13 +305,8 @@ export class ArtworkService {
     }
   }
 
-  private getSongArtworkUrl(songId: number, cacheKey = '') {
-    if (!cacheKey) {
-      return `smplayer-artwork://song/${songId}`
-    }
-
-    const revision = createHash('sha1').update(cacheKey).digest('hex').slice(0, 12)
-    return `smplayer-artwork://song/${songId}?v=${revision}`
+  private getSongArtworkUrl(songId: number) {
+    return `smplayer-artwork://song/${songId}`
   }
 }
 

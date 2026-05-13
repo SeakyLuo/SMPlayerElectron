@@ -124,6 +124,12 @@ const paths = {
     <circle key="c2" cx="12" cy="18" r="1" fill="currentColor" stroke="none" />,
     <circle key="c3" cx="16" cy="18" r="1" fill="currentColor" stroke="none" />,
   ],
+  grid: [
+    <rect key="topLeft" x="5.25" y="5.25" width="5.35" height="5.35" rx="0.95" />,
+    <rect key="topRight" x="13.4" y="5.25" width="5.35" height="5.35" rx="0.95" />,
+    <rect key="bottomLeft" x="5.25" y="13.4" width="5.35" height="5.35" rx="0.95" />,
+    <rect key="bottomRight" x="13.4" y="13.4" width="5.35" height="5.35" rx="0.95" />,
+  ],
   folder: [
     <path key="body" d="M3.5 7.5a2 2 0 0 1 2-2h4.2l2 2H19a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2H5.5a2 2 0 0 1-2-2z" />,
     <path key="top" d="M3.5 10h17" />,
@@ -217,8 +223,8 @@ const paths = {
   ],
   play: [<path key="play" d="M8 5v14l11-7z" fill="currentColor" stroke="none" />],
   pause: [
-    <path key="left" d="M8 5v14" />,
-    <path key="right" d="M16 5v14" />,
+    <rect key="left" x="7.5" y="5" width="3.5" height="14" rx="1" fill="currentColor" stroke="none" />,
+    <rect key="right" x="13" y="5" width="3.5" height="14" rx="1" fill="currentColor" stroke="none" />,
   ],
   playNext: [
     <path key="line" d="M6 5.5h12" />,
@@ -435,6 +441,8 @@ export function Icon({ name, className, ...props }: IconProps & { name: IconName
   const FluentIcon = fluentIcons[name]
   const strokeWidth = name === 'albums' || name === 'playlists' || name === 'playNext'
     ? 1.35
+    : name === 'grid'
+      ? 1.45
     : name === 'dice'
       ? 1.55
     : name.startsWith('volume')

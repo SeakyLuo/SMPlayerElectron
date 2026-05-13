@@ -222,7 +222,7 @@ export function MusicDialog({
       })
 
     void window.smplayer?.getSongArtworkSnapshot(song.id).then((snapshot) => {
-      if (!canceled && snapshot.artworkUrl) {
+      if (!canceled) {
         setArtworkUrl(snapshot.artworkUrl)
       }
     })

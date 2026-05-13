@@ -4,6 +4,7 @@ interface UndoableNotification {
   id: number
   message: string
   actions: UndoableNotificationAction[]
+  onDismiss?: () => void | Promise<void>
 }
 
 interface UndoableNotificationAction {
@@ -13,8 +14,8 @@ interface UndoableNotificationAction {
 
 interface UndoableNotificationStoreState {
   notification: UndoableNotification | null
-  show: (message: string, buttonText: string, action: () => void | Promise<void>, duration?: number) => void
-  showButtons: (message: string, actions: UndoableNotificationAction[], duration?: number) => void
+  show: (message: string, buttonText: string, action: () => void | Promise<void>, duration?: number, onDismiss?: () => void | Promise<void>) => void
+  showButtons: (message: string, actions: UndoableNotificationAction[], duration?: number, onDismiss?: () => void | Promise<void>) => void
   showMessage: (message: string, duration?: number) => void
   dismiss: () => void
   run: (actionIndex?: number) => Promise<void>
@@ -30,29 +31,40 @@ function clearDismissTimer() {
   }
 }
 
+function runDismiss(notification: UndoableNotification | null) {
+  if (notification?.onDismiss) {
+    void notification.onDismiss()
+  }
+}
+
 export const useUndoableNotificationStore = create<UndoableNotificationStoreState>((set, get) => ({
   notification: null,
-  show: (message, buttonText, action, duration = 5000) => {
-    get().showButtons(message, [{ text: buttonText, action }], duration)
+  show: (message, buttonText, action, duration = 5000, onDismiss) => {
+    get().showButtons(message, [{ text: buttonText, action }], duration, onDismiss)
   },
-  showButtons: (message, actions, duration = 5000) => {
+  showButtons: (message, actions, duration = 5000, onDismiss) => {
     clearDismissTimer()
+    runDismiss(get().notification)
     const id = nextNotificationId++
     set({
       notification: {
         id,
         message,
         actions,
+        onDismiss,
       },
     })
     dismissTimer = window.setTimeout(() => {
-      if (get().notification?.id === id) {
+      const current = get().notification
+      if (current?.id === id) {
         set({ notification: null })
+        runDismiss(current)
       }
     }, duration)
   },
   showMessage: (message, duration = 2000) => {
     clearDismissTimer()
+    runDismiss(get().notification)
     const id = nextNotificationId++
     set({
       notification: {
@@ -69,6 +81,7 @@ export const useUndoableNotificationStore = create<UndoableNotificationStoreStat
   },
   dismiss: () => {
     clearDismissTimer()
+    runDismiss(get().notification)
     set({ notification: null })
   },
   run: async (actionIndex = 0) => {

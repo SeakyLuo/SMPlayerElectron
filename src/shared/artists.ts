@@ -34,7 +34,7 @@ export function getDisplayArtists(song: Pick<LibrarySong, 'artist' | 'artists'>,
 
 function splitArtistValue(value: string | null | undefined) {
   return (value ?? '')
-    .split(/\s*(?:;|；|、|\|)\s*/u)
+    .split(/\s*(?:;|\uFF1B|\u3001|\|)\s*/u)
     .map((artist) => artist.trim())
     .filter(Boolean)
 }

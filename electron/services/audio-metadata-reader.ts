@@ -8,6 +8,7 @@ import {
   writeArtworkCache,
   writeShellThumbnailCache,
 } from './artwork-cache.ts'
+import { normalizeArtistTagValues, normalizeTagText } from './tag-text.ts'
 
 export interface ScannedSong {
   path: string
@@ -42,18 +43,17 @@ export async function readAudioMetadata(
     })
     const embeddedThumbnailPath = await writeArtworkCache(thumbnailCachePath, filePath, metadata.common.picture?.[0])
     const thumbnailPath = embeddedThumbnailPath || await writeShellThumbnailCache(thumbnailCachePath, filePath)
-    const artists = normalizeArtists([
-      ...(metadata.common.artists ?? []),
-      metadata.common.artist,
-    ])
+    const artists = normalizeArtists(normalizeArtistTagValues(metadata.common.artists ?? [], metadata.common.artist))
+    const title = normalizeTagText(metadata.common.title)
+    const album = normalizeTagText(metadata.common.album)
 
     return {
       path: filePath,
       thumbnailPath,
-      title: useFilenameNotMusicName ? filename : metadata.common.title?.trim() || filename,
+      title: useFilenameNotMusicName ? filename : title || filename,
       artist: artists.join(', '),
       artists,
-      album: metadata.common.album?.trim() || '',
+      album,
       duration: resolveDurationSeconds(metadata.format, fileStats.size),
       dateAdded,
     }

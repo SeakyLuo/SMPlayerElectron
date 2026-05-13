@@ -35,6 +35,8 @@ export function MusicAlbumArtControl({
       saving={saving}
       showBusy={showBusy}
       artworkUrl={artworkUrl}
+      songId={song.id}
+      fallbackArtwork
       showDeleteConfirm={showDeleteConfirm}
       onChangeArtwork={onChangeArtwork}
       onSaveArtwork={onSaveArtwork}
@@ -52,6 +54,7 @@ export function AlbumArtEditorControl({
   showBusy,
   artworkUrl,
   songId,
+  fallbackArtwork = false,
   showDeleteConfirm,
   onChangeArtwork,
   onSaveArtwork,
@@ -65,6 +68,7 @@ export function AlbumArtEditorControl({
   showBusy: boolean
   artworkUrl: string
   songId?: number
+  fallbackArtwork?: boolean
   showDeleteConfirm: boolean
   onChangeArtwork: () => void
   onSaveArtwork: () => void
@@ -87,7 +91,7 @@ export function AlbumArtEditorControl({
           songId={songId}
           className="AlbumArt"
           fallbackClassName="NoAlbumArtTextBlock"
-          fallbackArtwork={false}
+          fallbackArtwork={fallbackArtwork}
           fallbackText={t('song.noAlbumArt')}
         />
         {showDeleteConfirm ? (

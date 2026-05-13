@@ -320,7 +320,6 @@
 
 .app-shell.nav-minimal .workspace-header .appbar-icon-button,
 .app-shell.nav-minimal .workspace-header .appbar-quick-jump-button,
-.app-shell.nav-minimal .workspace-header .search-appbar-multi-select-button,
 .app-shell.nav-minimal .workspace-header .appbar-commandbar .uwp-commandbar-button,
 .app-shell.nav-minimal .workspace-header .appbar-commandbar .albums-sort-trigger {
   border-color: transparent;
@@ -334,9 +333,6 @@
 .app-shell.nav-minimal .workspace-header .appbar-quick-jump-button:hover,
 .app-shell.nav-minimal .workspace-header .appbar-quick-jump-button:focus-visible,
 .app-shell.nav-minimal .workspace-header .appbar-quick-jump-button.is-open,
-.app-shell.nav-minimal .workspace-header .search-appbar-multi-select-button:hover,
-.app-shell.nav-minimal .workspace-header .search-appbar-multi-select-button:focus-visible,
-.app-shell.nav-minimal .workspace-header .search-appbar-multi-select-button.is-active,
 .app-shell.nav-minimal .workspace-header .appbar-commandbar .uwp-commandbar-button:hover,
 .app-shell.nav-minimal .workspace-header .appbar-commandbar .uwp-commandbar-button:focus-visible,
 .app-shell.nav-minimal .workspace-header .appbar-commandbar .uwp-commandbar-button[aria-expanded='true'],
@@ -356,7 +352,6 @@
 
 body.night-mode .app-shell.nav-minimal .workspace-header .appbar-icon-button,
 body.night-mode .app-shell.nav-minimal .workspace-header .appbar-quick-jump-button,
-body.night-mode .app-shell.nav-minimal .workspace-header .search-appbar-multi-select-button,
 body.night-mode .app-shell.nav-minimal .workspace-header .appbar-commandbar .uwp-commandbar-button,
 body.night-mode .app-shell.nav-minimal .workspace-header .appbar-commandbar .albums-sort-trigger {
   border-color: transparent;
@@ -370,9 +365,6 @@ body.night-mode .app-shell.nav-minimal .workspace-header .appbar-icon-button:foc
 body.night-mode .app-shell.nav-minimal .workspace-header .appbar-quick-jump-button:hover,
 body.night-mode .app-shell.nav-minimal .workspace-header .appbar-quick-jump-button:focus-visible,
 body.night-mode .app-shell.nav-minimal .workspace-header .appbar-quick-jump-button.is-open,
-body.night-mode .app-shell.nav-minimal .workspace-header .search-appbar-multi-select-button:hover,
-body.night-mode .app-shell.nav-minimal .workspace-header .search-appbar-multi-select-button:focus-visible,
-body.night-mode .app-shell.nav-minimal .workspace-header .search-appbar-multi-select-button.is-active,
 body.night-mode .app-shell.nav-minimal .workspace-header .appbar-commandbar .uwp-commandbar-button:hover,
 body.night-mode .app-shell.nav-minimal .workspace-header .appbar-commandbar .uwp-commandbar-button:focus-visible,
 body.night-mode .app-shell.nav-minimal .workspace-header .appbar-commandbar .uwp-commandbar-button[aria-expanded='true'],
