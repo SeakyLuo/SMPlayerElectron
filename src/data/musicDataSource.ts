@@ -79,7 +79,7 @@ function createRemoteSettings(musicLibrarySort: MusicLibrarySortCriterion) {
     showLyricsInNotification: false,
     notificationLyricsSource: 'local' as const,
     playerLyricsSource: 'auto' as const,
-    saveLyricsImmediately: false,
+    saveLyricsImmediately: true,
     preserveInternetLyricsTimestamps: true,
     preferredLanguage: 'system' as const,
     musicLibrarySort,

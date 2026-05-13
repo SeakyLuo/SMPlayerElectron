@@ -180,7 +180,8 @@
 }
 
 .library-context-menu button:hover,
-.library-context-submenu:hover > span {
+.library-context-submenu:hover > span,
+.library-context-submenu:has(.library-context-submenu-panel.is-active) > span {
   background: rgba(var(--accent-rgb), 0.1);
   color: var(--accent-strong);
 }
@@ -241,7 +242,8 @@
 }
 
 .library-context-submenu:hover > .library-context-submenu-panel,
-.library-context-submenu:focus-within > .library-context-submenu-panel {
+.library-context-submenu:focus-within > .library-context-submenu-panel,
+.library-context-submenu-panel.is-active {
   opacity: 1;
   pointer-events: auto;
   visibility: visible;
@@ -325,7 +327,8 @@ body.night-mode .app-shell .library-context-submenu > span {
 }
 
 body.night-mode .app-shell .library-context-menu button:hover,
-body.night-mode .app-shell .library-context-submenu:hover > span {
+body.night-mode .app-shell .library-context-submenu:hover > span,
+body.night-mode .app-shell .library-context-submenu:has(.library-context-submenu-panel.is-active) > span {
   background: rgba(var(--accent-rgb), 0.18);
   color: #fff;
 }
@@ -396,7 +399,8 @@ body.night-mode .library-context-volume-slider-wrap {
 }
 
 body.night-mode .library-context-menu button:hover,
-body.night-mode .library-context-submenu:hover > span {
+body.night-mode .library-context-submenu:hover > span,
+body.night-mode .library-context-submenu:has(.library-context-submenu-panel.is-active) > span {
   background: rgba(var(--accent-rgb), 0.18);
   color: #fff;
 }

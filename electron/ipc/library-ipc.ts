@@ -142,10 +142,6 @@ export function registerLibraryIpc(options: LibraryIpcOptions) {
   ipcMain.handle('library:rename-local-folder', (_event, folderPath: string, name: string) =>
     getLocalItemService().renameLocalFolder(folderPath, name),
   )
-  ipcMain.handle('library:delete-local-folder', async (_event, folderPath: string) => {
-    await options.trashPathIfExists(folderPath)
-    getLocalItemService().deleteLocalFolder(folderPath)
-  })
   ipcMain.handle('library:hide-local-folder', (_event, folderPath: string) => {
     getHiddenItemService().hideFolder(folderPath)
   })

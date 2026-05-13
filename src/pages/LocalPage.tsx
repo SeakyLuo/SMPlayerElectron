@@ -31,6 +31,7 @@ import {
   sortSongs,
   type FolderNode,
 } from './localFolderModel'
+import { buildLocalMoveToFolderMenuItems } from './localMoveToFolderMenu'
 import { FolderUpdateResultDialog } from './FolderUpdateResultDialog'
 import { LocalGridContent } from './LocalGridContent'
 import { LocalTableContent } from './LocalTableContent'
@@ -250,10 +251,7 @@ export function LocalPage({
     () => buildFolderIndex(songs, folders, rootPath),
     [folders, songs, rootPath],
   )
-  const nodesByAbsolutePath = useMemo(
-    () => new Map([...nodes.values()].map((folder) => [folder.path, folder])),
-    [nodes],
-  )
+  const nodesByAbsolutePath = useMemo(() => new Map([...nodes.values()].map((folder) => [folder.path, folder])), [nodes])
   const currentNode = nodes.get(currentRelativePath) ?? null
   const currentSortMode = currentNode ? localSortModeFromCriterion(currentNode.criterion) : 'title'
   const effectiveViewMode: 'grid' | 'list' = 'grid'
@@ -617,20 +615,6 @@ export function LocalPage({
   }
 
   const selectedFolderAbsolutePaths = effectiveSelectedFolderPaths.map((folderPath) => nodes.get(folderPath)!.path)
-  const selectedMoveTargetFolders = [...nodes.values()].filter((folder) => {
-    const songAlreadyInTarget = effectiveSelectedSongIds.some((songId) =>
-      getSongFolderRelativePath(songsById.get(songId)!.path, rootPath) === folder.relativePath,
-    )
-    if (songAlreadyInTarget) {
-      return false
-    }
-
-    return effectiveSelectedFolderPaths.every((selectedFolderPath) =>
-      folder.relativePath !== selectedFolderPath &&
-      folder.relativePath !== getParentPath(selectedFolderPath) &&
-      !folder.relativePath.startsWith(`${selectedFolderPath}/`),
-    )
-  })
 
   const moveLocalItemsWithUndo = async (songIds: number[], folderPaths: string[], targetFolderPath: string) => {
     const songOriginalFolders = songIds.map((songId) => ({
@@ -669,61 +653,26 @@ export function LocalPage({
   }
 
   const getFolderMoveToMenuItem = (sourceFolder: FolderNode) => {
-    const sourceParentPath = getParentPath(sourceFolder.relativePath)
-    const targetFolders = [...nodes.values()].filter((folder) => {
-      if (folder.relativePath === sourceFolder.relativePath || folder.relativePath === sourceParentPath) {
-        return false
-      }
-      return !folder.relativePath.startsWith(`${sourceFolder.relativePath}/`)
+    const submenu = buildLocalMoveToFolderMenuItems({
+      nodes,
+      songsById,
+      songIds: [],
+      folderPaths: [sourceFolder.path],
+      t,
+      onMoveToFolder: (targetFolder) => {
+        void moveLocalItemsWithUndo([], [sourceFolder.path], targetFolder.path)
+      },
     })
 
-    if (targetFolders.length === 0) {
+    if (submenu.length === 0) {
       return null
     }
-
-    const childrenByParentPath = new Map<string, FolderNode[]>()
-    for (const folder of targetFolders) {
-      const parentPath = folder.relativePath ? getParentPath(folder.relativePath) : ''
-      childrenByParentPath.set(parentPath, [...(childrenByParentPath.get(parentPath) ?? []), folder])
-    }
-
-    const toItem = (folder: FolderNode): MenuFlyoutItem => {
-      const children = (childrenByParentPath.get(folder.relativePath) ?? [])
-        .filter((child) => child.relativePath !== folder.relativePath)
-        .slice()
-        .sort((left, right) => left.name.localeCompare(right.name))
-
-      return {
-        key: `move-folder-${folder.relativePath || 'root'}`,
-        text: folder.relativePath ? folder.name : t('local.libraryRoot'),
-        icon: 'folder',
-        onClick: children.length === 0
-          ? () => { void moveLocalItemsWithUndo([], [sourceFolder.path], folder.path) }
-          : undefined,
-        submenu: children.length > 0
-          ? [
-              {
-                key: `move-folder-${folder.relativePath || 'root'}-self`,
-                text: folder.relativePath ? folder.name : t('local.libraryRoot'),
-                icon: 'folder',
-                onClick: () => { void moveLocalItemsWithUndo([], [sourceFolder.path], folder.path) },
-              },
-              { key: `move-folder-${folder.relativePath || 'root'}-separator`, text: '', separator: true },
-              ...children.map(toItem),
-            ]
-          : undefined,
-      }
-    }
-
-    const roots = targetFolders
-      .filter((folder) => !folder.relativePath || !targetFolders.some((item) => item.relativePath === getParentPath(folder.relativePath)))
-      .sort((left, right) => left.name.localeCompare(right.name))
 
     return {
       key: 'move-folder-to-folder',
       text: t('context.moveToFolder'),
       icon: 'folder',
-      submenu: roots.map(toItem),
+      submenu,
     } satisfies MenuFlyoutItem
   }
 
@@ -852,6 +801,17 @@ export function LocalPage({
     await moveLocalItemsWithUndo(effectiveSelectedSongIds, selectedFolderAbsolutePaths, folderPath)
     HideMultiSelectAfterOperation()
   }
+
+  const selectedMoveToFolderMenuItems = buildLocalMoveToFolderMenuItems({
+    nodes,
+    songsById,
+    songIds: effectiveSelectedSongIds,
+    folderPaths: selectedFolderAbsolutePaths,
+    t,
+    onMoveToFolder: (targetFolder) => {
+      void moveSelectedItemsToFolder(targetFolder.path)
+    },
+  })
 
   const deleteSelectedItems = async () => {
     const selectedCount = effectiveSelectedSongIds.length + selectedFolderAbsolutePaths.length
@@ -1131,7 +1091,7 @@ export function LocalPage({
             disabled={scanning}
           />
           <CommandBarButton icon="sort" label={t('common.sort')} onClick={showSortMenu} />
-          <CommandBarButton icon="folder" label={t('local.newFolder')} onClick={createFolder} />
+          <CommandBarButton icon="plus" label={t('local.newFolder')} onClick={createFolder} />
           <CommandBarButton icon="multiSelect" label={t('albums.multiSelect')} active={multiSelect} onClick={enableMultiSelect} />
           {multiSelect ? (
             <CommandBarButton
@@ -1186,7 +1146,7 @@ export function LocalPage({
             key: 'move-to-folder',
             text: t('context.moveToFolder'),
             icon: 'folder',
-            disabled: selectedLocalItemCount === 0 || selectedMoveTargetFolders.length === 0,
+            disabled: selectedLocalItemCount === 0 || selectedMoveToFolderMenuItems.length === 0,
             onClick: (event) => {
               const rect = event.currentTarget.getBoundingClientRect()
               openSelectionMoveMenu(rect.left, rect.top - 8, event.currentTarget)
@@ -1480,14 +1440,7 @@ export function LocalPage({
           onClose={() => {
             setSelectionMoveMenu(null)
           }}
-          items={selectedMoveTargetFolders.map((folder) => ({
-            key: `move-selection-${folder.relativePath}`,
-            text: folder.relativePath || t('local.libraryRoot'),
-            icon: 'folder',
-            onClick: () => {
-              void moveSelectedItemsToFolder(folder.relativePath)
-            },
-          }))}
+          items={selectedMoveToFolderMenuItems}
         />
       ) : null}
       {toolbarMenu ? (

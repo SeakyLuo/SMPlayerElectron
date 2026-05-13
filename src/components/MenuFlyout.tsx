@@ -20,6 +20,7 @@ export function MenuFlyout({
 }) {
   const menuRef = useRef<HTMLDivElement | null>(null)
   const animationFrameRef = useRef(0)
+  const [activeSubmenuKey, setActiveSubmenuKey] = useState<string | null>(null)
   const [resolvedPosition, setResolvedPosition] = useState({ left: position.x, top: position.y })
   const [menuBoundaryHeight, setMenuBoundaryHeight] = useState(window.innerHeight)
 
@@ -140,7 +141,7 @@ export function MenuFlyout({
           event.stopPropagation()
         }}
       >
-        {items.map((item) => renderMenuItem(item, menuBoundaryHeight, onClose))}
+        {items.map((item) => renderMenuItem(item, menuBoundaryHeight, activeSubmenuKey, setActiveSubmenuKey, onClose))}
       </div>
     </>,
     document.body,
@@ -150,21 +151,25 @@ export function MenuFlyout({
 function MenuFlyoutSubmenu({
   item,
   menuBoundaryHeight,
+  active,
+  onActivate,
   onClose,
 }: {
   item: MenuFlyoutItem
   menuBoundaryHeight: number
+  active: boolean
+  onActivate: () => void
   onClose: () => void
 }) {
   const triggerRef = useRef<HTMLSpanElement | null>(null)
   const panelRef = useRef<HTMLDivElement | null>(null)
-  const [active, setActive] = useState(false)
   const [layout, setLayout] = useState({
     left: -10000,
     top: 8,
     maxHeight: Math.max(120, menuBoundaryHeight - 16),
     scrollable: false,
   })
+  const [activeSubmenuKey, setActiveSubmenuKey] = useState<string | null>(null)
   const submenu = item.submenu!
   const submenuLength = submenu.length
 
@@ -184,9 +189,9 @@ function MenuFlyoutSubmenu({
     const availableHeight = Math.max(120, boundaryBottom - margin * 2)
     const panelHeight = Math.min(fullPanelHeight, availableHeight)
 
-    let left = triggerRect.right - 2
+    let left = triggerRect.right + 8
     if (left + panelWidth > window.innerWidth - margin) {
-      left = triggerRect.left - panelWidth + 2
+      left = triggerRect.left - panelWidth - 8
     }
     left = Math.max(margin, Math.min(left, window.innerWidth - panelWidth - margin))
 
@@ -216,6 +221,7 @@ function MenuFlyoutSubmenu({
 
   useEffect(() => {
     if (!active) {
+      setActiveSubmenuKey(null)
       return
     }
 
@@ -231,10 +237,10 @@ function MenuFlyoutSubmenu({
     <div
       className="library-context-submenu"
       onFocus={() => {
-        setActive(true)
+        onActivate()
       }}
       onPointerEnter={() => {
-        setActive(true)
+        onActivate()
       }}
     >
       <span ref={triggerRef}>
@@ -245,27 +251,33 @@ function MenuFlyoutSubmenu({
       {active ? (
         <div
           ref={panelRef}
-          className={`library-context-submenu-panel${layout.scrollable ? ' is-scrollable' : ''}`}
+          className={`library-context-submenu-panel is-active${layout.scrollable ? ' is-scrollable' : ''}`}
           style={{
             '--submenu-left': `${layout.left}px`,
             '--submenu-top': `${layout.top}px`,
             '--submenu-max-height': `${layout.maxHeight}px`,
           } as CSSProperties}
         >
-          {submenu.map((subitem) => renderMenuItem(subitem, menuBoundaryHeight, onClose))}
+          {submenu.map((subitem) => renderMenuItem(subitem, menuBoundaryHeight, activeSubmenuKey, setActiveSubmenuKey, onClose))}
         </div>
       ) : null}
     </div>
   )
 }
 
-function renderMenuItem(item: MenuFlyoutItem, menuBoundaryHeight: number, onClose: () => void) {
+function renderMenuItem(
+  item: MenuFlyoutItem,
+  menuBoundaryHeight: number,
+  activeSubmenuKey: string | null,
+  setActiveSubmenuKey: (key: string | null) => void,
+  onClose: () => void,
+) {
   if (item.separator) {
     return <div className="library-context-menu-separator" key={item.key} role="separator" />
   }
 
   if (item.kind === 'volume') {
-    return <MenuFlyoutVolumeItem item={item} key={item.key} />
+    return <MenuFlyoutVolumeItem item={item} key={item.key} onPointerEnter={() => setActiveSubmenuKey(null)} />
   }
 
   if (item.submenu) {
@@ -274,12 +286,14 @@ function renderMenuItem(item: MenuFlyoutItem, menuBoundaryHeight: number, onClos
         item={item}
         key={item.key}
         menuBoundaryHeight={menuBoundaryHeight}
+        active={activeSubmenuKey === item.key}
+        onActivate={() => setActiveSubmenuKey(item.key)}
         onClose={onClose}
       />
     )
   }
 
-  return <MenuFlyoutButton item={item} key={item.key} onClose={onClose} />
+  return <MenuFlyoutButton item={item} key={item.key} onPointerEnter={() => setActiveSubmenuKey(null)} onClose={onClose} />
 }
 
 function getMenuFlyoutItemsHeight(items: MenuFlyoutItem[]) {
@@ -294,7 +308,7 @@ function getMenuFlyoutItemsHeight(items: MenuFlyoutItem[]) {
   }, 0)
 }
 
-function MenuFlyoutVolumeItem({ item }: { item: MenuFlyoutItem }) {
+function MenuFlyoutVolumeItem({ item, onPointerEnter }: { item: MenuFlyoutItem; onPointerEnter: () => void }) {
   const volumeValue = item.volumeValue ?? 0
   const volumeTitle = item.text
   const [tooltipActive, setTooltipActive] = useState(false)
@@ -335,7 +349,7 @@ function MenuFlyoutVolumeItem({ item }: { item: MenuFlyoutItem }) {
   }, [])
 
   return (
-    <div className="library-context-volume-item" role="menuitem" aria-label={volumeTitle}>
+    <div className="library-context-volume-item" role="menuitem" aria-label={volumeTitle} onPointerEnter={onPointerEnter}>
       <button
         type="button"
         className="library-context-volume-button"
@@ -403,7 +417,7 @@ function MenuFlyoutVolumeItem({ item }: { item: MenuFlyoutItem }) {
   )
 }
 
-function MenuFlyoutButton({ item, onClose }: { item: MenuFlyoutItem; onClose: () => void }) {
+function MenuFlyoutButton({ item, onPointerEnter, onClose }: { item: MenuFlyoutItem; onPointerEnter: () => void; onClose: () => void }) {
   const [busy, setBusy] = useState(false)
 
   return (
@@ -413,6 +427,7 @@ function MenuFlyoutButton({ item, onClose }: { item: MenuFlyoutItem; onClose: ()
       aria-checked={item.checked === undefined ? undefined : item.checked}
       className={item.checked ? 'is-checked' : undefined}
       disabled={item.disabled || busy}
+      onPointerEnter={onPointerEnter}
       onClick={async () => {
         const result = item.onClick?.()
         if (result instanceof Promise) {

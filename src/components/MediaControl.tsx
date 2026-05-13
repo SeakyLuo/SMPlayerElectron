@@ -175,6 +175,10 @@ function getNextPlaybackMode(mode: PlaybackMode): PlaybackMode {
   return 'once'
 }
 
+function clampVolume(value: number) {
+  return Math.min(Math.max(value, 0), 100)
+}
+
 function setPlaybackModeFromCurrent({
   mode,
   targetMode,
@@ -323,6 +327,16 @@ export function MediaControlButtons({
     onVolumeChange(Number(value))
   }
 
+  const commitHorizontalVolumePointer = (event: PointerEvent<HTMLInputElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    onVolumeChange(Math.round(clampVolume(((event.clientX - rect.left) / rect.width) * 100)))
+  }
+
+  const commitVerticalVolumePointer = (event: PointerEvent<HTMLInputElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    onVolumeChange(Math.round(clampVolume(((rect.bottom - event.clientY) / rect.height) * 100)))
+  }
+
   const openModeMenu = (button: HTMLButtonElement) => {
     const rect = button.getBoundingClientRect()
     setCompactVolumeOpen(false)
@@ -462,8 +476,15 @@ export function MediaControlButtons({
                   onInput={(event) => {
                     commitVolumeChange(event.currentTarget.value)
                   }}
-                  onPointerDown={() => {
+                  onPointerDown={(event) => {
+                    event.currentTarget.setPointerCapture(event.pointerId)
+                    commitVerticalVolumePointer(event)
                     keepVolumeTooltipVisible()
+                  }}
+                  onPointerMove={(event) => {
+                    if (event.buttons === 1) {
+                      commitVerticalVolumePointer(event)
+                    }
                   }}
                   onPointerEnter={() => {
                     keepVolumeTooltipVisible()
@@ -527,8 +548,15 @@ export function MediaControlButtons({
               onInput={(event) => {
                 commitVolumeChange(event.currentTarget.value)
               }}
-              onPointerDown={() => {
+              onPointerDown={(event) => {
+                event.currentTarget.setPointerCapture(event.pointerId)
+                commitHorizontalVolumePointer(event)
                 keepVolumeTooltipVisible()
+              }}
+              onPointerMove={(event) => {
+                if (event.buttons === 1) {
+                  commitHorizontalVolumePointer(event)
+                }
               }}
               onPointerEnter={() => {
                 keepVolumeTooltipVisible()

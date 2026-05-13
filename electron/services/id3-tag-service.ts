@@ -68,12 +68,7 @@ export class Id3TagService {
     )
     const lyricsFrames = rawLyrics.trim()
       ? [
-          this.createId3Frame(tagVersion, 'USLT', Buffer.concat([
-            Buffer.from([3]),
-            Buffer.from('eng', 'ascii'),
-            Buffer.from([0]),
-            Buffer.from(rawLyrics, 'utf8'),
-          ])),
+          this.createId3Frame(tagVersion, 'USLT', this.createUnsynchronizedLyricsPayload(tagVersion, rawLyrics)),
         ]
       : []
     await this.writeTag(songPath, tagVersion, preservedFrames, lyricsFrames, audioBuffer)
@@ -190,7 +185,37 @@ export class Id3TagService {
       return Buffer.alloc(0)
     }
 
-    return this.createId3Frame(version, id, Buffer.concat([Buffer.from([3]), Buffer.from(value, 'utf8')]))
+    return this.createId3Frame(version, id, this.createEncodedTextPayload(version, value))
+  }
+
+  private createUnsynchronizedLyricsPayload(version: number, rawLyrics: string) {
+    if (version === 4) {
+      return Buffer.concat([
+        Buffer.from([3]),
+        Buffer.from('eng', 'ascii'),
+        Buffer.from([0]),
+        Buffer.from(rawLyrics, 'utf8'),
+      ])
+    }
+
+    return Buffer.concat([
+      Buffer.from([1]),
+      Buffer.from('eng', 'ascii'),
+      Buffer.from([0xff, 0xfe, 0, 0]),
+      Buffer.from([0xff, 0xfe]),
+      Buffer.from(rawLyrics, 'utf16le'),
+    ])
+  }
+
+  private createEncodedTextPayload(version: number, value: string) {
+    if (version === 4) {
+      return Buffer.concat([Buffer.from([3]), Buffer.from(value, 'utf8')])
+    }
+
+    return Buffer.concat([
+      Buffer.from([1, 0xff, 0xfe]),
+      Buffer.from(value, 'utf16le'),
+    ])
   }
 
   private readSynchsafeSize(buffer: Buffer, offset: number) {

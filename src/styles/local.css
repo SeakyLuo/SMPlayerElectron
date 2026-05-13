@@ -1240,15 +1240,12 @@
 
 .move-progress-overlay {
   position: fixed;
-  inset: 0;
-  z-index: 140;
-  display: grid;
-  place-items: center;
-  padding: 28px;
-  background: rgba(12, 18, 28, 0.38);
-  backdrop-filter: blur(18px) saturate(140%);
-  -webkit-backdrop-filter: blur(18px) saturate(140%);
-  pointer-events: auto;
+  left: 50%;
+  bottom: calc(var(--player-height, 96px) + 18px);
+  z-index: 760;
+  width: min(540px, calc(100vw - 40px));
+  transform: translateX(-50%);
+  pointer-events: none;
 }
 
 body.night-mode .app-shell .local-empty-state-artwork {
@@ -1284,37 +1281,38 @@ body.night-mode .app-shell .local-page .grid-artwork-card-cover:has(.grid-artwor
 }
 
 .move-progress-panel {
-  width: min(460px, calc(100vw - 44px));
   border: 1px solid rgba(255, 255, 255, 0.5);
-  border-radius: 14px;
-  padding: 22px 24px;
+  border-radius: 12px;
+  padding: 14px 18px;
   background: rgba(255, 255, 255, 0.94);
   box-shadow:
-    0 24px 64px rgba(16, 24, 36, 0.26),
-    0 2px 10px rgba(16, 24, 36, 0.12);
+    0 18px 44px rgba(40, 50, 64, 0.12),
+    0 2px 8px rgba(40, 50, 64, 0.08);
   color: #1f2937;
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
 }
 
 .move-progress-header {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 18px;
-  font-size: 16px;
+  gap: 14px;
+  font-size: 15px;
   font-weight: 700;
 }
 
 .move-progress-header strong {
   color: var(--accent-strong);
-  font-size: 28px;
+  font-size: 16px;
   font-weight: 760;
   font-variant-numeric: tabular-nums;
 }
 
 .move-progress-bar {
-  height: 8px;
+  height: 4px;
   overflow: hidden;
-  margin: 16px 0 18px;
+  margin: 11px 0 10px;
   border-radius: 999px;
   background: rgba(95, 110, 130, 0.18);
 }
@@ -1328,20 +1326,23 @@ body.night-mode .app-shell .local-page .grid-artwork-card-cover:has(.grid-artwor
 }
 
 .move-progress-current {
-  display: grid;
-  gap: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 .move-progress-current span {
+  flex: 0 0 auto;
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 650;
 }
 
 .move-progress-current strong {
   min-width: 0;
   overflow: hidden;
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 700;
   line-height: 1.35;
   text-overflow: ellipsis;
@@ -1349,12 +1350,15 @@ body.night-mode .app-shell .local-page .grid-artwork-card-cover:has(.grid-artwor
 }
 
 body.night-mode .move-progress-overlay {
-  background: rgba(0, 0, 0, 0.46);
+  background: transparent;
 }
 
 body.night-mode .move-progress-panel {
   border-color: rgba(214, 224, 236, 0.14);
-  background: rgba(27, 33, 42, 0.94);
+  background: rgba(28, 34, 43, 0.92);
+  box-shadow:
+    0 18px 44px rgba(0, 0, 0, 0.34),
+    0 2px 8px rgba(0, 0, 0, 0.22);
   color: var(--night-text);
 }
 

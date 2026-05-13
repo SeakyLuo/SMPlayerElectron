@@ -444,53 +444,64 @@ function getMoveToFolderMenuFlyoutItem({
   onMoveToFolder: (folderPath: string) => void | Promise<void>
 }) {
   const currentFolderPath = getFileParentPath(songPath)
-  const targetFolders = folders.filter((folder) => folder.path !== currentFolderPath)
 
-  if (targetFolders.length === 0) {
+  if (folders.length === 0) {
     return null
   }
 
   const childrenByParentId = new Map<number, LibraryFolder[]>()
-  for (const folder of targetFolders) {
+  for (const folder of folders) {
     childrenByParentId.set(folder.parentId, [...(childrenByParentId.get(folder.parentId) ?? []), folder])
   }
 
-  const toItem = (folder: LibraryFolder): MenuFlyoutItem => {
+  const isTargetFolder = (folder: LibraryFolder) => folder.path !== currentFolderPath
+
+  const toTargetItem = (folder: LibraryFolder): MenuFlyoutItem => ({
+    key: `move-folder-${folder.id}-target`,
+    text: getPathName(folder.path),
+    onClick: () => onMoveToFolder(folder.path),
+  })
+
+  const toItem = (folder: LibraryFolder): MenuFlyoutItem | null => {
     const children = (childrenByParentId.get(folder.id) ?? [])
       .slice()
       .sort((left, right) => getPathName(left.path).localeCompare(getPathName(right.path)))
+      .map(toItem)
+      .filter((item): item is MenuFlyoutItem => item != null)
+
+    if (children.length === 0) {
+      return isTargetFolder(folder) ? toTargetItem(folder) : null
+    }
 
     return {
       key: `move-folder-${folder.id}`,
       text: getPathName(folder.path),
-      icon: 'folder',
-      onClick: children.length === 0
-        ? () => onMoveToFolder(folder.path)
-        : undefined,
-      submenu: children.length > 0
+      submenu: isTargetFolder(folder)
         ? [
-            {
-              key: `move-folder-${folder.id}-self`,
-              text: getPathName(folder.path),
-              icon: 'folder',
-              onClick: () => onMoveToFolder(folder.path),
-            },
+            toTargetItem(folder),
             { key: `move-folder-${folder.id}-separator`, text: '', separator: true },
-            ...children.map(toItem),
+            ...children,
           ]
-        : undefined,
+        : children,
     }
   }
 
-  const roots = targetFolders
-    .filter((folder) => folder.parentId === 0 || !targetFolders.some((item) => item.id === folder.parentId))
+  const submenu = folders
+    .filter((folder) => folder.parentId === 0 || !folders.some((item) => item.id === folder.parentId))
     .sort((left, right) => getPathName(left.path).localeCompare(getPathName(right.path)))
+    .map(toItem)
+    .filter((item): item is MenuFlyoutItem => item != null)
+    .flatMap((item) => item.submenu ?? [item])
+
+  if (submenu.length === 0) {
+    return null
+  }
 
   return {
     key: 'move-to-folder',
     text: t('context.moveToFolder'),
     icon: 'folder',
-    submenu: roots.map(toItem),
+    submenu,
   } satisfies MenuFlyoutItem
 }
 

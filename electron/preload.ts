@@ -101,7 +101,7 @@ const api: SmplayerApi = {
   updateLocalFolderSort: (folderPath, sortCriterion) =>
     ipcRenderer.invoke('library:update-local-folder-sort', folderPath, sortCriterion),
   renameLocalFolder: (folderPath, name) => ipcRenderer.invoke('library:rename-local-folder', folderPath, name),
-  deleteLocalFolder: (folderPath) => ipcRenderer.invoke('library:delete-local-folder', folderPath),
+  deleteLocalFolder: (folderPath) => ipcRenderer.invoke('library:delete-local-items', [], [folderPath]),
   hideLocalFolder: (path) => ipcRenderer.invoke('library:hide-local-folder', path),
   getHiddenStorageItems: () => ipcRenderer.invoke('library:get-hidden-storage-items'),
   resumeHiddenStorageItem: (item) => ipcRenderer.invoke('library:resume-hidden-storage-item', item),

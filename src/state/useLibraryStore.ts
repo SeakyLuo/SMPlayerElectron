@@ -36,6 +36,9 @@ let songsLoadRequest: Promise<void> | null = null
 let foldersLoadRequest: Promise<void> | null = null
 let recentLoadRequest: Promise<void> | null = null
 
+type LibraryDataRequirements = { songs?: boolean; folders?: boolean; recent?: boolean }
+type LibraryRefreshOptions = { silent?: boolean }
+
 interface LibraryStoreState {
   snapshot: MusicData
   loading: boolean
@@ -51,8 +54,8 @@ interface LibraryStoreState {
   loadSongs: () => Promise<void>
   loadFolders: () => Promise<void>
   loadRecent: () => Promise<void>
-  loadRequiredData: (requirements: { songs?: boolean; folders?: boolean; recent?: boolean }) => Promise<void>
-  refresh: (requirements?: { songs?: boolean; folders?: boolean; recent?: boolean }) => Promise<void>
+  loadRequiredData: (requirements: LibraryDataRequirements) => Promise<void>
+  refresh: (requirements?: LibraryDataRequirements, options?: LibraryRefreshOptions) => Promise<void>
   pickLibraryRoot: () => Promise<boolean>
   scanLibrary: () => Promise<ScanLibraryResult | null>
   scanLocalFolder: (folderPath: string) => Promise<ScanLibraryResult | null>
@@ -84,7 +87,7 @@ interface LibraryStoreState {
   deleteLocalItems: (songIds: number[], folderPaths: string[]) => Promise<PendingLocalItemsDelete | null>
   updateLocalFolderSort: (folderPath: string, sortCriterion: LocalFolderSortCriterion) => Promise<void>
   renameLocalFolder: (folderPath: string, name: string) => Promise<void>
-  deleteLocalFolder: (folderPath: string) => Promise<void>
+  deleteLocalFolder: (folderPath: string) => Promise<PendingLocalItemsDelete | null>
   hideLocalFolder: (folderPath: string) => Promise<void>
   resumeHiddenStorageItem: (item: HiddenStorageItem) => Promise<void>
   resumeHiddenStorageItemByPath: (path: string) => Promise<void>
@@ -249,12 +252,19 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
       set({ loading: false })
     }
   },
-  refresh: async (requirements = { songs: true, folders: true, recent: true }) => {
+  refresh: async (
+    requirements: LibraryDataRequirements = { songs: true, folders: true, recent: true },
+    options: LibraryRefreshOptions = {},
+  ) => {
     if (!window.smplayer) {
       return
     }
 
-    set({ loading: true, error: null })
+    if (options.silent) {
+      set({ error: null })
+    } else {
+      set({ loading: true, error: null })
+    }
 
     try {
       const state = get()
@@ -302,7 +312,9 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
     } catch (error) {
       set({ error: getErrorMessage(error) })
     } finally {
-      set({ loading: false })
+      if (!options.silent) {
+        set({ loading: false })
+      }
     }
   },
   pickLibraryRoot: async () => {
@@ -752,7 +764,7 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
 
     try {
       await window.smplayer.moveSongToFolder(songId, folderPath)
-      await get().refresh({ songs: true, folders: true, recent: false })
+      await get().refresh({ songs: true, folders: true, recent: false }, { silent: true })
     } catch (error) {
       set({ error: getErrorMessage(error) })
     }
@@ -766,7 +778,7 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
 
     try {
       await window.smplayer.moveSongsToFolder(songIds, folderPath)
-      await get().refresh({ songs: true, folders: true, recent: false })
+      await get().refresh({ songs: true, folders: true, recent: false }, { silent: true })
     } catch (error) {
       set({ error: getErrorMessage(error) })
     }
@@ -780,7 +792,7 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
 
     try {
       await window.smplayer.moveLocalFolderToFolder(sourceFolderPath, targetFolderPath)
-      await get().refresh({ songs: true, folders: true, recent: false })
+      await get().refresh({ songs: true, folders: true, recent: false }, { silent: true })
     } catch (error) {
       set({ error: getErrorMessage(error) })
     }
@@ -810,7 +822,7 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
         }
       })
       await window.smplayer.moveLocalItemsToFolder(songIds, folderPaths, targetFolderPath, operationId)
-      await get().refresh({ songs: true, folders: true, recent: false })
+      await get().refresh({ songs: true, folders: true, recent: false }, { silent: true })
     } catch (error) {
       set({ error: getErrorMessage(error) })
     } finally {
@@ -823,18 +835,16 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
       return null
     }
 
-    set({ scanning: true, error: null })
+    set({ error: null })
 
     try {
       await window.smplayer.createLocalFolder(rootPath, relativePath, name)
       const result = await window.smplayer.scanLocalFolder(getLocalFolderPath(rootPath, relativePath))
-      await get().refresh({ songs: true, folders: true, recent: false })
+      await get().refresh({ songs: true, folders: true, recent: false }, { silent: true })
       return result
     } catch (error) {
       set({ error: getErrorMessage(error) })
       return null
-    } finally {
-      set({ scanning: false })
     }
   },
   deleteLocalItems: async (songIds, folderPaths) => {
@@ -846,7 +856,7 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
 
     try {
       const pendingDelete = await window.smplayer.deleteLocalItems(songIds, folderPaths)
-      await get().refresh({ songs: true, folders: true, recent: false })
+      await get().refresh({ songs: true, folders: true, recent: false }, { silent: true })
       return pendingDelete
     } catch (error) {
       set({ error: getErrorMessage(error) })
@@ -890,16 +900,18 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
   },
   deleteLocalFolder: async (folderPath) => {
     if (!window.smplayer) {
-      return
+      return null
     }
 
     set({ error: null })
 
     try {
-      await window.smplayer.deleteLocalFolder(folderPath)
-      await get().refresh({ songs: true, folders: true, recent: false })
+      const pendingDelete = await window.smplayer.deleteLocalFolder(folderPath)
+      await get().refresh({ songs: true, folders: true, recent: false }, { silent: true })
+      return pendingDelete
     } catch (error) {
       set({ error: getErrorMessage(error) })
+      return null
     }
   },
   hideLocalFolder: async (folderPath) => {

@@ -666,16 +666,6 @@ export function SettingsPage({
                 onUpdateSettings({ preserveInternetLyricsTimestamps: checked })
               }}
             />
-            <ToggleSettingRow
-              label={t('settings.saveFetchedLyrics')}
-              hint={t(
-                'settings.saveLyricsImmediatelyHint',
-              )}
-              checked={snapshot.settings.saveLyricsImmediately}
-              onChange={(checked) => {
-                onUpdateSettings({ saveLyricsImmediately: checked })
-              }}
-            />
             <div className="lyrics-action-row">
               <SettingsActionButton
                 disabled={lyricsJobActive || snapshot.songs.length === 0}

@@ -30,6 +30,19 @@
   gap: 6px;
 }
 
+.appbar-title-drag-region {
+  min-width: 0;
+  -webkit-app-region: drag;
+  app-region: drag;
+  user-select: none;
+}
+
+.appbar-title-drag-region h1 {
+  -webkit-app-region: drag;
+  app-region: drag;
+  user-select: none;
+}
+
 .appbar-actions {
   display: flex;
   align-items: center;

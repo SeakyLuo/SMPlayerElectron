@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises'
+import { access, readFile, writeFile } from 'node:fs/promises'
 import { extname } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 
@@ -50,7 +50,6 @@ export class LyricsService {
   async getLyrics(songId: number, mode: LyricsRequestMode = 'auto'): Promise<LyricsSnapshot> {
     const song = this.getSongLookup(songId)
 
-    const settings = this.settingsService.getSettings()
     const sidecarLyrics = await this.getSidecarLyrics(song.path)
 
     if (mode === 'embedded') {
@@ -58,40 +57,24 @@ export class LyricsService {
       return this.createLyricsSnapshot(embeddedLyrics, embeddedLyrics ? 'music-file' : 'none')
     }
 
-    if (mode === 'auto' && sidecarLyrics && !sidecarLyrics.isSynced) {
-      const internetLyrics = this.prepareInternetLyrics(
-        await this.searchInternetLyrics(song),
-        settings,
-      )
-      const snapshot = this.createLyricsSnapshot(internetLyrics, internetLyrics ? 'internet' : 'none')
-      if (snapshot.isSynced) {
-        await this.maybePersistFetchedLyrics(song.path, snapshot, settings)
-        return snapshot
-      }
-    }
-
     if (mode !== 'internet' && sidecarLyrics) {
       return sidecarLyrics
     }
 
     if (mode === 'internet') {
+      const settings = this.settingsService.getSettings()
       const internetLyrics = this.prepareInternetLyrics(await this.searchInternetLyrics(song), settings)
       const snapshot = this.createLyricsSnapshot(internetLyrics, internetLyrics ? 'internet' : 'none')
-      await this.maybePersistFetchedLyrics(song.path, snapshot, settings)
+      await this.maybePersistFetchedLyrics(song.path, snapshot)
       return snapshot
     }
 
-    if (mode === 'auto' && settings.AutoLyrics) {
-      const internetLyrics = this.prepareInternetLyrics(await this.searchInternetLyrics(song), settings)
-      if (internetLyrics) {
-        const snapshot = this.createLyricsSnapshot(internetLyrics, 'internet')
-        await this.maybePersistFetchedLyrics(song.path, snapshot, settings)
-        return snapshot
-      }
+    const embeddedLyrics = await this.getEmbeddedLyrics(song.path)
+    if (embeddedLyrics) {
+      return this.createLyricsSnapshot(embeddedLyrics, 'music-file')
     }
 
-    const embeddedLyrics = await this.getEmbeddedLyrics(song.path)
-    return this.createLyricsSnapshot(embeddedLyrics, embeddedLyrics ? 'music-file' : 'none')
+    return this.createLyricsSnapshot('', 'none')
   }
 
   async saveInternetLyricsToFile(songId: number) {
@@ -174,9 +157,8 @@ export class LyricsService {
   private async maybePersistFetchedLyrics(
     songPath: string,
     lyrics: LyricsSnapshot,
-    settings: SettingsRow,
   ) {
-    if (!settings.SaveLyricsImmediately || lyrics.source !== 'internet' || !lyrics.rawText.trim()) {
+    if (lyrics.source !== 'internet' || !lyrics.rawText.trim()) {
       return
     }
 
@@ -188,13 +170,39 @@ export class LyricsService {
   }
 
   private async writeLyricsToSongPath(songPath: string, rawLyrics: string) {
-    if (extname(songPath).toLocaleLowerCase() === '.mp3') {
+    const extension = extname(songPath)
+    const basePath = songPath.slice(0, songPath.length - extension.length)
+    const sidecarLrcPath = `${basePath}.lrc`
+    const sidecarTextPath = `${basePath}.txt`
+    const sidecarLrcExists = await this.fileExists(sidecarLrcPath)
+    const sidecarTextExists = await this.fileExists(sidecarTextPath)
+
+    if (extension.toLocaleLowerCase() === '.mp3') {
       await this.id3TagService.writeEmbeddedLyrics(songPath, rawLyrics)
+      if (sidecarLrcExists) {
+        await writeFile(sidecarLrcPath, rawLyrics, 'utf8')
+      }
+      if (sidecarTextExists) {
+        await writeFile(sidecarTextPath, rawLyrics, 'utf8')
+      }
       return
     }
 
-    const basePath = songPath.slice(0, songPath.length - extname(songPath).length)
-    await writeFile(`${basePath}.lrc`, rawLyrics, 'utf8')
+    if (sidecarLrcExists) {
+      await writeFile(sidecarLrcPath, rawLyrics, 'utf8')
+      if (rawLyrics.trim()) {
+        return
+      }
+    }
+
+    if (sidecarTextExists) {
+      await writeFile(sidecarTextPath, rawLyrics, 'utf8')
+      if (rawLyrics.trim()) {
+        return
+      }
+    }
+
+    await writeFile(sidecarLrcPath, rawLyrics, 'utf8')
   }
 
   private async readTextIfExists(filePath: string) {
@@ -202,6 +210,15 @@ export class LyricsService {
       return await readFile(filePath, 'utf8')
     } catch {
       return ''
+    }
+  }
+
+  private async fileExists(filePath: string) {
+    try {
+      await access(filePath)
+      return true
+    } catch {
+      return false
     }
   }
 

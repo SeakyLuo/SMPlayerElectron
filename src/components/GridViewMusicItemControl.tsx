@@ -19,10 +19,12 @@ interface GridViewMusicItemControlProps {
   variant?: 'recent' | 'local'
   draggable?: boolean
   detailLabel?: string
+  showMoreButton?: boolean
   onPlayTrack: (trackId: number, queueSongIds: number[]) => void
   onTogglePlayPause: () => void
   onToggleSelection: (songId: number) => void
   onAddToPlaylistClick?: (event: MouseEvent<HTMLButtonElement>, song: LibrarySong) => void
+  onPlayNextClick?: (song: LibrarySong) => void
   onMoreClick?: (song: LibrarySong, x: number, y: number) => void
   onContextMenu: (event: MouseEvent<HTMLElement>, song: LibrarySong) => void
   onDragStart?: (event: DragEvent<HTMLDivElement>, song: LibrarySong) => void
@@ -40,10 +42,12 @@ export function GridViewMusicItemControl({
   variant = 'recent',
   draggable,
   detailLabel,
+  showMoreButton = false,
   onPlayTrack,
   onTogglePlayPause,
   onToggleSelection,
   onAddToPlaylistClick,
+  onPlayNextClick,
   onMoreClick,
   onContextMenu,
   onDragStart,
@@ -154,6 +158,7 @@ export function GridViewMusicItemControl({
       role="button"
       tabIndex={0}
       className={clsx('recent-song-tile', {
+        'has-more-action': showMoreButton && onPlayNextClick && onMoreClick,
         'has-detail': detailLabel,
         'is-current': current,
         'is-playing': playing,
@@ -217,19 +222,40 @@ export function GridViewMusicItemControl({
         ) : null}
       </span>
       {!multiSelect ? (
-        <button
-          type="button"
-          className="recent-song-more"
-          aria-label={t('player.more')}
-          title={t('player.more')}
-          onClick={(event) => {
-            event.stopPropagation()
-            const rect = event.currentTarget.getBoundingClientRect()
-            onMoreClick?.(song, rect.left, rect.bottom + 8)
-          }}
-        >
-          <Icon name="moreHorizontal" />
-        </button>
+        <span className="recent-song-actions">
+          <button
+            type="button"
+            className="recent-song-more"
+            aria-label={onPlayNextClick ? t('context.playNext') : t('player.more')}
+            title={onPlayNextClick ? t('context.playNext') : t('player.more')}
+            onClick={(event) => {
+              event.stopPropagation()
+              if (onPlayNextClick) {
+                onPlayNextClick(song)
+              } else {
+                const rect = event.currentTarget.getBoundingClientRect()
+                onMoreClick?.(song, rect.left, rect.bottom + 8)
+              }
+            }}
+          >
+            <Icon name={onPlayNextClick ? 'playNext' : 'moreHorizontal'} />
+          </button>
+          {showMoreButton && onPlayNextClick && onMoreClick ? (
+            <button
+              type="button"
+              className="recent-song-more"
+              aria-label={t('player.more')}
+              title={t('player.more')}
+              onClick={(event) => {
+                event.stopPropagation()
+                const rect = event.currentTarget.getBoundingClientRect()
+                onMoreClick(song, rect.left, rect.bottom + 8)
+              }}
+            >
+              <Icon name="moreHorizontal" />
+            </button>
+          ) : null}
+        </span>
       ) : null}
     </div>
   )
