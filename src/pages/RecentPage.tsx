@@ -131,7 +131,7 @@ function getParentFolderPath(filePath: string) {
 }
 
 const RECENT_ADDED_LIMIT = 500
-const RECENT_GRID_MIN_COLUMN_WIDTH = 252
+const RECENT_GRID_MIN_COLUMN_WIDTH = 270
 const RECENT_GRID_COLUMN_GAP = 28
 const RECENT_GRID_ROW_HEIGHT = 136
 const RECENT_GRID_COMPACT_ROW_HEIGHT = 104
@@ -515,6 +515,7 @@ export function RecentPage({
           preferredLanguage={preferredLanguage}
           onPlayTrack={onPlayTrack}
           onAddNextAndPlay={onAddNextAndPlay}
+          onPlayNext={onPlayNext}
           onTogglePlayPause={onTogglePlayPause}
           onToggleSelection={toggleSongSelection}
           onToggleCollectionSelection={toggleCollectionSelection}
@@ -573,6 +574,7 @@ export function RecentPage({
           loading={loading}
           t={t}
           onAddNextAndPlay={onAddNextAndPlay}
+          onPlayNext={onPlayNext}
           onTogglePlayPause={onTogglePlayPause}
           onToggleSelection={toggleSongSelection}
           getTimelineDate={(song) => song.dateAdded}
@@ -972,6 +974,7 @@ function RecentPlayedPanel({
   preferredLanguage,
   onPlayTrack,
   onAddNextAndPlay,
+  onPlayNext,
   onTogglePlayPause,
   onToggleSelection,
   onToggleCollectionSelection,
@@ -1003,6 +1006,7 @@ function RecentPlayedPanel({
   preferredLanguage: PreferredLanguage
   onPlayTrack: (trackId: number, queueSongIds: number[]) => void
   onAddNextAndPlay: (songId: number) => void
+  onPlayNext: (songId: number) => void
   onTogglePlayPause: () => void
   onToggleSelection: (songId: number) => void
   onToggleCollectionSelection: (key: string) => void
@@ -1100,6 +1104,7 @@ function RecentPlayedPanel({
           loading={false}
           t={t}
           onAddNextAndPlay={onAddNextAndPlay}
+          onPlayNext={onPlayNext}
           onTogglePlayPause={onTogglePlayPause}
           onToggleSelection={onToggleSelection}
           getTimelineDate={(song) => (song as RecentLibrarySong).playedAt}
@@ -1502,6 +1507,7 @@ function RecentSongGrid({
   loading,
   t,
   onAddNextAndPlay,
+  onPlayNext,
   onTogglePlayPause,
   onToggleSelection,
   getTimelineDate,
@@ -1520,6 +1526,7 @@ function RecentSongGrid({
   loading: boolean
   t: Translator
   onAddNextAndPlay: (songId: number) => void
+  onPlayNext: (songId: number) => void
   onTogglePlayPause: () => void
   onToggleSelection: (songId: number) => void
   getTimelineDate: (song: LibrarySong) => string
@@ -1540,6 +1547,8 @@ function RecentSongGrid({
     Math.floor((gridWidth + RECENT_GRID_COLUMN_GAP) / (RECENT_GRID_MIN_COLUMN_WIDTH + RECENT_GRID_COLUMN_GAP)),
   )
   const rowHeight = gridWidth <= 520 ? RECENT_GRID_COMPACT_ROW_HEIGHT : RECENT_GRID_ROW_HEIGHT
+  const columnWidth = (gridWidth - RECENT_GRID_COLUMN_GAP * (columnCount - 1)) / columnCount
+  const showSongMoreButton = columnWidth >= 330
   const layout = useMemo(() => buildRecentSongGridLayout(groups, columnCount, rowHeight), [columnCount, groups, rowHeight])
   const listHeight = layout.height
   const effectiveScrollTop = Math.min(scrollTop, Math.max(0, listHeight - viewportHeight))
@@ -1624,6 +1633,7 @@ function RecentSongGrid({
                   multiSelect={multiSelect}
                   t={t}
                   detailLabel={getDetailLabel?.(song)}
+                  showMoreButton={showSongMoreButton}
                   onPlayTrack={(songId) => {
                     onAddNextAndPlay(songId)
                   }}
@@ -1631,6 +1641,9 @@ function RecentSongGrid({
                   onToggleSelection={onToggleSelection}
                   onAddToPlaylistClick={(event, menuSong) => {
                     onOpenAddToMenu({ songIds: [menuSong.id], defaultPlaylistName: '', x: event.clientX, y: event.clientY })
+                  }}
+                  onPlayNextClick={(menuSong) => {
+                    onPlayNext(menuSong.id)
                   }}
                   onMoreClick={(menuSong, x, y) => {
                     onOpenMenu({ song: menuSong, x, y, canRemove })

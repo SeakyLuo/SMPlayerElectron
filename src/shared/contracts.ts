@@ -570,7 +570,7 @@ export interface SmplayerApi {
   deleteLocalItems: (songIds: number[], folderPaths: string[]) => Promise<PendingLocalItemsDelete>
   updateLocalFolderSort: (folderPath: string, sortCriterion: LocalFolderSortCriterion) => Promise<void>
   renameLocalFolder: (folderPath: string, name: string) => Promise<void>
-  deleteLocalFolder: (folderPath: string) => Promise<void>
+  deleteLocalFolder: (folderPath: string) => Promise<PendingLocalItemsDelete>
   hideLocalFolder: (path: string) => Promise<void>
   getHiddenStorageItems: () => Promise<HiddenStorageItem[]>
   resumeHiddenStorageItem: (item: HiddenStorageItem) => Promise<void>

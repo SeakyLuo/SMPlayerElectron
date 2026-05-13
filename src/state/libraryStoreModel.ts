@@ -26,7 +26,7 @@ export const emptySnapshot: MusicData = {
     showLyricsInNotification: false,
     notificationLyricsSource: 'internet',
     playerLyricsSource: 'auto',
-    saveLyricsImmediately: false,
+    saveLyricsImmediately: true,
     preserveInternetLyricsTimestamps: true,
     preferredLanguage: 'system',
     musicLibrarySort: 'title',

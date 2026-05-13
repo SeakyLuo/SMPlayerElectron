@@ -84,6 +84,13 @@ function App() {
     window.innerWidth >= NAVIGATION_MINIMAL_BREAKPOINT && window.innerWidth < NAVIGATION_OVERLAY_BREAKPOINT,
   )
   const [isMinimalNavigationOpen, setIsMinimalNavigationOpen] = useState(false)
+  const navigationModeRef = useRef<'minimal' | 'overlay' | 'wide'>(
+    window.innerWidth < NAVIGATION_MINIMAL_BREAKPOINT
+      ? 'minimal'
+      : window.innerWidth < NAVIGATION_OVERLAY_BREAKPOINT
+        ? 'overlay'
+        : 'wide',
+  )
   const hasSeenNavigationRef = useRef(false)
   const workspaceRef = useRef<HTMLDivElement | null>(null)
   const workspaceContentRef = useRef<HTMLElement | null>(null)
@@ -483,11 +490,23 @@ function App() {
     const updateNavigationMode = () => {
       const width = window.innerWidth
       const nextIsMinimal = width < NAVIGATION_MINIMAL_BREAKPOINT
-      setIsNavigationOverlay(width >= NAVIGATION_MINIMAL_BREAKPOINT && width < NAVIGATION_OVERLAY_BREAKPOINT)
+      const nextIsOverlay = width >= NAVIGATION_MINIMAL_BREAKPOINT && width < NAVIGATION_OVERLAY_BREAKPOINT
+      const nextNavigationMode = nextIsMinimal ? 'minimal' : nextIsOverlay ? 'overlay' : 'wide'
+      const navigationModeChanged = nextNavigationMode !== navigationModeRef.current
+
+      setIsNavigationOverlay(nextIsOverlay)
       setIsNavigationMinimal(nextIsMinimal)
-      if (!nextIsMinimal) {
+      if (navigationModeChanged) {
+        if (nextNavigationMode === 'wide') {
+          setIsNavigationCollapsed(false)
+        } else {
+          setIsNavigationCollapsed(true)
+          setIsMinimalNavigationOpen(false)
+        }
+      } else if (!nextIsMinimal) {
         setIsMinimalNavigationOpen(false)
       }
+      navigationModeRef.current = nextNavigationMode
     }
 
     updateNavigationMode()
@@ -861,6 +880,9 @@ function App() {
                     : snapshot.settings.rootPath
                   await moveLocalItemsToFolder(payload.songIds, payload.folderPaths, targetFolderPath)
                 }}
+                onMoveLocalItemsToFolder={async (songIds, folderPaths, targetFolderPath) => {
+                  await moveLocalItemsToFolder(songIds, folderPaths, targetFolderPath)
+                }}
               />
             ) : (
               <h1>{currentPageTitle}</h1>
@@ -906,9 +928,12 @@ function App() {
                     : snapshot.settings.rootPath
                   await moveLocalItemsToFolder(payload.songIds, payload.folderPaths, targetFolderPath)
                 }}
+                onMoveLocalItemsToFolder={async (songIds, folderPaths, targetFolderPath) => {
+                  await moveLocalItemsToFolder(songIds, folderPaths, targetFolderPath)
+                }}
               />
             ) : (
-              <div>
+              <div className="appbar-title-drag-region">
                 <h1>{currentPageTitle}</h1>
               </div>
             )}
@@ -1091,7 +1116,7 @@ function MoveProgressOverlay({
   const currentItem = progress.currentItem.split(/[\\/]/).filter(Boolean).pop() ?? progress.currentItem
 
   return (
-    <div className="move-progress-overlay" role="alert" aria-live="assertive" aria-modal="true">
+    <div className="move-progress-overlay" role="status" aria-live="polite">
       <section className="move-progress-panel">
         <div className="move-progress-header">
           <span>{t('local.moveProgressTitle')}</span>

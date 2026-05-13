@@ -53,11 +53,10 @@ export function MusicDialog({
   const [artworkUrl, setArtworkUrl] = useState(song.artworkUrl)
   const [artworkSourcePath, setArtworkSourcePath] = useState('')
   const [showArtworkDeleteConfirm, setShowArtworkDeleteConfirm] = useState(false)
-  const [pendingLyricsSave, setPendingLyricsSave] = useState<PendingLyricsSnapshot | null>(null)
   const [pendingSwitchLyrics, setPendingSwitchLyrics] = useState<PendingLyricsSnapshot | null>(null)
   const [loading, setLoading] = useState(true)
+  const [lyricsLoading, setLyricsLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const showButtonedNotification = useUndoableNotificationStore((state) => state.show)
   const showNotificationButtons = useUndoableNotificationStore((state) => state.showButtons)
   const showNotification = useUndoableNotificationStore((state) => state.showMessage)
   const dialogRef = useRef<HTMLElement | null>(null)
@@ -69,7 +68,6 @@ export function MusicDialog({
     dirty: boolean
     lyrics: string
     originalLyrics: string
-    pendingDelayedSave: boolean
     songId: number
     title: string
   } | null>(null)
@@ -82,7 +80,8 @@ export function MusicDialog({
   const isCurrentSong = currentTrackId === song.id
   const canPause = isCurrentSong && isPlaying
   const controlsDisabled = saving || loading
-  const showBusy = loading || saving
+  const propertiesBusy = loading || saving
+  const lyricsBusy = lyricsLoading || saving
   const playQueue = useMemo(() => {
     return queueSongIds.includes(song.id) ? queueSongIds : [...queueSongIds, song.id]
   }, [queueSongIds, song.id])
@@ -104,7 +103,6 @@ export function MusicDialog({
         setLyricsRawText(snapshot.lyrics)
         setOriginalLyricsText(snapshot.lyrics)
         setLyrics((current) => current ? { ...current, rawText: snapshot.lyrics } : current)
-        setPendingLyricsSave(null)
         onSaved?.()
       }
       setPendingSwitchLyrics((current) => current?.songId === snapshot.songId ? null : current)
@@ -120,15 +118,6 @@ export function MusicDialog({
       setSaving(false)
     }
   }, [getCurrentTrackTitle, onSaved, showNotification, song.id, song.title, t])
-  const showSaveLyricsLaterNotification = useCallback((snapshot: PendingLyricsSnapshot) => {
-    showButtonedNotification(
-      t('song.saveLyricsLater', { title: snapshot.title }),
-      t('song.saveImmediately'),
-      () => {
-        void saveLyricsSnapshot(snapshot)
-      },
-    )
-  }, [saveLyricsSnapshot, showButtonedNotification, t])
   const showPendingSwitchLyricsNotification = useCallback((snapshot: PendingLyricsSnapshot) => {
     showNotificationButtons(
       t('song.pendingSaveLyrics', { title: snapshot.title }),
@@ -186,8 +175,7 @@ export function MusicDialog({
       previous &&
       previous.songId !== song.id &&
       previous.activeMode === 'lyrics' &&
-      previous.dirty &&
-      !previous.pendingDelayedSave
+      previous.dirty
     ) {
       const pending = {
         songId: previous.songId,
@@ -201,7 +189,8 @@ export function MusicDialog({
 
   useEffect(() => {
     let canceled = false
-    void window.smplayer?.getLyrics(song.id, 'auto')
+    setLyricsLoading(true)
+    void window.smplayer?.getLyrics(song.id, 'embedded')
       .then((snapshot) => {
         if (canceled) {
           return
@@ -211,9 +200,11 @@ export function MusicDialog({
         setLyricsRawText(snapshot.rawText)
         setLyricsText(snapshot.rawText)
         setOriginalLyricsText(snapshot.rawText)
+        setLyricsLoading(false)
       })
       .catch(() => {
         if (!canceled) {
+          setLyricsLoading(false)
           showNotification(t('song.getLyricsFailed'))
         }
       })
@@ -239,8 +230,7 @@ export function MusicDialog({
       previousTrackId === latest.songId &&
       currentTrackId !== latest.songId &&
       latest.activeMode === 'lyrics' &&
-      latest.dirty &&
-      !latest.pendingDelayedSave
+      latest.dirty
     ) {
       const pending = {
         songId: latest.songId,
@@ -258,25 +248,10 @@ export function MusicDialog({
       dirty: lyricsDirty,
       lyrics: currentLyricsRawText,
       originalLyrics: originalLyricsText,
-      pendingDelayedSave: pendingLyricsSave != null,
       songId: song.id,
       title: song.title,
     }
   })
-
-  useEffect(() => {
-    if (!pendingLyricsSave || currentTrackId === pendingLyricsSave.songId) {
-      return
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      void saveLyricsSnapshot(pendingLyricsSave, currentTrackId != null)
-    }, 3000)
-
-    return () => {
-      window.clearTimeout(timeoutId)
-    }
-  }, [currentTrackId, pendingLyricsSave, saveLyricsSnapshot])
 
   const updateProperty = (key: keyof SongPropertiesSnapshot, value: string) => {
     setProperties((current) => current ? { ...current, [key]: value } : current)
@@ -463,13 +438,6 @@ export function MusicDialog({
       return
     }
 
-    if (isCurrentSong && !useLibraryStore.getState().snapshot.settings.saveLyricsImmediately) {
-      const pending = { songId: song.id, title: song.title, lyrics: currentLyricsRawText }
-      setPendingLyricsSave(pending)
-      showSaveLyricsLaterNotification(pending)
-      return
-    }
-
     await saveLyricsImmediately()
   }
 
@@ -512,7 +480,6 @@ export function MusicDialog({
           return
         }
 
-        setPendingLyricsSave(null)
         showNotification(t('song.searchLyricsSuccessful'))
         requestAnimationFrame(scrollLyricsToTop)
         return
@@ -540,7 +507,6 @@ export function MusicDialog({
       const result = await window.smplayer?.importLyrics()
       if (result && !result.canceled) {
         updateLyricsEditorRawText(result.rawText)
-        setPendingLyricsSave(null)
         requestAnimationFrame(scrollLyricsToTop)
       }
     } catch {
@@ -643,7 +609,6 @@ export function MusicDialog({
     }
     if (activeMode === 'lyrics') {
       updateLyricsEditorRawText(originalLyricsText)
-      setPendingLyricsSave(null)
       requestAnimationFrame(scrollLyricsToTop)
       showNotification(t('song.lyricsReset'))
     }
@@ -700,7 +665,7 @@ export function MusicDialog({
       resizeObserver.disconnect()
       window.removeEventListener('resize', scheduleUpdate)
     }
-  }, [activeMode, loading, saving, properties, lyricsText, pendingLyricsSave, pendingSwitchLyrics, showArtworkDeleteConfirm])
+  }, [activeMode, loading, saving, properties, lyricsText, pendingSwitchLyrics, showArtworkDeleteConfirm])
 
   const onDialogScrollbarPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     const dialog = dialogRef.current
@@ -774,7 +739,7 @@ export function MusicDialog({
       resizeObserver.disconnect()
       window.removeEventListener('resize', scheduleUpdate)
     }
-  }, [activeMode, lyricsText, pendingLyricsSave, pendingSwitchLyrics, saving])
+  }, [activeMode, lyricsText, pendingSwitchLyrics, saving])
 
   const onLyricsScrollbarPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     const dialog = dialogRef.current
@@ -846,7 +811,7 @@ export function MusicDialog({
             t={t}
             loading={loading}
             saving={saving}
-            showBusy={showBusy}
+            showBusy={propertiesBusy}
             controlsDisabled={controlsDisabled}
             canPause={canPause}
             properties={properties}
@@ -864,8 +829,9 @@ export function MusicDialog({
         {activeMode === 'lyrics' ? (
           <MusicLyricsControl
             t={t}
+            loading={lyricsLoading}
             saving={saving}
-            showBusy={showBusy}
+            showBusy={lyricsBusy}
             lyrics={lyrics}
             lyricsText={lyricsText}
             lyricsTextAreaRef={lyricsTextAreaRef}
@@ -881,7 +847,6 @@ export function MusicDialog({
               if (showLyricsTimestamps) {
                 setLyricsRawText(nextText)
               }
-              setPendingLyricsSave(null)
             }}
           />
         ) : null}
@@ -890,7 +855,7 @@ export function MusicDialog({
             song={song}
             t={t}
             saving={saving}
-            showBusy={showBusy}
+            showBusy={saving}
             artworkUrl={artworkUrl}
             showDeleteConfirm={showArtworkDeleteConfirm}
             onChangeArtwork={() => void changeArtwork()}

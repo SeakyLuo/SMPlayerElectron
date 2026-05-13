@@ -309,7 +309,7 @@ export function toSettingsSnapshot(settings: SettingsRow): SettingsSnapshot {
     showLyricsInNotification: Boolean(settings.ShowLyricsInNotification),
     notificationLyricsSource: mapLyricsRequestMode(settings.NotificationLyricsSource),
     playerLyricsSource: mapLyricsRequestMode(settings.PlayerLyricsSource),
-    saveLyricsImmediately: Boolean(settings.SaveLyricsImmediately),
+    saveLyricsImmediately: true,
     preserveInternetLyricsTimestamps: Boolean(settings.PreserveInternetLyricsTimestamps),
     preferredLanguage: mapPreferredLanguage(settings.VoiceAssistantPreferredLanguage),
     musicLibrarySort: mapMusicLibrarySort(settings.MusicLibraryCriterion),

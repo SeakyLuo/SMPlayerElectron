@@ -6,6 +6,7 @@ import { CommandBar, CommandBarButton } from './CommandBar'
 
 export function MusicLyricsControl({
   t,
+  loading,
   saving,
   showBusy,
   lyrics,
@@ -21,6 +22,7 @@ export function MusicLyricsControl({
   onLyricsTextChange,
 }: {
   t: Translator
+  loading: boolean
   saving: boolean
   showBusy: boolean
   lyrics: LyricsSnapshot | null
@@ -38,27 +40,33 @@ export function MusicLyricsControl({
   return (
     <>
       <CommandBar className="song-dialog-commandbar music-info-control-commandbar MusicLyricsControllerCommandBar" overflowLabel={t('player.more')}>
-        <CommandBarButton icon="search" label={t('common.search')} className="SearchLyricsButton" disabled={saving} onClick={onSearch} />
-        <CommandBarButton icon="import" label={t('common.import')} className="ImportLyricsButton" disabled={saving} onClick={onImport} />
-        <CommandBarButton icon="save" label={t('settings.save')} className="song-dialog-primary-button save-lyrics-button SaveLyricsButton" disabled={saving} onClick={onSave} />
-        <CommandBarButton icon="undo" label={t('common.reset')} className="reset-lyrics-button ResetLyricsButton" disabled={saving} onClick={onReset} />
+        <CommandBarButton icon="search" label={t('common.search')} className="SearchLyricsButton" disabled={loading || saving} onClick={onSearch} />
+        <CommandBarButton icon="import" label={t('common.import')} className="ImportLyricsButton" disabled={loading || saving} onClick={onImport} />
+        <CommandBarButton icon="save" label={t('settings.save')} className="song-dialog-primary-button save-lyrics-button SaveLyricsButton" disabled={loading || saving} onClick={onSave} />
+        <CommandBarButton icon="undo" label={t('common.reset')} className="reset-lyrics-button ResetLyricsButton" disabled={loading || saving} onClick={onReset} />
         {lyricsCanToggleTimestamps ? (
           <label className="song-dialog-lyrics-timestamp-toggle">
-            <input type="checkbox" checked={showLyricsTimestamps} onChange={(event) => onToggleTimestamps(event.currentTarget.checked)} />
+            <input type="checkbox" checked={showLyricsTimestamps} disabled={loading || saving} onChange={(event) => onToggleTimestamps(event.currentTarget.checked)} />
             {t('song.showLyricsTimestamps')}
           </label>
         ) : null}
         {showBusy ? <div className="music-info-save-progress SaveProgress" /> : null}
       </CommandBar>
       <div className="song-dialog-body song-dialog-lyrics MusicLyricsControl MusicLyricsController">
-        <textarea
-          className="LyricsTextBox"
-          ref={lyricsTextAreaRef}
-          value={lyricsText}
-          disabled={saving}
-          placeholder={lyrics?.source === 'none' ? t('nowPlaying.noLyrics') : ''}
-          onChange={(event) => onLyricsTextChange(event.currentTarget.value)}
-        />
+        {loading ? (
+          <div className="song-dialog-loading-placeholder" role="status" aria-label={t('nowPlaying.loading')}>
+            <div className="song-dialog-loading" aria-hidden="true" />
+          </div>
+        ) : (
+          <textarea
+            className="LyricsTextBox"
+            ref={lyricsTextAreaRef}
+            value={lyricsText}
+            disabled={saving}
+            placeholder={lyrics?.source === 'none' ? t('nowPlaying.noLyrics') : ''}
+            onChange={(event) => onLyricsTextChange(event.currentTarget.value)}
+          />
+        )}
       </div>
     </>
   )

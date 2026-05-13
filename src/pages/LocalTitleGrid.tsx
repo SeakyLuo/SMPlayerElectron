@@ -16,6 +16,7 @@ import {
   shuffleSongIds,
   type FolderNode,
 } from './localFolderModel'
+import { buildLocalMoveToFolderMenuItems } from './localMoveToFolderMenu'
 
 export interface FolderChainDropPayload {
   songIds: number[]
@@ -320,6 +321,7 @@ export function LocalTitleGrid({
   currentRelativePath,
   onHiddenFoldersListButtonClick,
   onDropLocalItems,
+  onMoveLocalItemsToFolder,
   onOpenFolder,
   onRevealFolder,
   onSearchDirectory,
@@ -337,6 +339,7 @@ export function LocalTitleGrid({
   currentRelativePath: string
   onHiddenFoldersListButtonClick: () => void
   onDropLocalItems?: (payload: FolderChainDropPayload, targetRelativePath: string) => void | Promise<void>
+  onMoveLocalItemsToFolder: (songIds: number[], folderPaths: string[], targetFolderPath: string) => void | Promise<void>
   onOpenFolder: (targetRelativePath: string) => void
   onRevealFolder: (folderPath: string) => void | Promise<void>
   onSearchDirectory: (query: string, folderRelativePath: string) => void
@@ -352,6 +355,7 @@ export function LocalTitleGrid({
     () => buildFolderIndex(songs, folders, rootPath),
     [folders, rootPath, songs],
   )
+  const songsById = useMemo(() => new Map(songs.map((song) => [song.id, song])), [songs])
   const searchDirectory = (folder: FolderNode, query: string) => {
     onSearchDirectory(query, folder.relativePath)
     setSearchTargetFolder(null)
@@ -363,6 +367,30 @@ export function LocalTitleGrid({
     onAddSongsToPlaylist(favoritePlaylistId, songIds)
   }
   const getNotFavoriteSongIds = (songIds: number[]) => songIds.filter((songId) => !favoriteSongIdSet.has(songId))
+  const getFolderChainMoveToMenuItem = (folder: FolderNode) => {
+    const submenu = buildLocalMoveToFolderMenuItems({
+      nodes,
+      songsById,
+      songIds: [],
+      folderPaths: [folder.path],
+      t,
+      onMoveToFolder: (targetFolder) => {
+        void onMoveLocalItemsToFolder([], [folder.path], targetFolder.path)
+        setFolderChainMenu(null)
+      },
+    })
+
+    if (submenu.length === 0) {
+      return null
+    }
+
+    return {
+      key: 'chain-move-to-folder',
+      text: t('context.moveToFolder'),
+      icon: 'folder',
+      submenu,
+    } satisfies MenuFlyoutItem
+  }
   return (
     <div className="local-title-grid">
       <div className="current-path-grid">
@@ -420,6 +448,7 @@ export function LocalTitleGrid({
               onCreatePlaylist: (name) => onCreatePlaylistWithSongs(name, folderChainMenu.folder.subtreeSongIds),
               onAddToPlaylist: (playlistId) => onAddSongsToPlaylist(playlistId, folderChainMenu.folder.subtreeSongIds),
             }),
+            getFolderChainMoveToMenuItem(folderChainMenu.folder),
             getFolderPreferenceMenuItem(folderChainMenu.folder, 'chain'),
             {
               key: 'chain-show-in-explorer',
