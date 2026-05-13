@@ -8,9 +8,10 @@ import { useLibraryStore } from '../state/useLibraryStore'
 import { usePreferenceStore } from '../state/usePreferenceStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
 import { AppBarPortal } from './AppBarPortal'
+import { ArtworkImage } from './ArtworkImage'
 import { CommandBar, CommandBarButton } from './CommandBar'
+import { DefaultAlbumArtwork } from './DefaultAlbumArtwork'
 import { requestConfirmDialog, requestTextDialog } from './dialogService'
-import { HeaderedPlaylistCover } from './HeaderedPlaylistCover'
 import { MenuFlyout } from './MenuFlyout'
 import { getAddToPlaylistMenuFlyoutItem, getMusicMenuFlyoutItems, getPreferenceMenuFlyoutItem, type MenuFlyoutItem, type MenuFlyoutPosition } from './MenuFlyoutHelper'
 import { MultiSelectCommandBar } from './MultiSelectCommandBar'
@@ -108,6 +109,48 @@ async function extractHeaderArtworkColorRgb(artworkUrls: string[]) {
   return colors.length === 0 ? getDefaultArtworkColorRgb() : mixArtworkColorRgbs(colors)
 }
 
+function HeaderedPlaylistCover({
+  artworkUrls,
+  title,
+  type,
+}: {
+  artworkUrls: string[]
+  title: string
+  type: HeaderedPlaylistType
+}) {
+  if (artworkUrls.length >= 3 && type !== 'album') {
+    return (
+      <span className="headered-playlist-cover headered-playlist-cover-mosaic" aria-hidden="true">
+        {artworkUrls.slice(0, 4).map((artworkUrl, index) => (
+          <img
+            alt=""
+            key={`${artworkUrl}:${index}`}
+            src={artworkUrl}
+          />
+        ))}
+        {artworkUrls.length === 3 ? (
+          <span className="headered-playlist-cover-mosaic-fallback">
+            <img src="/colorful_bg_wide.png" alt="" />
+          </span>
+        ) : null}
+      </span>
+    )
+  }
+
+  return (
+    <ArtworkImage
+      className="headered-playlist-cover"
+      src={artworkUrls[0] ?? ''}
+      title={title}
+      renderFallback={() => (
+        <div className="headered-playlist-cover headered-playlist-cover-fallback" aria-hidden="true">
+          <DefaultAlbumArtwork className="headered-playlist-cover-fallback-image" />
+        </div>
+      )}
+    />
+  )
+}
+
 export function HeaderedPlaylistControl({
   type,
   title,
@@ -149,6 +192,7 @@ export function HeaderedPlaylistControl({
   onRecordPlay,
 }: HeaderedPlaylistControlProps) {
   const controlRef = useRef<HTMLElement | null>(null)
+  const songListRef = useRef<HTMLDivElement | null>(null)
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false)
   const onScrollbarPointerDown = useHeaderedPlaylistScroll(controlRef, title, setIsHeaderCollapsed)
   const [selectionMode, setSelectionMode] = useState(false)
@@ -200,9 +244,19 @@ export function HeaderedPlaylistControl({
     ]
   }, [orderedSongIds, songs, songsById])
   const queueSongIds = useMemo(() => visibleSongs.map((song) => song.id), [visibleSongs])
-  const visibleSongIds = visibleSongs.map((song) => song.id)
+  const queueSongIdSet = useMemo(() => new Set(queueSongIds), [queueSongIds])
+  const visibleSongIds = queueSongIds
+  const virtualWindow = useHeaderedPlaylistVirtualWindow(controlRef, songListRef, visibleSongs.length)
+  const renderedSongs = visibleSongs.slice(virtualWindow.startIndex, virtualWindow.endIndex)
   const headerInfo = getHeaderPlaylistInfo(headerSongs ?? songs, translateCaption)
-  const effectiveSelectedSongIds = [...selectedSongIds].filter((songId) => queueSongIds.includes(songId))
+  const effectiveSelectedSongIds = useMemo(
+    () => [...selectedSongIds].filter((songId) => queueSongIdSet.has(songId)),
+    [queueSongIdSet, selectedSongIds],
+  )
+  const effectiveSelectedSongIdSet = useMemo(
+    () => new Set(effectiveSelectedSongIds),
+    [effectiveSelectedSongIds],
+  )
   const customPlaylists = playlists.filter((playlist) => !playlist.isBuiltIn)
   const currentSavedPlaylist = type === 'playlist'
       ? playlists.find((playlist) => playlist.name === title)
@@ -653,8 +707,13 @@ export function HeaderedPlaylistControl({
           {showAlbum ? <span>{captionFor('album')}</span> : null}
           <span>{captionFor('duration')}</span>
         </div>
-        <div className="headered-playlist-song-list">
-          {visibleSongs.map((song, index) => (
+        <div className="headered-playlist-song-list" ref={songListRef}>
+          {virtualWindow.topSpacerHeight > 0 ? (
+            <div className="now-playing-virtual-spacer" style={{ height: virtualWindow.topSpacerHeight }} />
+          ) : null}
+          {renderedSongs.map((song, renderedIndex) => {
+            const songIndex = virtualWindow.startIndex + renderedIndex
+            return (
             <PlaylistControlItem
               key={song.id}
               className="headered-playlist-queue-item"
@@ -662,7 +721,7 @@ export function HeaderedPlaylistControl({
               t={translateCaption}
               current={song.id === selectedTrackId}
               playing={isPlaying}
-              selected={effectiveSelectedSongIds.includes(song.id)}
+              selected={effectiveSelectedSongIdSet.has(song.id)}
               selectionMode={selectionMode}
               dropPosition={null}
               queueSongIds={queueSongIds}
@@ -689,7 +748,7 @@ export function HeaderedPlaylistControl({
               onPlayTrack={onPlayTrack}
               onTogglePlayPause={onTogglePlayPause}
               onContextMenu={(contextSong, x, y) => {
-                setSongMenu({ song: contextSong, songIndex: index, x, y })
+                setSongMenu({ song: contextSong, songIndex, x, y })
               }}
               onSeeArtist={onArtistClick}
               onSeeAlbum={(contextSong) => {
@@ -697,7 +756,11 @@ export function HeaderedPlaylistControl({
               }}
               onToggleFavorite={onToggleFavorite}
             />
-          ))}
+            )
+          })}
+          {virtualWindow.bottomSpacerHeight > 0 ? (
+            <div className="now-playing-virtual-spacer" style={{ height: virtualWindow.bottomSpacerHeight }} />
+          ) : null}
         </div>
       </section>
       <div className="headered-playlist-bottom-spacer" aria-hidden="true" />
@@ -1010,6 +1073,86 @@ export function HeaderedPlaylistControl({
   function captionFor(key: string) {
     return translateCaption(key)
   }
+}
+
+const HEADERED_PLAYLIST_DESKTOP_ROW_HEIGHT = 82
+const HEADERED_PLAYLIST_COMPACT_ROW_HEIGHT = 80
+const HEADERED_PLAYLIST_OVERSCAN_ROWS = 10
+
+function useHeaderedPlaylistVirtualWindow(
+  controlRef: RefObject<HTMLElement | null>,
+  songListRef: RefObject<HTMLDivElement | null>,
+  songCount: number,
+) {
+  const [windowState, setWindowState] = useState(() => ({
+    startIndex: 0,
+    endIndex: Math.min(songCount, 40),
+    topSpacerHeight: 0,
+    bottomSpacerHeight: 0,
+  }))
+
+  useEffect(() => {
+    const control = controlRef.current as HTMLElement
+    const songList = songListRef.current as HTMLDivElement
+    const scrollContainer = control.closest('.workspace-content') as HTMLElement
+    const compactMediaQuery = window.matchMedia('(max-width: 720px)')
+    let animationFrame = 0
+
+    const update = () => {
+      animationFrame = 0
+      const rowHeight = compactMediaQuery.matches
+        ? HEADERED_PLAYLIST_COMPACT_ROW_HEIGHT
+        : HEADERED_PLAYLIST_DESKTOP_ROW_HEIGHT
+      const containerRect = scrollContainer.getBoundingClientRect()
+      const listRect = songList.getBoundingClientRect()
+      const visibleTop = Math.max(0, containerRect.top - listRect.top)
+      const visibleBottom = Math.max(0, Math.min(songCount * rowHeight, containerRect.bottom - listRect.top))
+      const startIndex = Math.max(0, Math.floor(visibleTop / rowHeight) - HEADERED_PLAYLIST_OVERSCAN_ROWS)
+      const endIndex = Math.max(startIndex, Math.min(
+        songCount,
+        Math.ceil(visibleBottom / rowHeight) + HEADERED_PLAYLIST_OVERSCAN_ROWS,
+      ))
+      const nextState = {
+        startIndex,
+        endIndex,
+        topSpacerHeight: startIndex * rowHeight,
+        bottomSpacerHeight: Math.max(0, (songCount - endIndex) * rowHeight),
+      }
+
+      setWindowState((current) =>
+        current.startIndex === nextState.startIndex &&
+        current.endIndex === nextState.endIndex &&
+        current.topSpacerHeight === nextState.topSpacerHeight &&
+        current.bottomSpacerHeight === nextState.bottomSpacerHeight
+          ? current
+          : nextState,
+      )
+    }
+
+    const scheduleUpdate = () => {
+      if (animationFrame === 0) {
+        animationFrame = window.requestAnimationFrame(update)
+      }
+    }
+
+    const resizeObserver = new ResizeObserver(scheduleUpdate)
+    resizeObserver.observe(scrollContainer)
+    resizeObserver.observe(songList)
+    scrollContainer.addEventListener('scroll', scheduleUpdate, { passive: true })
+    compactMediaQuery.addEventListener('change', scheduleUpdate)
+    update()
+
+    return () => {
+      if (animationFrame !== 0) {
+        window.cancelAnimationFrame(animationFrame)
+      }
+      resizeObserver.disconnect()
+      scrollContainer.removeEventListener('scroll', scheduleUpdate)
+      compactMediaQuery.removeEventListener('change', scheduleUpdate)
+    }
+  }, [controlRef, songCount, songListRef])
+
+  return windowState
 }
 
 function useHeaderedPlaylistScroll(

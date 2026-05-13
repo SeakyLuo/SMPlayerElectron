@@ -28,7 +28,6 @@ import {
   type RecentArtistView,
   type RecentPlaylistView,
 } from './recentPageModel'
-import { RecentPlayedFilterBar, RecentTabButton, type RecentPlayedFilter, type RecentTab } from './RecentControls'
 import { RecentSearchList } from './RecentSearchList'
 import { removeQueueRange } from '../shared/queueUndo'
 import { useLibraryStore } from '../state/useLibraryStore'
@@ -83,6 +82,9 @@ interface RecentAddToMenuState {
   x: number
   y: number
 }
+
+type RecentTab = 'added' | 'played' | 'searches'
+type RecentPlayedFilter = 'songs' | 'artists' | 'albums' | 'playlists'
 
 function getParentFolderPath(filePath: string) {
   const index = Math.max(filePath.lastIndexOf('\\'), filePath.lastIndexOf('/'))
@@ -849,6 +851,60 @@ function RecentPlayedPanel({
           onOpenMenu={onOpenMenu}
         />
       </div> : null}
+    </div>
+  )
+}
+
+function RecentTabButton({
+  active,
+  count,
+  label,
+  showCount,
+  onClick,
+}: {
+  active: boolean
+  count: number
+  label: string
+  showCount: boolean
+  onClick: () => void
+}) {
+  return (
+    <button type="button" className={active ? 'is-active' : ''} onClick={onClick}>
+      <span>{label}</span>
+      {showCount ? <strong>{count}</strong> : null}
+    </button>
+  )
+}
+
+function RecentPlayedFilterBar({
+  activeFilter,
+  t,
+  onChange,
+}: {
+  activeFilter: RecentPlayedFilter
+  t: Translator
+  onChange: (filter: RecentPlayedFilter) => void
+}) {
+  const filters: Array<{ key: RecentPlayedFilter; label: string; icon: 'songs' | 'users' | 'albums' | 'playlists' }> = [
+    { key: 'songs', label: t('common.songs'), icon: 'songs' },
+    { key: 'artists', label: t('common.artists'), icon: 'users' },
+    { key: 'albums', label: t('common.albums'), icon: 'albums' },
+    { key: 'playlists', label: t('common.playlists'), icon: 'playlists' },
+  ]
+
+  return (
+    <div className="recent-played-filters" role="tablist" aria-label={t('recent.played')}>
+      {filters.map((filterItem) => (
+        <button
+          type="button"
+          className={filterItem.key === activeFilter ? 'is-active' : ''}
+          key={filterItem.key}
+          onClick={() => onChange(filterItem.key)}
+        >
+          <Icon name={filterItem.icon} />
+          <span>{filterItem.label}</span>
+        </button>
+      ))}
     </div>
   )
 }

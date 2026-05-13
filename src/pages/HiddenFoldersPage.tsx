@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect } from 'react'
 
 import { Icon } from '../components/icons'
 import { LoadingState } from '../components/LoadingState'
+import { useHiddenStorageItems } from '../hooks/useHiddenStorageItems'
 import type { HiddenStorageItem } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
 
@@ -13,18 +14,7 @@ interface HiddenFoldersPageProps {
 }
 
 export function HiddenFoldersPage({ active, t, loading, onResumeHiddenStorageItem }: HiddenFoldersPageProps) {
-  const [hiddenStorageItems, setHiddenStorageItems] = useState<HiddenStorageItem[]>([])
-  const [itemsLoading, setItemsLoading] = useState(false)
-
-  const loadHiddenStorageItems = useCallback(async () => {
-    setItemsLoading(true)
-    try {
-      const items = await window.smplayer!.getHiddenStorageItems()
-      setHiddenStorageItems(items)
-    } finally {
-      setItemsLoading(false)
-    }
-  }, [])
+  const { hiddenStorageItems, itemsLoading, loadHiddenStorageItems } = useHiddenStorageItems()
 
   useEffect(() => {
     if (active) {

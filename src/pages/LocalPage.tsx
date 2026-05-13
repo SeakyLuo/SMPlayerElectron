@@ -1,7 +1,16 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent } from 'react'
+import { Link } from 'react-router-dom'
 
+import { CommandBar, CommandBarButton } from '../components/CommandBar'
+import { CustomScrollbar } from '../components/CustomScrollbar'
+import { Icon } from '../components/icons'
+import { InputDialog } from '../components/InputDialog'
+import { LoadingState } from '../components/LoadingState'
 import { MenuFlyout } from '../components/MenuFlyout'
 import { getAddToPlaylistMenuFlyoutItem, type MenuFlyoutItem, type MenuFlyoutPosition } from '../components/MenuFlyoutHelper'
+import { MusicMenuFlyout } from '../components/MusicMenuFlyout'
+import { MultiSelectCommandBar } from '../components/MultiSelectCommandBar'
+import { RemoveDialog } from '../components/RemoveDialog'
 import { useFolderPreferenceMenuItem } from '../hooks/useFolderPreferenceMenuItem'
 import { useCustomScrollbar } from '../hooks/useCustomScrollbar'
 import type { LibraryFolder, LibraryPlaylist, LibrarySong, ScanLibraryProgress, ScanLibraryResult } from '../shared/contracts'
@@ -20,14 +29,15 @@ import {
   sortSongs,
   type FolderNode,
 } from './localFolderModel'
-import { LocalPageDialogs } from './LocalPageDialogs'
-import { LocalFolderNotFoundState, LocalNoRootState } from './LocalEmptyState'
-import { LocalPageMainContent } from './LocalPageMainContent'
+import { FolderUpdateResultDialog } from './FolderUpdateResultDialog'
+import { LocalGridContent } from './LocalGridContent'
+import { LocalTableContent } from './LocalTableContent'
 import {
   areSetsEqual,
   buildLocalSongQuickJumpMap,
   getLocalSongQuickJumpBasisName,
   getRefreshFolderErrorMessage,
+  getRefreshProgressMessage,
   getRefreshResultMessage,
   hasRefreshResultChanges,
   type LocalSortMode,
@@ -58,6 +68,7 @@ interface LocalPageProps {
   onMoveToMusicOrPlay: (songId: number) => void
   onTogglePlayPause: () => void
   onPlayNext: (songId: number) => void
+  onAddNextAndPlay: (songId: number) => void
   onRevealSong: (songPath: string) => void | Promise<void>
   onRevealFolder: (folderPath: string) => void | Promise<void>
   onCreateFolder: (relativePath: string, name: string) => void | Promise<void>
@@ -70,8 +81,7 @@ interface LocalPageProps {
   onAddSongsToNowPlaying: (songIds: number[]) => void
   onToggleFavorite: (songId: number, favorite: boolean) => void
   onDeleteSongFromDisk: (songId: number) => void
-  onMoveSongsToFolder: (songIds: number[], folderPath: string) => void | Promise<void>
-  onMoveFolderToFolder: (sourceFolderPath: string, targetFolderPath: string) => void | Promise<void>
+  onMoveLocalItemsToFolder: (songIds: number[], folderPaths: string[], targetFolderPath: string) => void | Promise<void>
   onDeleteLocalItems: (songIds: number[], folderPaths: string[]) => void | Promise<void>
   onUpdateFolderSort: (folderPath: string, sortCriterion: LocalSortMode) => void | Promise<void>
   onSearchDirectory: (query: string, folderRelativePath: string) => void
@@ -127,6 +137,7 @@ export function LocalPage({
   onMoveToMusicOrPlay,
   onTogglePlayPause,
   onPlayNext,
+  onAddNextAndPlay,
   onRevealSong,
   onRevealFolder,
   onCreateFolder,
@@ -139,8 +150,7 @@ export function LocalPage({
   onAddSongsToNowPlaying,
   onToggleFavorite,
   onDeleteSongFromDisk,
-  onMoveSongsToFolder,
-  onMoveFolderToFolder,
+  onMoveLocalItemsToFolder,
   onDeleteLocalItems,
   onUpdateFolderSort,
   onSearchDirectory,
@@ -204,10 +214,6 @@ export function LocalPage({
   const currentSortMode = currentNode ? localSortModeFromCriterion(currentNode.criterion) : 'title'
   const effectiveViewMode: 'grid' | 'list' = 'grid'
 
-  const openFolder = (targetRelativePath: string) => {
-    onOpenFolder(targetRelativePath)
-  }
-
   useEffect(() => {
     const updateCompactLayout = () => {
       setIsCompactLayout(window.innerWidth < LOCAL_COMPACT_BREAKPOINT)
@@ -260,6 +266,7 @@ export function LocalPage({
   }, [createdFolderPaths, currentNode, currentRelativePath, nodes, rootPath, searchQuery])
   const showLocalSectionHeaders = childFolders.length > 0 && currentSongs.length > 0
   const visibleSongIds = useMemo(() => currentSongs.map((song) => song.id), [currentSongs])
+  const visibleSongIdSet = useMemo(() => new Set(visibleSongIds), [visibleSongIds])
   const queueSongIds = visibleSongIds
   const songQuickJumpMap = useMemo(
     () => buildLocalSongQuickJumpMap(currentSongs, sortMode, currentSortMode, t),
@@ -267,14 +274,27 @@ export function LocalPage({
   )
   const showSongQuickJump = currentSongs.length >= 50 && songQuickJumpMap.size >= 4
   const songQuickJumpBasisName = getLocalSongQuickJumpBasisName(sortMode, currentSortMode, t)
-  const effectiveSelectedFolderPaths = [...selectedFolderPaths].filter((folderPath) =>
-    childFolders.some((folder) => folder.relativePath === folderPath),
+  const childFolderPathSet = useMemo(
+    () => new Set(childFolders.map((folder) => folder.relativePath)),
+    [childFolders],
   )
-  const effectiveSelectedSongIds = [...selectedSongIds].filter((songId) => visibleSongIds.includes(songId))
-  const selectedQueueSongIds = [
-    ...effectiveSelectedSongIds,
-    ...effectiveSelectedFolderPaths.flatMap((folderPath) => nodes.get(folderPath)?.subtreeSongIds ?? []),
-  ].filter((songId, index, all) => all.indexOf(songId) === index)
+  const effectiveSelectedFolderPaths = useMemo(
+    () => [...selectedFolderPaths].filter((folderPath) => childFolderPathSet.has(folderPath)),
+    [childFolderPathSet, selectedFolderPaths],
+  )
+  const effectiveSelectedSongIds = useMemo(
+    () => [...selectedSongIds].filter((songId) => visibleSongIdSet.has(songId)),
+    [selectedSongIds, visibleSongIdSet],
+  )
+  const selectedQueueSongIds = useMemo(
+    () => [
+      ...new Set([
+        ...effectiveSelectedSongIds,
+        ...effectiveSelectedFolderPaths.flatMap((folderPath) => nodes.get(folderPath)?.subtreeSongIds ?? []),
+      ]),
+    ],
+    [effectiveSelectedFolderPaths, effectiveSelectedSongIds, nodes],
+  )
   const selectedLocalItemCount = effectiveSelectedFolderPaths.length + effectiveSelectedSongIds.length
   const playablePlaylists = playlists.filter((playlist) => !playlist.isBuiltIn || playlist.name === t('common.myFavorites'))
   const addSongsToFavorites = (songIds: number[]) => {
@@ -340,9 +360,6 @@ export function LocalPage({
   })
 
   useEffect(() => {
-    const childFolderPathSet = new Set(childFolders.map((folder) => folder.relativePath))
-    const visibleSongIdSet = new Set(visibleSongIds)
-
     setSelectedFolderPaths((current) => {
       const next = new Set([...current].filter((folderPath) => childFolderPathSet.has(folderPath)))
       return areSetsEqual(current, next) ? current : next
@@ -381,7 +398,7 @@ export function LocalPage({
     if (songAddMenu && !songsById.has(songAddMenu.song.id)) {
       setSongAddMenu(null)
     }
-  }, [childFolders, folderAddMenu, folderMenu, nodes, selectedListItemKey, songAddMenu, songMenu, songsById, visibleSongIds])
+  }, [childFolderPathSet, folderAddMenu, folderMenu, nodes, selectedListItemKey, songAddMenu, songMenu, songsById, visibleSongIdSet])
 
   useEffect(() => {
     setSortMode(currentSortMode)
@@ -601,7 +618,7 @@ export function LocalPage({
         text: folder.relativePath ? folder.name : t('local.libraryRoot'),
         icon: 'folder',
         onClick: children.length === 0
-          ? () => onMoveFolderToFolder(sourceFolder.path, folder.path)
+          ? () => onMoveLocalItemsToFolder([], [sourceFolder.path], folder.path)
           : undefined,
         submenu: children.length > 0
           ? [
@@ -609,7 +626,7 @@ export function LocalPage({
                 key: `move-folder-${folder.relativePath || 'root'}-self`,
                 text: folder.relativePath ? folder.name : t('local.libraryRoot'),
                 icon: 'folder',
-                onClick: () => onMoveFolderToFolder(sourceFolder.path, folder.path),
+                onClick: () => onMoveLocalItemsToFolder([], [sourceFolder.path], folder.path),
               },
               { key: `move-folder-${folder.relativePath || 'root'}-separator`, text: '', separator: true },
               ...children.map(toItem),
@@ -720,10 +737,7 @@ export function LocalPage({
   }
 
   const moveSelectedItemsToFolder = async (folderPath: string) => {
-    await onMoveSongsToFolder(effectiveSelectedSongIds, folderPath)
-    for (const sourceFolderPath of selectedFolderAbsolutePaths) {
-      await onMoveFolderToFolder(sourceFolderPath, folderPath)
-    }
+    await onMoveLocalItemsToFolder(effectiveSelectedSongIds, selectedFolderAbsolutePaths, folderPath)
     HideMultiSelectAfterOperation()
   }
 
@@ -771,19 +785,133 @@ export function LocalPage({
     }
 
     const payload = JSON.parse(rawPayload) as { songIds: number[]; folderPaths: string[] }
-    await onMoveSongsToFolder(payload.songIds, targetFolder.path)
-    for (const folderPath of payload.folderPaths) {
-      await onMoveFolderToFolder(folderPath, targetFolder.path)
-    }
+    await onMoveLocalItemsToFolder(payload.songIds, payload.folderPaths, targetFolder.path)
     ClearMultiSelectStatus()
   }
 
+  const refreshCurrentFolder = () => {
+    void refreshFolderWithResult(currentNode!)
+  }
+
+  const enableMultiSelect = () => {
+    if (multiSelect) {
+      return
+    }
+    setMultiSelect(true)
+    setLocalNotification('')
+  }
+
+  const requestDeleteSelectedItems = () => {
+    void deleteSelectedItems()
+  }
+
+  const openSelectionAddMenu = (x: number, y: number) => {
+    setSelectionAddMenu({ x, y })
+  }
+
+  const openSelectionMoveMenu = (x: number, y: number) => {
+    setSelectionMoveMenu({ x, y })
+  }
+
+  const selectAllLocalItems = () => {
+    setSelectedFolderPaths(new Set(childFolders.map((folder) => folder.relativePath)))
+    setSelectedSongIds(new Set(visibleSongIds))
+  }
+
+  const reverseLocalSelection = () => {
+    setSelectedFolderPaths((current) => new Set(childFolders
+      .map((folder) => folder.relativePath)
+      .filter((folderPath) => !current.has(folderPath))))
+    setSelectedSongIds((current) => new Set(visibleSongIds.filter((songId) => !current.has(songId))))
+  }
+
+  const clearLocalSelection = () => {
+    setSelectedFolderPaths(new Set())
+    setSelectedSongIds(new Set())
+  }
+
+  const toggleFoldersExpanded = () => {
+    setFoldersExpanded((current) => !current)
+  }
+
+  const toggleSongsExpanded = () => {
+    setSongsExpanded((current) => !current)
+  }
+
+  const openFolderAddMenu = (folder: FolderNode, x: number, y: number) => {
+    setFolderAddMenu({ folder, x, y })
+  }
+
+  const refreshFolder = (folder: FolderNode) => {
+    void refreshFolderWithResult(folder)
+  }
+
+  const revealFolder = (folder: FolderNode) => {
+    void onRevealFolder(folder.path)
+  }
+
+  const openFolderMenu = (folder: FolderNode, x: number, y: number) => {
+    setFolderMenu({ folder, x, y })
+  }
+
+  const openSongAddMenu = (song: LibrarySong, x: number, y: number) => {
+    setSongAddMenu({ song, x, y })
+  }
+
+  const openSongMenu = (song: LibrarySong, x: number, y: number) => {
+    setSongMenu({ song, x, y })
+  }
+
+  const onDragFolderStart = (event: DragEvent, folder: FolderNode) => {
+    event.dataTransfer.setData('application/x-smplayer-local-items', JSON.stringify(dragPayloadForFolder(folder)))
+    event.dataTransfer.effectAllowed = 'move'
+  }
+
+  const onDropFolder = (event: DragEvent, folder: FolderNode) => {
+    void moveDraggedItems(event, folder)
+  }
+
+  const onDragSongStart = (event: DragEvent, song: LibrarySong) => {
+    event.dataTransfer.setData('application/x-smplayer-local-items', JSON.stringify(dragPayloadForSong(song)))
+    event.dataTransfer.effectAllowed = 'move'
+  }
+
   if (!rootPath) {
-    return <LocalNoRootState loading={loading} t={t} onPickLibraryRoot={onPickLibraryRoot} />
+    return (
+      <section className="page-panel local-page">
+        {loading ? (
+          <LoadingState t={t} />
+        ) : (
+          <div className="empty-state">
+            <h3>{t('local.noRoot')}</h3>
+            <p>{t('local.noRootCopy')}</p>
+            <button className="local-command" type="button" onClick={onPickLibraryRoot}>
+              <Icon name="folder" />
+              {t('library.chooseFolder')}
+            </button>
+          </div>
+        )}
+      </section>
+    )
   }
 
   if (!currentNode) {
-    return <LocalFolderNotFoundState loading={loading} t={t} />
+    return (
+      <section className="page-panel local-page">
+        {loading ? (
+          <LoadingState t={t} />
+        ) : (
+          <div className="empty-state">
+            <h3>{t('local.folderNotFound')}</h3>
+            <p>{t('local.folderNotFoundDescription')}</p>
+            <Link className="local-command" to="/local">
+              <Icon name="arrowLeft" />
+              {t('local.backToRoot')}
+            </Link>
+          </div>
+        )}
+      </section>
+    )
   }
 
   const showFolderItems = !showLocalSectionHeaders || foldersExpanded
@@ -803,124 +931,229 @@ export function LocalPage({
 
   return (
     <section className="page-panel local-page">
-      <LocalPageMainContent
-        childFolders={childFolders}
-        currentSongs={currentSongs}
-        nodes={nodes}
-        songs={songs}
-        songsById={songsById}
-        playablePlaylists={playablePlaylists}
-        selectedFolderPaths={selectedFolderPaths}
-        selectedSongIds={selectedSongIds}
-        selectedTrackId={selectedTrackId}
-        selectedListItemKey={selectedListItemKey}
-        isPlaying={isPlaying}
-        multiSelect={multiSelect}
-        isCompactLayout={isCompactLayout}
-        showLocalSectionHeaders={showLocalSectionHeaders}
-        showFolderItems={showFolderItems}
-        showSongItems={showSongItems}
-        foldersExpanded={foldersExpanded}
-        songsExpanded={songsExpanded}
-        showSongQuickJump={showSongQuickJump}
-        songQuickJumpBasisName={songQuickJumpBasisName}
-        songQuickJumpMap={songQuickJumpMap}
-        effectiveViewMode={effectiveViewMode}
-        currentRelativePath={currentRelativePath}
-        queueSongIds={queueSongIds}
-        selectedQueueSongIds={selectedQueueSongIds}
-        selectedLocalItemCount={selectedLocalItemCount}
-        loading={loading}
-        scanning={scanning}
-        scanProgress={scanProgress}
-        refreshProgressAngle={refreshProgressAngle}
-        refreshProgressPercent={refreshProgressPercent}
-        error={error}
-        localNotification={localNotification}
-        searchQuery={searchQuery}
+      <div className="local-toolbar">
+        <CommandBar
+          className="local-commandbar"
+          overflowReserve={isCompactLayout ? 44 : 0}
+          overflowLabel={t('player.more')}
+          overflowItems={isCompactLayout ? [
+            {
+              key: 'hidden-folders',
+              text: t('local.viewHiddenFolders'),
+              icon: 'hiddenFolders',
+              onClick: onHiddenFoldersListButtonClick,
+            },
+          ] : []}
+          content={(
+            <p>
+              {t('local.headerStats', {
+                folders: childFolders.length,
+                songs: currentSongs.length,
+              })}
+            </p>
+          )}
+        >
+          <CommandBarButton icon="shuffle" label={t('nowPlaying.randomPlay')} onClick={playShuffled} />
+          <CommandBarButton
+            icon="refresh"
+            label={scanning ? t('library.scanning') : isCompactLayout ? t('local.updateFolderShort') : t('local.updateFolder')}
+            onClick={refreshCurrentFolder}
+            disabled={scanning}
+          />
+          <CommandBarButton icon="sort" label={t('common.sort')} onClick={showSortMenu} />
+          <CommandBarButton icon="folder" label={t('local.newFolder')} onClick={createFolder} />
+          <CommandBarButton icon="multiSelect" label={t('albums.multiSelect')} active={multiSelect} onClick={enableMultiSelect} />
+          {multiSelect ? (
+            <CommandBarButton
+              icon="trash"
+              label={t('context.deleteFromDisk')}
+              disabled={selectedLocalItemCount === 0}
+              onClick={requestDeleteSelectedItems}
+            />
+          ) : null}
+        </CommandBar>
+      </div>
+
+      {loading ? <div className="root-banner">{t('library.refreshing')}</div> : null}
+      {error ? <div className="error-banner">{error}</div> : null}
+      {localNotification ? <div className="root-banner">{localNotification}</div> : null}
+      {scanning ? (
+        <div className="local-refresh-overlay" role="status" aria-live="polite">
+          <span
+            className="local-refresh-progress-ring"
+            style={{ '--local-refresh-progress-angle': refreshProgressAngle } as CSSProperties}
+            aria-hidden="true"
+          >
+            <span className="local-refresh-progress-value">{refreshProgressPercent}%</span>
+          </span>
+          <p>{getRefreshProgressMessage(scanProgress, t)}</p>
+          {scanProgress?.canCancel ? (
+            <button type="button" className="local-refresh-stop-button" onClick={onCancelRefreshFolder}>
+              {t('common.pause')}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      <MultiSelectCommandBar
+        visible={multiSelect}
+        selectedCount={selectedLocalItemCount}
         t={t}
-        localSongItemRefs={localSongItemRefs}
-        localScrollFrameRef={localScrollFrameRef}
-        localScrollShellRef={localScrollShellRef}
-        localScrollbarTrackRef={localScrollbarTrackRef}
-        localTableScrollFrameRef={localTableScrollFrameRef}
-        localTableShellRef={localTableShellRef}
-        localTableScrollbarTrackRef={localTableScrollbarTrackRef}
-        onLocalScrollbarPointerDown={onLocalScrollbarPointerDown}
-        onLocalTableScrollbarPointerDown={onLocalTableScrollbarPointerDown}
-        onHiddenFoldersListButtonClick={onHiddenFoldersListButtonClick}
-        onCancelRefreshFolder={onCancelRefreshFolder}
-        onPlayShuffled={playShuffled}
-        onRefreshCurrentFolder={() => {
-          void refreshFolderWithResult(currentNode)
+        playlists={playablePlaylists}
+        showPlay={selectedQueueSongIds.length > 0}
+        showAddTo={selectedQueueSongIds.length > 0}
+        onPlay={() => {
+          onPlayTrack(selectedQueueSongIds[0]!, selectedQueueSongIds)
         }}
-        onShowSortMenu={showSortMenu}
-        onCreateFolder={createFolder}
-        onEnableMultiSelect={() => {
-          if (multiSelect) {
-            return
-          }
-          setMultiSelect(true)
-          setLocalNotification('')
+        onAddToPlaylistMenuClick={(event) => {
+          const rect = event.currentTarget.getBoundingClientRect()
+          openSelectionAddMenu(rect.left, rect.top - 8)
         }}
-        onDeleteSelectedItems={() => {
-          void deleteSelectedItems()
-        }}
-        onOpenSelectionAddMenu={(x, y) => setSelectionAddMenu({ x, y })}
-        onOpenSelectionMoveMenu={(x, y) => setSelectionMoveMenu({ x, y })}
-        selectedMoveTargetFolders={selectedMoveTargetFolders}
-        onSelectAll={() => {
-          setSelectedFolderPaths(new Set(childFolders.map((folder) => folder.relativePath)))
-          setSelectedSongIds(new Set(visibleSongIds))
-        }}
-        onReverseSelection={() => {
-          setSelectedFolderPaths((current) => new Set(childFolders
-            .map((folder) => folder.relativePath)
-            .filter((folderPath) => !current.has(folderPath))))
-          setSelectedSongIds((current) => new Set(visibleSongIds.filter((songId) => !current.has(songId))))
-        }}
-        onClearSelection={() => {
-          setSelectedFolderPaths(new Set())
-          setSelectedSongIds(new Set())
-        }}
-        onCancelSelection={() => {
-          ClearMultiSelectStatus()
-        }}
-        onToggleFoldersExpanded={() => setFoldersExpanded((current) => !current)}
-        onToggleSongsExpanded={() => setSongsExpanded((current) => !current)}
-        onSelectListItem={setSelectedListItemKey}
-        onOpenFolder={openFolder}
-        onShuffleFolder={shuffleFolder}
-        onOpenFolderAddMenu={(folder, x, y) => setFolderAddMenu({ folder, x, y })}
-        onRefreshFolder={(folder) => {
-          void refreshFolderWithResult(folder)
-        }}
-        onSearchFolder={searchDirectory}
-        onRevealFolder={(folder) => {
-          void onRevealFolder(folder.path)
-        }}
-        onToggleFolderSelection={toggleFolderSelection}
-        onDragFolderStart={(event, folder) => {
-          event.dataTransfer.setData('application/x-smplayer-local-items', JSON.stringify(dragPayloadForFolder(folder)))
-          event.dataTransfer.effectAllowed = 'move'
-        }}
-        onDropFolder={(event, folder) => {
-          void moveDraggedItems(event, folder)
-        }}
-        onOpenFolderMenu={(folder, x, y) => setFolderMenu({ folder, x, y })}
-        onPlayTrack={onPlayTrack}
-        onTogglePlayPause={onTogglePlayPause}
-        onMoveToMusicOrPlay={onMoveToMusicOrPlay}
-        onPlayNext={onPlayNext}
-        onToggleSongSelection={toggleSongSelection}
-        onOpenSongAddMenu={(song, x, y) => setSongAddMenu({ song, x, y })}
-        onOpenSongMenu={(song, x, y) => setSongMenu({ song, x, y })}
-        onDragSongStart={(event, song) => {
-          event.dataTransfer.setData('application/x-smplayer-local-items', JSON.stringify(dragPayloadForSong(song)))
-          event.dataTransfer.effectAllowed = 'move'
-        }}
-        onJumpToSongKey={jumpToLocalSongKey}
+        onRemove={requestDeleteSelectedItems}
+        removeLabel={t('context.deleteFromDisk')}
+        extraActions={[
+          {
+            key: 'move-to-folder',
+            text: t('context.moveToFolder'),
+            icon: 'folder',
+            disabled: selectedLocalItemCount === 0 || selectedMoveTargetFolders.length === 0,
+            onClick: (event) => {
+              const rect = event.currentTarget.getBoundingClientRect()
+              openSelectionMoveMenu(rect.left, rect.top - 8)
+            },
+          },
+        ]}
+        onSelectAll={selectAllLocalItems}
+        onReverseSelection={reverseLocalSelection}
+        onClearSelection={clearLocalSelection}
+        onCancel={ClearMultiSelectStatus}
       />
+
+      {childFolders.length === 0 && currentSongs.length === 0 ? (
+        loading || scanning ? (
+          <LoadingState t={t} />
+        ) : songs.length === 0 || searchQuery.trim() ? (
+          <div className="empty-state">
+            <h3>
+              {songs.length === 0
+                ? t('local.noSongsScanned')
+                : t('local.noSongsBranch', { query: searchQuery })}
+            </h3>
+            <p>
+              {songs.length === 0
+                ? t('local.scanPopulate')
+                : t('local.searchHelp')}
+            </p>
+            {songs.length === 0 ? (
+              <Link className="local-command" to="/settings">
+                <Icon name="settings" />
+                {t('local.goToSettings')}
+              </Link>
+            ) : null}
+          </div>
+        ) : (
+          <div className="local-empty-folder" aria-hidden="true" />
+        )
+      ) : effectiveViewMode === 'grid' ? (
+        <div className="local-scroll-frame custom-scrollbar-frame" ref={localScrollFrameRef}>
+          <div className="local-scroll-shell custom-scrollbar-container" ref={localScrollShellRef}>
+            <LocalGridContent
+              childFolders={childFolders}
+              currentSongs={currentSongs}
+              nodes={nodes}
+              songsById={songsById}
+              selectedFolderPaths={selectedFolderPaths}
+              selectedSongIds={selectedSongIds}
+              selectedTrackId={selectedTrackId}
+              isPlaying={isPlaying}
+              multiSelect={multiSelect}
+              isCompactLayout={isCompactLayout}
+              showLocalSectionHeaders={showLocalSectionHeaders}
+              foldersExpanded={foldersExpanded}
+              songsExpanded={songsExpanded}
+              showSongQuickJump={showSongQuickJump}
+              songQuickJumpBasisName={songQuickJumpBasisName}
+              songQuickJumpMap={songQuickJumpMap}
+              queueSongIds={queueSongIds}
+              t={t}
+              localSongItemRefs={localSongItemRefs}
+              onToggleFoldersExpanded={toggleFoldersExpanded}
+              onToggleSongsExpanded={toggleSongsExpanded}
+              onPlayFolder={shuffleFolder}
+              onAddFolder={openFolderAddMenu}
+              onRefreshFolder={refreshFolder}
+              onSearchFolder={searchDirectory}
+              onRevealFolder={revealFolder}
+              onOpenFolder={onOpenFolder}
+              onToggleFolderSelection={toggleFolderSelection}
+              onDragFolderStart={onDragFolderStart}
+              onDropFolder={onDropFolder}
+              onOpenFolderMenu={openFolderMenu}
+              onPlayTrack={onPlayTrack}
+              onTogglePlayPause={onTogglePlayPause}
+              onToggleSongSelection={toggleSongSelection}
+              onAddSong={openSongAddMenu}
+              onOpenSongMenu={openSongMenu}
+              onDragSongStart={onDragSongStart}
+              onJumpToSongKey={jumpToLocalSongKey}
+            />
+          </div>
+          <CustomScrollbar
+            scrollbarTrackRef={localScrollbarTrackRef}
+            onThumbPointerDown={onLocalScrollbarPointerDown}
+          />
+        </div>
+      ) : (
+        <LocalTableContent
+          frameRef={localTableScrollFrameRef}
+          shellRef={localTableShellRef}
+          scrollbarTrackRef={localTableScrollbarTrackRef}
+          onThumbPointerDown={onLocalTableScrollbarPointerDown}
+          childFolders={childFolders}
+          currentSongs={currentSongs}
+          currentRelativePath={currentRelativePath}
+          selectedFolderPaths={selectedFolderPaths}
+          selectedSongIds={selectedSongIds}
+          selectedListItemKey={selectedListItemKey}
+          selectedTrackId={selectedTrackId}
+          isPlaying={isPlaying}
+          multiSelect={multiSelect}
+          showLocalSectionHeaders={showLocalSectionHeaders}
+          showFolderItems={showFolderItems}
+          showSongItems={showSongItems}
+          foldersExpanded={foldersExpanded}
+          songsExpanded={songsExpanded}
+          showSongQuickJump={showSongQuickJump}
+          songQuickJumpBasisName={songQuickJumpBasisName}
+          songQuickJumpMap={songQuickJumpMap}
+          queueSongIds={queueSongIds}
+          t={t}
+          localSongItemRefs={localSongItemRefs}
+          onToggleFoldersExpanded={toggleFoldersExpanded}
+          onToggleSongsExpanded={toggleSongsExpanded}
+          onToggleFolderSelection={toggleFolderSelection}
+          onSelectListItem={setSelectedListItemKey}
+          onOpenFolder={onOpenFolder}
+          onOpenFolderMenu={openFolderMenu}
+          onDragFolderStart={onDragFolderStart}
+          onDropFolder={onDropFolder}
+          onPlayFolder={shuffleFolder}
+          onAddFolder={openFolderAddMenu}
+          onRefreshFolder={refreshFolder}
+          onSearchFolder={searchDirectory}
+          onRevealFolder={revealFolder}
+          onToggleSongSelection={toggleSongSelection}
+          onOpenSongMenu={openSongMenu}
+          onDragSongStart={onDragSongStart}
+          onPlayTrack={onPlayTrack}
+          onTogglePlayPause={onTogglePlayPause}
+          onMoveToMusicOrPlay={onMoveToMusicOrPlay}
+          onPlayNext={onPlayNext}
+          onAddSong={openSongAddMenu}
+          onJumpToSongKey={jumpToLocalSongKey}
+        />
+      )}
+
       {folderMenu ? (
         <MenuFlyout
           position={folderMenu}
@@ -1130,37 +1363,93 @@ export function LocalPage({
           ].filter((item) => item != null) as MenuFlyoutItem[]}
         />
       ) : null}
-      <LocalPageDialogs
-        t={t}
-        songs={songs}
-        playlists={playlists}
-        queueSongIds={queueSongIds}
-        selectedTrackId={selectedTrackId}
-        isPlaying={isPlaying}
-        songMenu={songMenu}
-        folderUpdateResultDialog={folderUpdateResultDialog}
-        folderUpdateResultSongMenu={folderUpdateResultSongMenu}
-        inputDialog={inputDialog}
-        removeDialog={removeDialog}
-        onCloseSongMenu={() => setSongMenu(null)}
-        onCloseFolderUpdateResultDialog={() => {
-          setFolderUpdateResultDialog(null)
-          setFolderUpdateResultSongMenu(null)
-        }}
-        onCloseFolderUpdateResultSongMenu={() => setFolderUpdateResultSongMenu(null)}
-        onOpenFolderUpdateResultSongMenu={(song, x, y) => setFolderUpdateResultSongMenu({ song, x, y })}
-        onCloseInputDialog={() => setInputDialog(null)}
-        onCloseRemoveDialog={() => setRemoveDialog(null)}
-        onPlayTrack={onPlayTrack}
-        onMoveToMusicOrPlay={onMoveToMusicOrPlay}
-        onTogglePlayPause={onTogglePlayPause}
-        onPlayNext={onPlayNext}
-        onRevealSong={onRevealSong}
-        onDeleteSongFromDisk={onDeleteSongFromDisk}
-        onToggleFavorite={onToggleFavorite}
-        onAddSongToPlaylist={onAddSongToPlaylist}
-        onSelectSong={selectSong}
-      />
+      {songMenu ? (
+        <MusicMenuFlyout
+          menu={songMenu}
+          playlists={playlists}
+          queueSongIds={queueSongIds}
+          currentTrackId={selectedTrackId}
+          isPlaying={isPlaying}
+          t={t}
+          onClose={() => setSongMenu(null)}
+          onPlayTrack={onPlayTrack}
+          onMoveToMusicOrPlay={onMoveToMusicOrPlay}
+          onTogglePlayPause={onTogglePlayPause}
+          onPlayNext={onPlayNext}
+          onRevealSong={onRevealSong}
+          onDeleteSongFromDisk={onDeleteSongFromDisk}
+          onToggleFavorite={onToggleFavorite}
+          onAddSongToPlaylist={onAddSongToPlaylist}
+          showSelect
+          showMoveToFolder
+          showHideFile
+          onSelectSong={selectSong}
+        />
+      ) : null}
+      {folderUpdateResultDialog ? (
+        <FolderUpdateResultDialog
+          t={t}
+          result={folderUpdateResultDialog.result}
+          folder={folderUpdateResultDialog.folder}
+          songs={songs}
+          selectedTrackId={selectedTrackId}
+          songMenuOpen={folderUpdateResultSongMenu != null}
+          onPlaySong={(songId) => {
+            onAddNextAndPlay(songId)
+          }}
+          onOpenSongMenu={(song, x, y) => setFolderUpdateResultSongMenu({ song, x, y })}
+          onClose={() => {
+            setFolderUpdateResultDialog(null)
+            setFolderUpdateResultSongMenu(null)
+          }}
+        />
+      ) : null}
+      {folderUpdateResultSongMenu ? (
+        <MusicMenuFlyout
+          menu={folderUpdateResultSongMenu}
+          playlists={playlists}
+          queueSongIds={queueSongIds}
+          currentTrackId={selectedTrackId}
+          isPlaying={isPlaying}
+          t={t}
+          onClose={() => setFolderUpdateResultSongMenu(null)}
+          onPlayTrack={onPlayTrack}
+          onMoveToMusicOrPlay={onMoveToMusicOrPlay}
+          onTogglePlayPause={onTogglePlayPause}
+          onPlayNext={onPlayNext}
+          onRevealSong={onRevealSong}
+          onDeleteSongFromDisk={onDeleteSongFromDisk}
+          onToggleFavorite={onToggleFavorite}
+          onAddSongToPlaylist={onAddSongToPlaylist}
+          showSelect={false}
+          showMusicProperties={false}
+          showDelete={false}
+          menuLayer="dialog"
+        />
+      ) : null}
+      {inputDialog ? (
+        <InputDialog
+          t={t}
+          title={inputDialog.title}
+          defaultValue={inputDialog.defaultValue}
+          validate={inputDialog.validate}
+          onCancel={() => setInputDialog(null)}
+          onConfirm={(value) => {
+            void inputDialog.onConfirm(value)
+          }}
+        />
+      ) : null}
+      {removeDialog ? (
+        <RemoveDialog
+          t={t}
+          title={removeDialog.title}
+          message={removeDialog.message}
+          onCancel={() => setRemoveDialog(null)}
+          onConfirm={() => {
+            void removeDialog.onConfirm()
+          }}
+        />
+      ) : null}
     </section>
   )
 }

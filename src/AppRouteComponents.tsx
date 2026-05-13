@@ -2,15 +2,10 @@ import { useLocation, useNavigate } from 'react-router-dom'
 
 import { LoadingState } from './components/LoadingState'
 import { AlbumDetailPage } from './pages/AlbumDetailPage'
-import { LocalPage } from './pages/LocalPage'
 import type {
-  LibraryFolder,
   LibraryPlaylist,
   LibrarySong,
-  LocalFolderSortCriterion,
   PreferenceLevel,
-  ScanLibraryProgress,
-  ScanLibraryResult,
 } from './shared/contracts'
 import type { Translator } from './shared/i18n'
 import { compareLocalText } from './shared/textCompare'
@@ -105,135 +100,6 @@ export function AlbumDetailRoute({
       onAlbumClick={(album) => {
         navigate(`/albums?album=${encodeURIComponent(album)}`)
       }}
-    />
-  )
-}
-
-export function LocalPageRoute({
-  songs,
-  folders,
-  playlists,
-  favoritePlaylistId,
-  t,
-  rootPath,
-  currentRelativePath,
-  selectedTrackId,
-  isPlaying,
-  searchQuery,
-  loading,
-  scanning,
-  scanProgress,
-  error,
-  onPickLibraryRoot,
-  onOpenFolder,
-  onRefreshFolder,
-  onCancelRefreshFolder,
-  onPlayTrack,
-  onMoveToMusicOrPlay,
-  onTogglePlayPause,
-  onPlayNext,
-  onRevealSong,
-  onRevealFolder,
-  onCreateFolder,
-  onRenameFolder,
-  onDeleteFolder,
-  onHideFolder,
-  onAddSongToPlaylist,
-  onAddSongsToPlaylist,
-  onCreatePlaylistWithSongs,
-  onAddSongsToNowPlaying,
-  onToggleFavorite,
-  onDeleteSongFromDisk,
-  onMoveSongsToFolder,
-  onMoveFolderToFolder,
-  onDeleteLocalItems,
-  onUpdateFolderSort,
-  onSearchDirectory,
-  onHiddenFoldersListButtonClick,
-}: {
-  songs: LibrarySong[]
-  folders: LibraryFolder[]
-  playlists: LibraryPlaylist[]
-  favoritePlaylistId: number
-  t: Translator
-  rootPath: string
-  currentRelativePath: string
-  selectedTrackId: number | null
-  isPlaying: boolean
-  searchQuery: string
-  loading: boolean
-  scanning: boolean
-  scanProgress: ScanLibraryProgress | null
-  error: string | null
-  onPickLibraryRoot: () => void
-  onOpenFolder: (targetRelativePath: string) => void
-  onRefreshFolder: (folderPath: string) => void | ScanLibraryResult | null | Promise<ScanLibraryResult | null | void>
-  onCancelRefreshFolder: () => void
-  onPlayTrack: (trackId: number, queueSongIds: number[]) => void
-  onMoveToMusicOrPlay: (songId: number) => void
-  onTogglePlayPause: () => void
-  onPlayNext: (songId: number) => void
-  onRevealSong: (songPath: string) => void | Promise<void>
-  onRevealFolder: (folderPath: string) => void | Promise<void>
-  onCreateFolder: (relativePath: string, name: string) => void | Promise<void>
-  onRenameFolder: (folderPath: string, name: string) => void | Promise<void>
-  onDeleteFolder: (folderPath: string) => void | Promise<void>
-  onHideFolder: (folderPath: string) => void | Promise<void>
-  onAddSongToPlaylist: (playlistId: number, songId: number) => void
-  onAddSongsToPlaylist: (playlistId: number, songIds: number[]) => void
-  onCreatePlaylistWithSongs: (name: string, songIds: number[]) => void
-  onAddSongsToNowPlaying: (songIds: number[]) => void
-  onToggleFavorite: (songId: number, favorite: boolean) => void
-  onDeleteSongFromDisk: (songId: number) => void
-  onMoveSongsToFolder: (songIds: number[], folderPath: string) => void | Promise<void>
-  onMoveFolderToFolder: (sourceFolderPath: string, targetFolderPath: string) => void | Promise<void>
-  onDeleteLocalItems: (songIds: number[], folderPaths: string[]) => void | Promise<void>
-  onUpdateFolderSort: (folderPath: string, sortCriterion: LocalFolderSortCriterion) => void | Promise<void>
-  onSearchDirectory: (query: string, folderRelativePath: string) => void
-  onHiddenFoldersListButtonClick: () => void
-}) {
-  return (
-    <LocalPage
-      songs={songs}
-      folders={folders}
-      playlists={playlists}
-      favoritePlaylistId={favoritePlaylistId}
-      t={t}
-      rootPath={rootPath}
-      currentRelativePath={currentRelativePath}
-      selectedTrackId={selectedTrackId}
-      isPlaying={isPlaying}
-      searchQuery={searchQuery}
-      loading={loading}
-      scanning={scanning}
-      scanProgress={scanProgress}
-      error={error}
-      onPickLibraryRoot={onPickLibraryRoot}
-      onOpenFolder={onOpenFolder}
-      onRefreshFolder={onRefreshFolder}
-      onCancelRefreshFolder={onCancelRefreshFolder}
-      onPlayTrack={onPlayTrack}
-      onMoveToMusicOrPlay={onMoveToMusicOrPlay}
-      onTogglePlayPause={onTogglePlayPause}
-      onPlayNext={onPlayNext}
-      onRevealSong={onRevealSong}
-      onRevealFolder={onRevealFolder}
-      onCreateFolder={onCreateFolder}
-      onRenameFolder={onRenameFolder}
-      onDeleteFolder={onDeleteFolder}
-      onHideFolder={onHideFolder}
-      onAddSongToPlaylist={onAddSongToPlaylist}
-      onAddSongsToPlaylist={onAddSongsToPlaylist}
-      onCreatePlaylistWithSongs={onCreatePlaylistWithSongs}
-      onAddSongsToNowPlaying={onAddSongsToNowPlaying}
-      onToggleFavorite={onToggleFavorite}
-      onDeleteSongFromDisk={onDeleteSongFromDisk}
-      onMoveSongsToFolder={onMoveSongsToFolder}
-      onMoveFolderToFolder={onMoveFolderToFolder}
-      onDeleteLocalItems={onDeleteLocalItems}
-      onUpdateFolderSort={onUpdateFolderSort}
-      onSearchDirectory={onSearchDirectory}
-      onHiddenFoldersListButtonClick={onHiddenFoldersListButtonClick}
     />
   )
 }
