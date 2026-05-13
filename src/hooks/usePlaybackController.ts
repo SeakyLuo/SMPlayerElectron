@@ -21,7 +21,7 @@ import { updateMediaSessionPosition, useMediaSession } from './useMediaSession'
 import { usePlaybackPersistence } from './usePlaybackPersistence'
 import { usePlaybackShortcuts } from './usePlaybackShortcuts'
 
-interface PlaybackController {
+export interface PlaybackController {
   currentTrack: LibrarySong | null
   currentTrackId: number | null
   currentQueueIndex: number | null

@@ -1,27 +1,25 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type PointerEvent, type RefObject, type SetStateAction } from 'react'
 
-import { getDisplayArtists } from '../shared/artists'
 import { extractArtworkColorRgb, getDefaultArtworkColorRgb } from '../shared/artworkColor'
-import type { LibraryPlaylist, LibrarySong, MusicLibrarySortCriterion, PlaylistSortCriterion, PreferenceEntityType, PreferenceItemSnapshot, PreferenceLevel, PreferenceSettingsSnapshot } from '../shared/contracts'
-import { formatDuration } from '../shared/formatters'
+import type { LibraryPlaylist, LibrarySong, PlaylistSortCriterion, PreferenceEntityType, PreferenceItemSnapshot, PreferenceLevel, PreferenceSettingsSnapshot } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
 import { removeQueueRange } from '../shared/queueUndo'
 import { useLibraryStore } from '../state/useLibraryStore'
 import { usePreferenceStore } from '../state/usePreferenceStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
-import { ArtworkImage } from './ArtworkImage'
 import { AppBarPortal } from './AppBarPortal'
 import { CommandBar, CommandBarButton } from './CommandBar'
-import { DefaultAlbumArtwork } from './DefaultAlbumArtwork'
 import { requestConfirmDialog, requestTextDialog } from './dialogService'
+import { HeaderedPlaylistCover } from './HeaderedPlaylistCover'
 import { MenuFlyout } from './MenuFlyout'
 import { getAddToPlaylistMenuFlyoutItem, getMusicMenuFlyoutItems, getPreferenceMenuFlyoutItem, type MenuFlyoutItem, type MenuFlyoutPosition } from './MenuFlyoutHelper'
 import { MultiSelectCommandBar } from './MultiSelectCommandBar'
 import { PlaylistControlItem } from './PlaylistControlItem'
 import { MusicDialog } from './MusicDialog'
 import { getPlaylistArtworkDisplayUrls, usePlaylistArtwork } from './playlistArtwork'
+import { captions, getAlbumPreferenceDisplayName, getHeaderPlaylistInfo, getNextPlaylistName, getParentFolderPath, inferSortCriterion, isBadNewPlaylistName, shuffleSongIds, sortOptions, sortSongs, validatePlaylistName } from './headeredPlaylistModel'
 
-type HeaderedPlaylistType = 'album' | 'playlist' | 'favorites'
+export type HeaderedPlaylistType = 'album' | 'playlist' | 'favorites'
 
 interface HeaderedPlaylistControlProps {
   type: HeaderedPlaylistType
@@ -65,8 +63,6 @@ interface HeaderedPlaylistControlProps {
   onPlayNext?: (songId: number) => void
   onRecordPlay?: () => void
 }
-
-const sortOptions: MusicLibrarySortCriterion[] = ['title', 'artist', 'album', 'duration', 'play-count', 'date-added']
 
 function parseArtworkRgb(value: string) {
   const [red, green, blue] = value.split(',').map((part) => Number(part.trim()))
@@ -1193,184 +1189,4 @@ function useHeaderedPlaylistScroll(
     window.addEventListener('pointerup', stop)
     window.addEventListener('pointercancel', stop)
   }
-}
-
-function getParentFolderPath(filePath: string) {
-  const index = Math.max(filePath.lastIndexOf('\\'), filePath.lastIndexOf('/'))
-  return filePath.slice(0, index)
-}
-
-function HeaderedPlaylistCover({
-  artworkUrls,
-  title,
-  type,
-}: {
-  artworkUrls: string[]
-  title: string
-  type: HeaderedPlaylistType
-}) {
-  if (artworkUrls.length >= 3 && type !== 'album') {
-    return (
-      <span className="headered-playlist-cover headered-playlist-cover-mosaic" aria-hidden="true">
-        {artworkUrls.slice(0, 4).map((artworkUrl, index) => (
-          <img
-            alt=""
-            key={`${artworkUrl}:${index}`}
-            src={artworkUrl}
-          />
-        ))}
-        {artworkUrls.length === 3 ? (
-          <span className="headered-playlist-cover-mosaic-fallback">
-            <img src="/colorful_bg_wide.png" alt="" />
-          </span>
-        ) : null}
-      </span>
-    )
-  }
-
-  return (
-    <ArtworkImage
-      className="headered-playlist-cover"
-      src={artworkUrls[0] ?? ''}
-      title={title}
-      renderFallback={() => (
-        <div className="headered-playlist-cover headered-playlist-cover-fallback" aria-hidden="true">
-          {type === 'album'
-            ? <DefaultAlbumArtwork className="headered-playlist-cover-fallback-image" />
-            : <DefaultAlbumArtwork className="headered-playlist-cover-fallback-image" />}
-        </div>
-      )}
-    />
-  )
-}
-
-const captions: Record<string, string> = {
-  album: 'common.album',
-  artist: 'common.artist',
-  cancel: 'common.cancel',
-  clear: 'common.clear',
-  delete: 'playlists.delete',
-  duration: 'common.duration',
-  editArtwork: 'albums.editArtwork',
-  multiSelect: 'albums.multiSelect',
-  name: 'common.name',
-  play: 'context.play',
-  removeSelected: 'playlists.removeSelected',
-  rename: 'playlists.rename',
-  save: 'playlists.save',
-  shuffle: 'nowPlaying.randomPlay',
-  sort: 'common.sort',
-  preferenceSettings: 'settings.preferenceSettings',
-  songArtist: 'headeredPlaylist.songArtist',
-  songsPrefix: 'headeredPlaylist.songsPrefix',
-  'sort.album': 'table.album',
-  'sort.artist': 'table.artist',
-  'sort.date-added': 'table.dateAdded',
-  'sort.duration': 'table.duration',
-  'sort.play-count': 'table.playCount',
-  'sort.reverse': 'albums.sort.reverse',
-  'sort.title': 'table.title',
-}
-
-function getHeaderPlaylistInfo(songs: LibrarySong[], t: Translator) {
-  const countText = `${t('headeredPlaylist.songsPrefix')}${songs.length}`
-  if (songs.length < 2) {
-    return countText
-  }
-
-  const duration = songs.reduce((total, song) => total + song.duration, 0)
-  return `${countText} • ${formatDuration(duration)}`
-}
-
-function getAlbumPreferenceDisplayName(albumName: string, songs: LibrarySong[], t: Translator) {
-  const albumTitle = albumName || t('common.albumUnknown')
-  const firstSong = songs[0]
-  const artist = firstSong ? getDisplayArtists(firstSong, t('common.artistUnknown')) : t('common.artistUnknown')
-  return `${albumTitle} - ${artist}`
-}
-
-function sortSongs(songs: LibrarySong[], criterion: MusicLibrarySortCriterion) {
-  const sortedSongs = songs.slice().sort((left, right) => {
-    switch (criterion) {
-      case 'artist':
-        return getDisplayArtists(left).localeCompare(getDisplayArtists(right))
-      case 'album':
-        return left.album.localeCompare(right.album)
-      case 'duration':
-        return left.duration - right.duration
-      case 'play-count':
-        return left.playCount - right.playCount
-      case 'date-added':
-        return left.dateAdded.localeCompare(right.dateAdded)
-      case 'title':
-        return left.title.localeCompare(right.title)
-    }
-  })
-
-  return sortedSongs
-}
-
-function inferSortCriterion(songs: LibrarySong[]) {
-  for (const criterion of sortOptions) {
-    const sortedSongIds = sortSongs(songs, criterion).map((song) => song.id)
-    if (sortedSongIds.every((songId, index) => songId === songs[index]!.id)) {
-      return criterion
-    }
-  }
-
-  return 'title'
-}
-
-function isBadNewPlaylistName(name: string, t: Translator) {
-  return name === t('common.nowPlaying') || name === t('common.myFavorites')
-}
-
-function validatePlaylistName(name: string, playlists: LibraryPlaylist[], currentName: string, t: Translator) {
-  if (!name) {
-    return t('playlists.nameEmpty')
-  }
-
-  if (name.length > 50) {
-    return t('playlists.nameTooLong')
-  }
-
-  if (playlists.some((playlist) => playlist.name !== currentName && playlist.name === name)) {
-    return t('playlists.nameUsed')
-  }
-
-  if (name.includes('+++++') || name.includes('{0}') || name.includes('{1}')) {
-    return t('playlists.nameSpecial')
-  }
-
-  return ''
-}
-
-function getNextPlaylistName(name: string, playlists: LibraryPlaylist[]) {
-  if (!name) {
-    return ''
-  }
-
-  const playlistNames = new Set(playlists.map((playlist) => playlist.name))
-  const siblingCount = playlists.filter((playlist) => playlist.name.startsWith(name)).length
-  for (let index = 1; index <= siblingCount; index += 1) {
-    const nextName = `${name} (${index})`
-    if (!playlistNames.has(nextName)) {
-      return nextName
-    }
-  }
-
-  return name
-}
-
-function shuffleSongIds(songIds: number[]) {
-  const shuffledSongIds = songIds.slice()
-
-  for (let index = shuffledSongIds.length - 1; index > 0; index -= 1) {
-    const randomIndex = Math.floor(Math.random() * (index + 1))
-    const current = shuffledSongIds[index]
-    shuffledSongIds[index] = shuffledSongIds[randomIndex]
-    shuffledSongIds[randomIndex] = current
-  }
-
-  return shuffledSongIds
 }

@@ -354,6 +354,11 @@ export interface MusicData {
   search: SearchSnapshot
 }
 
+export type LibraryShellSnapshot = Pick<
+  MusicData,
+  'settings' | 'counts' | 'playlists' | 'favorites' | 'nowPlaying' | 'search'
+>
+
 export interface PreferenceItemSnapshot {
   id: number
   type: PreferenceEntityType
@@ -478,6 +483,7 @@ export interface ViewStateUpdate {
 
 export interface SmplayerApi {
   getAppInfo: () => Promise<AppInfo>
+  getLibraryShell: () => Promise<LibraryShellSnapshot>
   getLibrarySettings: () => Promise<SettingsSnapshot>
   getLibraryCounts: () => Promise<LibraryCounts>
   getLibrarySongs: () => Promise<LibrarySong[]>

@@ -44,6 +44,7 @@ if (startupNightModeActive) {
 
 const api: SmplayerApi = {
   getAppInfo: () => ipcRenderer.invoke('app:get-info'),
+  getLibraryShell: () => ipcRenderer.invoke('library:get-shell'),
   getLibrarySettings: () => ipcRenderer.invoke('library:get-settings'),
   getLibraryCounts: () => ipcRenderer.invoke('library:get-counts'),
   getLibrarySongs: () => ipcRenderer.invoke('library:get-songs'),

@@ -1,22 +1,21 @@
 import { mkdir, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 
-import { Notification, ipcMain, shell, type BrowserWindow } from 'electron'
+import { Notification, app, ipcMain, shell, type BrowserWindow } from 'electron'
 
 import type { TrackNotificationPayload } from '../../src/shared/contracts'
 
 interface ShellIpcOptions {
   getWindow: () => BrowserWindow | null
-  createLocalFolder: (rootPath: string, relativePath: string, name: string) => Promise<void>
-  sendFeedbackEmail: () => Promise<void>
-  openFeedbackInBrowser: () => Promise<void>
-  openVoiceAssistantPrivacySettings: () => Promise<void>
   recognizeWindowsSpeech: (language: string) => Promise<unknown>
   cancelWindowsSpeechRecognition: () => void
-  revealSystemLogs: () => Promise<void>
   showNotifications: () => boolean
   getTrackNotificationBody: (songId: number) => Promise<string>
 }
+
+const feedbackIssueUrl = 'https://github.com/SeakyLuo/SMPlayerEletron/issues'
+const feedbackEmailAddress = 'luokiss9@qq.com'
+const feedbackEmailSubject = 'Feedback about Simple Melody Player'
 
 export function registerShellIpc(options: ShellIpcOptions) {
   ipcMain.handle('shell:reveal-item', async (_event, itemPath: string) => {
@@ -24,14 +23,14 @@ export function registerShellIpc(options: ShellIpcOptions) {
     shell.showItemInFolder(itemPath)
   })
   ipcMain.handle('shell:create-local-folder', async (_event, rootPath: string, relativePath: string, name: string) => {
-    await options.createLocalFolder(rootPath, relativePath, name)
+    await createLocalFolder(rootPath, relativePath, name)
   })
-  ipcMain.handle('shell:send-feedback-email', () => options.sendFeedbackEmail())
-  ipcMain.handle('shell:open-feedback-browser', () => options.openFeedbackInBrowser())
-  ipcMain.handle('shell:open-voice-assistant-privacy-settings', () => options.openVoiceAssistantPrivacySettings())
+  ipcMain.handle('shell:send-feedback-email', () => sendFeedbackEmail())
+  ipcMain.handle('shell:open-feedback-browser', () => openFeedbackInBrowser())
+  ipcMain.handle('shell:open-voice-assistant-privacy-settings', () => openVoiceAssistantPrivacySettings())
   ipcMain.handle('voice:recognize', (_event, language: string) => options.recognizeWindowsSpeech(language))
   ipcMain.handle('voice:cancel-recognition', () => options.cancelWindowsSpeechRecognition())
-  ipcMain.handle('shell:reveal-system-logs', () => options.revealSystemLogs())
+  ipcMain.handle('shell:reveal-system-logs', () => revealSystemLogs())
   ipcMain.handle('shell:show-track-notification', async (_event, track: TrackNotificationPayload) => {
     if (!Notification.isSupported()) {
       return
@@ -67,6 +66,34 @@ export function registerShellIpc(options: ShellIpcOptions) {
   })
 }
 
-export async function createLocalFolder(rootPath: string, relativePath: string, name: string) {
+async function createLocalFolder(rootPath: string, relativePath: string, name: string) {
   await mkdir(join(rootPath, relativePath, name), { recursive: true })
+}
+
+async function sendFeedbackEmail() {
+  const mailtoUrl = new URL(`mailto:${feedbackEmailAddress}`)
+  mailtoUrl.searchParams.set('subject', feedbackEmailSubject)
+  await shell.openExternal(mailtoUrl.toString())
+}
+
+async function openFeedbackInBrowser() {
+  await shell.openExternal(feedbackIssueUrl)
+}
+
+async function openVoiceAssistantPrivacySettings() {
+  if (process.platform === 'win32') {
+    await shell.openExternal('ms-settings:privacy-speech')
+    return
+  }
+
+  await shell.openExternal(process.platform === 'darwin'
+    ? 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone'
+    : 'https://support.microsoft.com/windows/manage-app-permissions-for-your-microphone-in-windows',
+  )
+}
+
+async function revealSystemLogs() {
+  const logsPath = join(app.getPath('userData'), 'Logs')
+  await mkdir(logsPath, { recursive: true })
+  shell.openPath(logsPath)
 }

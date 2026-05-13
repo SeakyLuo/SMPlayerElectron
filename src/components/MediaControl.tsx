@@ -11,7 +11,7 @@ import { useLibraryStore } from '../state/useLibraryStore'
 import { usePlaybackProgress } from '../state/playbackProgressStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
 import { useSongArtwork } from '../hooks/useSongArtwork'
-import { DefaultAlbumArtwork, DEFAULT_ALBUM_ARTWORK_URL } from './DefaultAlbumArtwork'
+import { DefaultAlbumArtwork } from './DefaultAlbumArtwork'
 import { Icon } from './icons'
 import { formatDuration } from '../shared/formatters'
 import { MenuFlyout } from './MenuFlyout'
@@ -20,6 +20,7 @@ import { MusicDialog } from './MusicDialog'
 import { usePreferenceStore } from '../state/usePreferenceStore'
 import { VoiceAssistantFlyout, type VoiceAssistantFlyoutHandle, type VoiceAssistantResponse } from './VoiceAssistantFlyout'
 import { getVolumeIconName } from './volumeIcon'
+import { DEFAULT_ARTWORK_URL, getRepeatOneTitle, getRepeatTitle, getShuffleTitle } from './mediaControlModel'
 
 export type { VoiceAssistantResponse } from './VoiceAssistantFlyout'
 
@@ -130,18 +131,6 @@ interface MediaControlSurfaceProps {
   onMoreClick: (event: MouseEvent<HTMLButtonElement>) => void
 }
 
-export function getShuffleTitle(t: Translator, mode: PlaybackMode) {
-  return mode === 'shuffle' ? t('player.shuffleEnabled') : t('player.shuffleDisabled')
-}
-
-export function getRepeatTitle(t: Translator, mode: PlaybackMode) {
-  return mode === 'repeat' ? t('player.repeatEnabled') : t('player.repeatDisabled')
-}
-
-export function getRepeatOneTitle(t: Translator, mode: PlaybackMode) {
-  return mode === 'repeat-one' ? t('player.repeatOneEnabled') : t('player.repeatOneDisabled')
-}
-
 function getPlaybackModeName(t: Translator, mode: PlaybackMode) {
   switch (mode) {
     case 'shuffle':
@@ -167,8 +156,6 @@ function getPlaybackModeIcon(mode: PlaybackMode): NonNullable<MenuFlyoutItem['ic
       return 'nowPlaying'
   }
 }
-
-export const DEFAULT_ARTWORK_URL = DEFAULT_ALBUM_ARTWORK_URL
 
 export function MediaControlButtons({
   trackId,
