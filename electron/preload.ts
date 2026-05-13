@@ -94,8 +94,8 @@ const api: SmplayerApi = {
   moveSongsToFolder: (songIds, folderPath) => ipcRenderer.invoke('library:move-songs-to-folder', songIds, folderPath),
   moveLocalFolderToFolder: (sourceFolderPath, targetFolderPath) =>
     ipcRenderer.invoke('library:move-local-folder-to-folder', sourceFolderPath, targetFolderPath),
-  moveLocalItemsToFolder: (songIds, folderPaths, targetFolderPath) =>
-    ipcRenderer.invoke('library:move-local-items-to-folder', songIds, folderPaths, targetFolderPath),
+  moveLocalItemsToFolder: (songIds, folderPaths, targetFolderPath, operationId) =>
+    ipcRenderer.invoke('library:move-local-items-to-folder', songIds, folderPaths, targetFolderPath, operationId),
   deleteSongsFromDisk: (songIds) => ipcRenderer.invoke('library:delete-songs-from-disk', songIds),
   deleteLocalItems: (songIds, folderPaths) => ipcRenderer.invoke('library:delete-local-items', songIds, folderPaths),
   updateLocalFolderSort: (folderPath, sortCriterion) =>
@@ -121,6 +121,7 @@ const api: SmplayerApi = {
   prepareScanLocalFolder: (folderPath) => ipcRenderer.invoke('library:prepare-scan-folder', folderPath),
   scanLocalFolder: (folderPath, operationId, progressMax) => ipcRenderer.invoke('library:scan-folder', folderPath, operationId, progressMax),
   cancelScanLocalFolder: (operationId) => ipcRenderer.invoke('library:cancel-scan-folder', operationId),
+  applyArtistSplits: (splits) => ipcRenderer.invoke('library:apply-artist-splits', splits),
   onScanLocalFolderProgress: (callback) => {
     const listener = (_event: Electron.IpcRendererEvent, progress: Parameters<typeof callback>[0]) => {
       callback(progress)
@@ -130,6 +131,17 @@ const api: SmplayerApi = {
 
     return () => {
       ipcRenderer.removeListener('library:scan-folder-progress', listener)
+    }
+  },
+  onMoveLocalItemsProgress: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, progress: Parameters<typeof callback>[0]) => {
+      callback(progress)
+    }
+
+    ipcRenderer.on('library:move-local-items-progress', listener)
+
+    return () => {
+      ipcRenderer.removeListener('library:move-local-items-progress', listener)
     }
   },
   takePendingOpenFiles: () => ipcRenderer.invoke('app:take-pending-open-files'),

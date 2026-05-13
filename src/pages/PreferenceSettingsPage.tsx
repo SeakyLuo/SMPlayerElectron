@@ -1,8 +1,7 @@
 ﻿import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 
-import { createPortal } from 'react-dom'
-
 import { Icon } from '../components/icons'
+import { PopupDialog } from '../components/PopupDialog'
 import type {
   PreferenceEntityType,
   PreferenceItemSnapshot,
@@ -161,51 +160,39 @@ export function PreferenceSettingsPage({ t, onClose }: PreferenceSettingsPagePro
   }
 
   if (!snapshot) {
-    return createPortal(
-      <div
-        className="settings-modal-backdrop"
-        role="presentation"
-        onMouseDown={(event) => {
-          if (event.target === event.currentTarget) {
-            onClose()
-          }
-        }}
+    return (
+      <PopupDialog
+        t={t}
+        overlayClassName="music-dialog-overlay PreferenceDialogOverlay"
+        className="preference-modal ContentDialog PreferenceDialog"
+        navClassName="music-dialog-pivot PreferenceDialogPivot"
+        navLabel={t('settings.preferenceSettings')}
+        ariaLabel={t('settings.preferenceSettings')}
+        onClose={onClose}
+        closeOnBackdrop
+        navChildren={(
+          <h2 className="popup-dialog-title">{t('settings.preferenceSettings')}</h2>
+        )}
       >
-        <section className="settings-modal preference-modal" role="dialog" aria-modal="true">
-          <header>
-            <h2>{t('settings.preferenceSettings')}</h2>
-            <button type="button" onClick={onClose} aria-label={t('common.close')}>
-              <Icon name="arrowLeft" className="dialog-back-icon" />
-              <Icon name="close" className="dialog-close-icon" />
-            </button>
-            <span className="dialog-titlebar-title">{t('app.shell')}</span>
-          </header>
-          <div className="preference-loading">{error || t('preferences.loading')}</div>
-        </section>
-      </div>,
-      document.body,
+        <div className="preference-loading">{error || t('preferences.loading')}</div>
+      </PopupDialog>
     )
   }
 
-  return createPortal(
-    <div
-      className="settings-modal-backdrop"
-      role="presentation"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) {
-          onClose()
-        }
-      }}
+  return (
+    <PopupDialog
+      t={t}
+      overlayClassName="music-dialog-overlay PreferenceDialogOverlay"
+      className="preference-modal ContentDialog PreferenceDialog"
+      navClassName="music-dialog-pivot PreferenceDialogPivot"
+      navLabel={t('settings.preferenceSettings')}
+      ariaLabel={t('settings.preferenceSettings')}
+      onClose={onClose}
+      closeOnBackdrop
+      navChildren={(
+        <h2 className="popup-dialog-title">{t('settings.preferenceSettings')}</h2>
+      )}
     >
-      <section className="settings-modal preference-modal" role="dialog" aria-modal="true">
-        <header>
-          <h2>{t('settings.preferenceSettings')}</h2>
-          <button type="button" onClick={onClose} aria-label={t('common.close')}>
-            <Icon name="arrowLeft" className="dialog-back-icon" />
-            <Icon name="close" className="dialog-close-icon" />
-          </button>
-          <span className="dialog-titlebar-title">{t('app.shell')}</span>
-        </header>
         <div className="preference-scroll-frame" ref={preferenceScrollFrameRef}>
           <div className="preference-page" ref={preferencePageRef}>
           <div className="preference-info">
@@ -301,9 +288,7 @@ export function PreferenceSettingsPage({ t, onClose }: PreferenceSettingsPagePro
             <div className="preference-scrollbar-thumb" onPointerDown={onPreferenceScrollbarPointerDown} />
           </div>
         </div>
-      </section>
-    </div>,
-    document.body,
+    </PopupDialog>
   )
 }
 

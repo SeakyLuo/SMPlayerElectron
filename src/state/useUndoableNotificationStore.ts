@@ -4,6 +4,7 @@ interface UndoableNotification {
   id: number
   message: string
   actions: UndoableNotificationAction[]
+  runningActionIndex: number | null
   onDismiss?: () => void | Promise<void>
 }
 
@@ -51,6 +52,7 @@ export const useUndoableNotificationStore = create<UndoableNotificationStoreStat
         id,
         message,
         actions,
+        runningActionIndex: null,
         onDismiss,
       },
     })
@@ -71,6 +73,7 @@ export const useUndoableNotificationStore = create<UndoableNotificationStoreStat
         id,
         message,
         actions: [],
+        runningActionIndex: null,
       },
     })
     dismissTimer = window.setTimeout(() => {
@@ -92,7 +95,18 @@ export const useUndoableNotificationStore = create<UndoableNotificationStoreStat
     }
 
     clearDismissTimer()
-    set({ notification: null })
-    await action.action()
+    set({
+      notification: {
+        ...current,
+        runningActionIndex: actionIndex,
+      },
+    })
+    try {
+      await action.action()
+    } finally {
+      if (get().notification?.id === current.id) {
+        set({ notification: null })
+      }
+    }
   },
 }))

@@ -19,18 +19,28 @@ export function InputDialog({
   confirmText?: string
   validate?: (value: string) => string
   onCancel: () => void
-  onConfirm: (value: string) => void
+  onConfirm: (value: string) => void | Promise<void>
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const mountedRef = useRef(true)
   const [value, setValue] = useState(defaultValue)
   const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
     inputRef.current?.focus()
     inputRef.current?.select()
+
+    return () => {
+      mountedRef.current = false
+    }
   }, [])
 
-  const confirm = () => {
+  const confirm = async () => {
+    if (submitting) {
+      return
+    }
+
     const nextValue = value.trim()
     const validationError = validate?.(nextValue) ?? ''
     if (validationError) {
@@ -38,7 +48,14 @@ export function InputDialog({
       return
     }
 
-    onConfirm(nextValue)
+    setSubmitting(true)
+    try {
+      await onConfirm(nextValue)
+    } finally {
+      if (mountedRef.current) {
+        setSubmitting(false)
+      }
+    }
   }
 
   return (
@@ -49,6 +66,7 @@ export function InputDialog({
           ref={inputRef}
           type="text"
           value={value}
+          disabled={submitting}
           placeholder={placeholder}
           onChange={(event) => {
             setValue(event.currentTarget.value)
@@ -56,18 +74,26 @@ export function InputDialog({
           }}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
-              confirm()
-            } else if (event.key === 'Escape') {
+              void confirm()
+            } else if (event.key === 'Escape' && !submitting) {
               onCancel()
             }
           }}
         />
         {error ? <p className="input-dialog-error">{error}</p> : null}
         <div className="input-dialog-actions">
-          <button type="button" className="input-dialog-primary" onClick={confirm}>
-            {confirmText}
+          <button
+            type="button"
+            className={`input-dialog-primary${submitting ? ' is-loading' : ''}`}
+            disabled={submitting}
+            onClick={() => {
+              void confirm()
+            }}
+          >
+            {submitting ? <span className="input-dialog-button-spinner" aria-hidden="true" /> : null}
+            <span>{confirmText}</span>
           </button>
-          <button type="button" onClick={onCancel}>
+          <button type="button" disabled={submitting} onClick={onCancel}>
             {t('common.cancel')}
           </button>
         </div>

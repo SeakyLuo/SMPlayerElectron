@@ -4,6 +4,7 @@ import {
   getPreferenceMenuFlyoutItem,
   getShuffleMenuItems,
   type MenuFlyoutItem,
+  type MenuFlyoutPosition,
 } from '../components/MenuFlyoutHelper'
 import type {
   LibraryFolder,
@@ -23,11 +24,9 @@ export interface NowPlayingSongMenuState {
   y: number
 }
 
-export interface NowPlayingAddToMenuState {
+export interface NowPlayingAddToMenuState extends MenuFlyoutPosition {
   songIds: number[]
   defaultPlaylistName: string
-  x: number
-  y: number
 }
 
 function getPlaybackModeName(t: Translator, mode: PlaybackMode) {
@@ -54,6 +53,15 @@ function getPlaybackModeIcon(mode: PlaybackMode): NonNullable<MenuFlyoutItem['ic
     default:
       return 'nowPlaying'
   }
+}
+
+function getPlaybackModeMenuItems(t: Translator, mode: PlaybackMode, setPlaybackMode: (mode: PlaybackMode) => void): MenuFlyoutItem[] {
+  return [
+    { key: 'playback-mode-list', text: getPlaybackModeName(t, 'once'), icon: 'nowPlaying', checked: mode === 'once', onClick: () => setPlaybackMode('once') },
+    { key: 'playback-mode-shuffle', text: getPlaybackModeName(t, 'shuffle'), icon: 'shuffle', checked: mode === 'shuffle', onClick: () => setPlaybackMode('shuffle') },
+    { key: 'playback-mode-repeat', text: getPlaybackModeName(t, 'repeat'), icon: 'repeat', checked: mode === 'repeat', onClick: () => setPlaybackMode('repeat') },
+    { key: 'playback-mode-repeat-one', text: getPlaybackModeName(t, 'repeat-one'), icon: 'repeatOne', checked: mode === 'repeat-one', onClick: () => setPlaybackMode('repeat-one') },
+  ]
 }
 
 export function getNowPlayingFullMoreItems({
@@ -170,12 +178,7 @@ export function getNowPlayingFullMoreItems({
         key: 'playback-mode',
         text: `${t('player.playbackMode')}: ${getPlaybackModeName(t, mode)}`,
         icon: getPlaybackModeIcon(mode),
-        submenu: [
-          { key: 'playback-mode-list', text: getPlaybackModeName(t, 'once'), icon: 'nowPlaying', onClick: () => setPlaybackMode('once') },
-          { key: 'playback-mode-shuffle', text: getPlaybackModeName(t, 'shuffle'), icon: 'shuffle', onClick: () => setPlaybackMode('shuffle') },
-          { key: 'playback-mode-repeat', text: getPlaybackModeName(t, 'repeat'), icon: 'repeat', onClick: () => setPlaybackMode('repeat') },
-          { key: 'playback-mode-repeat-one', text: getPlaybackModeName(t, 'repeat-one'), icon: 'repeatOne', onClick: () => setPlaybackMode('repeat-one') },
-        ],
+        submenu: getPlaybackModeMenuItems(t, mode, setPlaybackMode),
       },
       {
         key: 'player-volume',
@@ -192,6 +195,7 @@ export function getNowPlayingFullMoreItems({
         key: 'player-favorite',
         text: currentSong?.favorite ? t('player.unlike') : t('player.like'),
         icon: currentSong?.favorite ? 'heartFilled' : 'heart',
+        ...(currentSong?.favorite ? { iconTone: 'favorite' as const } : {}),
         disabled: !currentSong,
         onClick: onToggleFavorite,
       },

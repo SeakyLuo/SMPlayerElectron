@@ -107,6 +107,16 @@
   min-width: 0;
 }
 
+.settings-app-info {
+  grid-column: 1 / -1;
+  justify-self: center;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.4;
+  opacity: 0.82;
+}
+
 .settings-card {
   padding: 20px 22px;
   border-radius: 18px;
@@ -233,8 +243,8 @@
 .settings-feedback-options {
   position: absolute;
   left: 0;
-  top: calc(100% + 6px);
-  z-index: 121;
+  bottom: calc(100% + 6px);
+  z-index: 240;
   display: flex;
   flex-direction: column;
   min-width: 138px;
@@ -307,78 +317,6 @@
   }
 }
 
-.settings-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 300;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: rgba(24, 30, 38, 0.24);
-  backdrop-filter: blur(12px);
-  box-sizing: border-box;
-  -webkit-app-region: no-drag;
-  app-region: no-drag;
-}
-
-.settings-modal {
-  width: min(720px, calc(100vw - 48px));
-  max-height: calc(100vh - 48px);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  border: 1px solid rgba(126, 139, 154, 0.24);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.98);
-  box-shadow: 0 28px 70px rgba(20, 27, 36, 0.22);
-}
-
-.settings-modal header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 18px 20px 8px;
-}
-
-.settings-modal h2 {
-  min-width: 0;
-  margin: 0;
-  font-size: 22px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.settings-modal header button {
-  flex: 0 0 auto;
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  cursor: pointer;
-}
-
-.settings-modal header button svg {
-  width: var(--top-titlebar-back-icon-size);
-  height: var(--top-titlebar-back-icon-size);
-}
-
-.settings-modal header button .dialog-back-icon {
-  display: none;
-}
-
-.settings-modal .dialog-titlebar-title {
-  display: none;
-}
-
-.settings-modal header button:hover {
-  background: rgba(14, 25, 39, 0.08);
-}
-
 .release-notes-list {
   padding: 6px 20px 22px;
   color: var(--text-strong);
@@ -431,23 +369,10 @@
 .preference-modal {
   width: min(1080px, calc(100vw - 48px));
   height: min(820px, calc(100vh - 48px));
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  border: 1px solid rgba(126, 139, 154, 0.2);
-  border-radius: 16px;
-  background: rgba(248, 250, 252, 0.98);
-  color: var(--text-strong);
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 @media (max-width: 720px) {
-  .settings-modal-backdrop {
-    --dialog-toolbar-offset: 32px;
-    place-items: start stretch;
-    padding: 0;
-  }
-
-  .settings-modal,
   .preference-modal {
     width: 100vw;
     height: 100vh;
@@ -456,58 +381,6 @@
     max-height: none;
     border-width: 0;
     border-radius: 0;
-  }
-
-  .settings-modal header {
-    flex: 0 0 auto;
-    min-height: 48px;
-    padding: calc(var(--dialog-toolbar-offset) + 8px) 14px 8px;
-  }
-
-  .settings-modal h2 {
-    font-size: 18px;
-  }
-
-  .settings-modal header button {
-    position: fixed;
-    top: 0;
-    left: 8px;
-    z-index: 306;
-    width: 40px;
-    height: var(--dialog-toolbar-offset);
-    border-radius: 0;
-    background: transparent !important;
-  }
-
-  .settings-modal header button:hover {
-    background: var(--top-titlebar-back-hover-background) !important;
-  }
-
-  .settings-modal header button .dialog-back-icon {
-    display: block;
-  }
-
-  .settings-modal header button .dialog-close-icon {
-    display: none;
-  }
-
-  .settings-modal .dialog-titlebar-title {
-    position: fixed;
-    top: 0;
-    left: 54px;
-    right: 138px;
-    z-index: 305;
-    display: block;
-    overflow: hidden;
-    color: var(--text-primary);
-    font-size: 13px;
-    font-weight: 500;
-    line-height: var(--dialog-toolbar-offset);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    user-select: none;
-    -webkit-app-region: drag;
-    app-region: drag;
   }
 
   .release-notes-list {
@@ -539,7 +412,8 @@ body.night-mode .app-shell .settings-path-value {
 body.night-mode .app-shell .settings-toggle-row p,
 body.night-mode .app-shell .settings-input-row p,
 body.night-mode .app-shell .settings-card-header p,
-body.night-mode .app-shell .settings-inline-hint {
+body.night-mode .app-shell .settings-inline-hint,
+body.night-mode .app-shell .settings-app-info {
   color: var(--night-muted);
 }
 
@@ -602,63 +476,34 @@ body.night-mode .app-shell .settings-action-message {
   color: var(--night-text);
 }
 
-body.night-mode .app-shell .settings-progress-overlay,
-body.night-mode .app-shell .settings-modal-backdrop {
+body.night-mode .app-shell .settings-progress-overlay {
   background: rgba(4, 8, 13, 0.62);
 }
 
-body.night-mode .app-shell .settings-progress-dialog,
-body.night-mode .app-shell .settings-modal,
-body.night-mode .app-shell .preference-modal {
+body.night-mode .app-shell .settings-progress-dialog {
   border-color: var(--night-border);
   background: rgba(22, 28, 36, 0.98);
   color: var(--night-text);
   box-shadow: 0 28px 70px rgba(0, 0, 0, 0.48);
 }
 
-body.night-mode .app-shell .settings-modal h2,
 body.night-mode .app-shell .release-notes-list {
   color: var(--night-text);
-}
-
-body.night-mode .app-shell .settings-modal header button {
-  color: var(--night-muted);
-}
-
-body.night-mode .app-shell .settings-modal header button:hover {
-  background: rgba(var(--accent-rgb), 0.16);
-  color: color-mix(in srgb, var(--accent) 72%, #f5fbff 28%);
 }
 
 body.night-mode .app-shell .release-note-version {
   border-top-color: var(--night-border);
 }
 
-body.night-mode .settings-modal-backdrop {
-  background: rgba(4, 8, 13, 0.62);
-}
-
-body.night-mode .settings-progress-dialog,
-body.night-mode .settings-modal,
-body.night-mode .preference-modal {
+body.night-mode .settings-progress-dialog {
   border-color: var(--night-border);
   background: rgba(22, 28, 36, 0.98);
   color: var(--night-text);
   box-shadow: 0 28px 70px rgba(0, 0, 0, 0.48);
 }
 
-body.night-mode .settings-modal h2,
 body.night-mode .release-notes-list {
   color: var(--night-text);
-}
-
-body.night-mode .settings-modal header button {
-  color: var(--night-muted);
-}
-
-body.night-mode .settings-modal header button:hover {
-  background: rgba(var(--accent-rgb), 0.16);
-  color: color-mix(in srgb, var(--accent) 72%, #f5fbff 28%);
 }
 
 body.night-mode .release-note-version {

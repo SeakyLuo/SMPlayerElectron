@@ -124,10 +124,12 @@ export async function createMainWindow(options: MainWindowOptions) {
   const startupRoute = resolveStartupRoute(options.getSettings().lastPage)
   if (process.env.VITE_DEV_SERVER_URL) {
     const devServerUrl = new URL(process.env.VITE_DEV_SERVER_URL)
+    devServerUrl.searchParams.set('startupNightMode', startupNightModeActive ? '1' : '0')
     devServerUrl.hash = startupRoute
     await window.loadURL(devServerUrl.toString())
   } else {
     const indexUrl = pathToFileURL(join(__dirname, '../dist/index.html'))
+    indexUrl.searchParams.set('startupNightMode', startupNightModeActive ? '1' : '0')
     indexUrl.hash = startupRoute
     await window.loadURL(indexUrl.toString())
   }

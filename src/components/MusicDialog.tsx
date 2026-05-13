@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { createPortal } from 'react-dom'
 
 import { normalizeArtists } from '../shared/artists'
 import type { LibrarySong, LyricsSnapshot, SongPropertiesSnapshot } from '../shared/contracts'
@@ -13,6 +12,7 @@ import { Icon } from './icons'
 import { MusicAlbumArtControl } from './MusicAlbumArtControl'
 import { MAX_ARTIST_CELLS, MusicInfoControl } from './MusicInfoControl'
 import { MusicLyricsControl } from './MusicLyricsControl'
+import { PopupDialog } from './PopupDialog'
 
 type SongDialogMode = 'properties' | 'lyrics' | 'album-art'
 type PendingLyricsSnapshot = { songId: number; title: string; lyrics: string }
@@ -57,9 +57,9 @@ export function MusicDialog({
   const [pendingSwitchLyrics, setPendingSwitchLyrics] = useState<PendingLyricsSnapshot | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [statusMessage, setStatusMessage] = useState('')
   const showButtonedNotification = useUndoableNotificationStore((state) => state.show)
   const showNotificationButtons = useUndoableNotificationStore((state) => state.showButtons)
+  const showNotification = useUndoableNotificationStore((state) => state.showMessage)
   const dialogRef = useRef<HTMLElement | null>(null)
   const dialogScrollbarTrackRef = useRef<HTMLDivElement | null>(null)
   const lyricsScrollbarTrackRef = useRef<HTMLDivElement | null>(null)
@@ -110,16 +110,16 @@ export function MusicDialog({
       setPendingSwitchLyrics((current) => current?.songId === snapshot.songId ? null : current)
       if (refreshLatestLyrics) {
         const currentTitle = getCurrentTrackTitle() || song.title
-        setStatusMessage(t('song.lyricsUpdatedAndRefreshed', { savedTitle: snapshot.title, currentTitle }))
+        showNotification(t('song.lyricsUpdatedAndRefreshed', { savedTitle: snapshot.title, currentTitle }))
       } else {
-        setStatusMessage(t('song.lyricsUpdated', { title: snapshot.title }))
+        showNotification(t('song.lyricsUpdated', { title: snapshot.title }))
       }
     } catch {
-      setStatusMessage(t('song.updateFailed'))
+      showNotification(t('song.updateFailed'))
     } finally {
       setSaving(false)
     }
-  }, [getCurrentTrackTitle, onSaved, song.id, song.title, t])
+  }, [getCurrentTrackTitle, onSaved, showNotification, song.id, song.title, t])
   const showSaveLyricsLaterNotification = useCallback((snapshot: PendingLyricsSnapshot) => {
     showButtonedNotification(
       t('song.saveLyricsLater', { title: snapshot.title }),
@@ -147,7 +147,6 @@ export function MusicDialog({
               setLyricsText(showLyricsTimestamps ? originalLyricsText : stripLyricsTimestamps(originalLyricsText))
             }
             setPendingSwitchLyrics(null)
-            setStatusMessage('')
           },
         },
       ],
@@ -166,7 +165,6 @@ export function MusicDialog({
   useEffect(() => {
     let canceled = false
     setLoading(true)
-    setStatusMessage('')
     void window.smplayer?.getSongProperties(song.id).then((snapshot) => {
       if (canceled) {
         return
@@ -184,7 +182,6 @@ export function MusicDialog({
 
   useEffect(() => {
     const previous = latestLyricsRef.current
-    setStatusMessage('')
     if (
       previous &&
       previous.songId !== song.id &&
@@ -217,7 +214,7 @@ export function MusicDialog({
       })
       .catch(() => {
         if (!canceled) {
-          setStatusMessage(t('song.getLyricsFailed'))
+          showNotification(t('song.getLyricsFailed'))
         }
       })
 
@@ -230,7 +227,7 @@ export function MusicDialog({
     return () => {
       canceled = true
     }
-  }, [song.id, t])
+  }, [showNotification, song.id, t])
 
   useEffect(() => {
     const previousTrackId = previousTrackIdRef.current
@@ -363,21 +360,23 @@ export function MusicDialog({
   }
 
   const switchMode = (nextMode: SongDialogMode) => {
-    if (activeMode === 'lyrics' && lyricsDirty) {
-      void requestConfirmDialog({
-        title: t('common.confirm'),
-        message: t('song.discardLyricsConfirm'),
-      }).then((confirmed) => {
-        if (confirmed) {
-          setActiveMode(nextMode)
-          setStatusMessage('')
-        }
-      })
+    setActiveMode(nextMode)
+  }
+
+  const requestClose = () => {
+    if (!lyricsDirty) {
+      onClose()
       return
     }
 
-    setActiveMode(nextMode)
-    setStatusMessage('')
+    void requestConfirmDialog({
+      title: t('common.confirm'),
+      message: t('song.discardLyricsConfirm'),
+    }).then((confirmed) => {
+      if (confirmed) {
+        onClose()
+      }
+    })
   }
 
   const play = () => {
@@ -415,7 +414,7 @@ export function MusicDialog({
       if (!isPropertiesModified(nextProperties, originalProperties)) {
         setProperties(nextProperties)
         setOriginalProperties(nextProperties)
-        setStatusMessage(t('song.propertiesUpdated'))
+        showNotification(t('song.propertiesUpdated'))
         return
       }
 
@@ -433,10 +432,10 @@ export function MusicDialog({
       })
       setProperties(nextProperties)
       setOriginalProperties(nextProperties)
-      setStatusMessage(t('song.propertiesUpdated'))
+      showNotification(t('song.propertiesUpdated'))
       onSaved?.()
     } catch {
-      setStatusMessage(t('song.updateFailed'))
+      showNotification(t('song.updateFailed'))
     } finally {
       setSaving(false)
     }
@@ -450,18 +449,17 @@ export function MusicDialog({
     await window.smplayer?.updateSongPlayCount(song.id, 0)
     setProperties((current) => current ? { ...current, playCount: 0 } : current)
     setOriginalProperties((current) => current ? { ...current, playCount: 0 } : current)
-    setStatusMessage('')
     onSaved?.()
   }
 
   const saveLyrics = async () => {
     if (saving) {
-      setStatusMessage(t('song.processingRequest'))
+      showNotification(t('song.processingRequest'))
       return
     }
 
     if (currentLyricsRawText === originalLyricsText) {
-      setStatusMessage(t('song.nothingChanged'))
+      showNotification(t('song.nothingChanged'))
       return
     }
 
@@ -487,7 +485,7 @@ export function MusicDialog({
 
   const searchLyrics = async () => {
     if (saving) {
-      setStatusMessage(t('song.processingRequest'))
+      showNotification(t('song.processingRequest'))
       return
     }
 
@@ -500,9 +498,9 @@ export function MusicDialog({
       } catch {
         try {
           await window.smplayer?.openLyricsSearchInBrowser(song.id)
-          setStatusMessage(t('song.openBrowserSuccessful'))
+          showNotification(t('song.openBrowserSuccessful'))
         } catch {
-          setStatusMessage(t('song.searchLyricsFailed'))
+          showNotification(t('song.searchLyricsFailed'))
         }
         return
       }
@@ -510,21 +508,21 @@ export function MusicDialog({
         setLyrics(snapshot)
         updateLyricsEditorRawText(snapshot.rawText)
         if (before === (showLyricsTimestamps ? snapshot.rawText : stripLyricsTimestamps(snapshot.rawText))) {
-          setStatusMessage(t('song.nothingChanged'))
+          showNotification(t('song.nothingChanged'))
           return
         }
 
         setPendingLyricsSave(null)
-        setStatusMessage(t('song.searchLyricsSuccessful'))
+        showNotification(t('song.searchLyricsSuccessful'))
         requestAnimationFrame(scrollLyricsToTop)
         return
       }
 
       try {
         await window.smplayer?.openLyricsSearchInBrowser(song.id)
-        setStatusMessage(t('song.openBrowserSuccessful'))
+        showNotification(t('song.openBrowserSuccessful'))
       } catch {
-        setStatusMessage(t('song.searchLyricsFailed'))
+        showNotification(t('song.searchLyricsFailed'))
       }
     } finally {
       setSaving(false)
@@ -533,7 +531,7 @@ export function MusicDialog({
 
   const importLyrics = async () => {
     if (saving) {
-      setStatusMessage(t('song.processingRequest'))
+      showNotification(t('song.processingRequest'))
       return
     }
 
@@ -543,11 +541,10 @@ export function MusicDialog({
       if (result && !result.canceled) {
         updateLyricsEditorRawText(result.rawText)
         setPendingLyricsSave(null)
-        setStatusMessage('')
         requestAnimationFrame(scrollLyricsToTop)
       }
     } catch {
-      setStatusMessage(t('song.importLyricsFailed'))
+      showNotification(t('song.importLyricsFailed'))
     } finally {
       setSaving(false)
     }
@@ -555,7 +552,7 @@ export function MusicDialog({
 
   const changeArtwork = async () => {
     if (saving) {
-      setStatusMessage(t('song.processingRequest'))
+      showNotification(t('song.processingRequest'))
       return
     }
 
@@ -564,22 +561,21 @@ export function MusicDialog({
       const result = await window.smplayer?.pickSongArtworkSource()
       if (result && !result.canceled) {
         if (result.error === 'error') {
-          setStatusMessage(t('song.updateFailed'))
+          showNotification(t('song.updateFailed'))
           return
         }
 
         if (result.error === 'no-artwork') {
-          setStatusMessage(t('song.musicNoAlbumArt', { title: result.sourceName }))
+          showNotification(t('song.musicNoAlbumArt', { title: result.sourceName }))
           return
         }
 
         setArtworkUrl(result.artworkUrl)
         setArtworkSourcePath(result.sourcePath)
         setShowArtworkDeleteConfirm(false)
-        setStatusMessage('')
       }
     } catch {
-      setStatusMessage(t('song.updateFailed'))
+      showNotification(t('song.updateFailed'))
     } finally {
       setSaving(false)
     }
@@ -587,22 +583,21 @@ export function MusicDialog({
 
   const saveArtwork = async () => {
     if (saving) {
-      setStatusMessage(t('song.processingRequest'))
+      showNotification(t('song.processingRequest'))
       return
     }
 
     if (!artworkSourcePath) {
-      setStatusMessage('')
       return
     }
 
     setSaving(true)
     try {
       await window.smplayer?.saveSongArtwork(song.id, artworkSourcePath)
-      setStatusMessage(t('song.albumArtSaved'))
+      showNotification(t('song.albumArtSaved'))
       onSaved?.()
     } catch {
-      setStatusMessage(t('song.updateFailed'))
+      showNotification(t('song.updateFailed'))
     } finally {
       setSaving(false)
     }
@@ -610,7 +605,7 @@ export function MusicDialog({
 
   const deleteArtwork = async () => {
     if (saving) {
-      setStatusMessage(t('song.processingRequest'))
+      showNotification(t('song.processingRequest'))
       return
     }
 
@@ -620,10 +615,10 @@ export function MusicDialog({
       setArtworkUrl('')
       setArtworkSourcePath('')
       setShowArtworkDeleteConfirm(false)
-      setStatusMessage(t('song.albumArtDeleted'))
+      showNotification(t('song.albumArtDeleted'))
       onSaved?.()
     } catch {
-      setStatusMessage(t('song.updateFailed'))
+      showNotification(t('song.updateFailed'))
     } finally {
       setSaving(false)
     }
@@ -644,13 +639,13 @@ export function MusicDialog({
   const resetActivePage = () => {
     if (activeMode === 'properties' && originalProperties) {
       setProperties(originalProperties)
-      setStatusMessage(t('song.propertiesReset'))
+      showNotification(t('song.propertiesReset'))
     }
     if (activeMode === 'lyrics') {
       updateLyricsEditorRawText(originalLyricsText)
       setPendingLyricsSave(null)
       requestAnimationFrame(scrollLyricsToTop)
-      setStatusMessage(t('song.lyricsReset'))
+      showNotification(t('song.lyricsReset'))
     }
   }
 
@@ -808,19 +803,18 @@ export function MusicDialog({
     window.addEventListener('pointerup', onPointerUp)
   }
 
-  return createPortal(
-    <div className="song-dialog-overlay music-dialog-overlay MusicDialogOverlay">
-      <section
-        ref={dialogRef}
-        className="song-dialog music-dialog ContentDialog MusicDialog"
-        role="dialog"
-        aria-modal="true"
-        aria-label={song.title}
-        onMouseDown={(event) => {
-          event.stopPropagation()
-        }}
-      >
-        <nav className="song-dialog-tabs music-dialog-pivot MusicDialogPivot" aria-label={t('context.seeMusicInfo')}>
+  return (
+    <PopupDialog
+      t={t}
+      dialogRef={dialogRef}
+      overlayClassName="music-dialog-overlay MusicDialogOverlay"
+      className="music-dialog ContentDialog MusicDialog"
+      navClassName="music-dialog-pivot MusicDialogPivot"
+      navLabel={t('context.seeMusicInfo')}
+      ariaLabel={song.title}
+      onClose={requestClose}
+      navChildren={(
+        <>
           <button type="button" className={`PropertiesItem PropertiesPivotItem${activeMode === 'properties' ? ' is-active' : ''}`} onClick={() => switchMode('properties')}>
             <Icon name="info" />
             {getDialogTabLabel(t('context.seeMusicInfo'))}
@@ -833,13 +827,19 @@ export function MusicDialog({
             <Icon name="pictures" />
             {getDialogTabLabel(t('context.seeAlbumArt'))}
           </button>
-          <button type="button" className="song-dialog-icon-button music-dialog-close-button CloseButton" onClick={onClose} aria-label={t('common.close')}>
-            <Icon name="arrowLeft" className="dialog-back-icon" />
-            <Icon name="close" className="dialog-close-icon" />
-          </button>
-          <span className="dialog-titlebar-title">{t('app.shell')}</span>
-        </nav>
-        {statusMessage ? <p className="song-dialog-status">{statusMessage}</p> : null}
+        </>
+      )}
+      footer={(
+        <>
+          <div className="song-dialog-scrollbar" ref={dialogScrollbarTrackRef} aria-hidden="true">
+            <div className="song-dialog-scrollbar-thumb" onPointerDown={onDialogScrollbarPointerDown} />
+          </div>
+          <div className="song-dialog-lyrics-scrollbar" ref={lyricsScrollbarTrackRef} aria-hidden="true">
+            <div className="song-dialog-lyrics-scrollbar-thumb" onPointerDown={onLyricsScrollbarPointerDown} />
+          </div>
+        </>
+      )}
+    >
         {activeMode === 'properties' ? (
           <MusicInfoControl
             song={song}
@@ -882,7 +882,6 @@ export function MusicDialog({
                 setLyricsRawText(nextText)
               }
               setPendingLyricsSave(null)
-              setStatusMessage('')
             }}
           />
         ) : null}
@@ -901,14 +900,6 @@ export function MusicDialog({
             onCancelDelete={() => setShowArtworkDeleteConfirm(false)}
           />
         ) : null}
-        <div className="song-dialog-scrollbar" ref={dialogScrollbarTrackRef} aria-hidden="true">
-          <div className="song-dialog-scrollbar-thumb" onPointerDown={onDialogScrollbarPointerDown} />
-        </div>
-        <div className="song-dialog-lyrics-scrollbar" ref={lyricsScrollbarTrackRef} aria-hidden="true">
-          <div className="song-dialog-lyrics-scrollbar-thumb" onPointerDown={onLyricsScrollbarPointerDown} />
-        </div>
-      </section>
-    </div>,
-    document.body,
+    </PopupDialog>
   )
 }

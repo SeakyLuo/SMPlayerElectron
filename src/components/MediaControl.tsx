@@ -24,6 +24,8 @@ import { DEFAULT_ARTWORK_URL, getRepeatOneTitle, getRepeatTitle, getShuffleTitle
 
 export type { VoiceAssistantResponse } from './VoiceAssistantFlyout'
 
+const PLAYER_COMPACT_BREAKPOINT = 800
+
 export interface MediaControlTrack {
   id: number | null
   title: string
@@ -157,6 +159,63 @@ function getPlaybackModeIcon(mode: PlaybackMode): NonNullable<MenuFlyoutItem['ic
   }
 }
 
+function getNextPlaybackMode(mode: PlaybackMode): PlaybackMode {
+  if (mode === 'once') {
+    return 'shuffle'
+  }
+
+  if (mode === 'shuffle') {
+    return 'repeat'
+  }
+
+  if (mode === 'repeat') {
+    return 'repeat-one'
+  }
+
+  return 'once'
+}
+
+function setPlaybackModeFromCurrent({
+  mode,
+  targetMode,
+  onToggleShuffle,
+  onToggleRepeat,
+  onToggleRepeatOne,
+}: {
+  mode: PlaybackMode
+  targetMode: PlaybackMode
+  onToggleShuffle: () => void
+  onToggleRepeat: () => void
+  onToggleRepeatOne: () => void
+}) {
+  if (mode === targetMode) {
+    return
+  }
+
+  if (targetMode === 'shuffle') {
+    onToggleShuffle()
+  } else if (targetMode === 'repeat') {
+    onToggleRepeat()
+  } else if (targetMode === 'repeat-one') {
+    onToggleRepeatOne()
+  } else if (mode === 'shuffle') {
+    onToggleShuffle()
+  } else if (mode === 'repeat') {
+    onToggleRepeat()
+  } else if (mode === 'repeat-one') {
+    onToggleRepeatOne()
+  }
+}
+
+function getPlaybackModeMenuItems(t: Translator, mode: PlaybackMode, setPlaybackMode: (mode: PlaybackMode) => void): MenuFlyoutItem[] {
+  return [
+    { key: 'playback-mode-list', text: getPlaybackModeName(t, 'once'), icon: 'nowPlaying', checked: mode === 'once', onClick: () => setPlaybackMode('once') },
+    { key: 'playback-mode-shuffle', text: getPlaybackModeName(t, 'shuffle'), icon: 'shuffle', checked: mode === 'shuffle', onClick: () => setPlaybackMode('shuffle') },
+    { key: 'playback-mode-repeat', text: getPlaybackModeName(t, 'repeat'), icon: 'repeat', checked: mode === 'repeat', onClick: () => setPlaybackMode('repeat') },
+    { key: 'playback-mode-repeat-one', text: getPlaybackModeName(t, 'repeat-one'), icon: 'repeatOne', checked: mode === 'repeat-one', onClick: () => setPlaybackMode('repeat-one') },
+  ]
+}
+
 export function MediaControlButtons({
   trackId,
   isLoading,
@@ -192,14 +251,44 @@ export function MediaControlButtons({
   const playTitle = isPlaying ? t('player.pause') : t('player.play')
   const volumeTitle = isMuted ? t('player.unmute') : t('player.mute')
   const [volumeTooltipActive, setVolumeTooltipActive] = useState(false)
+  const [compactVolumeOpen, setCompactVolumeOpen] = useState(false)
+  const [modeMenu, setModeMenu] = useState<MenuFlyoutPosition | null>(null)
   const volumeTooltipTimerRef = useRef<number | null>(null)
+  const compactVolumeButtonRef = useRef<HTMLButtonElement | null>(null)
+  const compactVolumePanelRef = useRef<HTMLDivElement | null>(null)
+  const modeLongPressTimerRef = useRef<number | null>(null)
+  const suppressNextModeClickRef = useRef(false)
   const volumeDisplayValue = Math.round(volumeValue)
   const volumeIconName = getVolumeIconName(volumeValue, isMuted)
+  const modeTitle = `${t('player.playbackMode')}: ${getPlaybackModeName(t, mode)}`
+  const modeIconName = getPlaybackModeIcon(mode)
+
+  const setPlaybackMode = (targetMode: PlaybackMode) => {
+    setPlaybackModeFromCurrent({
+      mode,
+      targetMode,
+      onToggleShuffle,
+      onToggleRepeat,
+      onToggleRepeatOne,
+    })
+  }
+
+  const cyclePlaybackMode = () => {
+    setCompactVolumeOpen(false)
+    setPlaybackMode(getNextPlaybackMode(mode))
+  }
 
   const clearVolumeTooltipTimer = () => {
     if (volumeTooltipTimerRef.current != null) {
       window.clearTimeout(volumeTooltipTimerRef.current)
       volumeTooltipTimerRef.current = null
+    }
+  }
+
+  const clearModeLongPressTimer = () => {
+    if (modeLongPressTimerRef.current != null) {
+      window.clearTimeout(modeLongPressTimerRef.current)
+      modeLongPressTimerRef.current = null
     }
   }
 
@@ -234,9 +323,37 @@ export function MediaControlButtons({
     onVolumeChange(Number(value))
   }
 
+  const openModeMenu = (button: HTMLButtonElement) => {
+    const rect = button.getBoundingClientRect()
+    setCompactVolumeOpen(false)
+    setModeMenu({ x: rect.left, y: rect.top - 8, anchor: button })
+  }
+
   useEffect(() => () => {
     clearVolumeTooltipTimer()
+    clearModeLongPressTimer()
   }, [])
+
+  useEffect(() => {
+    if (!compactVolumeOpen) {
+      hideVolumeTooltip()
+      return
+    }
+
+    const closeVolumeOnOutsidePointerDown = (event: globalThis.PointerEvent) => {
+      const target = event.target as Node
+      if (compactVolumePanelRef.current?.contains(target) || compactVolumeButtonRef.current?.contains(target)) {
+        return
+      }
+
+      setCompactVolumeOpen(false)
+    }
+
+    document.addEventListener('pointerdown', closeVolumeOnOutsidePointerDown)
+    return () => {
+      document.removeEventListener('pointerdown', closeVolumeOnOutsidePointerDown)
+    }
+  }, [compactVolumeOpen])
 
   return (
     <>
@@ -304,10 +421,84 @@ export function MediaControlButtons({
 
       <div className="player-utility">
         <div className="player-volume-row">
+          <div className="player-compact-volume-action">
+            <button
+              ref={compactVolumeButtonRef}
+              type="button"
+              disabled={disabled}
+              className={compactVolumeOpen ? 'is-active' : ''}
+              onClick={() => {
+                setModeMenu(null)
+                setCompactVolumeOpen((current) => {
+                  const nextOpen = !current
+                  if (nextOpen) {
+                    showVolumeTooltip(900)
+                  }
+                  return nextOpen
+                })
+              }}
+              aria-label={volumeTitle}
+              title={volumeTitle}
+            >
+              <Icon name={volumeIconName} />
+            </button>
+            {compactVolumeOpen ? (
+              <div
+                ref={compactVolumePanelRef}
+                className={`mini-mode-volume-popover player-compact-volume-popover${volumeTooltipActive ? ' is-active' : ''}${disabled ? ' is-disabled' : ''}`}
+                style={{ '--volume-tooltip-bottom': `${volumeValue}%` } as CSSProperties}
+              >
+                <input
+                  className="mini-mode-volume-slider"
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={volumeValue}
+                  style={{ '--range-progress': `${volumeValue}%` } as CSSProperties}
+                  disabled={disabled}
+                  onChange={() => {
+                    keepVolumeTooltipVisible()
+                  }}
+                  onInput={(event) => {
+                    commitVolumeChange(event.currentTarget.value)
+                  }}
+                  onPointerDown={() => {
+                    keepVolumeTooltipVisible()
+                  }}
+                  onPointerEnter={() => {
+                    keepVolumeTooltipVisible()
+                  }}
+                  onPointerLeave={() => {
+                    hideVolumeTooltip()
+                  }}
+                  onPointerUp={(event) => {
+                    commitVolumeChange(event.currentTarget.value)
+                    showVolumeTooltip(650)
+                  }}
+                  onPointerCancel={() => {
+                    hideVolumeTooltip()
+                  }}
+                  onLostPointerCapture={(event) => {
+                    commitVolumeChange(event.currentTarget.value)
+                    showVolumeTooltip(650)
+                  }}
+                  onFocus={() => {
+                    keepVolumeTooltipVisible()
+                  }}
+                  onBlur={() => {
+                    hideVolumeTooltip()
+                  }}
+                  aria-label={t('player.volume')}
+                  aria-valuetext={String(volumeDisplayValue)}
+                />
+                <span className="volume-slider-tooltip" aria-hidden="true">{volumeDisplayValue}</span>
+              </div>
+            ) : null}
+          </div>
           <button
             type="button"
             disabled={disabled}
-            className={isMuted ? 'is-active' : ''}
+            className={isMuted ? 'player-volume-toggle is-active' : 'player-volume-toggle'}
             onClick={onToggleMute}
             aria-label={volumeTitle}
             title={volumeTitle}
@@ -316,7 +507,11 @@ export function MediaControlButtons({
           </button>
           <div
             className={`volume-slider-wrap${volumeTooltipActive ? ' is-active' : ''}${disabled ? ' is-disabled' : ''}`}
-            style={{ '--volume-tooltip-left': `${volumeValue}%` } as CSSProperties}
+            style={{
+              '--range-progress': `${volumeValue}%`,
+              '--volume-tooltip-left': `${volumeValue}%`,
+              '--volume-tooltip-anchor-left': `${volumeValue}%`,
+            } as CSSProperties}
           >
             <input
               className="media-slider"
@@ -378,7 +573,7 @@ export function MediaControlButtons({
           <button
             type="button"
             disabled={disabled}
-            className={mode === 'shuffle' ? 'is-active' : ''}
+            className={mode === 'shuffle' ? 'player-mode-button is-active' : 'player-mode-button'}
             onClick={onToggleShuffle}
             aria-label={getShuffleTitle(t, mode)}
             title={getShuffleTitle(t, mode)}
@@ -388,7 +583,7 @@ export function MediaControlButtons({
           <button
             type="button"
             disabled={disabled}
-            className={mode === 'repeat' ? 'is-active' : ''}
+            className={mode === 'repeat' ? 'player-mode-button is-active' : 'player-mode-button'}
             onClick={onToggleRepeat}
             aria-label={getRepeatTitle(t, mode)}
             title={getRepeatTitle(t, mode)}
@@ -398,12 +593,50 @@ export function MediaControlButtons({
           <button
             type="button"
             disabled={disabled}
-            className={mode === 'repeat-one' ? 'is-active' : ''}
+            className={mode === 'repeat-one' ? 'player-mode-button is-active' : 'player-mode-button'}
             onClick={onToggleRepeatOne}
             aria-label={getRepeatOneTitle(t, mode)}
             title={getRepeatOneTitle(t, mode)}
           >
             <Icon name="repeatOne" />
+          </button>
+          <button
+            type="button"
+            disabled={disabled}
+            className={mode === 'once' ? 'player-compact-mode-button' : 'player-compact-mode-button is-active'}
+            aria-label={modeTitle}
+            title={modeTitle}
+            onClick={() => {
+              if (suppressNextModeClickRef.current) {
+                suppressNextModeClickRef.current = false
+                return
+              }
+
+              cyclePlaybackMode()
+            }}
+            onContextMenu={(event) => {
+              event.preventDefault()
+              clearModeLongPressTimer()
+              openModeMenu(event.currentTarget)
+            }}
+            onPointerDown={(event) => {
+              if (event.button !== 0) {
+                return
+              }
+
+              const button = event.currentTarget
+              clearModeLongPressTimer()
+              modeLongPressTimerRef.current = window.setTimeout(() => {
+                modeLongPressTimerRef.current = null
+                suppressNextModeClickRef.current = true
+                openModeMenu(button)
+              }, 520)
+            }}
+            onPointerUp={clearModeLongPressTimer}
+            onPointerCancel={clearModeLongPressTimer}
+            onPointerLeave={clearModeLongPressTimer}
+          >
+            <Icon name={modeIconName} />
           </button>
           {voiceAssistantAvailable ? (
             <button
@@ -422,6 +655,15 @@ export function MediaControlButtons({
           </button>
         </div>
       </div>
+      {modeMenu ? (
+        <MenuFlyout
+          position={modeMenu}
+          onClose={() => {
+            setModeMenu(null)
+          }}
+          items={getPlaybackModeMenuItems(t, mode, setPlaybackMode)}
+        />
+      ) : null}
     </>
   )
 }
@@ -536,7 +778,11 @@ export function MediaControlSurface({
         onToggleRepeatOne={onToggleRepeatOne}
         onToggleFavorite={onToggleFavorite}
         onVoiceAssistantClick={() => {
-          voiceAssistantFlyoutRef.current?.open()
+          if (voiceAssistantOpen) {
+            voiceAssistantFlyoutRef.current?.close()
+          } else {
+            voiceAssistantFlyoutRef.current?.open()
+          }
         }}
         voiceAssistantAvailable={voiceAssistantAvailable}
         voiceAssistantActive={voiceAssistantAvailable && voiceAssistantOpen}
@@ -610,7 +856,7 @@ export function MediaControl({
   const [dialogMode, setDialogMode] = useState<'properties' | 'lyrics' | 'album-art' | null>(null)
   const [preferenceItem, setPreferenceItem] = useState<PreferenceItemSnapshot | null>(null)
   const [lyrics, setLyrics] = useState<LyricsSnapshot | null>(null)
-  const [isCompactPlayerMenu, setIsCompactPlayerMenu] = useState(() => window.innerWidth < 720)
+  const [isCompactPlayerMenu, setIsCompactPlayerMenu] = useState(() => window.innerWidth <= PLAYER_COMPACT_BREAKPOINT)
   const {
     artworkUrl: effectiveArtworkUrl,
     baseArtworkUrl,
@@ -640,13 +886,13 @@ export function MediaControl({
 
   const openMoreMenu = (event: MouseEvent<HTMLButtonElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
-    setMoreMenu({ x: rect.left, y: rect.top })
+    setMoreMenu({ x: rect.left, y: rect.top - 8, anchor: event.currentTarget })
     void refreshPreferenceItem()
   }
 
   useEffect(() => {
     const updateCompactMenu = () => {
-      setIsCompactPlayerMenu(window.innerWidth < 720)
+      setIsCompactPlayerMenu(window.innerWidth <= PLAYER_COMPACT_BREAKPOINT)
     }
 
     window.addEventListener('resize', updateCompactMenu)
@@ -961,12 +1207,7 @@ function getPlayerMoreMenuItems({
         key: 'playback-mode',
         text: `${t('player.playbackMode')}: ${getPlaybackModeName(t, mode)}`,
         icon: getPlaybackModeIcon(mode),
-        submenu: [
-          { key: 'playback-mode-list', text: getPlaybackModeName(t, 'once'), icon: 'nowPlaying', onClick: () => setPlaybackMode('once') },
-          { key: 'playback-mode-shuffle', text: getPlaybackModeName(t, 'shuffle'), icon: 'shuffle', onClick: () => setPlaybackMode('shuffle') },
-          { key: 'playback-mode-repeat', text: getPlaybackModeName(t, 'repeat'), icon: 'repeat', onClick: () => setPlaybackMode('repeat') },
-          { key: 'playback-mode-repeat-one', text: getPlaybackModeName(t, 'repeat-one'), icon: 'repeatOne', onClick: () => setPlaybackMode('repeat-one') },
-        ],
+        submenu: getPlaybackModeMenuItems(t, mode, setPlaybackMode),
       },
       {
         key: 'player-volume',
@@ -983,6 +1224,7 @@ function getPlayerMoreMenuItems({
         key: 'player-favorite',
         text: song?.favorite ? t('player.unlike') : t('player.like'),
         icon: song?.favorite ? 'heartFilled' : 'heart',
+        ...(song?.favorite ? { iconTone: 'favorite' as const } : {}),
         disabled: !song,
         onClick: onToggleFavorite,
       },

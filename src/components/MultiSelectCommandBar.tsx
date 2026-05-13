@@ -226,7 +226,7 @@ export function MultiSelectCommandBar({
           title={t('player.more')}
           onClick={(event) => {
             const rect = event.currentTarget.getBoundingClientRect()
-            setSelectionMenu({ x: rect.left, y: rect.top - 8 })
+            setSelectionMenu({ x: rect.left, y: rect.top - 8, anchor: event.currentTarget })
           }}
         >
           <Icon name="moreHorizontal" />

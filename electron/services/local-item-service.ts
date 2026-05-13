@@ -16,6 +16,7 @@ import type { SongService } from './song-service.ts'
 
 export type MoveConflictAction = 'replace' | 'keep-both' | 'skip'
 export type MoveConflictResolver = (sourcePath: string, targetPath: string) => Promise<MoveConflictAction>
+export type MoveProgressReporter = (currentItem: string, progress: number, max: number) => void
 export type { DeletedLocalItemsState, DeletedSongState }
 
 export class LocalItemService {
@@ -125,11 +126,35 @@ export class LocalItemService {
     folderPaths: string[],
     targetFolderPath: string,
     resolveConflict?: MoveConflictResolver,
+    reportProgress?: MoveProgressReporter,
   ) {
-    await this.moveSongsToFolder(songIds, targetFolderPath, resolveConflict)
+    const targetFolderStats = await stat(targetFolderPath)
+
+    if (!targetFolderStats.isDirectory()) {
+      throw new Error(`Target path is not a folder: ${targetFolderPath}`)
+    }
+
+    const moves = await this.collectSongMoves(songIds, targetFolderPath, resolveConflict)
+    const max = moves.length + folderPaths.length
+    let progress = 0
+
+    if (max > 0) {
+      reportProgress?.(moves[0]?.songPath ?? folderPaths[0]!, progress, max)
+    }
+
+    await this.moveSongFiles(moves, (currentItem) => {
+      reportProgress?.(currentItem, progress, max)
+    }, (currentItem) => {
+      progress += 1
+      reportProgress?.(currentItem, progress, max)
+    })
+    this.stateService.applySongMoves(moves, targetFolderPath)
 
     for (const folderPath of folderPaths) {
+      reportProgress?.(folderPath, progress, max)
       await this.moveLocalFolderToFolder(folderPath, targetFolderPath, resolveConflict)
+      progress += 1
+      reportProgress?.(folderPath, progress, max)
     }
   }
 
@@ -204,13 +229,19 @@ export class LocalItemService {
     }
   }
 
-  private async moveSongFiles(moves: SongMove[]) {
+  private async moveSongFiles(
+    moves: SongMove[],
+    onBeforeMove?: (currentItem: string) => void,
+    onAfterMove?: (currentItem: string) => void,
+  ) {
     for (const move of moves) {
+      onBeforeMove?.(move.songPath)
       await stat(move.songPath)
       if (move.replacedPath) {
         await unlink(move.replacedPath)
       }
       await rename(move.songPath, move.targetPath)
+      onAfterMove?.(move.songPath)
     }
   }
 

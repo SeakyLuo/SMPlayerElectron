@@ -74,6 +74,7 @@ export function initializeSchema(db: DatabaseSync) {
       LastReleaseNotesVersion TEXT DEFAULT '',
       RemotePlayPassword TEXT DEFAULT '',
       UseFilenameNotMusicName INTEGER DEFAULT 0,
+      SmartMultiArtistRecognition INTEGER DEFAULT 1,
       NotificationLyricsSource INTEGER DEFAULT 0,
       PlayerLyricsSource INTEGER DEFAULT 3,
       SaveLyricsImmediately INTEGER DEFAULT 0,
@@ -301,6 +302,7 @@ export function initializeSchema(db: DatabaseSync) {
     ['LastReleaseNotesVersion', `LastReleaseNotesVersion TEXT DEFAULT ''`],
     ['RemotePlayPassword', `RemotePlayPassword TEXT DEFAULT ''`],
     ['UseFilenameNotMusicName', `UseFilenameNotMusicName INTEGER DEFAULT 0`],
+    ['SmartMultiArtistRecognition', `SmartMultiArtistRecognition INTEGER DEFAULT 1`],
     ['NotificationLyricsSource', `NotificationLyricsSource INTEGER DEFAULT 0`],
     ['PlayerLyricsSource', `PlayerLyricsSource INTEGER DEFAULT 3`],
     ['SaveLyricsImmediately', `SaveLyricsImmediately INTEGER DEFAULT 0`],
@@ -329,32 +331,24 @@ export function initializeSchema(db: DatabaseSync) {
       ON RemoteHost(HostId)
       WHERE HostId <> '';
 
-    UPDATE MusicArtist
-    SET State = 0
-    WHERE MusicId IN (
-      SELECT Id
-      FROM Music
-    );
-
     INSERT OR IGNORE INTO MusicArtist (MusicId, Name, Priority, State)
     SELECT Id, TRIM(Artist), 0, State
     FROM Music
-    WHERE NULLIF(TRIM(Artist), '') IS NOT NULL;
+    WHERE NULLIF(TRIM(Artist), '') IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1
+        FROM MusicArtist
+        WHERE MusicArtist.MusicId = Music.Id
+          AND MusicArtist.State = Music.State
+      );
 
     UPDATE MusicArtist
-    SET
-      Priority = 0,
-      State = (
-        SELECT Music.State
-        FROM Music
-        WHERE Music.Id = MusicArtist.MusicId
-      )
+    SET State = 0
     WHERE EXISTS (
       SELECT 1
       FROM Music
       WHERE Music.Id = MusicArtist.MusicId
-        AND NULLIF(TRIM(Music.Artist), '') IS NOT NULL
-        AND MusicArtist.Name = TRIM(Music.Artist)
+        AND Music.State <> 1
     );
 
     INSERT OR IGNORE INTO SearchHistory (Query, Type, SearchedAt)

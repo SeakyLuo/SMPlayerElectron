@@ -22,6 +22,9 @@
 }
 
 body.night-mode .app-shell .sidebar {
+  --night-text: rgba(255, 255, 255, 0.92);
+  --night-muted: rgba(255, 255, 255, 0.78);
+  --night-subtle: rgba(255, 255, 255, 0.58);
   color: var(--night-text);
 }
 

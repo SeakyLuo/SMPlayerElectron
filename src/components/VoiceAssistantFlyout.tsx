@@ -2,7 +2,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 're
 import { createPortal } from 'react-dom'
 
 import type { Translator } from '../shared/i18n'
-import { Icon } from './icons'
+import { PopupDialog } from './PopupDialog'
 
 export interface VoiceAssistantResponse {
   message: string
@@ -252,18 +252,20 @@ export const VoiceAssistantFlyout = forwardRef<VoiceAssistantFlyoutHandle, Voice
         </>,
         document.body,
       ) : null}
-      {helpOpen ? createPortal(
-        <div className="settings-modal-backdrop" role="presentation">
-          <section className="settings-modal" role="dialog" aria-modal="true" aria-labelledby="voice-assistant-help-title">
-            <header>
-              <h2 id="voice-assistant-help-title">{t('voiceAssistant.helpTitle')}</h2>
-              <button type="button" onClick={() => setHelpOpen(false)} aria-label={t('common.close')} title={t('common.close')}>
-                <Icon name="arrowLeft" className="dialog-back-icon" />
-                <Icon name="close" className="dialog-close-icon" />
-              </button>
-              <span className="dialog-titlebar-title">{t('app.shell')}</span>
-            </header>
-            <div className="release-notes-list">
+      {helpOpen ? (
+        <PopupDialog
+          t={t}
+          overlayClassName="music-dialog-overlay VoiceAssistantHelpDialogOverlay"
+          className="voice-assistant-help-dialog ContentDialog VoiceAssistantHelpDialog"
+          navClassName="music-dialog-pivot VoiceAssistantHelpDialogPivot"
+          navLabel={t('voiceAssistant.helpTitle')}
+          ariaLabelledBy="voice-assistant-help-title"
+          onClose={() => setHelpOpen(false)}
+          navChildren={(
+            <h2 id="voice-assistant-help-title" className="popup-dialog-title">{t('voiceAssistant.helpTitle')}</h2>
+          )}
+        >
+            <div className="song-dialog-body release-notes-list">
               <section className="release-note-version">
                 <h3>{t('voiceAssistant.supportedCommands')}</h3>
                 <div className="voice-assistant-command-rows">
@@ -294,9 +296,7 @@ export const VoiceAssistantFlyout = forwardRef<VoiceAssistantFlyoutHandle, Voice
                 </ol>
               </section>
             </div>
-          </section>
-        </div>,
-        document.body,
+        </PopupDialog>
       ) : null}
     </>
   )

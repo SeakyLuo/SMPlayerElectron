@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 
 import type { MenuFlyoutItem, MenuFlyoutPosition } from './MenuFlyoutHelper'
@@ -19,33 +19,91 @@ export function MenuFlyout({
   layer?: 'default' | 'dialog'
 }) {
   const menuRef = useRef<HTMLDivElement | null>(null)
+  const animationFrameRef = useRef(0)
   const [resolvedPosition, setResolvedPosition] = useState({ left: position.x, top: position.y })
   const [menuBoundaryHeight, setMenuBoundaryHeight] = useState(window.innerHeight)
 
-  useLayoutEffect(() => {
-    const menuElement = menuRef.current as HTMLDivElement
+  const resolveRequestedPosition = useCallback((menuElement: HTMLDivElement) => {
+    const anchor = position.anchor
+    if (anchor) {
+      if (!anchor.isConnected) {
+        onClose()
+        return { x: position.x, y: position.y }
+      }
 
+      const anchorRect = anchor.getBoundingClientRect()
+      const menuRect = menuElement.getBoundingClientRect()
+      const shouldOpenAbove = position.y < anchorRect.top
+      return {
+        x: anchorRect.left + (position.x - anchorRect.left),
+        y: shouldOpenAbove ? anchorRect.top - (anchorRect.top - position.y) : anchorRect.bottom + (position.y - anchorRect.bottom),
+        fallbackTop: shouldOpenAbove ? anchorRect.top - menuRect.height - 8 : undefined,
+      }
+    }
+
+    return { x: position.x, y: position.y }
+  }, [onClose, position.anchor, position.x, position.y])
+
+  const updatePosition = useCallback(() => {
+    const menuElement = menuRef.current
+    if (!menuElement) {
+      return
+    }
+
+    const requestedPosition = resolveRequestedPosition(menuElement)
     const margin = 8
-    const boundaryBottom = getMenuBoundaryBottom(margin)
+    const boundaryBottom = getMenuBoundaryBottom(margin, position.anchor)
     const rect = menuElement.getBoundingClientRect()
-    setResolvedPosition({
-      left: Math.max(margin, Math.min(position.x, window.innerWidth - rect.width - margin)),
-      top: Math.max(margin, Math.min(position.y, boundaryBottom - rect.height)),
+    const top = Math.max(margin, Math.min(requestedPosition.y, boundaryBottom - rect.height))
+    const left = Math.max(margin, Math.min(requestedPosition.x, window.innerWidth - rect.width - margin))
+    const resolvedTop = requestedPosition.fallbackTop == null
+      ? top
+      : Math.max(margin, Math.min(top, requestedPosition.fallbackTop))
+    setResolvedPosition((current) => {
+      if (current.left === left && current.top === resolvedTop) {
+        return current
+      }
+
+      return { left, top: resolvedTop }
     })
-    setMenuBoundaryHeight(boundaryBottom)
-  }, [position.x, position.y, items.length])
+    setMenuBoundaryHeight((current) => {
+      if (current === boundaryBottom) {
+        return current
+      }
+
+      return boundaryBottom
+    })
+  }, [position.anchor, resolveRequestedPosition])
+
+  const schedulePositionUpdate = useCallback(() => {
+    window.cancelAnimationFrame(animationFrameRef.current)
+    animationFrameRef.current = window.requestAnimationFrame(updatePosition)
+  }, [updatePosition])
+
+  useLayoutEffect(() => {
+    updatePosition()
+    return () => {
+      window.cancelAnimationFrame(animationFrameRef.current)
+    }
+  }, [items.length, updatePosition])
 
   useEffect(() => {
-    window.addEventListener('resize', onClose)
+    window.addEventListener('resize', schedulePositionUpdate)
+    window.addEventListener('scroll', schedulePositionUpdate, true)
 
     return () => {
-      window.removeEventListener('resize', onClose)
+      window.removeEventListener('resize', schedulePositionUpdate)
+      window.removeEventListener('scroll', schedulePositionUpdate, true)
     }
-  }, [onClose])
+  }, [schedulePositionUpdate])
 
   useEffect(() => {
     const closeOnOutsidePointerDown = (event: PointerEvent) => {
-      const menuElement = menuRef.current as HTMLDivElement
+      const menuElement = menuRef.current
+      if (!menuElement) {
+        return
+      }
+
       if (!menuElement.contains(event.target as Node)) {
         onClose()
       }
@@ -107,17 +165,22 @@ function MenuFlyoutSubmenu({
     maxHeight: Math.max(120, menuBoundaryHeight - 16),
     scrollable: false,
   })
-  const submenuLength = item.submenu!.length
+  const submenu = item.submenu!
+  const submenuLength = submenu.length
 
-  const updateLayout = () => {
-    const triggerElement = triggerRef.current as HTMLSpanElement
-    const panelElement = panelRef.current as HTMLDivElement
+  const updateLayout = useCallback(() => {
+    const triggerElement = triggerRef.current
+    const panelElement = panelRef.current
+    if (!triggerElement || !panelElement) {
+      return
+    }
+
     const margin = 8
     const triggerRect = triggerElement.getBoundingClientRect()
     const panelWidth = panelElement.getBoundingClientRect().width
-    const itemsHeight = getMenuFlyoutItemsHeight(item.submenu!)
+    const itemsHeight = getMenuFlyoutItemsHeight(submenu)
     const fullPanelHeight = itemsHeight + MENU_FLYOUT_VERTICAL_PADDING
-    const boundaryBottom = getMenuBoundaryBottom(margin)
+    const boundaryBottom = menuBoundaryHeight
     const availableHeight = Math.max(120, boundaryBottom - margin * 2)
     const panelHeight = Math.min(fullPanelHeight, availableHeight)
 
@@ -131,19 +194,38 @@ function MenuFlyoutSubmenu({
     const availablePanelHeight = Math.max(120, boundaryBottom - top - margin)
     const scrollable = itemsHeight > availablePanelHeight
     const maxHeight = scrollable ? availablePanelHeight : fullPanelHeight + 2
-    setLayout({
-      left,
-      top,
-      maxHeight,
-      scrollable,
+    setLayout((current) => {
+      if (current.left === left && current.top === top && current.maxHeight === maxHeight && current.scrollable === scrollable) {
+        return current
+      }
+
+      return {
+        left,
+        top,
+        maxHeight,
+        scrollable,
+      }
     })
-  }
+  }, [menuBoundaryHeight, submenu])
 
   useLayoutEffect(() => {
     if (active) {
       updateLayout()
     }
-  }, [active, submenuLength, menuBoundaryHeight])
+  }, [active, updateLayout])
+
+  useEffect(() => {
+    if (!active) {
+      return
+    }
+
+    window.addEventListener('resize', updateLayout)
+    window.addEventListener('scroll', updateLayout, true)
+    return () => {
+      window.removeEventListener('resize', updateLayout)
+      window.removeEventListener('scroll', updateLayout, true)
+    }
+  }, [active, submenuLength, menuBoundaryHeight, updateLayout])
 
   return (
     <div
@@ -156,7 +238,7 @@ function MenuFlyoutSubmenu({
       }}
     >
       <span ref={triggerRef}>
-        {item.icon ? <Icon name={item.icon} /> : <span />}
+        {item.icon ? <Icon name={item.icon} className={item.iconTone === 'favorite' ? 'library-context-menu-icon-favorite' : undefined} /> : <span />}
         <span>{item.text}</span>
         <Icon name="chevronRight" />
       </span>
@@ -170,7 +252,7 @@ function MenuFlyoutSubmenu({
             '--submenu-max-height': `${layout.maxHeight}px`,
           } as CSSProperties}
         >
-          {item.submenu!.map((subitem) => renderMenuItem(subitem, menuBoundaryHeight, onClose))}
+          {submenu.map((subitem) => renderMenuItem(subitem, menuBoundaryHeight, onClose))}
         </div>
       ) : null}
     </div>
@@ -217,7 +299,8 @@ function MenuFlyoutVolumeItem({ item }: { item: MenuFlyoutItem }) {
   const volumeTitle = item.text
   const [tooltipActive, setTooltipActive] = useState(false)
   const tooltipTimerRef = useRef<number | null>(null)
-  const volumeTooltipValue = item.volumeMuted ? 0 : volumeValue
+  const volumeTooltipValue = Math.round(volumeValue)
+  const tooltipAnchorLeft = `${volumeValue}%`
   const volumeIconName = getVolumeIconName(volumeValue, item.volumeMuted === true)
 
   const clearTooltipTimer = () => {
@@ -265,7 +348,11 @@ function MenuFlyoutVolumeItem({ item }: { item: MenuFlyoutItem }) {
       </button>
       <div
         className={`library-context-volume-slider-wrap${tooltipActive ? ' is-active' : ''}${item.disabled ? ' is-disabled' : ''}`}
-        style={{ '--volume-tooltip-left': `${volumeTooltipValue}%` } as CSSProperties}
+        style={{
+          '--range-progress': `${volumeValue}%`,
+          '--volume-tooltip-left': tooltipAnchorLeft,
+          '--volume-tooltip-anchor-left': tooltipAnchorLeft,
+        } as CSSProperties}
       >
         <input
           className="media-slider library-context-volume-slider"
@@ -322,7 +409,9 @@ function MenuFlyoutButton({ item, onClose }: { item: MenuFlyoutItem; onClose: ()
   return (
     <button
       type="button"
-      role="menuitem"
+      role={item.checked === undefined ? 'menuitem' : 'menuitemradio'}
+      aria-checked={item.checked === undefined ? undefined : item.checked}
+      className={item.checked ? 'is-checked' : undefined}
       disabled={item.disabled || busy}
       onClick={async () => {
         const result = item.onClick?.()
@@ -342,13 +431,18 @@ function MenuFlyoutButton({ item, onClose }: { item: MenuFlyoutItem; onClose: ()
         }
       }}
     >
-      {item.icon ? <Icon name={item.icon} /> : <span />}
+      {item.icon ? <Icon name={item.icon} className={item.iconTone === 'favorite' ? 'library-context-menu-icon-favorite' : undefined} /> : <span />}
       <span>{busy ? item.pendingText ?? item.text : item.text}</span>
+      {item.checked ? <Icon name="check" className="library-context-menu-check" /> : null}
     </button>
   )
 }
 
-function getMenuBoundaryBottom(margin: number) {
+function getMenuBoundaryBottom(margin: number, anchor?: HTMLElement) {
+  if (anchor?.closest('.player-bar')) {
+    return window.innerHeight - margin
+  }
+
   const playerBar = document.querySelector('.player-bar')
   return playerBar instanceof HTMLElement
     ? playerBar.getBoundingClientRect().top - margin

@@ -26,6 +26,7 @@ interface MusicDataSourcePlaylistsPageProps {
   onSetPlaylistPreferred: (playlistId: number, name: string, level: PreferenceLevel) => void
   onAddSongToPlaylist: (playlistId: number, songId: number) => void
   onAddSongsToPlaylist: (playlistId: number, songIds: number[]) => void
+  onToggleFavorite: (songId: number, favorite: boolean) => void
   onRemoveSongsFromPlaylist: (playlistId: number, songIds: number[]) => void
   onReorderPlaylistSongs: (playlistId: number, songIds: number[], sortCriterion?: PlaylistSortCriterion) => void
   routeBase?: string
@@ -52,6 +53,7 @@ export function MusicDataSourcePlaylistsPage({
   onSetPlaylistPreferred,
   onAddSongToPlaylist,
   onAddSongsToPlaylist,
+  onToggleFavorite,
   onRemoveSongsFromPlaylist,
   onReorderPlaylistSongs,
   routeBase = '',
@@ -119,6 +121,7 @@ export function MusicDataSourcePlaylistsPage({
       onRecordPlaylistPlayed={() => {}}
       onAddSongToPlaylist={onAddSongToPlaylist}
       onAddSongsToPlaylist={onAddSongsToPlaylist}
+      onToggleFavorite={onToggleFavorite}
       onRemoveSongsFromPlaylist={onRemoveSongsFromPlaylist}
       onReorderPlaylistSongs={onReorderPlaylistSongs}
       routeBase={routeBase}

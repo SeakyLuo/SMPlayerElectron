@@ -154,6 +154,7 @@
   display: flex;
   flex-direction: column;
   gap: 0;
+  container-type: inline-size;
 }
 
 .now-playing-queue-item {
@@ -484,7 +485,23 @@
   line-height: 1.35;
 }
 
+.now-playing-queue-artists {
+  display: flex;
+  align-items: center;
+}
+
+.now-playing-queue-artists > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .now-playing-queue-artist {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   border: 0;
   padding: 0;
   background: transparent;
@@ -494,6 +511,36 @@
 }
 
 .now-playing-queue-artist:hover {
+  color: var(--accent-strong);
+}
+
+.now-playing-queue-inline-album {
+  display: none;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.now-playing-queue-meta-separator {
+  flex: 0 0 auto;
+  margin: 0 6px;
+}
+
+.now-playing-queue-inline-album-button {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.now-playing-queue-inline-album-button:hover {
   color: var(--accent-strong);
 }
 
@@ -555,13 +602,50 @@
   transform: translateY(-1px);
 }
 
+.now-playing-queue-action:disabled {
+  cursor: default;
+  transform: none;
+}
+
 .now-playing-queue-action.favorite.is-active {
-  color: #d0445b;
+  color: var(--favorite-accent);
+}
+
+.now-playing-queue-action.favorite.is-loading {
+  color: var(--accent-strong);
+  opacity: 1;
+  pointer-events: none;
+}
+
+.queue-action-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: action-spinner-rotate 760ms linear infinite;
+}
+
+.headered-playlist-list.is-favorites .now-playing-queue-action.favorite {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.headered-playlist-list.is-favorites .now-playing-queue-item:hover .now-playing-queue-action.favorite,
+.headered-playlist-list.is-favorites .now-playing-queue-item:focus-within .now-playing-queue-action.favorite {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .now-playing-queue-action svg {
   width: 18px;
   height: 18px;
+}
+
+@keyframes action-spinner-rotate {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .now-playing-queue-item time {
@@ -570,6 +654,32 @@
   font-size: 13px;
   line-height: 1.35;
   font-variant-numeric: tabular-nums;
+}
+
+@container (max-width: 1120px) {
+  .now-playing-queue-item,
+  .now-playing-queue-item:not(.has-album-column),
+  .now-playing-queue-item.has-album-column {
+    grid-template-columns: 64px minmax(0, 1fr) max-content 20px;
+  }
+
+  .now-playing-queue-item.has-album-column .now-playing-queue-album {
+    display: none;
+  }
+
+  .now-playing-queue-item.has-album-column .now-playing-queue-inline-album {
+    display: inline-flex;
+  }
+
+  .now-playing-queue-item.has-album-column .now-playing-queue-actions {
+    justify-self: end;
+  }
+}
+
+@container (max-width: 800px) {
+  .now-playing-queue-action.favorite {
+    display: none;
+  }
 }
 
 .now-playing-virtual-spacer {
@@ -596,7 +706,7 @@
   .app-shell.nav-minimal .now-playing-queue-item,
   .app-shell.nav-minimal .now-playing-queue-item:not(.has-album-column),
   .app-shell.nav-minimal .now-playing-queue-item.has-album-column {
-    grid-template-columns: 58px minmax(0, 1fr) 76px 50px;
+    grid-template-columns: 58px minmax(0, 1fr) 34px 20px;
     gap: 12px;
     flex-basis: 78px;
     height: 78px;
@@ -624,8 +734,9 @@
   }
 
   .app-shell.nav-minimal .now-playing-queue-actions {
-    justify-content: center;
+    justify-content: flex-end;
     gap: 0;
+    min-width: 0;
   }
 
   .app-shell.nav-minimal .now-playing-queue-actions .now-playing-queue-action:not(:last-child),
@@ -637,10 +748,37 @@
     display: grid;
   }
 
+  .app-shell.nav-minimal .headered-playlist-list.is-album .now-playing-queue-actions .now-playing-queue-action:not(:last-child) {
+    display: grid;
+  }
+
+  .app-shell.nav-minimal .headered-playlist-list.is-album .now-playing-queue-actions .now-playing-queue-action.favorite {
+    display: none;
+  }
+
   .app-shell.nav-minimal .now-playing-queue-action {
     width: 34px;
     height: 34px;
     border-radius: 8px;
+  }
+
+  .app-shell.nav-minimal .now-playing-queue-action.favorite {
+    display: none;
+  }
+
+  .app-shell.nav-minimal .now-playing-queue-action.is-hover-action {
+    width: 0;
+    overflow: hidden;
+  }
+
+  .app-shell.nav-minimal .now-playing-queue-item:hover,
+  .app-shell.nav-minimal .now-playing-queue-item:focus-within {
+    grid-template-columns: 58px minmax(0, 1fr) max-content 20px;
+  }
+
+  .app-shell.nav-minimal .now-playing-queue-item:hover .now-playing-queue-action.is-hover-action,
+  .app-shell.nav-minimal .now-playing-queue-item:focus-within .now-playing-queue-action.is-hover-action {
+    width: 34px;
   }
 
   .app-shell.nav-minimal .now-playing-queue-item time {
@@ -705,6 +843,10 @@
   display: grid;
 }
 
+.playlist-control-compact .now-playing-queue-item.has-album-column .now-playing-queue-inline-album {
+  display: inline-flex;
+}
+
 .playlist-control-compact .now-playing-queue-action {
   width: 34px;
   height: 34px;
@@ -713,6 +855,40 @@
 
 .playlist-control-compact .now-playing-queue-item time {
   font-size: 14px;
+}
+
+@media (max-width: 1120px) {
+  .playlist-control-compact .now-playing-queue-item,
+  .playlist-control-compact .now-playing-queue-item:not(.has-album-column),
+  .playlist-control-compact .now-playing-queue-item.has-album-column {
+    grid-template-columns: 58px minmax(0, 1fr) 34px 20px;
+  }
+
+  .playlist-control-compact .now-playing-queue-actions {
+    justify-content: flex-end;
+    min-width: 0;
+  }
+
+  .playlist-control-compact .now-playing-queue-action.is-hover-action {
+    width: 0;
+    overflow: hidden;
+  }
+
+  .playlist-control-compact .now-playing-queue-item:hover,
+  .playlist-control-compact .now-playing-queue-item:focus-within {
+    grid-template-columns: 58px minmax(0, 1fr) max-content 20px;
+  }
+
+  .playlist-control-compact .now-playing-queue-item:hover .now-playing-queue-action.is-hover-action,
+  .playlist-control-compact .now-playing-queue-item:focus-within .now-playing-queue-action.is-hover-action {
+    width: 34px;
+  }
+}
+
+@media (max-width: 800px) {
+  .playlist-control-compact .now-playing-queue-action.favorite {
+    display: none;
+  }
 }
 
 @media (max-width: 720px) and (pointer: coarse) {
@@ -849,6 +1025,11 @@ body.night-mode .app-shell .now-playing-queue-artwork-fallback {
 body.night-mode .app-shell .now-playing-queue-action:hover {
   background: rgba(255, 255, 255, 0.09);
   color: color-mix(in srgb, var(--accent) 72%, #f5fbff 28%);
+}
+
+body.night-mode .app-shell .now-playing-queue-action.favorite.is-active,
+body.night-mode .app-shell .now-playing-queue-action.favorite.is-active:hover {
+  color: var(--favorite-accent);
 }
 
 body.night-mode .app-shell .lyrics-line {

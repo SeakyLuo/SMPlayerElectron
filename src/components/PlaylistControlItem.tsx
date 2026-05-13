@@ -32,6 +32,7 @@ interface PlaylistControlItemProps {
   onTogglePlayPause?: () => void
   onToggleSelection: () => void
   onToggleFavorite?: (songId: number, favorite: boolean) => void
+  favoriteLoading?: boolean
   onRemoveFromListClick?: (song: LibrarySong) => void
   onPlayNextClick?: (song: LibrarySong) => void
   onAddToPlaylistClick?: (song: LibrarySong, x: number, y: number) => void
@@ -67,6 +68,7 @@ export function PlaylistControlItem({
   onTogglePlayPause,
   onToggleSelection,
   onToggleFavorite,
+  favoriteLoading = false,
   onRemoveFromListClick,
   onPlayNextClick,
   onAddToPlaylistClick,
@@ -86,6 +88,8 @@ export function PlaylistControlItem({
 }: PlaylistControlItemProps) {
   const artists = getSongArtists(song, t('common.artistUnknown'))
   const artistLabel = artists.join(', ')
+  const albumLabel = song.album || t('common.albumUnknown')
+  const artistAlbumLabel = showAlbum ? `${artistLabel} • ${albumLabel}` : artistLabel
   const { artworkUrl, refreshArtwork } = useSongArtwork(song.id, song.artworkUrl)
   const [swipeOffset, setSwipeOffset] = useState(0)
   const swipeOffsetRef = useRef(0)
@@ -326,7 +330,7 @@ export function PlaylistControlItem({
       </span>
       <span className="now-playing-queue-copy">
         <strong title={song.title}>{song.title}</strong>
-        <span className="now-playing-queue-artists" title={artistLabel}>
+        <span className="now-playing-queue-artists" title={artistAlbumLabel}>
           {artists.map((artist, index) => (
             <span key={`${song.id}-${artist}`}>
               {index > 0 ? ', ' : null}
@@ -342,21 +346,38 @@ export function PlaylistControlItem({
               </button>
             </span>
           ))}
+          {showAlbum ? (
+            <span className="now-playing-queue-inline-album">
+              <span className="now-playing-queue-meta-separator">•</span>
+              <button
+                type="button"
+                className="now-playing-queue-inline-album-button"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onSeeAlbum?.(song)
+                }}
+              >
+                {albumLabel}
+              </button>
+            </span>
+          ) : null}
         </span>
       </span>
       <span className="now-playing-queue-actions">
         {onToggleFavorite ? (
           <button
             type="button"
-            className={clsx('now-playing-queue-action', 'favorite', { 'is-active': song.favorite })}
+            className={clsx('now-playing-queue-action', 'favorite', { 'is-active': song.favorite, 'is-loading': favoriteLoading })}
             aria-label={t('common.favorite')}
+            aria-busy={favoriteLoading}
             title={t('common.favorite')}
+            disabled={favoriteLoading}
             onClick={(event) => {
               event.stopPropagation()
               onToggleFavorite(song.id, !song.favorite)
             }}
           >
-            <Icon name={song.favorite ? 'heartFilled' : 'heart'} />
+            {favoriteLoading ? <span className="queue-action-spinner" aria-hidden="true" /> : <Icon name={song.favorite ? 'heartFilled' : 'heart'} />}
           </button>
         ) : null}
         {onAddToPlaylistClick ? (
@@ -420,13 +441,13 @@ export function PlaylistControlItem({
         <button
           type="button"
           className="now-playing-queue-album"
-          title={song.album || t('common.albumUnknown')}
+          title={albumLabel}
           onClick={(event) => {
             event.stopPropagation()
             onSeeAlbum?.(song)
           }}
         >
-          {song.album || t('common.albumUnknown')}
+          {albumLabel}
         </button>
       ) : null}
       <time>{formatDuration(song.duration)}</time>

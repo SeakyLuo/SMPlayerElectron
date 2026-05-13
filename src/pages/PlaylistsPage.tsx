@@ -36,7 +36,8 @@ interface PlaylistsPageProps {
   onRecordPlaylistPlayed: (playlistId: number) => void
   onAddSongToPlaylist: (playlistId: number, songId: number) => void
   onAddSongsToPlaylist: (playlistId: number, songIds: number[]) => void
-  onRemoveSongsFromPlaylist: (playlistId: number, songIds: number[]) => void
+  onToggleFavorite: (songId: number, favorite: boolean) => void
+  onRemoveSongsFromPlaylist: (playlistId: number, songIds: number[]) => void | Promise<void>
   onReorderPlaylistSongs: (playlistId: number, songIds: number[], sortCriterion?: PlaylistSortCriterion) => void
   routeBase?: string
   routePlaylistId?: number | null
@@ -88,6 +89,7 @@ export function PlaylistsPage({
   onRecordPlaylistPlayed,
   onAddSongToPlaylist,
   onAddSongsToPlaylist,
+  onToggleFavorite,
   onRemoveSongsFromPlaylist,
   onReorderPlaylistSongs,
   routeBase = '',
@@ -368,8 +370,9 @@ export function PlaylistsPage({
           onTogglePlayPause={onTogglePlayPause}
           onAddSongToPlaylist={onAddSongToPlaylist}
           onAddSongsToPlaylist={onAddSongsToPlaylist}
+          onToggleFavorite={onToggleFavorite}
           onRemoveSongs={(songIds) => {
-            onRemoveSongsFromPlaylist(selectedPlaylist.id, songIds)
+            return onRemoveSongsFromPlaylist(selectedPlaylist.id, songIds)
           }}
           onRename={(name) => {
             onRenamePlaylist(selectedPlaylist.id, name)

@@ -371,6 +371,7 @@ export function SettingsPage({
   const [showPreferenceSettings, setShowPreferenceSettings] = useState(false)
   const [showFeedbackOptions, setShowFeedbackOptions] = useState(false)
   const [showImportDataDialog, setShowImportDataDialog] = useState(false)
+  const [appVersion, setAppVersion] = useState('')
   const feedbackMenuRef = useRef<HTMLDivElement | null>(null)
   const [lyricsJob, setLyricsJob] = useState({
     status: 'idle' as 'idle' | 'running' | 'stopping' | 'done',
@@ -393,6 +394,12 @@ export function SettingsPage({
       mountedRef.current = false
       stopLyricsJobRef.current = true
     }
+  }, [])
+
+  useEffect(() => {
+    void window.smplayer?.getAppInfo().then((appInfo) => {
+      setAppVersion(appInfo.version)
+    })
   }, [])
 
   useEffect(() => {
@@ -623,6 +630,14 @@ export function SettingsPage({
               checked={snapshot.settings.useFilenameNotMusicName}
               onChange={(checked) => {
                 onUpdateSettings({ useFilenameNotMusicName: checked })
+              }}
+            />
+            <ToggleSettingRow
+              label={t('settings.smartMultiArtistRecognition')}
+              hint={t('settings.smartMultiArtistRecognitionHint')}
+              checked={snapshot.settings.smartMultiArtistRecognition}
+              onChange={(checked) => {
+                onUpdateSettings({ smartMultiArtistRecognition: checked })
               }}
             />
           </SettingsCard>
@@ -879,6 +894,11 @@ export function SettingsPage({
             </div>
           </SettingsCard>
         </div>
+        {appVersion ? (
+          <div className="settings-app-info">
+            {t('app.shell')} {appVersion}
+          </div>
+        ) : null}
       </div>
 
       {showReleaseNotes ? (

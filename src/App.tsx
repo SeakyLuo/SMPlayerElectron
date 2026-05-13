@@ -37,6 +37,7 @@ import { AppRoutes } from './AppRoutes'
 import {
   applyThemeColor,
   getClockMinute,
+  getNextClockMinuteDelay,
   getPageTitle,
   getRouteSection,
   getScrollElementKey,
@@ -62,6 +63,15 @@ function App() {
 
   const [initialLoadComplete, setInitialLoadComplete] = useState(false)
   const [resolvedArtwork, setResolvedArtwork] = useState<{ trackId: number; artworkUrl: string } | null>(null)
+  const updateResolvedArtwork = useCallback((trackId: number, artworkUrl: string) => {
+    setResolvedArtwork((current) => {
+      if (current?.trackId === trackId && current.artworkUrl === artworkUrl) {
+        return current
+      }
+
+      return { trackId, artworkUrl }
+    })
+  }, [])
   const [isNavigationCollapsed, setIsNavigationCollapsed] = useState(() => {
     try {
       return window.localStorage.getItem('smplayer:navigation-collapsed') === 'true'
@@ -101,6 +111,7 @@ function App() {
   const loading = useLibraryStore((state) => state.loading)
   const pageLoading = loading || !initialLoadComplete
   const scanning = useLibraryStore((state) => state.scanning)
+  const moveProgress = useLibraryStore((state) => state.moveProgress)
   const error = useLibraryStore((state) => state.error)
   const refresh = useLibraryStore((state) => state.refresh)
   const refreshShell = useLibraryStore((state) => state.refreshShell)
@@ -160,14 +171,12 @@ function App() {
     )
   )
   const nightModeActive = initialLoadComplete ? settingsNightModeActive : startupNightModeActive
-  const isRouteImmersiveForWindowControls = isAlbumDetailRoute(location.pathname) ||
-    isPlaylistDetailRoute(location.pathname) ||
-    (location.pathname === '/albums' && new URLSearchParams(location.search).has('album'))
-  const usesLightWindowControls = appWindow.isMiniMode || nightModeActive || (isNavigationMinimal && isRouteImmersiveForWindowControls)
+  const usesLightWindowControls = appWindow.isMiniMode || nightModeActive
   useWindowControlsLight(usesLightWindowControls)
 
   useEffect(() => {
     document.documentElement.classList.toggle('night-mode', nightModeActive)
+    document.documentElement.classList.remove('startup-night-mode')
     document.body.classList.toggle('night-mode', nightModeActive)
     document.documentElement.style.backgroundColor = ''
     document.body.style.backgroundColor = ''
@@ -180,14 +189,33 @@ function App() {
   }, [nightModeActive])
 
   useEffect(() => {
-    const interval = window.setInterval(() => {
+    if (snapshot.settings.nightMode !== 'auto') {
       setWindowControlClockMinute(getClockMinute())
-    }, 60_000)
+      return
+    }
+
+    let timeout = 0
+    const scheduleNextNightModeBoundary = () => {
+      timeout = window.setTimeout(() => {
+        setWindowControlClockMinute(getClockMinute())
+        scheduleNextNightModeBoundary()
+      }, getNextClockMinuteDelay([
+        settingsTimeToMinute(snapshot.settings.nightModeStartTime),
+        settingsTimeToMinute(snapshot.settings.nightModeEndTime),
+      ]))
+    }
+
+    setWindowControlClockMinute(getClockMinute())
+    scheduleNextNightModeBoundary()
 
     return () => {
-      window.clearInterval(interval)
+      window.clearTimeout(timeout)
     }
-  }, [])
+  }, [
+    snapshot.settings.nightMode,
+    snapshot.settings.nightModeEndTime,
+    snapshot.settings.nightModeStartTime,
+  ])
 
   useEffect(() => {
     if (!pendingCreatedPlaylistName) {
@@ -326,6 +354,9 @@ function App() {
     () => new Map(snapshot.songs.map((song) => [song.id, song])),
     [snapshot.songs],
   )
+  const currentPlaybackSong = playback.currentTrack
+    ? songsById.get(playback.currentTrack.id) ?? playback.currentTrack
+    : null
   const nowPlayingSongs = useMemo(
     () =>
       snapshot.nowPlaying.songIds
@@ -334,20 +365,20 @@ function App() {
     [snapshot.nowPlaying.songIds, songsById],
   )
   const showCount = snapshot.settings.showCount
-  const playerTrack = playback.currentTrack
+  const playerTrack = currentPlaybackSong
     ? {
-        id: playback.currentTrack.id,
-        title: playback.currentTrack.title,
+        id: currentPlaybackSong.id,
+        title: currentPlaybackSong.title,
         artist:
-          playback.currentTrack.artist ||
-          getDisplayArtists(playback.currentTrack, t('common.artistUnknown')) ||
-          playback.currentTrack.album ||
+          currentPlaybackSong.artist ||
+          getDisplayArtists(currentPlaybackSong, t('common.artistUnknown')) ||
+          currentPlaybackSong.album ||
           t('common.artistUnknown'),
         artworkUrl:
-          playback.currentTrack.artworkUrl ||
-          (resolvedArtwork?.trackId === playback.currentTrack.id ? resolvedArtwork.artworkUrl : ''),
+          currentPlaybackSong.artworkUrl ||
+          (resolvedArtwork?.trackId === currentPlaybackSong.id ? resolvedArtwork.artworkUrl : ''),
         isLoading: playback.status === 'loading' || playback.status === 'buffering',
-        favorite: playback.currentTrack.favorite,
+        favorite: currentPlaybackSong.favorite,
       }
     : {
         id: null,
@@ -498,7 +529,7 @@ function App() {
     setImmersiveHeaderTitle('')
   }, [location.pathname, location.search])
 
-  useTrackNotification(playback.currentTrack, t)
+  useTrackNotification(currentPlaybackSong, t)
 
   async function playQuick() {
     await Promise.all([loadSongs(), loadFolders(), loadRecent()])
@@ -540,6 +571,7 @@ function App() {
     location.pathname.startsWith('/favorites')
   const canNavigateBack = navigationDepth > 0 || isInAlbumDetail || isPlaylistDetailRoute(location.pathname)
   const isNavigationRail = isNavigationMinimal ? !isMinimalNavigationOpen : isNavigationCollapsed
+  const useCollapsedShellLayout = isNavigationMinimal || isNavigationRail
   const isNavigationOverlayOpen = isNavigationMinimal
     ? isMinimalNavigationOpen
     : isNavigationOverlay && !isNavigationCollapsed
@@ -641,7 +673,7 @@ function App() {
     return (
       <MiniModePage
         track={playerTrack}
-        currentSong={playback.currentTrack}
+        currentSong={currentPlaybackSong}
         disabled={snapshot.nowPlaying.songIds.length === 0}
         playerLyricsSource={snapshot.settings.playerLyricsSource}
         t={t}
@@ -650,21 +682,19 @@ function App() {
           void playQuick()
         }}
         onToggleFavorite={() => {
-          if (playback.currentTrack) {
-            void setSongFavorite(playback.currentTrack.id, !playback.currentTrack.favorite)
+          if (currentPlaybackSong) {
+            void setSongFavorite(currentPlaybackSong.id, !currentPlaybackSong.favorite)
           }
         }}
         onExitMiniMode={appWindow.exitMiniMode}
-        onArtworkResolved={(trackId, artworkUrl) => {
-          setResolvedArtwork({ trackId, artworkUrl })
-        }}
+        onArtworkResolved={updateResolvedArtwork}
       />
     )
   }
 
   return (
     <div
-      className={`app-shell${isNavigationRail ? ' nav-collapsed' : ''}${isNavigationOverlay ? ' nav-overlay' : ''}${isNavigationOverlayOpen && !isNavigationMinimal ? ' nav-overlay-open' : ''}${isNavigationMinimal ? ' nav-minimal' : ''}${isNavigationMinimal && isMinimalNavigationOpen ? ' nav-minimal-open' : ''}${isHeaderedPlaylistRoute ? ' is-headered-playlist-route' : ''}`}
+      className={`app-shell${useCollapsedShellLayout ? ' nav-collapsed' : ''}${isNavigationOverlay ? ' nav-overlay' : ''}${isNavigationOverlayOpen && !isNavigationMinimal ? ' nav-overlay-open' : ''}${isNavigationMinimal ? ' nav-minimal' : ''}${isNavigationMinimal && isMinimalNavigationOpen ? ' nav-minimal-open' : ''}${isHeaderedPlaylistRoute ? ' is-headered-playlist-route' : ''}`}
     >
       {isNavigationMinimal ? (
         <div
@@ -730,6 +760,13 @@ function App() {
         onSearchChange={setSearchInput}
         onSearchCommit={(value, type) => {
           void commitSearchQuery(value, type)
+          if (isNavigationOverlayOpen) {
+            if (isNavigationMinimal) {
+              setIsMinimalNavigationOpen(false)
+            } else {
+              setIsNavigationCollapsed(true)
+            }
+          }
         }}
         onSearchClear={() => {
           setSearchInput('')
@@ -927,14 +964,14 @@ function App() {
           recentSongs={snapshot.recentSongs}
           playlists={snapshot.playlists}
           favoritePlaylistId={snapshot.favorites.playlistId}
-          currentSong={playback.currentTrack}
+          currentSong={currentPlaybackSong}
           t={t}
           selectedTrackId={playback.currentTrackId}
           selectedQueueIndex={playback.currentQueueIndex}
           loading={pageLoading}
           {...playerControlBindings}
           resolvedArtworkUrl={
-            playback.currentTrack && resolvedArtwork?.trackId === playback.currentTrack.id
+            currentPlaybackSong && resolvedArtwork?.trackId === currentPlaybackSong.id
               ? resolvedArtwork.artworkUrl
               : ''
           }
@@ -970,9 +1007,7 @@ function App() {
           onClearQueue={() => {
             void clearNowPlaying()
           }}
-          onArtworkResolved={(trackId, artworkUrl) => {
-            setResolvedArtwork({ trackId, artworkUrl })
-          }}
+          onArtworkResolved={updateResolvedArtwork}
           onRefresh={() => {
             void refresh()
           }}
@@ -982,15 +1017,15 @@ function App() {
       <div className={showNowPlayingFullPage ? 'media-control-host is-hidden' : 'media-control-host'}>
         <MediaControl
           track={playerTrack}
-          currentSong={playback.currentTrack}
+          currentSong={currentPlaybackSong}
           playlists={snapshot.playlists}
           queueSongIds={snapshot.nowPlaying.songIds}
           disabled={snapshot.nowPlaying.songIds.length === 0}
           t={t}
           {...playerControlBindings}
           onToggleFavorite={() => {
-            if (playback.currentTrack) {
-              void setSongFavorite(playback.currentTrack.id, !playback.currentTrack.favorite)
+            if (currentPlaybackSong) {
+              void setSongFavorite(currentPlaybackSong.id, !currentPlaybackSong.favorite)
             }
           }}
           onQuickPlay={() => {
@@ -1005,9 +1040,7 @@ function App() {
           isWindowFullScreen={appWindow.isWindowFullScreen}
           onToggleWindowFullScreen={appWindow.toggleWindowFullScreen}
           onEnterMiniMode={appWindow.enterMiniMode}
-          onArtworkResolved={(trackId, artworkUrl) => {
-            setResolvedArtwork({ trackId, artworkUrl })
-          }}
+          onArtworkResolved={updateResolvedArtwork}
           onSaved={() => {
             void refresh()
           }}
@@ -1039,7 +1072,39 @@ function App() {
         />
       ) : null}
       <DialogHost t={t} />
+      {moveProgress ? <MoveProgressOverlay progress={moveProgress} t={t} /> : null}
       <InAppNotificationWithButton />
+    </div>
+  )
+}
+
+function MoveProgressOverlay({
+  progress,
+  t,
+}: {
+  progress: NonNullable<ReturnType<typeof useLibraryStore.getState>['moveProgress']>
+  t: ReturnType<typeof createTranslator>
+}) {
+  const percent = progress.max > 0
+    ? Math.min(100, Math.max(0, Math.round((progress.progress / progress.max) * 100)))
+    : 0
+  const currentItem = progress.currentItem.split(/[\\/]/).filter(Boolean).pop() ?? progress.currentItem
+
+  return (
+    <div className="move-progress-overlay" role="alert" aria-live="assertive" aria-modal="true">
+      <section className="move-progress-panel">
+        <div className="move-progress-header">
+          <span>{t('local.moveProgressTitle')}</span>
+          <strong>{percent}%</strong>
+        </div>
+        <div className="move-progress-bar" aria-hidden="true">
+          <span style={{ width: `${percent}%` }} />
+        </div>
+        <div className="move-progress-current">
+          <span>{t('local.moveProgressCurrent')}</span>
+          <strong title={progress.currentItem}>{currentItem}</strong>
+        </div>
+      </section>
     </div>
   )
 }

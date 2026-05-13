@@ -68,7 +68,7 @@
 .playlist-control-swipe-favorite {
   left: 0;
   justify-content: flex-start;
-  background: #d0445b;
+  background: var(--favorite-accent);
 }
 
 .playlist-control-swipe-remove {
@@ -462,9 +462,12 @@
   cursor: pointer;
 }
 
-.playlist-control-item-favorite:hover,
 .playlist-control-item-favorite.is-active {
-  color: #d0445b;
+  color: var(--favorite-accent);
+}
+
+.playlist-control-item-favorite:hover {
+  color: var(--favorite-accent);
 }
 
 .playlist-control-item-favorite svg {

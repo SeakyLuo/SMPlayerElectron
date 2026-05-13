@@ -337,7 +337,11 @@ export function AlbumsPage({
 
   const openSortMenu = (event: MouseEvent<HTMLButtonElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
-    setSortMenu({ x: rect.left, y: rect.bottom + 4 })
+    setSortMenu({ x: rect.left, y: rect.bottom + 4, anchor: event.currentTarget })
+  }
+
+  const openSortMenuAt = (position: MenuFlyoutPosition) => {
+    setSortMenu(position)
   }
 
   const albumSortOptions: AlbumSortCriterion[] = ['reverse', 'default', 'name', 'artist']
@@ -499,8 +503,8 @@ export function AlbumsPage({
             label={t(`albums.sort.${sortCriterion}`)}
             ariaHasPopup="menu"
             ariaExpanded={sortMenu != null}
-            canOverflow={false}
             onClick={openSortMenu}
+            onOverflowClick={openSortMenuAt}
           />
         </CommandBar>
       </header>
@@ -607,7 +611,7 @@ export function AlbumsPage({
         onPlay={playSelected}
         onAddToPlaylistMenuClick={(event) => {
           const rect = event.currentTarget.getBoundingClientRect()
-          setAddToMenu({ x: rect.left, y: rect.top - 8, songIds: selectedSongIds, defaultPlaylistName: t('common.albums') })
+          setAddToMenu({ x: rect.left, y: rect.top - 8, anchor: event.currentTarget, songIds: selectedSongIds, defaultPlaylistName: t('common.albums') })
         }}
         onSelectAll={() => {
           setSelectedAlbumNames(new Set(visibleAlbums.map((album) => album.name)))

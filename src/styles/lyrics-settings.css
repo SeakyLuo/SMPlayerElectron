@@ -305,6 +305,7 @@
   z-index: 121;
   display: flex;
   flex-direction: column;
+  gap: 4px;
   min-width: 100%;
   width: max-content;
   max-width: min(320px, calc(100vw - 32px));

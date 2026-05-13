@@ -20,6 +20,7 @@ import type { IconName } from './icons'
 
 export interface MenuFlyoutOption {
   showRemove?: boolean
+  removeLabel?: string
   showSeeArtistsAndSeeAlbum?: boolean
   showMusicProperties?: boolean
   showSelect?: boolean
@@ -35,6 +36,8 @@ export interface MenuFlyoutItem {
   text: string
   pendingText?: string
   icon?: IconName
+  iconTone?: 'favorite'
+  checked?: boolean
   kind?: 'button' | 'volume'
   volumeValue?: number
   volumeMuted?: boolean
@@ -50,6 +53,7 @@ export interface MenuFlyoutItem {
 export interface MenuFlyoutPosition {
   x: number
   y: number
+  anchor?: HTMLElement
 }
 
 const preferenceLevels: PreferenceLevel[] = ['do-not-appear', 'dislike', 'normal', 'high', 'higher', 'very-high']
@@ -290,6 +294,7 @@ export function getMusicMenuFlyoutItems({
 }) {
   const normalizedOption: Required<MenuFlyoutOption> = {
     showRemove: option?.showRemove ?? false,
+    removeLabel: option?.removeLabel ?? t('context.removeFromList'),
     showSeeArtistsAndSeeAlbum: option?.showSeeArtistsAndSeeAlbum ?? true,
     showMusicProperties: option?.showMusicProperties ?? true,
     showSelect: option?.showSelect ?? true,
@@ -334,7 +339,7 @@ export function getMusicMenuFlyoutItems({
   }
 
   if (normalizedOption.showRemove) {
-    items.push({ key: 'remove', text: t('context.removeFromList'), icon: 'close', onClick: onRemove })
+    items.push({ key: 'remove', text: normalizedOption.removeLabel, icon: 'close', onClick: onRemove })
   }
 
   if (normalizedOption.showSelect) {

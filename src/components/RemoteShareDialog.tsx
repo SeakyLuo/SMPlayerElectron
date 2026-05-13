@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import type { AuthorizedDevice, RemoteHost, RemoteShareStatus } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
 import { Icon } from './icons'
+import { PopupDialog } from './PopupDialog'
 
 function getPrimaryAddress(status: RemoteShareStatus) {
   return status.addresses[0] ?? ''
@@ -89,22 +90,23 @@ export function RemoteShareDialog({
   }
 
   return (
-    <div className="settings-modal-backdrop" role="presentation">
-      <section className="settings-modal remote-share-dialog" role="dialog" aria-modal="true" aria-labelledby="remote-share-title">
-        <header>
-          <div>
-            <h2 id="remote-share-title">{t('remoteShare.title')}</h2>
-            <p>{t('remoteShare.description')}</p>
-          </div>
-          <button type="button" aria-label={t('common.close')} onClick={onClose}>
-            <Icon name="arrowLeft" className="dialog-back-icon" />
-            <Icon name="close" className="dialog-close-icon" />
-          </button>
-          <span className="dialog-titlebar-title">{t('app.shell')}</span>
-        </header>
-
-        {status ? (
-          <div className="remote-share-body">
+    <PopupDialog
+      t={t}
+      overlayClassName="music-dialog-overlay RemoteShareDialogOverlay"
+      className="remote-share-dialog ContentDialog RemoteShareDialog"
+      navClassName="music-dialog-pivot RemoteShareDialogPivot"
+      navLabel={t('remoteShare.title')}
+      ariaLabelledBy="remote-share-title"
+      onClose={onClose}
+      navChildren={(
+        <div className="popup-dialog-title-block">
+          <h2 id="remote-share-title">{t('remoteShare.title')}</h2>
+          <p>{t('remoteShare.description')}</p>
+        </div>
+      )}
+    >
+      {status ? (
+        <div className="song-dialog-body remote-share-body">
             <section className="remote-share-section">
               <div className="remote-share-status-row">
                 <div>
@@ -241,7 +243,6 @@ export function RemoteShareDialog({
             {message ? <p className="remote-share-message">{message}</p> : null}
           </div>
         ) : null}
-      </section>
-    </div>
+    </PopupDialog>
   )
 }

@@ -23,8 +23,10 @@ interface GridViewMusicItemControlProps {
   onTogglePlayPause: () => void
   onToggleSelection: (songId: number) => void
   onAddToPlaylistClick?: (event: MouseEvent<HTMLButtonElement>, song: LibrarySong) => void
+  onMoreClick?: (song: LibrarySong, x: number, y: number) => void
   onContextMenu: (event: MouseEvent<HTMLElement>, song: LibrarySong) => void
   onDragStart?: (event: DragEvent<HTMLDivElement>, song: LibrarySong) => void
+  onDragEnd?: () => void
 }
 
 export function GridViewMusicItemControl({
@@ -42,8 +44,10 @@ export function GridViewMusicItemControl({
   onTogglePlayPause,
   onToggleSelection,
   onAddToPlaylistClick,
+  onMoreClick,
   onContextMenu,
   onDragStart,
+  onDragEnd,
 }: GridViewMusicItemControlProps) {
   const artistLabel = getDisplayArtists(song, t('common.artistUnknown'))
   const open = () => {
@@ -77,6 +81,7 @@ export function GridViewMusicItemControl({
         onDragStart={(event) => {
           onDragStart?.(event, song)
         }}
+        onDragEnd={onDragEnd}
         onContextMenu={(event) => {
           event.preventDefault()
           onContextMenu(event, song)
@@ -161,6 +166,7 @@ export function GridViewMusicItemControl({
       onDragStart={(event) => {
         onDragStart?.(event, song)
       }}
+      onDragEnd={onDragEnd}
       onContextMenu={(event) => {
         event.preventDefault()
         onContextMenu(event, song)
@@ -193,7 +199,7 @@ export function GridViewMusicItemControl({
               onAddToPlaylistClick(event, song)
             }}
           >
-            <span aria-hidden="true" />
+            <Icon name="plus" />
           </button>
         ) : null}
       </span>
@@ -210,6 +216,21 @@ export function GridViewMusicItemControl({
           </span>
         ) : null}
       </span>
+      {!multiSelect ? (
+        <button
+          type="button"
+          className="recent-song-more"
+          aria-label={t('player.more')}
+          title={t('player.more')}
+          onClick={(event) => {
+            event.stopPropagation()
+            const rect = event.currentTarget.getBoundingClientRect()
+            onMoreClick?.(song, rect.left, rect.bottom + 8)
+          }}
+        >
+          <Icon name="moreHorizontal" />
+        </button>
+      ) : null}
     </div>
   )
 }

@@ -347,7 +347,7 @@
 
 .mini-mode-actions .favorite-toggle.is-active {
   background: transparent;
-  color: #e81123;
+  color: var(--favorite-accent);
 }
 
 .mini-mode-volume-action {

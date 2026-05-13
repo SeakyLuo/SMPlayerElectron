@@ -22,6 +22,7 @@
 @import './styles/headered-playlist.css';
 @import './styles/now-playing.css';
 @import './styles/now-playing-full.css';
+@import './styles/now-playing-full-queue.css';
 @import './styles/mini-mode.css';
 @import './styles/settings.css';
 @import './styles/preferences.css';

@@ -5,13 +5,14 @@ import { pathToFileURL } from 'node:url'
 
 import { parseFile } from 'music-metadata'
 
-import type { SongPropertiesSnapshot, SongPropertiesUpdate } from '../../src/shared/contracts.ts'
+import type { ArtistSplitResultItem, SongPropertiesSnapshot, SongPropertiesUpdate } from '../../src/shared/contracts.ts'
 import { normalizeArtists } from '../../src/shared/artists.ts'
 import { ACTIVE_STATE } from './constants.ts'
 import type { Id3TagService } from './id3-tag-service.ts'
 import type { SongArtistRow } from './row-mappers.ts'
 import { normalizeArtistTagValues, normalizeTagText } from './tag-text.ts'
 import { syncAlbums } from './album-sync.ts'
+import { SongArtistSync } from './song-artist-sync.ts'
 
 export class SongService {
   private readonly db: DatabaseSync
@@ -19,8 +20,7 @@ export class SongService {
   private readonly getSongPathStatement
   private readonly updateSongPlayCountStatement
   private readonly updateSongDurationStatement
-  private readonly markSongArtistsInactiveStatement
-  private readonly upsertSongArtistStatement
+  private readonly songArtistSync
 
   constructor(db: DatabaseSync, id3TagService: Id3TagService) {
     this.db = db
@@ -52,18 +52,7 @@ export class SongService {
           OR ABS(Duration - ?) > 1
         )
     `)
-    this.markSongArtistsInactiveStatement = this.db.prepare(`
-      UPDATE MusicArtist
-      SET State = ?
-      WHERE MusicId = ?
-    `)
-    this.upsertSongArtistStatement = this.db.prepare(`
-      INSERT INTO MusicArtist (MusicId, Name, Priority, State)
-      VALUES (?, ?, ?, ?)
-      ON CONFLICT DO UPDATE SET
-        Priority = excluded.Priority,
-        State = excluded.State
-    `)
+    this.songArtistSync = new SongArtistSync(this.db)
   }
 
   async getSongProperties(songId: number): Promise<SongPropertiesSnapshot> {
@@ -94,7 +83,6 @@ export class SongService {
       FROM MusicArtist
       INNER JOIN Music
         ON Music.Id = MusicArtist.MusicId
-       AND MusicArtist.Name = TRIM(Music.Artist)
       WHERE MusicId = ?
         AND MusicArtist.State = ?
       ORDER BY MusicArtist.Priority, MusicArtist.Id
@@ -205,10 +193,7 @@ export class SongService {
         songId,
         ACTIVE_STATE.active,
       )
-      this.markSongArtistsInactiveStatement.run(ACTIVE_STATE.inactive, songId)
-      if (artist) {
-        this.upsertSongArtistStatement.run(songId, artist, 0, ACTIVE_STATE.active)
-      }
+      this.songArtistSync.sync(songId, artists)
       syncAlbums(this.db)
       this.db.exec('COMMIT')
     } catch (error) {
@@ -219,6 +204,17 @@ export class SongService {
 
   updateSongPlayCount(songId: number, playCount: number) {
     this.updateSongPlayCountStatement.run(playCount, songId, ACTIVE_STATE.active)
+  }
+
+  applyArtistSplits(splits: ArtistSplitResultItem[]) {
+    this.db.exec('BEGIN')
+    try {
+      this.songArtistSync.syncMany(splits)
+      this.db.exec('COMMIT')
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
   }
 
   updateSongDuration(songId: number, duration: number) {

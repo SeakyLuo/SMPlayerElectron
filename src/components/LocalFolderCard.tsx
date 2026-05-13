@@ -91,6 +91,7 @@ function FolderTypeBadge() {
 export function LocalFolderCard({
   folder,
   selected,
+  dropTarget = false,
   multiSelect,
   nodes,
   songsById,
@@ -105,11 +106,15 @@ export function LocalFolderCard({
   onOpenFolder,
   onToggleSelection,
   onDragStart,
+  onDragOver,
+  onDragLeave,
   onDrop,
+  onDragEnd,
   onOpenFolderMenu,
 }: {
   folder: FolderNode
   selected: boolean
+  dropTarget?: boolean
   multiSelect: boolean
   nodes: Map<string, FolderNode>
   songsById: Map<number, LibrarySong>
@@ -124,7 +129,10 @@ export function LocalFolderCard({
   onOpenFolder: (targetRelativePath: string) => void
   onToggleSelection: (folderPath: string) => void
   onDragStart?: (event: DragEvent, folder: FolderNode) => void
+  onDragOver?: (event: DragEvent, folder: FolderNode) => void
+  onDragLeave?: (event: DragEvent, folder: FolderNode) => void
   onDrop?: (event: DragEvent, folder: FolderNode) => void
+  onDragEnd?: () => void
   onOpenFolderMenu: (folder: FolderNode, x: number, y: number) => void
 }) {
   const artworkUrls = useOriginalFolderThumbnailUrls(folder, nodes, songsById)
@@ -229,14 +237,13 @@ export function LocalFolderCard({
       return (
         <button
           type="button"
-          className={selected ? 'local-folder-card local-folder-card-list is-selected' : 'local-folder-card local-folder-card-list'}
+          className={['local-folder-card local-folder-card-list', selected ? 'is-selected' : '', dropTarget ? 'is-drop-target' : ''].filter(Boolean).join(' ')}
           draggable={draggable}
           onDragStart={draggable ? (event) => onDragStart?.(event, folder) : undefined}
-          onDragOver={draggable ? (event) => {
-            event.preventDefault()
-            event.dataTransfer.dropEffect = 'move'
-          } : undefined}
+          onDragOver={draggable ? (event) => onDragOver?.(event, folder) : undefined}
+          onDragLeave={draggable ? (event) => onDragLeave?.(event, folder) : undefined}
           onDrop={draggable ? (event) => onDrop?.(event, folder) : undefined}
+          onDragEnd={draggable ? onDragEnd : undefined}
           onContextMenu={(event) => {
             event.preventDefault()
             onOpenFolderMenu(folder, event.clientX, event.clientY)
@@ -254,14 +261,13 @@ export function LocalFolderCard({
       <article
         role="button"
         tabIndex={0}
-        className="local-folder-card local-folder-card-list"
+        className={['local-folder-card local-folder-card-list', dropTarget ? 'is-drop-target' : ''].filter(Boolean).join(' ')}
         draggable={draggable}
         onDragStart={draggable ? (event) => onDragStart?.(event, folder) : undefined}
-        onDragOver={draggable ? (event) => {
-          event.preventDefault()
-          event.dataTransfer.dropEffect = 'move'
-        } : undefined}
+        onDragOver={draggable ? (event) => onDragOver?.(event, folder) : undefined}
+        onDragLeave={draggable ? (event) => onDragLeave?.(event, folder) : undefined}
         onDrop={draggable ? (event) => onDrop?.(event, folder) : undefined}
+        onDragEnd={draggable ? onDragEnd : undefined}
         onContextMenu={(event) => {
           event.preventDefault()
           onOpenFolderMenu(folder, event.clientX, event.clientY)
@@ -311,14 +317,13 @@ export function LocalFolderCard({
     return (
       <button
         type="button"
-        className={selected ? 'local-folder-card is-selected' : 'local-folder-card'}
+        className={['local-folder-card', selected ? 'is-selected' : '', dropTarget ? 'is-drop-target' : ''].filter(Boolean).join(' ')}
         draggable={draggable}
         onDragStart={draggable ? (event) => onDragStart?.(event, folder) : undefined}
-        onDragOver={draggable ? (event) => {
-          event.preventDefault()
-          event.dataTransfer.dropEffect = 'move'
-        } : undefined}
+        onDragOver={draggable ? (event) => onDragOver?.(event, folder) : undefined}
+        onDragLeave={draggable ? (event) => onDragLeave?.(event, folder) : undefined}
         onDrop={draggable ? (event) => onDrop?.(event, folder) : undefined}
+        onDragEnd={draggable ? onDragEnd : undefined}
         onContextMenu={(event) => {
           event.preventDefault()
           onOpenFolderMenu(folder, event.clientX, event.clientY)
@@ -336,14 +341,13 @@ export function LocalFolderCard({
     <article
       role="button"
       tabIndex={0}
-      className="local-folder-card"
+      className={['local-folder-card', dropTarget ? 'is-drop-target' : ''].filter(Boolean).join(' ')}
       draggable={draggable}
       onDragStart={draggable ? (event) => onDragStart?.(event, folder) : undefined}
-      onDragOver={draggable ? (event) => {
-        event.preventDefault()
-        event.dataTransfer.dropEffect = 'move'
-      } : undefined}
+      onDragOver={draggable ? (event) => onDragOver?.(event, folder) : undefined}
+      onDragLeave={draggable ? (event) => onDragLeave?.(event, folder) : undefined}
       onDrop={draggable ? (event) => onDrop?.(event, folder) : undefined}
+      onDragEnd={draggable ? onDragEnd : undefined}
       onContextMenu={(event) => {
         event.preventDefault()
         onOpenFolderMenu(folder, event.clientX, event.clientY)

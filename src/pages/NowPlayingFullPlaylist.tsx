@@ -429,6 +429,7 @@ export function NowPlayingFullPlaylist({
           setAddToMenu({
             x: rect.left,
             y: rect.top - 8,
+            anchor: event.currentTarget,
             songIds: selectedSongIds,
             defaultPlaylistName: defaultNewPlaylistName,
           })

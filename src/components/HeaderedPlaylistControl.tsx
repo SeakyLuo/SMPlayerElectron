@@ -51,7 +51,7 @@ interface HeaderedPlaylistControlProps {
   onTogglePlayPause?: () => void
   onAddSongToPlaylist: (playlistId: number, songId: number) => void
   onAddSongsToPlaylist?: (playlistId: number, songIds: number[]) => void
-  onRemoveSongs?: (songIds: number[]) => void
+  onRemoveSongs?: (songIds: number[]) => void | Promise<void>
   onRename?: (name: string) => void
   onDelete?: () => void
   onClear?: () => void
@@ -206,6 +206,7 @@ export function HeaderedPlaylistControl({
   const [headerPreferenceItem, setHeaderPreferenceItem] = useState<PreferenceItemSnapshot | null>(null)
   const [selectedSortCriterion, setSelectedSortCriterion] = useState<PlaylistSortCriterion | null>(null)
   const [orderedSongIds, setOrderedSongIds] = useState<number[] | null>(null)
+  const [pendingFavoriteSongIds, setPendingFavoriteSongIds] = useState<Set<number>>(new Set())
   const [coverColorRgb, setCoverColorRgb] = useState(getDefaultArtworkColorRgb)
   const resolvedPlaylistArtworkUrls = usePlaylistArtwork(type === 'album' ? [] : headerSongs ?? songs)
   const hideMultiSelectCommandBarAfterOperation = useLibraryStore(
@@ -348,7 +349,8 @@ export function HeaderedPlaylistControl({
   }
 
   const undoRemoveSongsFromCurrentPlaylist = (songIds: number[]) => {
-    if (!currentSavedPlaylist) {
+    const target = type === 'favorites' ? translateCaption('common.myFavorites') : currentSavedPlaylist?.name
+    if (!target) {
       return
     }
 
@@ -356,13 +358,51 @@ export function HeaderedPlaylistControl({
       songIds.length === 1
         ? translateCaption('notification.removedFrom', {
             title: songs.find((song) => song.id === songIds[0])!.title,
-            target: currentSavedPlaylist.name,
+            target,
           })
-        : translateCaption('notification.songsRemovedFrom', { count: songIds.length, target: currentSavedPlaylist.name }),
-      () =>
-        type === 'favorites'
-          ? setSongsFavorite(songIds, true)
-          : addSongsToPlaylist(currentSavedPlaylist.id, songIds),
+        : translateCaption('notification.songsRemovedFrom', { count: songIds.length, target }),
+      async () => {
+        const playlistId = type === 'favorites' ? favoritePlaylistId : currentSavedPlaylist!.id
+        await (type === 'favorites' ? setSongsFavorite(songIds, true) : addSongsToPlaylist(playlistId, songIds))
+        await refresh({ songs: false, folders: false, recent: false })
+      },
+    )
+  }
+
+  const removeSongsFromCurrentPlaylist = async (songIds: number[]) => {
+    if (type === 'favorites') {
+      setPendingFavoriteSongIds((current) => new Set([...current, ...songIds]))
+    }
+
+    try {
+      await (type === 'favorites' ? setSongsFavorite(songIds, false) : onRemoveSongs!(songIds))
+      undoRemoveSongsFromCurrentPlaylist(songIds)
+    } finally {
+      if (type === 'favorites') {
+        setPendingFavoriteSongIds((current) => {
+          const next = new Set(current)
+          for (const songId of songIds) {
+            next.delete(songId)
+          }
+          return next
+        })
+      }
+    }
+  }
+
+  const toggleSongFavoriteWithUndo = (song: LibrarySong) => {
+    if (type === 'favorites' && song.favorite) {
+      void removeSongsFromCurrentPlaylist([song.id])
+      return
+    }
+
+    onToggleFavorite?.(song.id, !song.favorite)
+    const target = translateCaption('common.myFavorites')
+    showUndo(
+      song.favorite
+        ? translateCaption('notification.removedFrom', { title: song.title, target })
+        : translateCaption('notification.songAddedTo', { title: song.title, target }),
+      () => setSongFavorite(song.id, song.favorite),
     )
   }
 
@@ -406,9 +446,9 @@ export function HeaderedPlaylistControl({
     onSortSongs?.(reversedSongs.map((song) => song.id), activeSortCriterion)
   }
 
-  const openPreferenceMenu = (x: number, y: number) => {
+  const openPreferenceMenu = (x: number, y: number, anchor?: HTMLElement) => {
     setSortMenu(null)
-    setPreferenceMenu({ x, y })
+    setPreferenceMenu({ x, y, anchor })
     if (preferenceType && preferenceItemId) {
       void refreshHeaderPreferenceItem()
     }
@@ -416,13 +456,13 @@ export function HeaderedPlaylistControl({
 
   const openPreferenceMenuFromButton = (button: HTMLElement) => {
     const rect = button.getBoundingClientRect()
-    openPreferenceMenu(rect.left, rect.bottom + 4)
+    openPreferenceMenu(rect.left, rect.bottom + 4, button)
   }
 
   const openSortMenuFromButton = (button: HTMLElement) => {
     const rect = button.getBoundingClientRect()
     setPreferenceMenu(null)
-    setSortMenu({ x: rect.left, y: rect.bottom + 4 })
+    setSortMenu({ x: rect.left, y: rect.bottom + 4, anchor: button })
   }
 
   const getToolbarOverflowMenuPosition = () => {
@@ -699,7 +739,7 @@ export function HeaderedPlaylistControl({
         </div>
       </header>
 
-      <section className={`PlaylistControl headered-playlist-list${showAlbum ? ' has-album' : ''}`}>
+      <section className={`PlaylistControl headered-playlist-list is-${type}${showAlbum ? ' has-album' : ''}`}>
         <div className="headered-playlist-list-header">
           <span aria-hidden="true" />
           <span>{captionFor('songArtist')}</span>
@@ -753,7 +793,10 @@ export function HeaderedPlaylistControl({
               onSeeAlbum={(contextSong) => {
                 onAlbumClick?.(contextSong.album || translateCaption('common.albumUnknown'))
               }}
-              onToggleFavorite={onToggleFavorite}
+              onToggleFavorite={() => {
+                toggleSongFavoriteWithUndo(song)
+              }}
+              favoriteLoading={type === 'favorites' && pendingFavoriteSongIds.has(song.id)}
             />
             )
           })}
@@ -778,8 +821,7 @@ export function HeaderedPlaylistControl({
         }}
         onRemove={removable ? () => {
           const removedSongIds = effectiveSelectedSongIds
-          onRemoveSongs?.(effectiveSelectedSongIds)
-          undoRemoveSongsFromCurrentPlaylist(removedSongIds)
+          void removeSongsFromCurrentPlaylist(removedSongIds)
           clearSelection()
         } : undefined}
         onSelectAll={() => {
@@ -917,6 +959,7 @@ export function HeaderedPlaylistControl({
             song: songMenu.song,
             option: {
               showRemove: removable,
+              removeLabel: type === 'favorites' ? translateCaption('context.removeFavorite') : undefined,
               showSelect: true,
               showDelete: true,
               showSeeArtistsAndSeeAlbum: true,
@@ -968,14 +1011,7 @@ export function HeaderedPlaylistControl({
               )
             },
             onRemove: () => {
-              onRemoveSongs?.([songMenu.song.id])
-              if (currentSavedPlaylist) {
-                showUndo(translateCaption('notification.removedFrom', { title: songMenu.song.title, target: currentSavedPlaylist.name }), () =>
-                  type === 'favorites'
-                    ? setSongFavorite(songMenu.song.id, true)
-                    : addSongsToPlaylist(currentSavedPlaylist.id, [songMenu.song.id]),
-                )
-              }
+              void removeSongsFromCurrentPlaylist([songMenu.song.id])
             },
             onSelect: () => {
               setSelectionMode(true)
@@ -996,14 +1032,7 @@ export function HeaderedPlaylistControl({
               )
             },
             onToggleFavorite: () => {
-              onToggleFavorite?.(songMenu.song.id, !songMenu.song.favorite)
-              const target = translateCaption('common.myFavorites')
-              showUndo(
-                songMenu.song.favorite
-                  ? translateCaption('notification.removedFrom', { title: songMenu.song.title, target })
-                  : translateCaption('notification.songAddedTo', { title: songMenu.song.title, target }),
-                () => setSongFavorite(songMenu.song.id, songMenu.song.favorite),
-              )
+              toggleSongFavoriteWithUndo(songMenu.song)
             },
             onReveal: () => {
               void window.smplayer?.revealItemInFolder(songMenu.song.path)

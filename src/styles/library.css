@@ -538,8 +538,8 @@
   padding: 0 10px;
   border: none;
   border-radius: 999px;
-  background: rgba(217, 65, 78, 0.12);
-  color: #bf3f4d;
+  background: rgba(var(--favorite-accent-rgb), 0.1);
+  color: var(--favorite-accent);
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
@@ -555,7 +555,7 @@
 }
 
 .favorite-pill.is-active {
-  background: rgba(217, 65, 78, 0.16);
+  background: rgba(var(--favorite-accent-rgb), 0.14);
 }
 
 .favorite-icon-button {
@@ -566,23 +566,23 @@
   border: 0;
   border-radius: 50%;
   background: transparent;
-  color: #ff0000;
+  color: var(--favorite-accent);
   font-size: 18px;
   line-height: 1;
   cursor: pointer;
 }
 
 .favorite-icon-button:hover {
-  background: rgba(217, 65, 78, 0.1);
+  background: rgba(var(--favorite-accent-rgb), 0.1);
 }
 
 .music-table tbody tr.is-current .favorite-pill {
-  background: rgba(217, 65, 78, 0.16);
-  color: #bf3f4d;
+  background: rgba(var(--favorite-accent-rgb), 0.14);
+  color: var(--favorite-accent);
 }
 
 .music-table tbody tr.is-current .favorite-icon-button {
-  color: #e33420;
+  color: var(--favorite-accent);
 }
 
 .favorite-icon-button svg {
@@ -1046,7 +1046,7 @@ body.night-mode .app-shell .library-row-artwork {
 
 body.night-mode .app-shell .favorite-icon-button:hover,
 body.night-mode .app-shell .favorite-pill:hover {
-  background: rgba(255, 76, 92, 0.14);
+  background: rgba(var(--favorite-accent-rgb), 0.14);
 }
 
 body.night-mode .app-shell .library-content-shell.is-compact .music-table tbody tr:not(.virtual-spacer-row) {

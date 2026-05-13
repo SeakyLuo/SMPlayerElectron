@@ -1,10 +1,13 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type PointerEvent as ReactPointerEvent } from 'react'
+import { createPortal } from 'react-dom'
 
+import { CustomScrollbar } from '../components/CustomScrollbar'
 import { Icon } from '../components/icons'
 import { InputDialog } from '../components/InputDialog'
 import { MenuFlyout } from '../components/MenuFlyout'
 import { getAddToPlaylistMenuFlyoutItem, type MenuFlyoutItem, type MenuFlyoutPosition } from '../components/MenuFlyoutHelper'
 import { useFolderPreferenceMenuItem } from '../hooks/useFolderPreferenceMenuItem'
+import { useCustomScrollbar } from '../hooks/useCustomScrollbar'
 import type { LibraryFolder, LibraryPlaylist, LibrarySong } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
 import {
@@ -50,6 +53,9 @@ export function FolderChainListView({
 }) {
   const [openedFolderChainItem, setOpenedFolderChainItem] = useState<{ path: string; left: number; top: number } | null>(null)
   const folderChainListRef = useRef<HTMLElement | null>(null)
+  const folderChainFlyoutFrameRef = useRef<HTMLDivElement | null>(null)
+  const folderChainFlyoutScrollRef = useRef<HTMLDivElement | null>(null)
+  const folderChainFlyoutScrollbarTrackRef = useRef<HTMLDivElement | null>(null)
   const folderChainDragRef = useRef({ active: false, dragged: false, startX: 0, scrollLeft: 0 })
   const { nodes } = useMemo(
     () => buildFolderIndex(songs, folders, rootPath),
@@ -59,6 +65,12 @@ export function FolderChainListView({
     () => buildFolderChain(currentRelativePath, nodes),
     [currentRelativePath, nodes],
   )
+  const onFolderChainFlyoutScrollbarPointerDown = useCustomScrollbar({
+    frameRef: folderChainFlyoutFrameRef,
+    scrollContainerRef: folderChainFlyoutScrollRef,
+    scrollbarTrackRef: folderChainFlyoutScrollbarTrackRef,
+    refreshDependencies: [openedFolderChainItem?.path],
+  })
   useLayoutEffect(() => {
     const folderChainList = folderChainListRef.current as HTMLElement
     const scrollToEnd = () => {
@@ -147,6 +159,9 @@ export function FolderChainListView({
         }}
         onPointerDown={(event) => {
           if (event.button !== 0) {
+            return
+          }
+          if (event.target !== event.currentTarget) {
             return
           }
 
@@ -245,38 +260,47 @@ export function FolderChainListView({
                   <Icon name={isFlyoutOpen ? 'chevronDown' : 'chevronRight'} />
                 </button>
               ) : null}
-              {hasChildFolders && isFlyoutOpen && openedFolderChainItem ? (
+              {hasChildFolders && isFlyoutOpen && openedFolderChainItem ? createPortal(
                 <div
                   className="folder-chain-item-flyout"
+                  ref={folderChainFlyoutFrameRef}
                   style={{
                     left: openedFolderChainItem.left,
                     top: openedFolderChainItem.top,
                   }}
                 >
-                  {folderChainItem.children.map((child) => (
-                    <button
-                      className={child.isHighlighted ? 'folder-chain-item-flyout-button is-highlighted' : 'folder-chain-item-flyout-button'}
-                      key={child.path}
-                      title={child.path}
-                      type="button"
-                      onDragOver={(event) => {
-                        event.preventDefault()
-                        event.dataTransfer.dropEffect = 'move'
-                      }}
-                      onDrop={(event) => dropLocalItems(event, child.path)}
-                      onContextMenu={(event) => {
-                        event.preventDefault()
-                        onOpenFolderMenu?.(child.path, event.clientX, event.clientY)
-                      }}
-                      onClick={() => {
-                        onOpenFolder(child.path)
-                        setOpenedFolderChainItem(null)
-                      }}
-                    >
-                      {child.name}
-                    </button>
-                  ))}
-                </div>
+                  <div className="folder-chain-item-flyout-scroll custom-scrollbar-container" ref={folderChainFlyoutScrollRef}>
+                    {folderChainItem.children.map((child) => (
+                      <button
+                        className={child.isHighlighted ? 'folder-chain-item-flyout-button is-highlighted' : 'folder-chain-item-flyout-button'}
+                        key={child.path}
+                        title={child.path}
+                        type="button"
+                        onDragOver={(event) => {
+                          event.preventDefault()
+                          event.dataTransfer.dropEffect = 'move'
+                        }}
+                        onDrop={(event) => dropLocalItems(event, child.path)}
+                        onContextMenu={(event) => {
+                          event.preventDefault()
+                          onOpenFolderMenu?.(child.path, event.clientX, event.clientY)
+                        }}
+                        onClick={() => {
+                          onOpenFolder(child.path)
+                          setOpenedFolderChainItem(null)
+                        }}
+                      >
+                        {child.name}
+                      </button>
+                    ))}
+                  </div>
+                  <CustomScrollbar
+                    className="folder-chain-item-flyout-scrollbar"
+                    scrollbarTrackRef={folderChainFlyoutScrollbarTrackRef}
+                    onThumbPointerDown={onFolderChainFlyoutScrollbarPointerDown}
+                  />
+                </div>,
+                document.body,
               ) : null}
             </span>
           )

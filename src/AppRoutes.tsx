@@ -130,6 +130,7 @@ export function AppRoutes({ context }: AppRoutesProps) {
   const scanLibrary = useLibraryStore((state) => state.scanLibrary)
   const scanProgress = useLibraryStore((state) => state.scanProgress)
   const scanLocalFolder = useLibraryStore((state) => state.scanLocalFolder)
+  const applyArtistSplits = useLibraryStore((state) => state.applyArtistSplits)
   const cancelLocalFolderScan = useLibraryStore((state) => state.cancelLocalFolderScan)
   const setSongFavorite = useLibraryStore((state) => state.setSongFavorite)
   const addSongToPlaylist = useLibraryStore((state) => state.addSongToPlaylist)
@@ -625,6 +626,7 @@ export function AppRoutes({ context }: AppRoutesProps) {
                   onCancelRefreshFolder={() => {
                     void cancelLocalFolderScan()
                   }}
+                  onApplyArtistSplits={(splits) => applyArtistSplits(splits)}
                   onPlayTrack={(trackId, queueSongIds) => {
                     void playbackCommands.playTrackInQueue(trackId, queueSongIds)
                   }}
@@ -764,8 +766,11 @@ export function AppRoutes({ context }: AppRoutesProps) {
                   onAddSongsToPlaylist={(playlistId, songIds) => {
                     void addSongsToPlaylist(playlistId, songIds)
                   }}
+                  onToggleFavorite={(songId, favorite) => {
+                    void setSongFavorite(songId, favorite)
+                  }}
                   onRemoveSongsFromPlaylist={(playlistId, songIds) => {
-                    void removeSongsFromPlaylist(playlistId, songIds)
+                    return removeSongsFromPlaylist(playlistId, songIds)
                   }}
                   onReorderPlaylistSongs={(playlistId, songIds, sortCriterion) => {
                     void reorderPlaylistSongs(playlistId, songIds, sortCriterion)
@@ -806,7 +811,7 @@ export function AppRoutes({ context }: AppRoutesProps) {
                     void addSongsToPlaylist(playlistId, songIds)
                   }}
                   onRemoveSongsFromFavorites={(songIds) => {
-                    void removeSongsFromPlaylist(snapshot.favorites.playlistId, songIds)
+                    return removeSongsFromPlaylist(snapshot.favorites.playlistId, songIds)
                   }}
                   onSortFavorites={(songIds, sortCriterion) => {
                     void reorderPlaylistSongs(snapshot.favorites.playlistId, songIds, sortCriterion)

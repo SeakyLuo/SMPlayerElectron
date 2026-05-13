@@ -15,6 +15,7 @@ export function LocalGridContent({
   songsById,
   selectedFolderPaths,
   selectedSongIds,
+  dragOverFolderPath,
   selectedTrackId,
   isPlaying,
   multiSelect,
@@ -38,11 +39,16 @@ export function LocalGridContent({
   onOpenFolder,
   onToggleFolderSelection,
   onDragFolderStart,
+  onDragOverFolder,
+  onDragLeaveFolder,
   onDropFolder,
+  onDragLocalItemEnd,
   onOpenFolderMenu,
   onPlayTrack,
   onTogglePlayPause,
   onToggleSongSelection,
+  onPlayNext,
+  onToggleFavorite,
   onAddSong,
   onOpenSongMenu,
   onDragSongStart,
@@ -54,6 +60,7 @@ export function LocalGridContent({
   songsById: Map<number, LibrarySong>
   selectedFolderPaths: Set<string>
   selectedSongIds: Set<number>
+  dragOverFolderPath: string
   selectedTrackId: number | null
   isPlaying: boolean
   multiSelect: boolean
@@ -77,11 +84,16 @@ export function LocalGridContent({
   onOpenFolder: (folderPath: string) => void
   onToggleFolderSelection: (folderPath: string) => void
   onDragFolderStart: (event: DragEvent, folder: FolderNode) => void
+  onDragOverFolder: (event: DragEvent, folder: FolderNode) => void
+  onDragLeaveFolder: (event: DragEvent, folder: FolderNode) => void
   onDropFolder: (event: DragEvent, folder: FolderNode) => void
+  onDragLocalItemEnd: () => void
   onOpenFolderMenu: (folder: FolderNode, x: number, y: number) => void
   onPlayTrack: (trackId: number, queueSongIds: number[]) => void
   onTogglePlayPause: () => void
   onToggleSongSelection: (songId: number) => void
+  onPlayNext: (songId: number) => void
+  onToggleFavorite: (songId: number, favorite: boolean) => void
   onAddSong: (song: LibrarySong, x: number, y: number) => void
   onOpenSongMenu: (song: LibrarySong, x: number, y: number) => void
   onDragSongStart: (event: DragEvent, song: LibrarySong) => void
@@ -102,6 +114,7 @@ export function LocalGridContent({
               nodes={nodes}
               songsById={songsById}
               selectedFolderPaths={selectedFolderPaths}
+              dragOverFolderPath={dragOverFolderPath}
               multiSelect={multiSelect}
               isCompactLayout={isCompactLayout}
               t={t}
@@ -113,7 +126,10 @@ export function LocalGridContent({
               onOpenFolder={onOpenFolder}
               onToggleFolderSelection={onToggleFolderSelection}
               onDragFolderStart={onDragFolderStart}
+              onDragOverFolder={onDragOverFolder}
+              onDragLeaveFolder={onDragLeaveFolder}
               onDropFolder={onDropFolder}
+              onDragLocalItemEnd={onDragLocalItemEnd}
               onOpenFolderMenu={onOpenFolderMenu}
             />
           </LocalContentSection>
@@ -123,6 +139,7 @@ export function LocalGridContent({
             nodes={nodes}
             songsById={songsById}
             selectedFolderPaths={selectedFolderPaths}
+            dragOverFolderPath={dragOverFolderPath}
             multiSelect={multiSelect}
             isCompactLayout={isCompactLayout}
             t={t}
@@ -134,7 +151,10 @@ export function LocalGridContent({
             onOpenFolder={onOpenFolder}
             onToggleFolderSelection={onToggleFolderSelection}
             onDragFolderStart={onDragFolderStart}
+            onDragOverFolder={onDragOverFolder}
+            onDragLeaveFolder={onDragLeaveFolder}
             onDropFolder={onDropFolder}
+            onDragLocalItemEnd={onDragLocalItemEnd}
             onOpenFolderMenu={onOpenFolderMenu}
           />
         )
@@ -163,9 +183,12 @@ export function LocalGridContent({
               onPlayTrack={onPlayTrack}
               onTogglePlayPause={onTogglePlayPause}
               onToggleSongSelection={onToggleSongSelection}
+              onPlayNext={onPlayNext}
+              onToggleFavorite={onToggleFavorite}
               onAddSong={onAddSong}
               onOpenSongMenu={onOpenSongMenu}
               onDragSongStart={onDragSongStart}
+              onDragLocalItemEnd={onDragLocalItemEnd}
               onJumpToSongKey={onJumpToSongKey}
             />
           </LocalContentSection>
@@ -186,9 +209,12 @@ export function LocalGridContent({
             onPlayTrack={onPlayTrack}
             onTogglePlayPause={onTogglePlayPause}
             onToggleSongSelection={onToggleSongSelection}
+            onPlayNext={onPlayNext}
+            onToggleFavorite={onToggleFavorite}
             onAddSong={onAddSong}
             onOpenSongMenu={onOpenSongMenu}
             onDragSongStart={onDragSongStart}
+            onDragLocalItemEnd={onDragLocalItemEnd}
             onJumpToSongKey={onJumpToSongKey}
           />
         )
@@ -202,6 +228,7 @@ function LocalFolderGrid({
   nodes,
   songsById,
   selectedFolderPaths,
+  dragOverFolderPath,
   multiSelect,
   isCompactLayout,
   t,
@@ -213,13 +240,17 @@ function LocalFolderGrid({
   onOpenFolder,
   onToggleFolderSelection,
   onDragFolderStart,
+  onDragOverFolder,
+  onDragLeaveFolder,
   onDropFolder,
+  onDragLocalItemEnd,
   onOpenFolderMenu,
 }: {
   childFolders: FolderNode[]
   nodes: Map<string, FolderNode>
   songsById: Map<number, LibrarySong>
   selectedFolderPaths: Set<string>
+  dragOverFolderPath: string
   multiSelect: boolean
   isCompactLayout: boolean
   t: Translator
@@ -231,7 +262,10 @@ function LocalFolderGrid({
   onOpenFolder: (folderPath: string) => void
   onToggleFolderSelection: (folderPath: string) => void
   onDragFolderStart: (event: DragEvent, folder: FolderNode) => void
+  onDragOverFolder: (event: DragEvent, folder: FolderNode) => void
+  onDragLeaveFolder: (event: DragEvent, folder: FolderNode) => void
   onDropFolder: (event: DragEvent, folder: FolderNode) => void
+  onDragLocalItemEnd: () => void
   onOpenFolderMenu: (folder: FolderNode, x: number, y: number) => void
 }) {
   return (
@@ -241,6 +275,7 @@ function LocalFolderGrid({
           folder={folder}
           key={folder.relativePath}
           selected={selectedFolderPaths.has(folder.relativePath)}
+          dropTarget={dragOverFolderPath === folder.relativePath}
           multiSelect={multiSelect}
           nodes={nodes}
           songsById={songsById}
@@ -256,7 +291,10 @@ function LocalFolderGrid({
           onOpenFolder={onOpenFolder}
           onToggleSelection={onToggleFolderSelection}
           onDragStart={onDragFolderStart}
+          onDragOver={onDragOverFolder}
+          onDragLeave={onDragLeaveFolder}
           onDrop={onDropFolder}
+          onDragEnd={onDragLocalItemEnd}
           onOpenFolderMenu={onOpenFolderMenu}
         />
       ))}
@@ -280,9 +318,12 @@ function LocalSongGrid({
   onPlayTrack,
   onTogglePlayPause,
   onToggleSongSelection,
+  onPlayNext,
+  onToggleFavorite,
   onAddSong,
   onOpenSongMenu,
   onDragSongStart,
+  onDragLocalItemEnd,
   onJumpToSongKey,
 }: {
   currentSongs: LibrarySong[]
@@ -300,9 +341,12 @@ function LocalSongGrid({
   onPlayTrack: (trackId: number, queueSongIds: number[]) => void
   onTogglePlayPause: () => void
   onToggleSongSelection: (songId: number) => void
+  onPlayNext: (songId: number) => void
+  onToggleFavorite: (songId: number, favorite: boolean) => void
   onAddSong: (song: LibrarySong, x: number, y: number) => void
   onOpenSongMenu: (song: LibrarySong, x: number, y: number) => void
   onDragSongStart: (event: DragEvent, song: LibrarySong) => void
+  onDragLocalItemEnd: () => void
   onJumpToSongKey: (key: string) => void
 }) {
   return (
@@ -335,12 +379,16 @@ function LocalSongGrid({
                 dropPosition={null}
                 queueSongIds={queueSongIds}
                 t={t}
-                showAlbum={false}
+                showAlbum
                 onPlayTrack={onPlayTrack}
                 onTogglePlayPause={onTogglePlayPause}
                 onToggleSelection={() => onToggleSongSelection(song.id)}
+                onToggleFavorite={onToggleFavorite}
                 onAddToPlaylistClick={(song, x, y) => {
                   onAddSong(song, x, y)
+                }}
+                onPlayNextClick={(song) => {
+                  onPlayNext(song.id)
                 }}
                 onContextMenu={(song, x, y) => {
                   onOpenSongMenu(song, x, y)
@@ -348,6 +396,7 @@ function LocalSongGrid({
                 onDragStart={(event) => {
                   onDragSongStart(event, song)
                 }}
+                onDragEnd={onDragLocalItemEnd}
               />
             ) : (
               <GridViewMusicItemControl
@@ -367,6 +416,7 @@ function LocalSongGrid({
                   onAddSong(song, event.clientX, event.clientY)
                 }}
                 onDragStart={onDragSongStart}
+                onDragEnd={onDragLocalItemEnd}
                 onContextMenu={(event, song) => {
                   onOpenSongMenu(song, event.clientX, event.clientY)
                 }}

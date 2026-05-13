@@ -365,8 +365,8 @@ const paths = {
   ],
   volumeMuted: [
     <path key="speaker" d="M4.7 9.4q-.8 0-.8.8v3.6q0 .8.8.8h3.2l4.2 3.7q.9.8.9-.45V6.15q0-1.25-.9-.45L7.9 9.4z" />,
-    <path key="x1" d="m18 9-4 4" />,
-    <path key="x2" d="m14 9 4 4" />,
+    <path key="x1" d="m20 10-4 4" />,
+    <path key="x2" d="m16 10 4 4" />,
   ],
   users: [
     <path key="user1" d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2" />,

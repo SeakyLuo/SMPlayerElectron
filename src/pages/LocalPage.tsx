@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
 import { CommandBar, CommandBarButton } from '../components/CommandBar'
@@ -18,6 +18,7 @@ import type { LibraryFolder, LibraryPlaylist, LibrarySong, ScanLibraryProgress, 
 import type { Translator } from '../shared/i18n'
 import { useLibraryStore } from '../state/useLibraryStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
+import { MONOTONE_ICON_URL } from '../shared/staticAssets'
 import {
   buildFolderIndex,
   createFolderNode,
@@ -45,6 +46,12 @@ import {
 } from './localPageModel'
 
 const LOCAL_COMPACT_BREAKPOINT = 720
+const LOCAL_ITEMS_DRAG_TYPE = 'application/x-smplayer-local-items'
+
+interface LocalItemsDragPayload {
+  songIds: number[]
+  folderPaths: string[]
+}
 
 interface LocalPageProps {
   songs: LibrarySong[]
@@ -65,6 +72,7 @@ interface LocalPageProps {
   onOpenFolder: (targetRelativePath: string) => void
   onRefreshFolder: (folderPath: string) => void | ScanLibraryResult | null | Promise<ScanLibraryResult | null | void>
   onCancelRefreshFolder: () => void
+  onApplyArtistSplits: (splits: ScanLibraryResult['artistSplitSuggestions']) => void | Promise<void>
   onPlayTrack: (trackId: number, queueSongIds: number[]) => void
   onMoveToMusicOrPlay: (songId: number) => void
   onTogglePlayPause: () => void
@@ -114,6 +122,35 @@ interface FolderUpdateResultSongMenuState extends MenuFlyoutPosition {
   song: LibrarySong
 }
 
+function getAbsoluteParentPath(filePath: string) {
+  const index = Math.max(filePath.lastIndexOf('\\'), filePath.lastIndexOf('/'))
+  return filePath.slice(0, index)
+}
+
+function getAbsolutePathName(filePath: string) {
+  return filePath.split(/[\\/]+/).at(-1)!
+}
+
+function joinAbsolutePath(parentPath: string, name: string) {
+  const separator = parentPath.includes('\\') ? '\\' : '/'
+  return `${parentPath.replace(/[\\/]+$/, '')}${separator}${name}`
+}
+
+function LocalEmptyState({
+  children,
+}: {
+  children: ReactNode
+}) {
+  return (
+    <div className="empty-state local-empty-state">
+      <span className="local-empty-state-artwork" aria-hidden="true">
+        <img src={MONOTONE_ICON_URL} alt="" />
+      </span>
+      {children}
+    </div>
+  )
+}
+
 export function LocalPage({
   songs,
   folders,
@@ -133,6 +170,7 @@ export function LocalPage({
   onOpenFolder,
   onRefreshFolder,
   onCancelRefreshFolder,
+  onApplyArtistSplits,
   onPlayTrack,
   onMoveToMusicOrPlay,
   onTogglePlayPause,
@@ -165,7 +203,9 @@ export function LocalPage({
   const [localNotification, setLocalNotification] = useState('')
   const [folderUpdateResultDialog, setFolderUpdateResultDialog] = useState<FolderUpdateResultDialogState | null>(null)
   const [folderUpdateResultSongMenu, setFolderUpdateResultSongMenu] = useState<FolderUpdateResultSongMenuState | null>(null)
+  const [dragOverFolderPath, setDragOverFolderPath] = useState('')
   const refreshFolderRunningRef = useRef(false)
+  const localItemsDragPayloadRef = useRef<LocalItemsDragPayload | null>(null)
   const [foldersExpanded, setFoldersExpanded] = useState(true)
   const [songsExpanded, setSongsExpanded] = useState(true)
   const [isCompactLayout, setIsCompactLayout] = useState(() => window.innerWidth < LOCAL_COMPACT_BREAKPOINT)
@@ -209,6 +249,10 @@ export function LocalPage({
   const { nodes, songsById } = useMemo(
     () => buildFolderIndex(songs, folders, rootPath),
     [folders, songs, rootPath],
+  )
+  const nodesByAbsolutePath = useMemo(
+    () => new Map([...nodes.values()].map((folder) => [folder.path, folder])),
+    [nodes],
   )
   const currentNode = nodes.get(currentRelativePath) ?? null
   const currentSortMode = currentNode ? localSortModeFromCriterion(currentNode.criterion) : 'title'
@@ -588,6 +632,42 @@ export function LocalPage({
     )
   })
 
+  const moveLocalItemsWithUndo = async (songIds: number[], folderPaths: string[], targetFolderPath: string) => {
+    const songOriginalFolders = songIds.map((songId) => ({
+      songId,
+      folderPath: getAbsoluteParentPath(songsById.get(songId)!.path),
+    }))
+    const folderOriginalFolders = folderPaths.map((folderPath) => ({
+      folderPath: joinAbsolutePath(targetFolderPath, getAbsolutePathName(folderPath)),
+      parentPath: getAbsoluteParentPath(folderPath),
+    }))
+
+    await onMoveLocalItemsToFolder(songIds, folderPaths, targetFolderPath)
+
+    const movedItemCount = songIds.length + folderPaths.length
+    const message = movedItemCount === 1 && songIds.length === 1
+      ? t('notification.movedSong', { title: songsById.get(songIds[0])!.title })
+      : t('notification.movedLocalItems', { count: movedItemCount })
+
+    showUndo(message, async () => {
+      const songIdsByFolder = new Map<string, number[]>()
+      for (const item of songOriginalFolders) {
+        songIdsByFolder.set(item.folderPath, [...(songIdsByFolder.get(item.folderPath) ?? []), item.songId])
+      }
+      for (const [folderPath, movedSongIds] of songIdsByFolder) {
+        await onMoveLocalItemsToFolder(movedSongIds, [], folderPath)
+      }
+
+      const folderPathsByParent = new Map<string, string[]>()
+      for (const item of folderOriginalFolders) {
+        folderPathsByParent.set(item.parentPath, [...(folderPathsByParent.get(item.parentPath) ?? []), item.folderPath])
+      }
+      for (const [parentPath, movedFolderPaths] of folderPathsByParent) {
+        await onMoveLocalItemsToFolder([], movedFolderPaths, parentPath)
+      }
+    })
+  }
+
   const getFolderMoveToMenuItem = (sourceFolder: FolderNode) => {
     const sourceParentPath = getParentPath(sourceFolder.relativePath)
     const targetFolders = [...nodes.values()].filter((folder) => {
@@ -618,7 +698,7 @@ export function LocalPage({
         text: folder.relativePath ? folder.name : t('local.libraryRoot'),
         icon: 'folder',
         onClick: children.length === 0
-          ? () => onMoveLocalItemsToFolder([], [sourceFolder.path], folder.path)
+          ? () => { void moveLocalItemsWithUndo([], [sourceFolder.path], folder.path) }
           : undefined,
         submenu: children.length > 0
           ? [
@@ -626,7 +706,7 @@ export function LocalPage({
                 key: `move-folder-${folder.relativePath || 'root'}-self`,
                 text: folder.relativePath ? folder.name : t('local.libraryRoot'),
                 icon: 'folder',
-                onClick: () => onMoveLocalItemsToFolder([], [sourceFolder.path], folder.path),
+                onClick: () => { void moveLocalItemsWithUndo([], [sourceFolder.path], folder.path) },
               },
               { key: `move-folder-${folder.relativePath || 'root'}-separator`, text: '', separator: true },
               ...children.map(toItem),
@@ -677,6 +757,7 @@ export function LocalPage({
     setToolbarMenu({
       x: rect.left,
       y: rect.bottom + 6,
+      anchor: event.currentTarget,
     })
     setFolderMenu(null)
     setSongMenu(null)
@@ -722,6 +803,37 @@ export function LocalPage({
     }
   }
 
+  const applyFolderUpdateArtistSplits = async () => {
+    const suggestions = folderUpdateResultDialog?.result.artistSplitSuggestions ?? []
+    if (suggestions.length === 0) {
+      return
+    }
+
+    await onApplyArtistSplits(suggestions)
+    setFolderUpdateResultDialog((current) => current
+      ? {
+          ...current,
+          result: {
+            ...current.result,
+            artistSplitsApplied: [...current.result.artistSplitsApplied, ...suggestions],
+            artistSplitSuggestions: [],
+          },
+        }
+      : current)
+  }
+
+  const dismissFolderUpdateArtistSplitSuggestions = () => {
+    setFolderUpdateResultDialog((current) => current
+      ? {
+          ...current,
+          result: {
+            ...current.result,
+            artistSplitSuggestions: [],
+          },
+        }
+      : current)
+  }
+
   const selectFolder = (folder: FolderNode) => {
     setMultiSelect(true)
     setSelectedFolderPaths(new Set([folder.relativePath]))
@@ -737,7 +849,7 @@ export function LocalPage({
   }
 
   const moveSelectedItemsToFolder = async (folderPath: string) => {
-    await onMoveLocalItemsToFolder(effectiveSelectedSongIds, selectedFolderAbsolutePaths, folderPath)
+    await moveLocalItemsWithUndo(effectiveSelectedSongIds, selectedFolderAbsolutePaths, folderPath)
     HideMultiSelectAfterOperation()
   }
 
@@ -767,26 +879,80 @@ export function LocalPage({
     })
   }
 
-  const dragPayloadForFolder = (folder: FolderNode) => ({
+  const dragPayloadForFolder = (folder: FolderNode): LocalItemsDragPayload => ({
     songIds: [],
     folderPaths: selectedFolderPaths.has(folder.relativePath) ? selectedFolderAbsolutePaths : [folder.path],
   })
 
-  const dragPayloadForSong = (song: LibrarySong) => ({
+  const dragPayloadForSong = (song: LibrarySong): LocalItemsDragPayload => ({
     songIds: selectedSongIds.has(song.id) ? effectiveSelectedSongIds : [song.id],
     folderPaths: [],
   })
 
-  const moveDraggedItems = async (event: DragEvent, targetFolder: FolderNode) => {
-    event.preventDefault()
-    const rawPayload = event.dataTransfer.getData('application/x-smplayer-local-items')
-    if (!rawPayload) {
+  const getDragPayload = (event: DragEvent) => {
+    if (localItemsDragPayloadRef.current) {
+      return localItemsDragPayloadRef.current
+    }
+
+    const rawPayload = event.dataTransfer.getData(LOCAL_ITEMS_DRAG_TYPE)
+    return rawPayload ? JSON.parse(rawPayload) as LocalItemsDragPayload : null
+  }
+
+  const isMoveTargetFolder = (payload: LocalItemsDragPayload, targetFolder: FolderNode) => {
+    if (payload.songIds.length + payload.folderPaths.length === 0) {
+      return false
+    }
+
+    const songAlreadyInTarget = payload.songIds.some((songId) =>
+      getSongFolderRelativePath(songsById.get(songId)!.path, rootPath) === targetFolder.relativePath,
+    )
+    if (songAlreadyInTarget) {
+      return false
+    }
+
+    return payload.folderPaths.every((folderPath) => {
+      const sourceFolder = nodesByAbsolutePath.get(folderPath)!
+      return targetFolder.relativePath !== sourceFolder.relativePath &&
+        targetFolder.relativePath !== getParentPath(sourceFolder.relativePath) &&
+        !targetFolder.relativePath.startsWith(`${sourceFolder.relativePath}/`)
+    })
+  }
+
+  const onDragOverFolder = (event: DragEvent, folder: FolderNode) => {
+    const payload = localItemsDragPayloadRef.current
+    if (!payload || !isMoveTargetFolder(payload, folder)) {
+      event.dataTransfer.dropEffect = 'none'
       return
     }
 
-    const payload = JSON.parse(rawPayload) as { songIds: number[]; folderPaths: string[] }
-    await onMoveLocalItemsToFolder(payload.songIds, payload.folderPaths, targetFolder.path)
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+    setDragOverFolderPath((current) => current === folder.relativePath ? current : folder.relativePath)
+  }
+
+  const onDragLeaveFolder = (event: DragEvent, folder: FolderNode) => {
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
+      return
+    }
+
+    setDragOverFolderPath((current) => current === folder.relativePath ? '' : current)
+  }
+
+  const moveDraggedItems = async (event: DragEvent, targetFolder: FolderNode) => {
+    const payload = getDragPayload(event)
+    if (!payload || !isMoveTargetFolder(payload, targetFolder)) {
+      return
+    }
+
+    event.preventDefault()
+    setDragOverFolderPath('')
+    await moveLocalItemsWithUndo(payload.songIds, payload.folderPaths, targetFolder.path)
     ClearMultiSelectStatus()
+  }
+
+  const clearLocalItemsDrag = () => {
+    localItemsDragPayloadRef.current = null
+    setDragOverFolderPath('')
   }
 
   const refreshCurrentFolder = () => {
@@ -805,12 +971,12 @@ export function LocalPage({
     void deleteSelectedItems()
   }
 
-  const openSelectionAddMenu = (x: number, y: number) => {
-    setSelectionAddMenu({ x, y })
+  const openSelectionAddMenu = (x: number, y: number, anchor?: HTMLElement) => {
+    setSelectionAddMenu({ x, y, anchor })
   }
 
-  const openSelectionMoveMenu = (x: number, y: number) => {
-    setSelectionMoveMenu({ x, y })
+  const openSelectionMoveMenu = (x: number, y: number, anchor?: HTMLElement) => {
+    setSelectionMoveMenu({ x, y, anchor })
   }
 
   const selectAllLocalItems = () => {
@@ -863,7 +1029,9 @@ export function LocalPage({
   }
 
   const onDragFolderStart = (event: DragEvent, folder: FolderNode) => {
-    event.dataTransfer.setData('application/x-smplayer-local-items', JSON.stringify(dragPayloadForFolder(folder)))
+    const payload = dragPayloadForFolder(folder)
+    localItemsDragPayloadRef.current = payload
+    event.dataTransfer.setData(LOCAL_ITEMS_DRAG_TYPE, JSON.stringify(payload))
     event.dataTransfer.effectAllowed = 'move'
   }
 
@@ -872,7 +1040,9 @@ export function LocalPage({
   }
 
   const onDragSongStart = (event: DragEvent, song: LibrarySong) => {
-    event.dataTransfer.setData('application/x-smplayer-local-items', JSON.stringify(dragPayloadForSong(song)))
+    const payload = dragPayloadForSong(song)
+    localItemsDragPayloadRef.current = payload
+    event.dataTransfer.setData(LOCAL_ITEMS_DRAG_TYPE, JSON.stringify(payload))
     event.dataTransfer.effectAllowed = 'move'
   }
 
@@ -882,14 +1052,14 @@ export function LocalPage({
         {loading ? (
           <LoadingState t={t} />
         ) : (
-          <div className="empty-state">
+          <LocalEmptyState>
             <h3>{t('local.noRoot')}</h3>
             <p>{t('local.noRootCopy')}</p>
             <button className="local-command" type="button" onClick={onPickLibraryRoot}>
               <Icon name="folder" />
               {t('library.chooseFolder')}
             </button>
-          </div>
+          </LocalEmptyState>
         )}
       </section>
     )
@@ -901,14 +1071,14 @@ export function LocalPage({
         {loading ? (
           <LoadingState t={t} />
         ) : (
-          <div className="empty-state">
+          <LocalEmptyState>
             <h3>{t('local.folderNotFound')}</h3>
             <p>{t('local.folderNotFoundDescription')}</p>
             <Link className="local-command" to="/local">
               <Icon name="arrowLeft" />
               {t('local.backToRoot')}
             </Link>
-          </div>
+          </LocalEmptyState>
         )}
       </section>
     )
@@ -1007,7 +1177,7 @@ export function LocalPage({
         }}
         onAddToPlaylistMenuClick={(event) => {
           const rect = event.currentTarget.getBoundingClientRect()
-          openSelectionAddMenu(rect.left, rect.top - 8)
+          openSelectionAddMenu(rect.left, rect.top - 8, event.currentTarget)
         }}
         onRemove={requestDeleteSelectedItems}
         removeLabel={t('context.deleteFromDisk')}
@@ -1019,7 +1189,7 @@ export function LocalPage({
             disabled: selectedLocalItemCount === 0 || selectedMoveTargetFolders.length === 0,
             onClick: (event) => {
               const rect = event.currentTarget.getBoundingClientRect()
-              openSelectionMoveMenu(rect.left, rect.top - 8)
+              openSelectionMoveMenu(rect.left, rect.top - 8, event.currentTarget)
             },
           },
         ]}
@@ -1033,7 +1203,7 @@ export function LocalPage({
         loading || scanning ? (
           <LoadingState t={t} />
         ) : songs.length === 0 || searchQuery.trim() ? (
-          <div className="empty-state">
+          <LocalEmptyState>
             <h3>
               {songs.length === 0
                 ? t('local.noSongsScanned')
@@ -1050,7 +1220,7 @@ export function LocalPage({
                 {t('local.goToSettings')}
               </Link>
             ) : null}
-          </div>
+          </LocalEmptyState>
         ) : (
           <div className="local-empty-folder" aria-hidden="true" />
         )
@@ -1064,6 +1234,7 @@ export function LocalPage({
               songsById={songsById}
               selectedFolderPaths={selectedFolderPaths}
               selectedSongIds={selectedSongIds}
+              dragOverFolderPath={dragOverFolderPath}
               selectedTrackId={selectedTrackId}
               isPlaying={isPlaying}
               multiSelect={multiSelect}
@@ -1087,11 +1258,16 @@ export function LocalPage({
               onOpenFolder={onOpenFolder}
               onToggleFolderSelection={toggleFolderSelection}
               onDragFolderStart={onDragFolderStart}
+              onDragOverFolder={onDragOverFolder}
+              onDragLeaveFolder={onDragLeaveFolder}
               onDropFolder={onDropFolder}
+              onDragLocalItemEnd={clearLocalItemsDrag}
               onOpenFolderMenu={openFolderMenu}
               onPlayTrack={onPlayTrack}
               onTogglePlayPause={onTogglePlayPause}
               onToggleSongSelection={toggleSongSelection}
+              onPlayNext={onPlayNext}
+              onToggleFavorite={onToggleFavorite}
               onAddSong={openSongAddMenu}
               onOpenSongMenu={openSongMenu}
               onDragSongStart={onDragSongStart}
@@ -1114,6 +1290,7 @@ export function LocalPage({
           currentRelativePath={currentRelativePath}
           selectedFolderPaths={selectedFolderPaths}
           selectedSongIds={selectedSongIds}
+          dragOverFolderPath={dragOverFolderPath}
           selectedListItemKey={selectedListItemKey}
           selectedTrackId={selectedTrackId}
           isPlaying={isPlaying}
@@ -1136,7 +1313,10 @@ export function LocalPage({
           onOpenFolder={onOpenFolder}
           onOpenFolderMenu={openFolderMenu}
           onDragFolderStart={onDragFolderStart}
+          onDragOverFolder={onDragOverFolder}
+          onDragLeaveFolder={onDragLeaveFolder}
           onDropFolder={onDropFolder}
+          onDragLocalItemEnd={clearLocalItemsDrag}
           onPlayFolder={shuffleFolder}
           onAddFolder={openFolderAddMenu}
           onRefreshFolder={refreshFolder}
@@ -1396,6 +1576,8 @@ export function LocalPage({
             onAddNextAndPlay(songId)
           }}
           onOpenSongMenu={(song, x, y) => setFolderUpdateResultSongMenu({ song, x, y })}
+          onApplyArtistSplits={applyFolderUpdateArtistSplits}
+          onDismissArtistSplitSuggestions={dismissFolderUpdateArtistSplitSuggestions}
           onClose={() => {
             setFolderUpdateResultDialog(null)
             setFolderUpdateResultSongMenu(null)
@@ -1433,7 +1615,7 @@ export function LocalPage({
           validate={inputDialog.validate}
           onCancel={() => setInputDialog(null)}
           onConfirm={(value) => {
-            void inputDialog.onConfirm(value)
+            return inputDialog.onConfirm(value)
           }}
         />
       ) : null}
