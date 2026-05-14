@@ -1,4 +1,4 @@
-import { useEffect, useMemo, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 
 import { AlbumsPage } from './pages/AlbumsPage'
@@ -16,7 +16,7 @@ import { SettingsPage } from './pages/SettingsPage'
 import { AlbumDetailRoute } from './AppRouteComponents'
 import { createLocalMusicDataSource } from './data/musicDataSource'
 import { resolveRestoredPage } from './appModel'
-import type { LibrarySong, MusicData, SearchHistoryType } from './shared/contracts'
+import type { ArtistSplitResultItem, LibrarySong, MusicData, ScanLibraryResult, SearchHistoryType } from './shared/contracts'
 import type { Translator } from './shared/i18n'
 import type { PlaybackCommands } from './hooks/usePlaybackCommands'
 import type { PlaybackController } from './hooks/usePlaybackController'
@@ -26,6 +26,14 @@ import { useLibraryStore } from './state/useLibraryStore'
 import { useUndoableNotificationStore } from './state/useUndoableNotificationStore'
 import { usePreferenceStore } from './state/usePreferenceStore'
 import { sortLibrarySongs } from './shared/sorting'
+import { MONOTONE_ICON_URL } from './shared/staticAssets'
+import { Icon } from './components/icons'
+import { FolderUpdateResultDialog } from './pages/FolderUpdateResultDialog'
+import type { FolderNode } from './pages/localFolderModel'
+import {
+  getRefreshResultMessage,
+  hasRefreshResultChanges,
+} from './pages/localPageModel'
 
 interface StartupRedirectProps {
   ready: boolean
@@ -73,6 +81,70 @@ function RequireLibraryData({ songs, folders, recent, children }: RequireLibrary
   return children
 }
 
+function MissingLibraryRootPage({
+  t,
+  loading,
+  onPickLibraryRoot,
+}: {
+  t: Translator
+  loading: boolean
+  onPickLibraryRoot: () => void
+}) {
+  return (
+    <section className="page-panel local-page">
+      {loading ? (
+        <div className="empty-state local-empty-state">
+          <span className="local-empty-state-artwork" aria-hidden="true">
+            <img src={MONOTONE_ICON_URL} alt="" />
+          </span>
+          <h3>{t('local.noRoot')}</h3>
+          <p>{t('local.noRootCopy')}</p>
+        </div>
+      ) : (
+        <div className="empty-state local-empty-state">
+          <span className="local-empty-state-artwork" aria-hidden="true">
+            <img src={MONOTONE_ICON_URL} alt="" />
+          </span>
+          <h3>{t('local.noRoot')}</h3>
+          <p>{t('local.noRootCopy')}</p>
+          <button className="local-command" type="button" onClick={onPickLibraryRoot}>
+            <Icon name="folder" />
+            {t('library.chooseFolder')}
+          </button>
+        </div>
+      )}
+    </section>
+  )
+}
+
+interface ScanLibraryResultDialogState {
+  folder: FolderNode
+  result: ScanLibraryResult
+}
+
+function getScanResultArtistUpdateCount(result: ScanLibraryResult) {
+  return result.artistSplitsApplied.length + result.artistSplitSuggestions.length + result.artistMergeSuggestions.length
+}
+
+function createScanResultFolder(rootPath: string): FolderNode {
+  const name = rootPath.split(/[\\/]+/).filter(Boolean).at(-1) ?? rootPath
+
+  return {
+    id: 0,
+    relativePath: '',
+    path: rootPath,
+    name,
+    thumbnailUrls: [],
+    childPaths: [],
+    directSongIds: [],
+    subtreeSongIds: [],
+    thumbnailChildPaths: [],
+    thumbnailDirectSongIds: [],
+    thumbnailSubtreeSongIds: [],
+    criterion: 0,
+  }
+}
+
 interface AppRoutesContext {
   initialLoadComplete: boolean
   snapshot: MusicData
@@ -94,6 +166,7 @@ interface AppRoutesContext {
   submittedSearchQuery: string
   searchResultsLoading: boolean
   searchFolderPath: string
+  requestSmartArtistFix: () => void
 }
 
 interface AppRoutesProps {
@@ -122,16 +195,16 @@ export function AppRoutes({ context }: AppRoutesProps) {
     submittedSearchQuery,
     searchResultsLoading,
     searchFolderPath,
+    requestSmartArtistFix,
   } = context
   const location = useLocation()
   const navigate = useNavigate()
   const refresh = useLibraryStore((state) => state.refresh)
   const pickLibraryRoot = useLibraryStore((state) => state.pickLibraryRoot)
   const scanLibrary = useLibraryStore((state) => state.scanLibrary)
-  const scanProgress = useLibraryStore((state) => state.scanProgress)
   const scanLocalFolder = useLibraryStore((state) => state.scanLocalFolder)
+  const loadRequiredData = useLibraryStore((state) => state.loadRequiredData)
   const applyArtistSplits = useLibraryStore((state) => state.applyArtistSplits)
-  const cancelLocalFolderScan = useLibraryStore((state) => state.cancelLocalFolderScan)
   const setSongFavorite = useLibraryStore((state) => state.setSongFavorite)
   const addSongToPlaylist = useLibraryStore((state) => state.addSongToPlaylist)
   const addSongsToPlaylist = useLibraryStore((state) => state.addSongsToPlaylist)
@@ -163,8 +236,10 @@ export function AppRoutes({ context }: AppRoutesProps) {
   const removeSongsFromPlaylist = useLibraryStore((state) => state.removeSongsFromPlaylist)
   const reorderPlaylistSongs = useLibraryStore((state) => state.reorderPlaylistSongs)
   const showUndoableNotification = useUndoableNotificationStore((state) => state.show)
+  const showNotification = useUndoableNotificationStore((state) => state.showMessage)
   const deleteSongFromDisk = useDeleteSongFromDisk(t)
   const deleteLocalItems = useDeleteLocalItems(t)
+  const [scanLibraryResultDialog, setScanLibraryResultDialog] = useState<ScanLibraryResultDialogState | null>(null)
   const routeSearchParams = useMemo(() => new URLSearchParams(location.search), [location.search])
   const targetArtistQuery = routeSearchParams.get('artist')
   const targetAlbumQuery = routeSearchParams.get('album')
@@ -195,8 +270,61 @@ export function AppRoutes({ context }: AppRoutesProps) {
         .filter((song): song is LibrarySong => song != null),
     [snapshot.favorites.songIds, songsById],
   )
+  const showScanLibraryResult = (result: ScanLibraryResult) => {
+    const message = `${t('local.scanLibraryDone')}：${getRefreshResultMessage(result, t)}`
+    const dialogState = {
+      folder: createScanResultFolder(result.rootPath),
+      result,
+    }
+    const artistUpdateCount = getScanResultArtistUpdateCount(result)
+
+    if (artistUpdateCount > 0) {
+      setScanLibraryResultDialog(dialogState)
+      showNotification(message, 5000)
+      return
+    }
+
+    if (hasRefreshResultChanges(result)) {
+      showUndoableNotification(message, t('common.detail'), () => {
+        setScanLibraryResultDialog(dialogState)
+      }, 10000)
+      return
+    }
+
+    showNotification(message, 3000)
+  }
+  const scanLibraryWithNotification = () => {
+    void (async () => {
+      const result = await scanLibrary()
+      if (result) {
+        await loadRequiredData({ songs: true, folders: true })
+        showScanLibraryResult(result)
+      }
+    })()
+  }
+  const pickLibraryRootAndScan = () => {
+    void pickLibraryRoot().then((picked: boolean) => {
+      if (picked) {
+        scanLibraryWithNotification()
+      }
+    })
+  }
+  const isSettingsRoute = location.pathname === '/settings'
+  const isRemoteRoute = location.pathname.startsWith('/remote/')
+  const shouldPromptForLibraryRoot = !snapshot.settings.rootPath && !isSettingsRoute && !isRemoteRoute
+
+  if (shouldPromptForLibraryRoot) {
+    return (
+      <MissingLibraryRootPage
+        t={t}
+        loading={pageLoading}
+        onPickLibraryRoot={pickLibraryRootAndScan}
+      />
+    )
+  }
 
   return (
+          <>
           <Routes>
             <Route
               path="/"
@@ -219,7 +347,7 @@ export function AppRoutes({ context }: AppRoutesProps) {
                       void pickLibraryRoot()
                     }}
                     onScanLibrary={() => {
-                      void scanLibrary()
+                      scanLibraryWithNotification()
                     }}
                     onPlayTrack={(trackId, queueSongIds) => {
                       void playbackCommands.playTrackInQueue(trackId, queueSongIds)
@@ -612,20 +740,16 @@ export function AppRoutes({ context }: AppRoutesProps) {
                   searchQuery=""
                   loading={pageLoading}
                   scanning={scanning}
-                  scanProgress={scanProgress}
                   error={error}
                   onPickLibraryRoot={() => {
                     void pickLibraryRoot().then((picked: boolean) => {
                       if (picked) {
-                        void scanLibrary()
+                        scanLibraryWithNotification()
                       }
                     })
                   }}
                   onOpenFolder={setLocalRelativePath}
                   onRefreshFolder={(folderPath) => scanLocalFolder(folderPath)}
-                  onCancelRefreshFolder={() => {
-                    void cancelLocalFolderScan()
-                  }}
                   onApplyArtistSplits={(splits) => applyArtistSplits(splits)}
                   onPlayTrack={(trackId, queueSongIds) => {
                     void playbackCommands.playTrackInQueue(trackId, queueSongIds)
@@ -909,11 +1033,16 @@ export function AppRoutes({ context }: AppRoutesProps) {
                   scanning={scanning}
                   error={error}
                   onPickLibraryRoot={() => {
-                    void pickLibraryRoot()
+                    void pickLibraryRoot().then((picked: boolean) => {
+                      if (picked) {
+                        scanLibraryWithNotification()
+                      }
+                    })
                   }}
                   onScanLibrary={() => {
-                    void scanLibrary()
+                    scanLibraryWithNotification()
                   }}
+                  onRequestSmartArtistFix={requestSmartArtistFix}
                   onUpdateSettings={(update) => {
                     void updateSettings(update)
                   }}
@@ -922,5 +1051,57 @@ export function AppRoutes({ context }: AppRoutesProps) {
               }
             />
           </Routes>
+          {scanLibraryResultDialog ? (
+            <FolderUpdateResultDialog
+              t={t}
+              result={scanLibraryResultDialog.result}
+              folder={scanLibraryResultDialog.folder}
+              songs={snapshot.songs}
+              selectedTrackId={playback.currentTrackId}
+              isPlaying={playback.isPlaying}
+              onPlaySong={(songId) => {
+                void playbackCommands.playTrackInQueue(songId, visibleSongs.map((song) => song.id))
+              }}
+              onOpenSongMenu={() => {}}
+              onApplyArtistSplits={async (splits: ArtistSplitResultItem[]) => {
+                await applyArtistSplits(splits)
+                showNotification(t('common.saved'), 2000)
+                setScanLibraryResultDialog((current) => current
+                  ? (() => {
+                      const appliedSongIds = new Set(splits.map((split) => split.songId))
+                      return {
+                        ...current,
+                        result: {
+                          ...current.result,
+                          artistSplitsApplied: current.result.artistSplitsApplied.filter((item) =>
+                            !appliedSongIds.has(item.songId)),
+                          artistSplitSuggestions: current.result.artistSplitSuggestions.filter((item) =>
+                            !appliedSongIds.has(item.songId)),
+                          artistMergeSuggestions: current.result.artistMergeSuggestions.filter((item) =>
+                            !appliedSongIds.has(item.songId)),
+                        },
+                      }
+                    })()
+                  : current)
+              }}
+              onDismissArtistSplitSuggestions={() => {
+                setScanLibraryResultDialog((current) => current
+                  ? ({
+                      ...current,
+                      result: {
+                        ...current.result,
+                        artistSplitsApplied: [],
+                        artistSplitSuggestions: [],
+                        artistMergeSuggestions: [],
+                      },
+                    })
+                  : current)
+              }}
+              onClose={() => {
+                setScanLibraryResultDialog(null)
+              }}
+            />
+          ) : null}
+          </>
   )
 }

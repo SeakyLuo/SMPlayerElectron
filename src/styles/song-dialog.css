@@ -564,8 +564,17 @@
   background: rgba(var(--accent-rgb), 0.12);
 }
 
-.artist-split-review-checkbox {
+.song-dialog .artist-split-review-checkbox {
   position: absolute;
+  width: 1px;
+  height: 1px;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  padding: 0;
+  appearance: none;
+  background: transparent;
+  box-shadow: none;
   opacity: 0;
   pointer-events: none;
 }
@@ -573,18 +582,14 @@
 .artist-split-review-check {
   display: inline-grid;
   place-items: center;
-  align-self: center;
+  align-self: start;
   width: 18px;
   height: 18px;
+  margin-top: 23px;
   border: 1px solid rgba(126, 139, 154, 0.48);
   border-radius: 5px;
   color: #fff;
   cursor: pointer;
-}
-
-.artist-split-review-item.is-editing .artist-split-review-check {
-  align-self: start;
-  margin-top: 23px;
 }
 
 .artist-split-review-check:focus-visible {
@@ -603,15 +608,11 @@
 }
 
 .artist-split-review-artwork {
-  align-self: center;
+  align-self: start;
   width: 64px;
   height: 64px;
   border-radius: 7px;
   box-shadow: 0 10px 24px rgba(34, 46, 64, 0.16);
-}
-
-.artist-split-review-item.is-editing .artist-split-review-artwork {
-  align-self: start;
 }
 
 .artist-split-review-copy {
@@ -867,6 +868,13 @@ body.night-mode .artist-split-review-next em.artist-split-review-merge-chip {
   padding: 9px 28px 12px;
 }
 
+.artist-split-review-footer button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
 @media (max-width: 520px) {
   .artist-split-review {
     padding: 0 16px;
@@ -1110,6 +1118,21 @@ body.night-mode .artist-split-review-next em.artist-split-review-merge-chip {
   background: rgba(230, 235, 243, 0.78) !important;
   color: rgba(94, 103, 115, 0.72) !important;
   box-shadow: none !important;
+}
+
+.artist-split-review-submit-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentcolor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: artist-split-review-submit-spin 760ms linear infinite;
+}
+
+@keyframes artist-split-review-submit-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .song-dialog-property-list {

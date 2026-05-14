@@ -124,6 +124,10 @@ export function getRefreshProgressMessage(progress: ScanLibraryProgress | null, 
     return t('local.updateFolderUpdatingLibrary')
   }
 
+  if (progress.stage === 'reading') {
+    return t('local.updateFolderProgressActionReading')
+  }
+
   return progress.folderName
     ? t('local.updateFolderChecking', { name: progress.folderName })
     : t('local.updateFolderLoading')

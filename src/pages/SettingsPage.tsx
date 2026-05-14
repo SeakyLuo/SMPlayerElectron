@@ -24,6 +24,7 @@ interface SettingsPageProps {
   error: string | null
   onPickLibraryRoot: () => void
   onScanLibrary: () => void
+  onRequestSmartArtistFix: () => void
   onUpdateSettings: (update: AppSettingsUpdate) => Promise<void> | void
 }
 
@@ -317,8 +318,10 @@ export function SettingsPage({
   t,
   snapshot,
   loading,
+  scanning,
   error,
   onPickLibraryRoot,
+  onRequestSmartArtistFix,
   onUpdateSettings,
 }: SettingsPageProps) {
   const showNotificationSettings = false
@@ -640,6 +643,19 @@ export function SettingsPage({
                 onUpdateSettings({ smartMultiArtistRecognition: checked })
               }}
             />
+            {snapshot.settings.smartMultiArtistRecognition ? (
+              <div className="settings-button-row">
+                <button
+                  type="button"
+                  className="settings-link-button"
+                  disabled={loading || scanning}
+                  onClick={onRequestSmartArtistFix}
+                >
+                  <Icon name="users" />
+                  {t('settings.smartMultiArtistFixConfirm')}
+                </button>
+              </div>
+            ) : null}
           </SettingsCard>
 
           <SettingsCard title={t('settings.lyrics')}>

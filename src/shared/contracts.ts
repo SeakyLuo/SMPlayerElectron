@@ -444,7 +444,7 @@ export interface ArtistSplitResultItem {
   artists: string[]
 }
 
-export type ScanLibraryProgressStage = 'checking' | 'updating'
+export type ScanLibraryProgressStage = 'checking' | 'reading' | 'updating'
 
 export interface ScanLibraryProgress {
   operationId: string
@@ -452,6 +452,13 @@ export interface ScanLibraryProgress {
   progress: number
   max: number
   folderName?: string
+  checkedFolderCount: number
+  folderCount: number
+  processedSongCount: number
+  songCount: number
+  addedCount: number
+  updatedCount: number
+  missingCount: number
   canCancel: boolean
 }
 
@@ -589,11 +596,12 @@ export interface SmplayerApi {
   getRemoteHostLibrary: (hostId: number) => Promise<RemoteMusicData>
   deleteRemoteHost: (hostId: number) => Promise<void>
   pickLibraryRoot: () => Promise<ChooseLibraryRootResult>
-  scanLibrary: (rootPath?: string) => Promise<ScanLibraryResult>
+  scanLibrary: (rootPath?: string, operationId?: string, progressMax?: number) => Promise<ScanLibraryResult>
   prepareScanLocalFolder: (folderPath: string) => Promise<ScanLocalFolderPreparation>
   scanLocalFolder: (folderPath: string, operationId?: string, progressMax?: number) => Promise<ScanLibraryResult>
   cancelScanLocalFolder: (operationId: string) => Promise<void>
   analyzeArtistSplits: () => Promise<ScanLibraryResult>
+  shouldCheckStartupArtistSplits: () => Promise<boolean>
   applyArtistSplits: (splits: ArtistSplitResultItem[]) => Promise<void>
   onScanLocalFolderProgress: (callback: (progress: ScanLibraryProgress) => void) => () => void
   onMoveLocalItemsProgress: (callback: (progress: MoveLocalItemsProgress) => void) => () => void

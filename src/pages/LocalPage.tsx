@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
 import { CommandBar, CommandBarButton } from '../components/CommandBar'
@@ -14,7 +14,7 @@ import { RemoveDialog } from '../components/RemoveDialog'
 import { useFolderPreferenceMenuItem } from '../hooks/useFolderPreferenceMenuItem'
 import { useCustomScrollbar } from '../hooks/useCustomScrollbar'
 import { useSongsAddedUndo } from '../hooks/useSongsAddedUndo'
-import type { ArtistSplitResultItem, LibraryFolder, LibraryPlaylist, LibrarySong, ScanLibraryProgress, ScanLibraryResult } from '../shared/contracts'
+import type { ArtistSplitResultItem, LibraryFolder, LibraryPlaylist, LibrarySong, ScanLibraryResult } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
 import { useLibraryStore } from '../state/useLibraryStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
@@ -40,7 +40,6 @@ import {
   buildLocalSongQuickJumpMap,
   getLocalSongQuickJumpBasisName,
   getRefreshFolderErrorMessage,
-  getRefreshProgressMessage,
   getRefreshResultMessage,
   hasRefreshResultChanges,
   type LocalSortMode,
@@ -67,12 +66,10 @@ interface LocalPageProps {
   isPlaying: boolean
   loading: boolean
   scanning: boolean
-  scanProgress: ScanLibraryProgress | null
   error: string | null
   onPickLibraryRoot: () => void
   onOpenFolder: (targetRelativePath: string) => void
   onRefreshFolder: (folderPath: string) => void | ScanLibraryResult | null | Promise<ScanLibraryResult | null | void>
-  onCancelRefreshFolder: () => void
   onApplyArtistSplits: (splits: ArtistSplitResultItem[]) => void | Promise<void>
   onPlayTrack: (trackId: number, queueSongIds: number[]) => void
   onMoveToMusicOrPlay: (songId: number) => void
@@ -165,12 +162,9 @@ export function LocalPage({
   isPlaying,
   loading,
   scanning,
-  scanProgress,
-  error,
   onPickLibraryRoot,
   onOpenFolder,
   onRefreshFolder,
-  onCancelRefreshFolder,
   onApplyArtistSplits,
   onPlayTrack,
   onMoveToMusicOrPlay,
@@ -201,7 +195,7 @@ export function LocalPage({
   const [selectedSongIds, setSelectedSongIds] = useState<Set<number>>(new Set())
   const [selectedListItemKey, setSelectedListItemKey] = useState('')
   const [createdFolderPaths, setCreatedFolderPaths] = useState<Set<string>>(new Set())
-  const [localNotification, setLocalNotification] = useState('')
+  const [, setLocalNotification] = useState('')
   const [folderUpdateResultDialog, setFolderUpdateResultDialog] = useState<FolderUpdateResultDialogState | null>(null)
   const [folderUpdateResultSongMenu, setFolderUpdateResultSongMenu] = useState<FolderUpdateResultSongMenuState | null>(null)
   const [dragOverFolderPath, setDragOverFolderPath] = useState('')
@@ -1062,12 +1056,6 @@ export function LocalPage({
     { key: 'toolbar-sort-artist', text: t('local.sortByArtist'), icon: sortMode === 'artist' ? 'check' : undefined, onClick: () => updateSortMode('artist') },
     { key: 'toolbar-sort-album', text: t('local.sortByAlbum'), icon: sortMode === 'album' ? 'check' : undefined, onClick: () => updateSortMode('album') },
   ]
-  const refreshProgressRatio = scanProgress
-    ? Math.min(1, scanProgress.progress / scanProgress.max)
-    : 0
-  const refreshProgressAngle = `${refreshProgressRatio * 360}deg`
-  const refreshProgressPercent = Math.round(refreshProgressRatio * 100)
-
   return (
     <section className="page-panel local-page">
       <div className="local-toolbar">
@@ -1097,7 +1085,7 @@ export function LocalPage({
             icon="refresh"
             label={scanning ? t('library.scanning') : isCompactLayout ? t('local.updateFolderShort') : t('local.updateFolder')}
             onClick={refreshCurrentFolder}
-            disabled={scanning}
+            disabled={scanning || !currentNode}
           />
           <CommandBarButton icon="sort" label={t('common.sort')} onClick={showSortMenu} />
           <CommandBarButton icon="plus" label={t('local.newFolder')} onClick={createFolder} />
@@ -1112,27 +1100,6 @@ export function LocalPage({
           ) : null}
         </CommandBar>
       </div>
-
-      {loading ? <div className="root-banner">{t('library.refreshing')}</div> : null}
-      {error ? <div className="error-banner">{error}</div> : null}
-      {localNotification ? <div className="root-banner">{localNotification}</div> : null}
-      {scanning ? (
-        <div className="local-refresh-overlay" role="status" aria-live="polite">
-          <span
-            className="local-refresh-progress-ring"
-            style={{ '--local-refresh-progress-angle': refreshProgressAngle } as CSSProperties}
-            aria-hidden="true"
-          >
-            <span className="local-refresh-progress-value">{refreshProgressPercent}%</span>
-          </span>
-          <p>{getRefreshProgressMessage(scanProgress, t)}</p>
-          {scanProgress?.canCancel ? (
-            <button type="button" className="local-refresh-stop-button" onClick={onCancelRefreshFolder}>
-              {t('common.pause')}
-            </button>
-          ) : null}
-        </div>
-      ) : null}
 
       <MultiSelectCommandBar
         visible={multiSelect}
@@ -1303,7 +1270,7 @@ export function LocalPage({
         />
       )}
 
-      {folderMenu ? (
+      {folderMenu && nodes.has(folderMenu.folder.relativePath) ? (
         <MenuFlyout
           position={folderMenu}
           onClose={() => {
@@ -1461,7 +1428,7 @@ export function LocalPage({
           items={toolbarSortItems}
         />
       ) : null}
-      {folderAddMenu ? (
+      {folderAddMenu && nodes.has(folderAddMenu.folder.relativePath) ? (
         <MenuFlyout
           position={folderAddMenu}
           onClose={() => {
@@ -1483,7 +1450,7 @@ export function LocalPage({
           })}
         />
       ) : null}
-      {songAddMenu ? (
+      {songAddMenu && songsById.has(songAddMenu.song.id) ? (
         <MenuFlyout
           position={songAddMenu}
           onClose={() => {
@@ -1503,7 +1470,7 @@ export function LocalPage({
           })}
         />
       ) : null}
-      {songMenu ? (
+      {songMenu && songsById.has(songMenu.song.id) ? (
         <MusicMenuFlyout
           menu={songMenu}
           playlists={playlists}
@@ -1533,7 +1500,7 @@ export function LocalPage({
           folder={folderUpdateResultDialog.folder}
           songs={songs}
           selectedTrackId={selectedTrackId}
-          songMenuOpen={folderUpdateResultSongMenu != null}
+          isPlaying={isPlaying}
           onPlaySong={(songId) => {
             onAddNextAndPlay(songId)
           }}

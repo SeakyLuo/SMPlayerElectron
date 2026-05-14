@@ -128,7 +128,7 @@ export class ScanService {
     this.songArtistSync = new SongArtistSync(this.db)
   }
 
-  async scanAll(requestedRootPath?: string): Promise<ScanLibraryResult> {
+  async scanAll(requestedRootPath?: string, options?: FolderScanOptions): Promise<ScanLibraryResult> {
     const settings = this.getSettings()
     const rootPath = requestedRootPath ?? settings.RootPath
 
@@ -149,14 +149,92 @@ export class ScanService {
     const { hiddenFolderPaths, hiddenFilePaths } = this.getHiddenStoragePaths()
 
     await mkdir(this.thumbnailCachePath, { recursive: true })
-    await this.walk(rootPath, folders, audioFiles, hiddenFolderPaths, hiddenFilePaths)
+    let checkedFolderCount = 0
+    await this.walk(rootPath, folders, audioFiles, hiddenFolderPaths, hiddenFilePaths, {
+      isCanceled: options?.isCanceled,
+      onFolder: (currentFolderPath) => {
+        checkedFolderCount += 1
+        const folderCount = Math.max(options?.progressMax ?? checkedFolderCount, checkedFolderCount, 1)
+        this.emitProgress(options, {
+          stage: 'checking',
+          progress: checkedFolderCount,
+          max: folderCount,
+          folderName: basename(currentFolderPath),
+          checkedFolderCount,
+          folderCount,
+          processedSongCount: 0,
+          songCount: 0,
+          addedCount: 0,
+          updatedCount: 0,
+          missingCount: 0,
+          canCancel: true,
+        })
+      },
+    })
 
-    const scannedSongs = await this.readSongs(audioFiles, Boolean(settings.UseFilenameNotMusicName))
+    const previousSongPaths = this.getActiveSongPaths()
+    const updateResult = this.buildFolderUpdateResult(previousSongPaths, audioFiles)
+    const folderCount = Math.max(checkedFolderCount, 1)
+    const readProgressMax = Math.max(audioFiles.length, 1)
+    const addedSongPathKeys = new Set(updateResult.filesAdded.map((songPath) => this.getPathComparisonKey(songPath)))
+    let readAddedCount = 0
+    this.emitProgress(options, {
+      stage: 'reading',
+      progress: 0,
+      max: readProgressMax,
+      checkedFolderCount,
+      folderCount,
+      processedSongCount: 0,
+      songCount: audioFiles.length,
+      addedCount: 0,
+      updatedCount: updateResult.filesMoved.length,
+      missingCount: updateResult.filesRemoved.length,
+      canCancel: true,
+    })
+    const scannedSongs = await this.readSongs(
+      audioFiles,
+      Boolean(settings.UseFilenameNotMusicName),
+      options?.isCanceled,
+      (filePath, completedCount) => {
+        if (addedSongPathKeys.has(this.getPathComparisonKey(filePath))) {
+          readAddedCount += 1
+        }
+        this.emitProgress(options, {
+          stage: 'reading',
+          progress: completedCount,
+          max: readProgressMax,
+          checkedFolderCount,
+          folderCount,
+          processedSongCount: completedCount,
+          songCount: audioFiles.length,
+          addedCount: readAddedCount,
+          updatedCount: updateResult.filesMoved.length,
+          missingCount: updateResult.filesRemoved.length,
+          canCancel: true,
+        })
+      },
+    )
     let artistSplitResult = {
       applied: [] as ArtistSplitResultItem[],
       suggestions: [] as ArtistSplitResultItem[],
       mergeSuggestions: [] as ArtistSplitResultItem[],
     }
+    const writeProgressMax = Math.max(scannedSongs.length + 1, 1)
+
+    this.emitProgress(options, {
+      stage: 'updating',
+      progress: 0,
+      max: writeProgressMax,
+      checkedFolderCount,
+      folderCount,
+      processedSongCount: 0,
+      songCount: scannedSongs.length,
+      addedCount: updateResult.filesAdded.length,
+      updatedCount: updateResult.filesMoved.length,
+      missingCount: updateResult.filesRemoved.length,
+      canCancel: false,
+    })
+    this.throwIfCanceled(options?.isCanceled)
 
     this.db.exec('BEGIN')
     try {
@@ -166,9 +244,42 @@ export class ScanService {
 
       const nonEmptyFolders = this.filterNonEmptyFolders(rootPath, folders, audioFiles)
       const folderIds = this.upsertScannedFolders(rootPath, nonEmptyFolders)
-      artistSplitResult = this.upsertScannedSongs(scannedSongs, folderIds, Boolean(settings.SmartMultiArtistRecognition))
+      artistSplitResult = this.upsertScannedSongs(
+        scannedSongs,
+        folderIds,
+        Boolean(settings.SmartMultiArtistRecognition),
+        new Set<string>(),
+        (writtenCount) => {
+          this.emitProgress(options, {
+            stage: 'updating',
+            progress: writtenCount,
+            max: writeProgressMax,
+            checkedFolderCount,
+            folderCount,
+            processedSongCount: writtenCount,
+            songCount: scannedSongs.length,
+            addedCount: updateResult.filesAdded.length,
+            updatedCount: updateResult.filesMoved.length,
+            missingCount: updateResult.filesRemoved.length,
+            canCancel: false,
+          })
+        },
+      )
       syncAlbums(this.db)
       this.cleanupSideEffects(settings)
+      this.emitProgress(options, {
+        stage: 'updating',
+        progress: writeProgressMax,
+        max: writeProgressMax,
+        checkedFolderCount,
+        folderCount,
+        processedSongCount: scannedSongs.length,
+        songCount: scannedSongs.length,
+        addedCount: updateResult.filesAdded.length,
+        updatedCount: updateResult.filesMoved.length,
+        missingCount: updateResult.filesRemoved.length,
+        canCancel: false,
+      })
 
       this.db.exec('COMMIT')
     } catch (error) {
@@ -183,9 +294,9 @@ export class ScanService {
       songCount: audioFiles.length,
       folderCount: folders.length,
       elapsedMs: Date.now() - startedAt,
-      filesAdded: [],
-      filesRemoved: [],
-      filesMoved: [],
+      filesAdded: updateResult.filesAdded,
+      filesRemoved: updateResult.filesRemoved,
+      filesMoved: updateResult.filesMoved,
       artistSplitsApplied: artistSplitResult.applied,
       artistSplitSuggestions: artistSplitResult.suggestions,
       artistMergeSuggestions: artistSplitResult.mergeSuggestions,
@@ -268,10 +379,19 @@ export class ScanService {
       isCanceled: options?.isCanceled,
       onFolder: (currentFolderPath) => {
         checkedFolderCount += 1
+        const folderCount = Math.max(options?.progressMax ?? checkedFolderCount, checkedFolderCount, 1)
         this.emitProgress(options, {
           stage: 'checking',
           progress: checkedFolderCount,
+          max: folderCount,
           folderName: basename(currentFolderPath),
+          checkedFolderCount,
+          folderCount,
+          processedSongCount: 0,
+          songCount: 0,
+          addedCount: 0,
+          updatedCount: 0,
+          missingCount: 0,
           canCancel: true,
         })
       },
@@ -289,14 +409,63 @@ export class ScanService {
     const newAudioFiles = audioFiles.filter((songPath) => !previousSongPathKeys.has(this.getPathComparisonKey(songPath)))
     const removedSongRows = previousSongRows.filter((row) => !scannedSongPathKeys.has(this.getPathComparisonKey(row.path)))
     const existingSongPathKeys = this.getExistingSongPathKeys(newAudioFiles)
-    const scannedSongs = await this.readSongs(newAudioFiles, Boolean(settings.UseFilenameNotMusicName), options?.isCanceled)
     const updateResult = this.buildFolderUpdateResult(previousSongPaths, audioFiles)
+    const folderCount = Math.max(checkedFolderCount, 1)
+    const readProgressMax = Math.max(newAudioFiles.length, 1)
+    const addedSongPathKeys = new Set(updateResult.filesAdded.map((songPath) => this.getPathComparisonKey(songPath)))
+    let readAddedCount = 0
+    this.emitProgress(options, {
+      stage: 'reading',
+      progress: 0,
+      max: readProgressMax,
+      checkedFolderCount,
+      folderCount,
+      processedSongCount: 0,
+      songCount: newAudioFiles.length,
+      addedCount: 0,
+      updatedCount: updateResult.filesMoved.length,
+      missingCount: updateResult.filesRemoved.length,
+      canCancel: true,
+    })
+    const scannedSongs = await this.readSongs(
+      newAudioFiles,
+      Boolean(settings.UseFilenameNotMusicName),
+      options?.isCanceled,
+      (filePath, completedCount) => {
+        if (addedSongPathKeys.has(this.getPathComparisonKey(filePath))) {
+          readAddedCount += 1
+        }
+        this.emitProgress(options, {
+          stage: 'reading',
+          progress: completedCount,
+          max: readProgressMax,
+          checkedFolderCount,
+          folderCount,
+          processedSongCount: completedCount,
+          songCount: newAudioFiles.length,
+          addedCount: readAddedCount,
+          updatedCount: updateResult.filesMoved.length,
+          missingCount: updateResult.filesRemoved.length,
+          canCancel: true,
+        })
+      },
+    )
     const nonEmptyFolders = this.filterNonEmptyFolders(rootPath, folders, audioFiles)
     let autoLyricsSongs: ScannedSong[] = []
+    const writeProgressMax = Math.max(scannedSongs.length + removedSongRows.length + 1, 1)
+    let removedWriteProgress = 0
 
     this.emitProgress(options, {
       stage: 'updating',
-      progress: options?.progressMax ?? Math.max(checkedFolderCount, 1),
+      progress: 0,
+      max: writeProgressMax,
+      checkedFolderCount,
+      folderCount,
+      processedSongCount: 0,
+      songCount: scannedSongs.length,
+      addedCount: updateResult.filesAdded.length,
+      updatedCount: updateResult.filesMoved.length,
+      missingCount: updateResult.filesRemoved.length,
       canCancel: false,
     })
     this.throwIfCanceled(options?.isCanceled)
@@ -320,6 +489,20 @@ export class ScanService {
         normalizedScanFolderPattern,
       )
       this.deactivateSongsInsideTransaction(removedSongRows)
+      removedWriteProgress = removedSongRows.length
+      this.emitProgress(options, {
+        stage: 'updating',
+        progress: removedWriteProgress,
+        max: writeProgressMax,
+        checkedFolderCount,
+        folderCount,
+        processedSongCount: 0,
+        songCount: scannedSongs.length,
+        addedCount: updateResult.filesAdded.length,
+        updatedCount: updateResult.filesMoved.length,
+        missingCount: updateResult.filesRemoved.length,
+        canCancel: false,
+      })
 
       const folderIds = this.upsertScannedFolders(rootPath, nonEmptyFolders)
       const artistSplitResult = this.upsertScannedSongs(
@@ -327,6 +510,21 @@ export class ScanService {
         folderIds,
         Boolean(settings.SmartMultiArtistRecognition),
         existingSongPathKeys,
+        (writtenCount) => {
+          this.emitProgress(options, {
+            stage: 'updating',
+            progress: removedWriteProgress + writtenCount,
+            max: writeProgressMax,
+            checkedFolderCount,
+            folderCount,
+            processedSongCount: writtenCount,
+            songCount: scannedSongs.length,
+            addedCount: updateResult.filesAdded.length,
+            updatedCount: updateResult.filesMoved.length,
+            missingCount: updateResult.filesRemoved.length,
+            canCancel: false,
+          })
+        },
       )
       syncAlbums(this.db)
       this.cleanupSideEffects(settings)
@@ -334,6 +532,19 @@ export class ScanService {
       updateResult.artistSplitSuggestions = artistSplitResult.suggestions
       updateResult.artistMergeSuggestions = artistSplitResult.mergeSuggestions
       autoLyricsSongs = artistSplitResult.addedSongs
+      this.emitProgress(options, {
+        stage: 'updating',
+        progress: writeProgressMax,
+        max: writeProgressMax,
+        checkedFolderCount,
+        folderCount,
+        processedSongCount: scannedSongs.length,
+        songCount: scannedSongs.length,
+        addedCount: updateResult.filesAdded.length,
+        updatedCount: updateResult.filesMoved.length,
+        missingCount: updateResult.filesRemoved.length,
+        canCancel: false,
+      })
       this.db.exec('COMMIT')
     } catch (error) {
       this.db.exec('ROLLBACK')
@@ -400,6 +611,7 @@ export class ScanService {
     folderIds: Map<string, number>,
     smartMultiArtistRecognition: boolean,
     existingSongPathKeys = new Set<string>(),
+    onProgress?: (writtenCount: number, song: ScannedSong) => void,
   ) {
     const artistSplitPlan = smartMultiArtistRecognition
       ? this.buildArtistSplitPlan(scannedSongs)
@@ -411,6 +623,7 @@ export class ScanService {
     const suggestions: ArtistSplitResultItem[] = []
     const mergeSuggestions: ArtistSplitResultItem[] = []
     const addedSongs: ScannedSong[] = []
+    let writtenCount = 0
 
     for (const song of scannedSongs) {
       const isNewSong = !existingSongPathKeys.has(this.getPathComparisonKey(song.path))
@@ -431,7 +644,7 @@ export class ScanService {
       }
       const mergeArtists = artistMergePlan.get(song)
       const splitArtists = mergeArtists ? undefined : artistSplitPlan.autoSplits.get(song)
-      const artists = splitArtists ?? (song.artist ? [song.artist] : [])
+      const artists = song.artist ? [song.artist] : []
 
       this.songArtistSync.sync(musicRow.Id, artists)
       if (splitArtists && splitArtists.length > 1) {
@@ -451,6 +664,8 @@ export class ScanService {
         musicRow.Id,
         ACTIVE_STATE.active,
       )
+      writtenCount += 1
+      onProgress?.(writtenCount, song)
     }
 
     return {
@@ -638,6 +853,16 @@ export class ScanService {
     return rows.map((row) => row.thumbnailPath)
   }
 
+  private getActiveSongPaths() {
+    const rows = this.db.prepare(`
+      SELECT Path AS path
+      FROM Music
+      WHERE State = ?
+    `).all(ACTIVE_STATE.active) as Array<{ path: string }>
+
+    return rows.map((row) => row.path)
+  }
+
   private buildFolderUpdateResult(previousSongPaths: string[], scannedSongPaths: string[]) {
     const previousPaths = new Set(previousSongPaths.map((songPath) => this.getPathComparisonKey(songPath)))
     const scannedPaths = new Set(scannedSongPaths.map((songPath) => this.getPathComparisonKey(songPath)))
@@ -734,11 +959,12 @@ export class ScanService {
     includeScannedSongs = true,
   ) {
     const artistUsage = this.getArtistUsage(scannedSongs, includeScannedSongs)
+    const expandedCandidatesByArtistKey = new Map<string, string[]>()
     const mergeSuggestions = new Map<ScannedSong, string[]>()
 
     for (const song of scannedSongs) {
       const sourceArtists = this.getArtistMergeSourceArtists(song, artistSplitPlan)
-      const mergedArtists = this.getMergedArtists(sourceArtists, artistUsage)
+      const mergedArtists = this.getMergedArtists(sourceArtists, artistUsage, expandedCandidatesByArtistKey)
 
       if (this.haveArtistNamesChanged(sourceArtists, mergedArtists)) {
         mergeSuggestions.set(song, mergedArtists)
@@ -786,7 +1012,7 @@ export class ScanService {
   }
 
   private addArtistUsage(usage: Map<string, ArtistUsage>, artist: string, count: number) {
-    const normalizedArtists = normalizeArtists([artist])
+    const normalizedArtists = normalizeArtists([this.normalizeArtistMergeName(artist)])
     for (const normalizedArtist of normalizedArtists) {
       const key = this.getArtistKey(normalizedArtist)
       const current = usage.get(key)
@@ -799,13 +1025,18 @@ export class ScanService {
 
   private getArtistMergeSourceArtists(song: ScannedSong, artistSplitPlan: ArtistSplitPlan) {
     const splitArtists = artistSplitPlan.autoSplits.get(song) ?? artistSplitPlan.suggestions.get(song)
-    return splitArtists ?? this.getScannedSongArtistUnits(song)
+    return this.normalizeArtistMergeNames(splitArtists ?? this.getScannedSongArtistUnits(song))
   }
 
-  private getMergedArtists(artists: string[], artistUsage: Map<string, ArtistUsage>) {
+  private getMergedArtists(
+    artists: string[],
+    artistUsage: Map<string, ArtistUsage>,
+    expandedCandidatesByArtistKey: Map<string, string[]>,
+  ) {
+    const sourceArtists = this.normalizeArtistMergeNames(artists)
     const artistGroups: string[][] = []
 
-    for (const artist of artists) {
+    for (const artist of sourceArtists) {
       const matchingGroup = artistGroups.find((group) =>
         group.some((groupArtist) => this.isContainedArtistPair(groupArtist, artist)),
       )
@@ -817,25 +1048,57 @@ export class ScanService {
     }
 
     const mergedArtists = artistGroups.map((group) =>
-      this.pickPreferredArtistName(this.expandArtistMergeCandidates(group, artistUsage), artistUsage),
+      this.pickPreferredArtistName(
+        this.expandArtistMergeCandidates(group, artistUsage, expandedCandidatesByArtistKey),
+        artistUsage,
+      ),
     )
 
     return normalizeArtists(mergedArtists)
   }
 
-  private expandArtistMergeCandidates(artists: string[], artistUsage: Map<string, ArtistUsage>) {
+  private expandArtistMergeCandidates(
+    artists: string[],
+    artistUsage: Map<string, ArtistUsage>,
+    expandedCandidatesByArtistKey: Map<string, string[]>,
+  ) {
     const candidates = new Map<string, string>()
 
     for (const artist of artists) {
-      candidates.set(this.getArtistKey(artist), artist)
-      for (const usage of artistUsage.values()) {
-        if (this.isContainedArtistPair(artist, usage.name)) {
-          candidates.set(this.getArtistKey(usage.name), usage.name)
-        }
+      const artistName = this.normalizeArtistMergeName(artist)
+      const artistKey = this.getArtistKey(artistName)
+      const expandedCandidates = expandedCandidatesByArtistKey.get(artistKey) ??
+        this.expandSingleArtistMergeCandidates(artistName, artistUsage)
+
+      expandedCandidatesByArtistKey.set(artistKey, expandedCandidates)
+      for (const candidate of expandedCandidates) {
+        candidates.set(this.getArtistKey(candidate), candidate)
       }
     }
 
     return [...candidates.values()]
+  }
+
+  private expandSingleArtistMergeCandidates(artistName: string, artistUsage: Map<string, ArtistUsage>) {
+    const candidates = [artistName]
+    for (const usage of artistUsage.values()) {
+      if (this.isContainedArtistPair(artistName, usage.name)) {
+        candidates.push(usage.name)
+      }
+    }
+
+    return candidates
+  }
+
+  private normalizeArtistMergeNames(artists: string[]) {
+    return normalizeArtists(artists.map((artist) => this.normalizeArtistMergeName(artist)))
+  }
+
+  private normalizeArtistMergeName(artist: string) {
+    return artist
+      .replace(/[\u200B-\u200D\uFEFF]/gu, '')
+      .replace(/\s+/gu, ' ')
+      .trim()
   }
 
   private pickPreferredArtistName(artists: string[], artistUsage: Map<string, ArtistUsage>) {
@@ -1040,13 +1303,13 @@ export class ScanService {
 
   private emitProgress(
     options: FolderScanOptions | undefined,
-    progress: Omit<ScanLibraryProgress, 'operationId' | 'max'>,
+    progress: Omit<ScanLibraryProgress, 'operationId'>,
   ) {
     if (!options?.operationId || !options.onProgress) {
       return
     }
 
-    const max = Math.max(options.progressMax ?? progress.progress, progress.progress, 1)
+    const max = Math.max(progress.max, progress.progress, 1)
     options.onProgress({
       ...progress,
       operationId: options.operationId,
@@ -1119,11 +1382,17 @@ export class ScanService {
     }
   }
 
-  private async readSongs(audioFiles: string[], useFilenameNotMusicName: boolean, isCanceled?: () => boolean) {
+  private async readSongs(
+    audioFiles: string[],
+    useFilenameNotMusicName: boolean,
+    isCanceled?: () => boolean,
+    onProgress?: (filePath: string, completedCount: number) => void,
+  ) {
     return readAudioMetadataBatch(this.thumbnailCachePath, audioFiles, useFilenameNotMusicName, {
       concurrency: METADATA_SCAN_CONCURRENCY,
       isCanceled,
       canceledMessage: SCAN_CANCELED_ERROR_MESSAGE,
+      onProgress,
     })
   }
 }

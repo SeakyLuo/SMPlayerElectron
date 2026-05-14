@@ -591,14 +591,13 @@
   fill: currentColor;
 }
 
-.library-duration-cell,
 .library-favorite-cell {
   text-align: center;
 }
 
 .library-duration-cell .music-table-cell-content {
   display: block;
-  text-align: center;
+  text-align: left;
   font-variant-numeric: tabular-nums;
 }
 

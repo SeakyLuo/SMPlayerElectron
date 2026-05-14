@@ -66,7 +66,7 @@ export function registerLibraryIpc(options: LibraryIpcOptions) {
     getSongService().updateSongPlayCount(songId, playCount),
   )
   ipcMain.handle('library:pick-album-artwork', async (_event, albumName: string) => {
-    const t = createArtworkDialogTranslator(options)
+    const t = createLibraryDialogTranslator(options)
     const result = await showOpenDialog(options.getWindow(), {
       title: t('song.chooseAlbumArtwork'),
       buttonLabel: t('common.open'),
@@ -184,9 +184,11 @@ export function registerLibraryIpc(options: LibraryIpcOptions) {
     getLyricsService().saveInternetLyricsToFile(songId),
   )
   ipcMain.handle('library:pick-root', async () => {
+    const t = createLibraryDialogTranslator(options)
     const settings = getSettingsService().getSettingsSnapshot()
     const result = await showOpenDialog(options.getWindow(), {
-      title: 'Choose Music Library Folder',
+      title: t('local.chooseMusicLibraryFolderDialogTitle'),
+      buttonLabel: t('local.chooseMusicLibraryFolderDialogButton'),
       defaultPath: settings.rootPath || app.getPath('music'),
       properties: ['openDirectory'],
     })
@@ -200,9 +202,26 @@ export function registerLibraryIpc(options: LibraryIpcOptions) {
 
     return { rootPath }
   })
-  ipcMain.handle('library:scan', async (_event, requestedRootPath?: string) =>
-    getScanService().scanAll(requestedRootPath),
-  )
+  ipcMain.handle('library:scan', async (event, requestedRootPath?: string, operationId?: string, progressMax?: number) => {
+    if (operationId) {
+      canceledLocalFolderScanOperationIds.delete(operationId)
+    }
+
+    try {
+      return await getScanService().scanAll(requestedRootPath, {
+        operationId,
+        progressMax,
+        isCanceled: () => operationId ? canceledLocalFolderScanOperationIds.has(operationId) : false,
+        onProgress: (progress: ScanLibraryProgress) => {
+          event.sender.send('library:scan-folder-progress', progress)
+        },
+      })
+    } finally {
+      if (operationId) {
+        canceledLocalFolderScanOperationIds.delete(operationId)
+      }
+    }
+  })
   ipcMain.handle('library:prepare-scan-folder', async (_event, folderPath: string) =>
     getScanService().prepareFolderScan(folderPath),
   )
@@ -231,6 +250,9 @@ export function registerLibraryIpc(options: LibraryIpcOptions) {
   })
   ipcMain.handle('library:analyze-artist-splits', () =>
     getScanService().analyzeExistingArtistSplits(),
+  )
+  ipcMain.handle('library:should-check-startup-artist-splits', () =>
+    getLibraryService().shouldCheckStartupArtistSplits,
   )
   ipcMain.handle('library:apply-artist-splits', (_event, splits) =>
     getSongService().applyArtistSplits(splits),
@@ -280,7 +302,7 @@ export function registerLibraryIpc(options: LibraryIpcOptions) {
 }
 
 async function pickArtworkSource(options: LibraryIpcOptions, includeNoArtworkError: boolean) {
-  const t = createArtworkDialogTranslator(options)
+  const t = createLibraryDialogTranslator(options)
   const result = await showOpenDialog(options.getWindow(), {
     title: t('song.chooseAlbumArtwork'),
     buttonLabel: t('common.open'),
@@ -329,7 +351,7 @@ async function pickArtworkSource(options: LibraryIpcOptions, includeNoArtworkErr
 
 const artworkImageExtensions = ['jpg', 'png', 'jpeg', 'webp', 'bmp']
 
-function createArtworkDialogTranslator(options: LibraryIpcOptions) {
+function createLibraryDialogTranslator(options: LibraryIpcOptions) {
   const settings = options.getLibraryService().settingsService.getSettingsSnapshot()
   return createTranslator(settings.preferredLanguage, app.getLocale())
 }

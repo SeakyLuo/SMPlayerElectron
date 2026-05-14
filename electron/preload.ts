@@ -117,11 +117,12 @@ const api: SmplayerApi = {
   getRemoteHostLibrary: (hostId) => ipcRenderer.invoke('remote-hosts:get-library', hostId),
   deleteRemoteHost: (hostId) => ipcRenderer.invoke('remote-hosts:delete', hostId),
   pickLibraryRoot: () => ipcRenderer.invoke('library:pick-root'),
-  scanLibrary: (rootPath?: string) => ipcRenderer.invoke('library:scan', rootPath),
+  scanLibrary: (rootPath, operationId, progressMax) => ipcRenderer.invoke('library:scan', rootPath, operationId, progressMax),
   prepareScanLocalFolder: (folderPath) => ipcRenderer.invoke('library:prepare-scan-folder', folderPath),
   scanLocalFolder: (folderPath, operationId, progressMax) => ipcRenderer.invoke('library:scan-folder', folderPath, operationId, progressMax),
   cancelScanLocalFolder: (operationId) => ipcRenderer.invoke('library:cancel-scan-folder', operationId),
   analyzeArtistSplits: () => ipcRenderer.invoke('library:analyze-artist-splits'),
+  shouldCheckStartupArtistSplits: () => ipcRenderer.invoke('library:should-check-startup-artist-splits'),
   applyArtistSplits: (splits) => ipcRenderer.invoke('library:apply-artist-splits', splits),
   onScanLocalFolderProgress: (callback) => {
     const listener = (_event: Electron.IpcRendererEvent, progress: Parameters<typeof callback>[0]) => {

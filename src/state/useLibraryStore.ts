@@ -327,7 +327,7 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
     try {
       const result = await window.smplayer.pickLibraryRoot()
       if (result.rootPath) {
-        await get().refresh()
+        await get().refresh(undefined, { silent: true })
         return true
       }
       return false
@@ -345,17 +345,62 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
       return null
     }
 
-    set({ scanning: true, error: null })
+    const rootPath = get().snapshot.settings.rootPath
+    const operationId = rootPath ? crypto.randomUUID() : ''
+    let removeProgressListener: (() => void) | null = null
+
+    set({
+      scanning: true,
+      error: null,
+      scanProgress: rootPath
+        ? {
+            operationId,
+            stage: 'checking',
+            progress: 0,
+            max: 1,
+            folderName: rootPath.split(/[\\/]+/).filter(Boolean).at(-1) ?? rootPath,
+            checkedFolderCount: 0,
+            folderCount: 1,
+            processedSongCount: 0,
+            songCount: 0,
+            addedCount: 0,
+            updatedCount: 0,
+            missingCount: 0,
+            canCancel: true,
+          }
+        : null,
+    })
 
     try {
-      const result = await window.smplayer.scanLibrary()
-      await get().refresh()
+      let progressMax: number | undefined
+      if (rootPath) {
+        removeProgressListener = window.smplayer.onScanLocalFolderProgress((progress) => {
+          if (progress.operationId === operationId) {
+            set({ scanProgress: progress })
+          }
+        })
+        const preparedProgressMax = (await window.smplayer.prepareScanLocalFolder(rootPath)).progressMax
+        progressMax = preparedProgressMax
+        set((state) => state.scanProgress?.operationId === operationId
+          ? {
+              scanProgress: {
+                ...state.scanProgress,
+                max: preparedProgressMax,
+                folderCount: preparedProgressMax,
+              },
+            }
+          : state)
+      }
+
+      const result = await window.smplayer.scanLibrary(undefined, operationId || undefined, progressMax)
+      await get().refresh(undefined, { silent: true })
       return result
     } catch (error) {
       set({ error: getErrorMessage(error) })
       return null
     } finally {
-      set({ scanning: false })
+      removeProgressListener?.()
+      set({ scanning: false, scanProgress: null })
     }
   },
   scanLocalFolder: async (folderPath) => {
@@ -386,12 +431,19 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
           stage: 'checking',
           progress: 0,
           max: preparation.progressMax,
+          checkedFolderCount: 0,
+          folderCount: preparation.progressMax,
+          processedSongCount: 0,
+          songCount: 0,
+          addedCount: 0,
+          updatedCount: 0,
+          missingCount: 0,
           canCancel: true,
         },
       })
 
       const result = await window.smplayer.scanLocalFolder(folderPath, operationId, preparation.progressMax)
-      await get().refresh({ songs: true, folders: true, recent: false })
+      await get().refresh({ songs: true, folders: true, recent: false }, { silent: true })
       return result
     } catch (error) {
       const errorMessage = getErrorMessage(error)
