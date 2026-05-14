@@ -207,9 +207,23 @@ export class SongService {
   }
 
   applyArtistSplits(splits: ArtistSplitResultItem[]) {
+    const updateArtistCases = splits.map(() => 'WHEN ? THEN ?').join(' ')
+    const songPlaceholders = splits.map(() => '?').join(',')
+    const updateArtistValues = splits.flatMap((split) => [
+      split.songId,
+      normalizeArtists(split.artists).join(', '),
+    ])
+
     this.db.exec('BEGIN')
     try {
       this.songArtistSync.syncMany(splits)
+      this.db.prepare(`
+        UPDATE Music
+        SET Artist = CASE Id ${updateArtistCases} END
+        WHERE Id IN (${songPlaceholders})
+          AND State = ?
+      `).run(...updateArtistValues, ...splits.map((split) => split.songId), ACTIVE_STATE.active)
+      syncAlbums(this.db)
       this.db.exec('COMMIT')
     } catch (error) {
       this.db.exec('ROLLBACK')

@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react'
 
 import { Icon } from '../components/icons'
-import type { LibrarySong, ScanLibraryResult } from '../shared/contracts'
+import { ArtistSplitReviewPanel } from '../components/ArtistSplitReviewDialog'
+import type { ArtistSplitResultItem, LibrarySong, ScanLibraryResult } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
 import type { FolderNode } from './localFolderModel'
 import {
@@ -31,7 +32,7 @@ export function FolderUpdateResultDialog({
   songMenuOpen: boolean
   onPlaySong: (songId: number) => void
   onOpenSongMenu: (song: LibrarySong, x: number, y: number) => void
-  onApplyArtistSplits: () => void | Promise<void>
+  onApplyArtistSplits: (splits: ArtistSplitResultItem[]) => void | Promise<void>
   onDismissArtistSplitSuggestions: () => void
   onClose: () => void
 }) {
@@ -118,39 +119,18 @@ export function FolderUpdateResultDialog({
               </div>
             </section>
           ))}
-          {result.artistSplitsApplied.length > 0 ? (
-            <section className="folder-update-result-group">
-              <h4>{t('local.refreshArtistSplitsAppliedGroup', { count: result.artistSplitsApplied.length })}</h4>
-              <div className="folder-update-result-list">
-                {result.artistSplitsApplied.map((item) => (
-                  <div className="folder-update-result-item folder-update-result-artist-split" key={`applied-${item.songId}-${item.artist}`} title={item.path}>
-                    <span className="folder-update-result-path">{item.title}</span>
-                    <span className="folder-update-result-artist-line">{item.artist}</span>
-                    <span className="folder-update-result-artist-line">{item.artists.join(t('common.comma'))}</span>
-                  </div>
-                ))}
-              </div>
-            </section>
-          ) : null}
-          {result.artistSplitSuggestions.length > 0 ? (
-            <section className="folder-update-result-group">
-              <div className="folder-update-result-group-header">
-                <h4>{t('local.refreshArtistSplitSuggestionsGroup', { count: result.artistSplitSuggestions.length })}</h4>
-                <span className="folder-update-result-actions">
-                  <button type="button" onClick={onApplyArtistSplits}>{t('local.applyArtistSplits')}</button>
-                  <button type="button" onClick={onDismissArtistSplitSuggestions}>{t('local.keepArtistSplits')}</button>
-                </span>
-              </div>
-              <div className="folder-update-result-list">
-                {result.artistSplitSuggestions.map((item) => (
-                  <div className="folder-update-result-item folder-update-result-artist-split" key={`suggested-${item.songId}-${item.artist}`} title={item.path}>
-                    <span className="folder-update-result-path">{item.title}</span>
-                    <span className="folder-update-result-artist-line">{item.artist}</span>
-                    <span className="folder-update-result-artist-line">{item.artists.join(t('common.comma'))}</span>
-                  </div>
-                ))}
-              </div>
-            </section>
+          {result.artistSplitsApplied.length > 0 ||
+          result.artistSplitSuggestions.length > 0 ||
+          result.artistMergeSuggestions.length > 0 ? (
+            <ArtistSplitReviewPanel
+              t={t}
+              directSplits={result.artistSplitsApplied}
+              possibleSplits={result.artistSplitSuggestions}
+              mergeSuggestions={result.artistMergeSuggestions}
+              appliedDirectSplits
+              onApply={onApplyArtistSplits}
+              onClose={onDismissArtistSplitSuggestions}
+            />
           ) : null}
         </div>
       </section>

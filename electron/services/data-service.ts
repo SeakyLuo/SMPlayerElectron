@@ -115,6 +115,9 @@ export class DataService {
       setRootPath: (rootPath) => this.settingsService.setRootPath(rootPath),
       getHiddenStorageItems: () => this.hiddenItemService.getItems(),
       cleanupSideEffects: (settings) => this.cleanupScanSideEffects(settings),
+      autoAddLyrics: async (songs) => {
+        await Promise.allSettled(songs.map((song) => this.lyricsService.saveInternetLyricsForSong(song)))
+      },
     })
 
     this.initializeSettingsRows()

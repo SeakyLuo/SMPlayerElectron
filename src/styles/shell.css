@@ -164,6 +164,18 @@ body.night-mode .app-shell.nav-minimal.is-headered-playlist-route {
   app-region: drag;
 }
 
+body.popup-dialog-open .app-shell.nav-minimal .minimal-titlebar,
+body.popup-dialog-open .app-shell.nav-minimal .minimal-titlebar-title {
+  -webkit-app-region: no-drag !important;
+  app-region: no-drag !important;
+}
+
+body.popup-dialog-open .app-shell,
+body.popup-dialog-open .app-shell * {
+  -webkit-app-region: no-drag !important;
+  app-region: no-drag !important;
+}
+
 body.night-mode .app-shell.nav-minimal .minimal-titlebar {
   color: var(--night-text);
 }

@@ -40,6 +40,8 @@ export class ArtworkService {
     return {
       songId,
       artworkUrl: result.fileUrl ? this.getSongArtworkUrl(songId) : '',
+      sourceUrl: result.fileUrl,
+      sourcePath: result.cacheKey,
       source: result.source,
     }
   }
@@ -67,6 +69,8 @@ export class ArtworkService {
       return {
         songId,
         artworkUrl: result.fileUrl ? this.getSongArtworkUrl(songId) : '',
+        sourceUrl: result.fileUrl,
+        sourcePath: result.cacheKey,
         source: result.source,
       }
     })

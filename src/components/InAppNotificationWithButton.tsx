@@ -9,9 +9,12 @@ export function InAppNotificationWithButton() {
   }
 
   const hasActions = notification.actions.length > 0
+  const className = hasActions
+    ? 'undoable-notification operation-notification undoable-notification-with-action'
+    : 'undoable-notification'
 
   return (
-    <div className={hasActions ? 'undoable-notification undoable-notification-with-action' : 'undoable-notification'} role="status">
+    <div className={className} role="status">
       <span className="undoable-notification-message">{notification.message}</span>
       {hasActions ? (
         <div className="undoable-notification-actions">

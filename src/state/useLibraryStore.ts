@@ -227,18 +227,18 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
   },
   loadRequiredData: async (requirements) => {
     const state = get()
-    const loads: Array<Promise<void>> = []
+    const loads: Array<() => Promise<void>> = []
 
     if (requirements.songs && !state.songsLoaded) {
-      loads.push(get().loadSongs())
+      loads.push(get().loadSongs)
     }
 
     if (requirements.folders && !state.foldersLoaded) {
-      loads.push(get().loadFolders())
+      loads.push(get().loadFolders)
     }
 
     if (requirements.recent && !state.recentLoaded) {
-      loads.push(get().loadRecent())
+      loads.push(get().loadRecent)
     }
 
     if (loads.length === 0) {
@@ -247,7 +247,7 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
 
     set({ loading: true })
     try {
-      await Promise.all(loads)
+      await Promise.all(loads.map((load) => load()))
     } finally {
       set({ loading: false })
     }

@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState, type PointerEvent as ReactPointerEvent } from 'react'
 
 interface AppWindowControllerOptions {
-  onScanLibrary: () => void | Promise<unknown>
+  onQuickPlay: () => void | Promise<unknown>
   onEnterMiniMode: () => void
 }
 
 export function useAppWindowController({
-  onScanLibrary,
+  onQuickPlay,
   onEnterMiniMode,
 }: AppWindowControllerOptions) {
   const [isWindowFullScreen, setIsWindowFullScreen] = useState(false)
@@ -34,11 +34,11 @@ export function useAppWindowController({
 
   useEffect(() => {
     return window.smplayer?.onTrayCommand((command) => {
-      if (command === 'scan-library') {
-        void onScanLibrary()
+      if (command === 'quick-play') {
+        void onQuickPlay()
       }
     })
-  }, [onScanLibrary])
+  }, [onQuickPlay])
 
   const startWindowDrag = useCallback((event: ReactPointerEvent<HTMLElement>) => {
     event.currentTarget.setPointerCapture(event.pointerId)

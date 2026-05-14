@@ -1,21 +1,66 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 
-import { normalizeArtists } from '../shared/artists'
+import { getDisplayArtists, getSongArtists, normalizeArtists } from '../shared/artists'
 import type { LibrarySong, LyricsSnapshot, SongPropertiesSnapshot } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
 import { hasLyricsTimestamps, mergePlainLyricsWithTimedRaw, stripLyricsTimestamps } from '../shared/lyrics'
 import { useLibraryStore } from '../state/useLibraryStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
 import { useMusicDialogShortcuts } from '../hooks/useMusicDialogShortcuts'
+import { AlbumArtLibraryPickerDialog, type AlbumArtLibraryChoice } from './AlbumArtLibraryPickerDialog'
 import { requestConfirmDialog } from './dialogService'
 import { Icon } from './icons'
-import { MusicAlbumArtControl } from './MusicAlbumArtControl'
+import { MusicAlbumArtControl, type AlbumArtRecommendation } from './MusicAlbumArtControl'
 import { MAX_ARTIST_CELLS, MusicInfoControl } from './MusicInfoControl'
 import { MusicLyricsControl } from './MusicLyricsControl'
 import { PopupDialog } from './PopupDialog'
 
 type SongDialogMode = 'properties' | 'lyrics' | 'album-art'
 type PendingLyricsSnapshot = { songId: number; title: string; lyrics: string }
+
+function normalizeArtworkMatchText(value: string) {
+  return value
+    .toLocaleLowerCase()
+    .replace(/[（(【[].*?[）)】\]]/gu, '')
+    .replace(/[\s\-_.·・:：,，/\\|]+/gu, '')
+    .trim()
+}
+
+function isSimilarArtworkTitle(left: string, right: string) {
+  const normalizedLeft = normalizeArtworkMatchText(left)
+  const normalizedRight = normalizeArtworkMatchText(right)
+
+  return normalizedLeft.length >= 2 &&
+    normalizedRight.length >= 2 &&
+    (normalizedLeft.includes(normalizedRight) || normalizedRight.includes(normalizedLeft))
+}
+
+function getAlbumArtRecommendationCandidates(song: LibrarySong, songs: LibrarySong[]) {
+  const artistKeys = new Set(getSongArtists(song).map((artist) => artist.toLocaleLowerCase()))
+
+  return songs
+    .filter((candidate) => candidate.id !== song.id)
+    .map((candidate) => {
+      const sameArtist = getSongArtists(candidate).some((artist) => artistKeys.has(artist.toLocaleLowerCase()))
+      if (!sameArtist) {
+        return null
+      }
+
+      const sameAlbum = song.album.trim() !== '' && candidate.album === song.album
+      const similarTitle = isSimilarArtworkTitle(song.title, candidate.title)
+      if (!sameAlbum && !similarTitle) {
+        return null
+      }
+
+      return {
+        song: candidate,
+        score: (sameAlbum ? 10 : 0) + (similarTitle ? 4 : 0) + (candidate.playCount > 0 ? 1 : 0),
+      }
+    })
+    .filter((candidate): candidate is { song: LibrarySong; score: number } => candidate != null)
+    .sort((left, right) => right.score - left.score || left.song.title.localeCompare(right.song.title))
+    .slice(0, 24)
+}
 
 interface MusicDialogProps {
   song: LibrarySong
@@ -51,7 +96,13 @@ export function MusicDialog({
   const [lyricsRawText, setLyricsRawText] = useState('')
   const [showLyricsTimestamps, setShowLyricsTimestamps] = useState(true)
   const [artworkUrl, setArtworkUrl] = useState(song.artworkUrl)
+  const [originalArtworkUrl, setOriginalArtworkUrl] = useState(song.artworkUrl)
   const [artworkSourcePath, setArtworkSourcePath] = useState('')
+  const [artworkMissing, setArtworkMissing] = useState(false)
+  const [originalArtworkMissing, setOriginalArtworkMissing] = useState(false)
+  const [artworkLoading, setArtworkLoading] = useState(true)
+  const [artworkRecommendation, setArtworkRecommendation] = useState<AlbumArtRecommendation | null>(null)
+  const [libraryArtworkPickerOpen, setLibraryArtworkPickerOpen] = useState(false)
   const [showArtworkDeleteConfirm, setShowArtworkDeleteConfirm] = useState(false)
   const [pendingSwitchLyrics, setPendingSwitchLyrics] = useState<PendingLyricsSnapshot | null>(null)
   const [loading, setLoading] = useState(true)
@@ -59,6 +110,7 @@ export function MusicDialog({
   const [saving, setSaving] = useState(false)
   const showNotificationButtons = useUndoableNotificationStore((state) => state.showButtons)
   const showNotification = useUndoableNotificationStore((state) => state.showMessage)
+  const librarySongs = useLibraryStore((state) => state.snapshot.songs)
   const dialogRef = useRef<HTMLElement | null>(null)
   const dialogScrollbarTrackRef = useRef<HTMLDivElement | null>(null)
   const lyricsScrollbarTrackRef = useRef<HTMLDivElement | null>(null)
@@ -85,6 +137,10 @@ export function MusicDialog({
   const playQueue = useMemo(() => {
     return queueSongIds.includes(song.id) ? queueSongIds : [...queueSongIds, song.id]
   }, [queueSongIds, song.id])
+  const albumArtRecommendationCandidates = useMemo(
+    () => getAlbumArtRecommendationCandidates(song, librarySongs),
+    [librarySongs, song],
+  )
   const getCurrentTrackTitle = useCallback(() => {
     if (currentTrackId == null) {
       return ''
@@ -209,16 +265,77 @@ export function MusicDialog({
         }
       })
 
-    void window.smplayer?.getSongArtworkSnapshot(song.id).then((snapshot) => {
-      if (!canceled) {
-        setArtworkUrl(snapshot.artworkUrl)
-      }
-    })
+    setArtworkLoading(true)
+    setArtworkUrl(song.artworkUrl)
+    setOriginalArtworkUrl(song.artworkUrl)
+    setArtworkSourcePath('')
+    setArtworkMissing(false)
+    setOriginalArtworkMissing(false)
+    setArtworkRecommendation(null)
+    setShowArtworkDeleteConfirm(false)
+    void window.smplayer?.getSongArtworkSnapshot(song.id)
+      .then((snapshot) => {
+        if (!canceled) {
+          const missing = snapshot.source === 'none' || !snapshot.artworkUrl
+          setArtworkUrl(snapshot.artworkUrl)
+          setOriginalArtworkUrl(snapshot.artworkUrl)
+          setArtworkMissing(missing)
+          setOriginalArtworkMissing(missing)
+        }
+      })
+      .finally(() => {
+        if (!canceled) {
+          setArtworkLoading(false)
+        }
+      })
 
     return () => {
       canceled = true
     }
   }, [showNotification, song.id, t])
+
+  useEffect(() => {
+    if (!artworkMissing) {
+      setArtworkRecommendation(null)
+      return
+    }
+
+    let canceled = false
+    const candidateSongIds = albumArtRecommendationCandidates.map((candidate) => candidate.song.id)
+    if (candidateSongIds.length === 0) {
+      setArtworkRecommendation(null)
+      return
+    }
+
+    void window.smplayer?.getSongArtworkSnapshots(candidateSongIds).then((snapshots) => {
+      if (canceled) {
+        return
+      }
+
+      const snapshotsBySongId = new Map(snapshots.map((snapshot) => [snapshot.songId, snapshot]))
+      const recommendationCandidate = albumArtRecommendationCandidates.find((candidate) => {
+        const snapshot = snapshotsBySongId.get(candidate.song.id)!
+        return snapshot.source !== 'none' && snapshot.sourcePath !== '' && snapshot.sourceUrl !== ''
+      })
+      if (!recommendationCandidate) {
+        setArtworkRecommendation(null)
+        return
+      }
+
+      const snapshot = snapshotsBySongId.get(recommendationCandidate.song.id)!
+      setArtworkRecommendation({
+        song: recommendationCandidate.song,
+        artworkUrl: snapshot.artworkUrl,
+        sourceUrl: snapshot.sourceUrl,
+        sourcePath: snapshot.sourcePath,
+        artistName: getDisplayArtists(recommendationCandidate.song, t('common.artistUnknown')),
+      })
+    })
+
+    return () => {
+      canceled = true
+    }
+  }, [albumArtRecommendationCandidates, artworkMissing, t])
 
   useEffect(() => {
     const previousTrackId = previousTrackIdRef.current
@@ -333,6 +450,8 @@ export function MusicDialog({
       || current.year !== original.year
       || current.playCount !== original.playCount
   }
+  const propertiesDirty = properties != null && originalProperties != null &&
+    isPropertiesModified(properties, originalProperties)
 
   const switchMode = (nextMode: SongDialogMode) => {
     setActiveMode(nextMode)
@@ -538,6 +657,8 @@ export function MusicDialog({
 
         setArtworkUrl(result.artworkUrl)
         setArtworkSourcePath(result.sourcePath)
+        setArtworkMissing(false)
+        setArtworkRecommendation(null)
         setShowArtworkDeleteConfirm(false)
       }
     } catch {
@@ -560,6 +681,9 @@ export function MusicDialog({
     setSaving(true)
     try {
       await window.smplayer?.saveSongArtwork(song.id, artworkSourcePath)
+      setOriginalArtworkUrl(artworkUrl)
+      setOriginalArtworkMissing(false)
+      setArtworkSourcePath('')
       showNotification(t('song.albumArtSaved'))
       onSaved?.()
     } catch {
@@ -579,7 +703,10 @@ export function MusicDialog({
     try {
       await window.smplayer?.deleteSongArtwork(song.id)
       setArtworkUrl('')
+      setOriginalArtworkUrl('')
       setArtworkSourcePath('')
+      setArtworkMissing(true)
+      setOriginalArtworkMissing(true)
       setShowArtworkDeleteConfirm(false)
       showNotification(t('song.albumArtDeleted'))
       onSaved?.()
@@ -602,15 +729,43 @@ export function MusicDialog({
     }
   }
 
+  const applyAlbumArtRecommendation = (recommendation: AlbumArtRecommendation) => {
+    setArtworkUrl(recommendation.sourceUrl)
+    setArtworkSourcePath(recommendation.sourcePath)
+    setArtworkMissing(false)
+    setShowArtworkDeleteConfirm(false)
+  }
+
+  const applyAlbumArtLibraryChoice = (choice: AlbumArtLibraryChoice) => {
+    setArtworkUrl(choice.sourceUrl)
+    setArtworkSourcePath(choice.sourcePath)
+    setArtworkMissing(false)
+    setArtworkRecommendation(null)
+    setShowArtworkDeleteConfirm(false)
+    setLibraryArtworkPickerOpen(false)
+  }
+
+  const resetArtwork = () => {
+    setArtworkUrl(originalArtworkUrl)
+    setArtworkSourcePath('')
+    setArtworkMissing(originalArtworkMissing)
+    setArtworkRecommendation(null)
+    setShowArtworkDeleteConfirm(false)
+    showNotification(t('song.albumArtReset'))
+  }
+
   const resetActivePage = () => {
-    if (activeMode === 'properties' && originalProperties) {
+    if (activeMode === 'properties' && propertiesDirty && originalProperties) {
       setProperties(originalProperties)
       showNotification(t('song.propertiesReset'))
     }
-    if (activeMode === 'lyrics') {
+    if (activeMode === 'lyrics' && lyricsDirty) {
       updateLyricsEditorRawText(originalLyricsText)
       requestAnimationFrame(scrollLyricsToTop)
       showNotification(t('song.lyricsReset'))
+    }
+    if (activeMode === 'album-art' && artworkSourcePath) {
+      resetArtwork()
     }
   }
 
@@ -769,7 +924,8 @@ export function MusicDialog({
   }
 
   return (
-    <PopupDialog
+    <>
+      <PopupDialog
       t={t}
       dialogRef={dialogRef}
       overlayClassName="music-dialog-overlay MusicDialogOverlay"
@@ -817,7 +973,7 @@ export function MusicDialog({
             properties={properties}
             onPlay={play}
             onSave={() => void saveProperties()}
-            onReset={resetActivePage}
+            {...(propertiesDirty ? { onReset: resetActivePage } : {})}
             onClearPlayCount={() => void clearPlayCount()}
             onUpdateProperty={updateProperty}
             onUpdateArtistCell={updateArtistCell}
@@ -840,7 +996,7 @@ export function MusicDialog({
             onSearch={() => void searchLyrics()}
             onImport={() => void importLyrics()}
             onSave={() => void saveLyrics()}
-            onReset={resetActivePage}
+            {...(lyricsDirty ? { onReset: resetActivePage } : {})}
             onToggleTimestamps={toggleLyricsTimestamps}
             onLyricsTextChange={(nextText) => {
               setLyricsText(nextText)
@@ -854,17 +1010,33 @@ export function MusicDialog({
           <MusicAlbumArtControl
             song={song}
             t={t}
+            loading={artworkLoading}
             saving={saving}
-            showBusy={saving}
+            showBusy={artworkLoading || saving}
             artworkUrl={artworkUrl}
+            recommendation={artworkMissing ? artworkRecommendation : null}
             showDeleteConfirm={showArtworkDeleteConfirm}
+            onApplyRecommendation={applyAlbumArtRecommendation}
             onChangeArtwork={() => void changeArtwork()}
+            onChooseArtworkFromLibrary={() => setLibraryArtworkPickerOpen(true)}
             onSaveArtwork={() => void saveArtwork()}
+            {...(artworkSourcePath ? { onResetArtwork: resetArtwork } : {})}
             onRequestDelete={() => setShowArtworkDeleteConfirm(true)}
             onConfirmDelete={() => void deleteArtwork()}
             onCancelDelete={() => setShowArtworkDeleteConfirm(false)}
           />
         ) : null}
-    </PopupDialog>
+      </PopupDialog>
+      {libraryArtworkPickerOpen ? (
+        <AlbumArtLibraryPickerDialog
+          albumName={song.album}
+          currentSong={song}
+          songs={librarySongs}
+          t={t}
+          onApply={applyAlbumArtLibraryChoice}
+          onClose={() => setLibraryArtworkPickerOpen(false)}
+        />
+      ) : null}
+    </>
   )
 }

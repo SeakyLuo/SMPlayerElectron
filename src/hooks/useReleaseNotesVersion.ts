@@ -12,6 +12,7 @@ export function useReleaseNotesVersion({
   lastReleaseNotesVersion,
 }: ReleaseNotesVersionOptions) {
   const [releaseNotesDialogVersion, setReleaseNotesDialogVersion] = useState('')
+  const [releaseNotesChecked, setReleaseNotesChecked] = useState(false)
   const releaseNotesCheckedRef = useRef(false)
 
   useEffect(() => {
@@ -20,18 +21,27 @@ export function useReleaseNotesVersion({
     }
 
     releaseNotesCheckedRef.current = true
-    void window.smplayer?.getAppInfo().then((appInfo) => {
+    const api = window.smplayer
+    if (!api) {
+      setReleaseNotesChecked(true)
+      return
+    }
+
+    void api.getAppInfo().then((appInfo) => {
       if (
         lastReleaseNotesVersion &&
         compareAppVersions(appInfo.version, lastReleaseNotesVersion) > 0
       ) {
         setReleaseNotesDialogVersion(appInfo.version)
       }
+    }).finally(() => {
+      setReleaseNotesChecked(true)
     })
   }, [lastReleaseNotesVersion, ready])
 
   return {
     releaseNotesDialogVersion,
+    releaseNotesChecked,
     setReleaseNotesDialogVersion,
   }
 }

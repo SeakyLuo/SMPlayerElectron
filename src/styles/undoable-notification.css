@@ -27,6 +27,11 @@
   padding-right: 16px;
 }
 
+.operation-notification {
+  top: auto;
+  bottom: calc(var(--player-height, 96px) + 18px);
+}
+
 .undoable-notification-actions {
   display: flex;
   align-items: center;

@@ -10,6 +10,21 @@
   app-region: no-drag;
 }
 
+.popup-dialog-mobile-titlebar {
+  display: none;
+}
+
+.popup-dialog-window-drag-strip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 138px;
+  z-index: 301;
+  height: 32px;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
 .song-dialog {
   width: min(780px, calc(100vw - 48px));
   height: min(760px, calc(100vh - 48px));
@@ -25,7 +40,7 @@
   app-region: no-drag;
 }
 
-.song-dialog button {
+.song-dialog button:not(:where(.search-form button, .search-history-panel button)) {
   -webkit-app-region: no-drag;
   app-region: no-drag;
   display: inline-flex;
@@ -44,11 +59,11 @@
   cursor: pointer;
 }
 
-.song-dialog button:disabled {
+.song-dialog button:not(:where(.search-form button, .search-history-panel button)):disabled {
   cursor: default;
 }
 
-.song-dialog button svg {
+.song-dialog button:not(:where(.search-form button, .search-history-panel button)) svg {
   width: 16px;
   height: 16px;
 }
@@ -74,7 +89,7 @@
   display: none;
 }
 
-.song-dialog button:hover {
+.song-dialog button:not(:where(.search-form button, .search-history-panel button)):hover {
   background: rgba(247, 250, 254, 0.98);
 }
 
@@ -85,6 +100,23 @@
   display: flex;
   gap: 0;
   padding: 22px 28px 18px;
+}
+
+.song-dialog-modebar {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.popup-dialog-toolbar {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.popup-dialog-toolbar button,
+.popup-dialog-toolbar input,
+.popup-dialog-toolbar textarea,
+.popup-dialog-toolbar select,
+.popup-dialog-toolbar a {
   -webkit-app-region: no-drag;
   app-region: no-drag;
 }
@@ -171,15 +203,733 @@
 .remote-share-dialog,
 .voice-assistant-help-dialog,
 .preference-modal,
-.release-notes-dialog {
+.release-notes-dialog,
+.artist-split-review-dialog,
+.album-art-library-picker-dialog {
   grid-template-rows: auto minmax(0, 1fr);
 }
 
 .remote-share-dialog .song-dialog-tabs,
 .voice-assistant-help-dialog .song-dialog-tabs,
 .preference-modal .song-dialog-tabs,
-.release-notes-dialog .song-dialog-tabs {
+.release-notes-dialog .song-dialog-tabs,
+.artist-split-review-dialog .song-dialog-tabs,
+.album-art-library-picker-dialog .song-dialog-tabs {
   align-items: center;
+}
+
+.album-art-library-picker-dialog {
+  width: min(860px, calc(100vw - 48px));
+  height: min(680px, calc(100vh - 48px));
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.album-art-library-picker-nav {
+  align-items: center;
+}
+
+.album-art-library-picker-nav .popup-dialog-title-block {
+  flex: 1 1 auto;
+}
+
+.album-art-library-picker {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 16px;
+  padding: 0 28px 0;
+}
+
+.album-art-library-picker-search-shell {
+  position: relative;
+  z-index: 5;
+}
+
+.album-art-library-picker-suggestions {
+  z-index: 330;
+}
+
+.album-art-library-picker-content {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  gap: 18px;
+}
+
+.album-art-library-picker-list-frame {
+  min-width: 0;
+  min-height: 0;
+}
+
+.album-art-library-picker-list {
+  min-height: 0;
+  height: 100%;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-right: 10px;
+}
+
+.album-art-library-picker-list .album-art-library-picker-source-item {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  height: 74px;
+  min-height: 74px;
+  max-height: 74px;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-strong);
+  font: inherit;
+  box-shadow: none;
+  outline: none;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.album-art-library-picker-list .album-art-library-picker-source-item:hover,
+.album-art-library-picker-list .album-art-library-picker-source-item:focus-visible,
+.album-art-library-picker-list .album-art-library-picker-source-item.is-selected {
+  border-color: rgba(var(--accent-rgb), 0.44);
+  background: rgba(var(--accent-rgb), 0.12);
+  box-shadow: none;
+}
+
+.album-art-library-picker-list .album-art-library-picker-artwork-wrap,
+.album-art-library-picker-list .album-art-library-picker-artwork {
+  width: 64px;
+  height: 64px;
+  flex: 0 0 64px;
+  border-radius: 6px;
+}
+
+.album-art-library-picker-list .album-art-library-picker-artwork-wrap {
+  position: relative;
+  display: block;
+}
+
+.album-art-library-picker-list .album-art-library-picker-artwork {
+  object-fit: cover;
+  box-shadow: none;
+}
+
+.album-art-library-picker-list .album-art-library-picker-source-item:hover .album-art-library-picker-artwork,
+.album-art-library-picker-list .album-art-library-picker-source-item:focus-visible .album-art-library-picker-artwork,
+.album-art-library-picker-list .album-art-library-picker-source-item.is-selected .album-art-library-picker-artwork {
+  box-shadow: none;
+}
+
+.album-art-library-picker-list .album-art-library-picker-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-self: center;
+  align-items: flex-start;
+  height: 64px;
+  gap: 3px;
+  padding: 0;
+  text-align: left;
+}
+
+.album-art-library-picker-list .album-art-library-picker-copy strong {
+  display: block;
+  max-width: 100%;
+  color: var(--text-strong);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 18px;
+  white-space: nowrap;
+  -webkit-line-clamp: unset;
+}
+
+.album-art-library-picker-list strong,
+.album-art-library-picker-list small,
+.album-art-library-picker-list .album-art-library-picker-copy span,
+.album-art-library-picker-preview strong,
+.album-art-library-picker-preview span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.album-art-library-picker-list small,
+.album-art-library-picker-list .album-art-library-picker-copy span,
+.album-art-library-picker-preview span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 16px;
+}
+
+.album-art-library-picker-message {
+  margin: 22px 0;
+  color: var(--muted);
+}
+
+.album-art-library-picker-preview {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  text-align: center;
+}
+
+.album-art-library-picker-preview .album-art-control {
+  width: min(220px, 100%);
+  height: min(220px, 100%);
+  aspect-ratio: 1 / 1;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.album-art-library-picker-preview strong,
+.album-art-library-picker-preview span {
+  max-width: 100%;
+}
+
+.album-art-library-picker-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 18px 28px 24px;
+}
+
+.artist-split-review-dialog {
+  width: min(760px, calc(100vw - 48px));
+  height: min(820px, calc(100vh - 32px));
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.artist-split-review-nav .popup-dialog-title-block {
+  flex: 1 1 auto;
+}
+
+.artist-split-review {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  padding: 0 28px;
+}
+
+.artist-split-review-content-frame {
+  min-height: 0;
+}
+
+.artist-split-review-content {
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding-right: 12px;
+}
+
+.artist-split-review-group {
+  display: grid;
+  gap: 8px;
+}
+
+.artist-split-review-group-header {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.song-dialog .artist-split-review-group-toggle {
+  width: auto;
+  min-height: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-strong);
+  padding: 0 2px;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.song-dialog .artist-split-review-group-toggle:hover,
+.song-dialog .artist-split-review-group-toggle:focus-visible {
+  background: transparent;
+  box-shadow: none;
+  color: var(--accent-strong);
+  outline: none;
+}
+
+.song-dialog .artist-split-review-group-toggle svg {
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+}
+
+.artist-split-review-group h3 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 16px;
+  font-weight: 760;
+}
+
+.song-dialog .artist-split-review-group-toggle > span {
+  color: var(--text-muted);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.song-dialog .artist-split-review-group-select {
+  width: auto;
+  height: 28px;
+  min-height: 28px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--accent-strong);
+  padding: 0 2px;
+  font-size: 13px;
+  font-weight: 720;
+}
+
+.song-dialog .artist-split-review-group-select:hover,
+.song-dialog .artist-split-review-group-select:focus-visible {
+  background: transparent;
+  box-shadow: none;
+  color: var(--accent);
+  outline: none;
+}
+
+.artist-split-review-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.artist-split-review-item {
+  position: relative;
+  min-height: 82px;
+  display: grid;
+  grid-template-columns: 22px 64px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  padding: 8px 10px;
+  color: var(--text-strong);
+  cursor: pointer;
+}
+
+.artist-split-review-item.is-editing {
+  align-items: start;
+}
+
+.artist-split-review-check,
+.artist-split-review-artwork,
+.artist-split-review-copy,
+.artist-split-review-row-actions {
+  position: relative;
+  z-index: 1;
+}
+
+.artist-split-review-item:hover,
+.artist-split-review-item:focus-within {
+  background: rgba(var(--accent-rgb), 0.08);
+}
+
+.artist-split-review-item.is-selected {
+  border-color: rgba(var(--accent-rgb), 0.44);
+  background: rgba(var(--accent-rgb), 0.12);
+}
+
+.artist-split-review-checkbox {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.artist-split-review-check {
+  display: inline-grid;
+  place-items: center;
+  align-self: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid rgba(126, 139, 154, 0.48);
+  border-radius: 5px;
+  color: #fff;
+  cursor: pointer;
+}
+
+.artist-split-review-item.is-editing .artist-split-review-check {
+  align-self: start;
+  margin-top: 23px;
+}
+
+.artist-split-review-check:focus-visible {
+  outline: 2px solid rgba(var(--accent-rgb), 0.34);
+  outline-offset: 2px;
+}
+
+.artist-split-review-check.is-selected {
+  border-color: rgba(var(--accent-rgb), 0.92);
+  background: rgb(var(--accent-rgb));
+}
+
+.artist-split-review-check svg {
+  width: 13px;
+  height: 13px;
+}
+
+.artist-split-review-artwork {
+  align-self: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 7px;
+  box-shadow: 0 10px 24px rgba(34, 46, 64, 0.16);
+}
+
+.artist-split-review-item.is-editing .artist-split-review-artwork {
+  align-self: start;
+}
+
+.artist-split-review-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.artist-split-review-copy strong,
+.artist-split-review-copy span,
+.artist-split-review-copy small,
+.artist-split-review-copy em {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artist-split-review-copy span,
+.artist-split-review-copy small {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.artist-split-review-copy strong {
+  font-size: 16px;
+}
+
+.artist-split-review-original,
+.artist-split-review-next {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.artist-split-review-original > span {
+  user-select: text;
+  cursor: text;
+}
+
+.artist-split-review-next.is-editing {
+  grid-template-columns: 48px minmax(0, 1fr);
+  align-items: start;
+  gap: 6px 8px;
+}
+
+.artist-split-review-next.is-editing > small {
+  grid-column: 1;
+  grid-row: 1;
+  line-height: 28px;
+}
+
+.artist-split-review-original > small,
+.artist-split-review-next > small {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.artist-split-review-next > span {
+  min-width: 0;
+  display: flex;
+  gap: 5px;
+}
+
+.artist-split-review-next > .artist-split-review-editor {
+  display: grid;
+}
+
+.artist-split-review-inline-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 5px;
+}
+
+.artist-split-review-next.is-editing > .artist-split-review-inline-actions {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.artist-split-review-next.is-editing > .artist-split-review-editor {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.artist-split-review-inline-actions button {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  max-width: 28px;
+  min-height: 28px;
+  max-height: 28px;
+  border: 1px solid rgba(126, 139, 154, 0.22);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--text-strong);
+  padding: 0;
+}
+
+.artist-split-review-inline-actions button:hover,
+.artist-split-review-inline-actions button:focus-visible {
+  background: rgba(var(--accent-rgb), 0.12);
+  color: var(--accent-strong);
+  outline: none;
+}
+
+.artist-split-review-next em {
+  max-width: 100%;
+  border-radius: 999px;
+  background: rgba(var(--accent-rgb), 0.12);
+  color: var(--accent-strong);
+  padding: 2px 7px;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 680;
+}
+
+.artist-split-review-next em.artist-split-review-merge-chip {
+  background: rgba(220, 38, 38, 0.14);
+  color: #dc2626;
+}
+
+body.night-mode .artist-split-review-next em.artist-split-review-merge-chip {
+  background: rgba(248, 113, 113, 0.18);
+  color: #f87171;
+}
+
+.artist-split-review-row-actions {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 0.14s ease;
+}
+
+.artist-split-review-item:hover .artist-split-review-row-actions,
+.artist-split-review-item:focus-within .artist-split-review-row-actions {
+  opacity: 1;
+}
+
+.artist-split-review-row-actions button,
+.artist-split-review-editor-cell button {
+  position: relative;
+  z-index: 2;
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  max-width: 28px;
+  min-height: 28px;
+  max-height: 28px;
+  box-sizing: border-box;
+  aspect-ratio: 1 / 1;
+  border: 1px solid rgba(126, 139, 154, 0.22);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--text-strong);
+  padding: 0;
+  cursor: pointer;
+}
+
+.artist-split-review-row-actions button {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  max-width: 34px;
+  min-height: 34px;
+  max-height: 34px;
+  border-radius: 8px;
+}
+
+.artist-split-review-row-actions button:hover,
+.artist-split-review-row-actions button:focus-visible,
+.artist-split-review-editor-cell button:hover,
+.artist-split-review-editor-cell button:focus-visible {
+  background: rgba(var(--accent-rgb), 0.12);
+  color: var(--accent-strong);
+  outline: none;
+}
+
+.artist-split-review-row-actions button:disabled {
+  cursor: default;
+  opacity: 0.44;
+}
+
+.artist-split-review-row-actions svg,
+.artist-split-review-editor-cell svg {
+  width: 15px;
+  height: 15px;
+}
+
+.artist-split-review-editor {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+}
+
+.artist-split-review-editor-cell {
+  position: relative;
+  min-width: 0;
+  display: block;
+}
+
+.artist-split-review-editor-cell input {
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  min-height: 36px;
+  max-height: 36px;
+  box-sizing: border-box;
+  border: 1px solid rgba(126, 139, 154, 0.24);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--text-strong);
+  padding: 0 38px 0 9px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.artist-split-review-editor-cell button {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  max-width: 28px;
+  min-height: 28px;
+  max-height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+}
+
+.artist-split-review-editor-cell input:focus {
+  border-color: rgba(var(--accent-rgb), 0.5);
+  outline: none;
+}
+
+.artist-split-review-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 9px 28px 12px;
+}
+
+@media (max-width: 520px) {
+  .artist-split-review {
+    padding: 0 16px;
+  }
+
+  .artist-split-review-group-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 76px;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .song-dialog .artist-split-review-group-toggle {
+    width: 100%;
+    height: 40px;
+    min-height: 40px;
+    justify-content: center;
+    border: 1px solid rgba(190, 200, 214, 0.62);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.72);
+    box-shadow: 0 8px 18px rgba(40, 55, 76, 0.04);
+  }
+
+  .song-dialog .artist-split-review-group-select {
+    width: 76px;
+    height: 40px;
+    min-width: 76px;
+    max-width: 76px;
+    min-height: 40px;
+    max-height: 40px;
+    border: 1px solid rgba(190, 200, 214, 0.62);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.72);
+    padding: 0;
+    white-space: nowrap;
+  }
+
+  .artist-split-review-item {
+    min-height: 78px;
+    grid-template-columns: 22px 64px minmax(0, 1fr);
+    align-items: center;
+    padding: 8px 10px;
+  }
+
+  .artist-split-review-item.is-editing {
+    align-items: start;
+  }
+
+  .artist-split-review-row-actions {
+    grid-column: 4;
+    justify-self: end;
+    align-self: center;
+  }
+
+  .artist-split-review-original,
+  .artist-split-review-next {
+    grid-template-columns: 44px minmax(0, 1fr);
+  }
+
+  .artist-split-review-copy {
+    gap: 2px;
+  }
+
 }
 
 .release-notes-dialog .release-notes-list {
@@ -396,7 +1146,7 @@
   padding-top: 12px;
 }
 
-.song-dialog input,
+.song-dialog input:not(:where(.search-shell input)),
 .song-dialog textarea {
   min-width: 0;
   border: 1px solid rgba(192, 202, 216, 0.58);
@@ -407,7 +1157,7 @@
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65), 0 8px 18px rgba(37, 49, 67, 0.04);
 }
 
-.song-dialog input {
+.song-dialog input:not(:where(.search-shell input)) {
   width: 100%;
   height: 42px;
   padding: 0 12px;
@@ -422,7 +1172,7 @@
   scrollbar-width: none;
 }
 
-.song-dialog input:focus,
+.song-dialog input:not(:where(.search-shell input)):focus,
 .song-dialog textarea:focus {
   outline: none;
   border-color: rgba(var(--accent-rgb), 0.72);
@@ -432,7 +1182,7 @@
     0 8px 18px rgba(37, 49, 67, 0.04);
 }
 
-.song-dialog input::selection,
+.song-dialog input:not(:where(.search-shell input))::selection,
 .song-dialog textarea::selection {
   background: rgba(var(--accent-rgb), 0.22);
   color: var(--text-primary);
@@ -471,7 +1221,7 @@
   accent-color: var(--accent);
 }
 
-.song-dialog input:disabled,
+.song-dialog input:not(:where(.search-shell input)):disabled,
 .song-dialog textarea:disabled {
   border-color: rgba(190, 200, 214, 0.42);
   background: rgba(230, 235, 243, 0.68);
@@ -548,6 +1298,36 @@
   min-height: 0;
 }
 
+.song-dialog-artwork-shell {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.song-dialog-artwork-shell.is-loading .album-art-control {
+  opacity: 0;
+}
+
+.song-dialog-artwork-loading-placeholder,
+.song-dialog-artwork-loading {
+  background:
+    linear-gradient(135deg, rgba(var(--accent-rgb), 0.08), rgba(255, 255, 255, 0.78)),
+    var(--surface-artwork);
+}
+
+.song-dialog-artwork-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  box-shadow: 0 18px 42px rgba(32, 42, 58, 0.12);
+}
+
+.song-dialog-artwork-loading .song-dialog-loading {
+  margin: 0;
+}
+
 .song-dialog-artwork .album-art-control {
   width: min(340px, calc(100vw - 92px));
   height: min(340px, calc(100vw - 92px));
@@ -564,6 +1344,71 @@
   gap: 10px;
   color: var(--text-muted);
   font-weight: 650;
+}
+
+.album-art-recommendation {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  max-width: min(300px, calc(100vw - 124px));
+  text-align: center;
+  line-height: 1.35;
+}
+
+.album-art-recommendation-button {
+  position: relative;
+  appearance: none;
+  margin: 0 3px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent-strong);
+  font: inherit;
+  font-weight: 760;
+  cursor: pointer;
+}
+
+.album-art-recommendation-button:hover,
+.album-art-recommendation-button:focus-visible {
+  text-decoration: underline;
+  outline: none;
+}
+
+.album-art-recommendation-preview {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 12px);
+  z-index: 4;
+  width: 128px;
+  height: 128px;
+  padding: 8px;
+  border: 1px solid rgba(126, 139, 154, 0.2);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 18px 44px rgba(38, 51, 68, 0.22);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 6px);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.album-art-recommendation-preview .album-art-control {
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.album-art-recommendation-button:hover .album-art-recommendation-preview,
+.album-art-recommendation-button:focus-visible .album-art-recommendation-preview {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+body.night-mode .app-shell .album-art-recommendation-preview {
+  border-color: var(--night-border);
+  background: rgba(28, 34, 43, 0.96);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.36);
 }
 
 .song-dialog-warning {
@@ -602,6 +1447,78 @@
     box-sizing: border-box;
   }
 
+  .popup-dialog-window-drag-strip {
+    display: none;
+  }
+
+  .popup-dialog-mobile-titlebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 138px;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    height: var(--dialog-toolbar-offset);
+    padding: 0 138px 0 8px;
+    box-sizing: border-box;
+    color: var(--text-primary);
+    -webkit-app-region: no-drag !important;
+    app-region: no-drag !important;
+  }
+
+  .popup-dialog-mobile-back-button {
+    position: relative;
+    z-index: 10001;
+    width: 40px;
+    height: var(--dialog-toolbar-offset);
+    min-width: 40px;
+    min-height: var(--dialog-toolbar-offset);
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    background: transparent;
+    color: inherit;
+    box-shadow: none;
+    cursor: pointer;
+    pointer-events: auto;
+    -webkit-app-region: no-drag !important;
+    app-region: no-drag !important;
+  }
+
+  .popup-dialog-mobile-back-button:hover,
+  .popup-dialog-mobile-back-button:focus-visible {
+    background: var(--top-titlebar-back-hover-background);
+    outline: none;
+  }
+
+  .popup-dialog-mobile-back-button:active {
+    background: rgba(var(--accent-rgb), 0.12);
+  }
+
+  .popup-dialog-mobile-back-button svg {
+    width: var(--top-titlebar-back-icon-size);
+    height: var(--top-titlebar-back-icon-size);
+  }
+
+  .popup-dialog-mobile-titlebar span {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    padding: 0 10px 0 6px;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: var(--dialog-toolbar-offset);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    user-select: none;
+    pointer-events: auto;
+    -webkit-app-region: no-drag !important;
+    app-region: no-drag !important;
+  }
+
   .song-dialog {
     width: 100vw;
     height: 100vh;
@@ -620,19 +1537,7 @@
   }
 
   .song-dialog-tabs .song-dialog-icon-button {
-    position: fixed;
-    top: 0;
-    left: 8px;
-    z-index: 306;
-    width: 40px;
-    height: var(--dialog-toolbar-offset);
-    min-width: 40px;
-    min-height: var(--dialog-toolbar-offset);
-    margin: 0 10px 0 0;
-    border: 0;
-    border-radius: 0;
-    background: transparent !important;
-    box-shadow: none;
+    display: none;
   }
 
   .song-dialog-tabs .song-dialog-icon-button:hover {
@@ -648,22 +1553,7 @@
   }
 
   .song-dialog .dialog-titlebar-title {
-    position: fixed;
-    top: 0;
-    left: 54px;
-    right: 138px;
-    z-index: 305;
-    display: block;
-    overflow: hidden;
-    color: var(--text-primary);
-    font-size: 13px;
-    font-weight: 500;
-    line-height: var(--dialog-toolbar-offset);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    user-select: none;
-    -webkit-app-region: drag;
-    app-region: drag;
+    display: none;
   }
 
   .song-dialog-tabs button:not(.song-dialog-icon-button):nth-child(1) {
@@ -700,7 +1590,8 @@
   .remote-share-dialog .song-dialog-tabs,
   .voice-assistant-help-dialog .song-dialog-tabs,
   .preference-modal .song-dialog-tabs,
-  .release-notes-dialog .song-dialog-tabs {
+  .release-notes-dialog .song-dialog-tabs,
+  .album-art-library-picker-dialog .song-dialog-tabs {
     display: flex;
     padding: calc(var(--dialog-toolbar-offset) + 12px) 12px 10px;
   }
@@ -711,6 +1602,153 @@
 
   .voice-assistant-help-dialog .release-notes-list {
     padding: 0 12px 28px;
+  }
+
+  .artist-split-review {
+    padding: 0 12px;
+  }
+
+  .artist-split-review-content {
+    padding-right: 0;
+  }
+
+  .artist-split-review-scrollbar {
+    right: -12px;
+    width: 16px;
+  }
+
+  .artist-split-review-scrollbar .custom-scrollbar-thumb {
+    right: 6px;
+    left: 5px;
+  }
+
+  .artist-split-review-scrollbar .custom-scrollbar-thumb:hover {
+    right: 5px;
+    left: 4px;
+  }
+
+  .artist-split-review-footer {
+    padding: 12px 12px 20px;
+  }
+
+  .album-art-library-picker-dialog {
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  .album-art-library-picker {
+    gap: 12px;
+    padding: 0 12px;
+  }
+
+  .album-art-library-picker-content {
+    display: block;
+    min-height: 0;
+  }
+
+  .album-art-library-picker-list-frame {
+    height: 100%;
+  }
+
+  .album-art-library-picker-scrollbar {
+    right: -12px;
+    width: 16px;
+  }
+
+  .album-art-library-picker-scrollbar .custom-scrollbar-thumb {
+    right: 6px;
+    left: 5px;
+  }
+
+  .album-art-library-picker-scrollbar .custom-scrollbar-thumb:hover {
+    right: 5px;
+    left: 4px;
+  }
+
+  .album-art-library-picker-list {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 4px 0 12px;
+  }
+
+  .album-art-library-picker-list .album-art-library-picker-source-item {
+    box-sizing: border-box;
+    width: 100%;
+    height: 92px;
+    min-height: 92px;
+    max-height: 92px;
+    display: grid;
+    grid-template-columns: 84px minmax(0, 1fr);
+    align-items: center;
+    justify-content: stretch;
+    gap: 10px;
+    border: 0;
+    border-radius: 9px;
+    padding: 4px;
+    background: transparent;
+    box-shadow: none;
+    color: var(--text-strong);
+    transition:
+      background-color 120ms ease,
+      box-shadow 120ms ease,
+      color 120ms ease;
+  }
+
+  .album-art-library-picker-list .album-art-library-picker-source-item:hover,
+  .album-art-library-picker-list .album-art-library-picker-source-item:focus-visible,
+  .album-art-library-picker-list .album-art-library-picker-source-item.is-selected {
+    border: 0;
+    background: rgba(var(--accent-rgb), 0.08);
+    box-shadow:
+      0 8px 18px rgba(29, 42, 60, 0.1),
+      inset 0 0 0 1px rgba(var(--accent-rgb), 0.16);
+  }
+
+  .album-art-library-picker-list .album-art-control {
+    width: 100%;
+    height: 100%;
+  }
+
+  .album-art-library-picker-list .album-art-library-picker-artwork-wrap,
+  .album-art-library-picker-list .album-art-library-picker-artwork {
+    width: 84px;
+    height: 84px;
+    border-radius: 6px;
+  }
+
+  .album-art-library-picker-list .album-art-library-picker-copy {
+    gap: 3px;
+    align-self: center;
+    height: 84px;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .album-art-library-picker-list strong {
+    display: -webkit-box;
+    color: currentColor;
+    font-size: 15px;
+    font-weight: 650;
+    line-height: 18px;
+    white-space: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .album-art-library-picker-list small {
+    font-size: 13px;
+    line-height: 16px;
+  }
+
+  .album-art-library-picker-preview {
+    display: none;
+  }
+
+  .album-art-library-picker-footer {
+    padding: 12px 12px 20px;
   }
 
   .song-dialog-lyrics-scrollbar {
@@ -801,14 +1839,14 @@ body.night-mode .song-dialog {
   box-shadow: 0 26px 80px rgba(0, 0, 0, 0.48);
 }
 
-body.night-mode .song-dialog button {
+body.night-mode .song-dialog button:not(:where(.search-form button, .search-history-panel button)) {
   border-color: var(--night-border);
   background: rgba(255, 255, 255, 0.065);
   color: var(--night-text);
   box-shadow: none;
 }
 
-body.night-mode .song-dialog button:hover {
+body.night-mode .song-dialog button:not(:where(.search-form button, .search-history-panel button)):hover {
   background: rgba(var(--accent-rgb), 0.16);
   color: color-mix(in srgb, var(--accent) 72%, #f5fbff 28%);
 }
@@ -833,7 +1871,7 @@ body.night-mode .song-dialog-artwork .album-art-control-fallback {
   color: var(--night-muted);
 }
 
-body.night-mode .song-dialog input,
+body.night-mode .song-dialog input:not(:where(.search-shell input)),
 body.night-mode .song-dialog textarea {
   border-color: var(--night-border);
   background: rgba(255, 255, 255, 0.065);
@@ -841,7 +1879,7 @@ body.night-mode .song-dialog textarea {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055);
 }
 
-body.night-mode .song-dialog input:focus,
+body.night-mode .song-dialog input:not(:where(.search-shell input)):focus,
 body.night-mode .song-dialog textarea:focus {
   border-color: rgba(var(--accent-rgb), 0.72);
   box-shadow:
@@ -849,13 +1887,13 @@ body.night-mode .song-dialog textarea:focus {
     inset 0 1px 0 rgba(255, 255, 255, 0.055);
 }
 
-body.night-mode .song-dialog input::selection,
+body.night-mode .song-dialog input:not(:where(.search-shell input))::selection,
 body.night-mode .song-dialog textarea::selection {
   background: rgba(var(--accent-rgb), 0.34);
   color: var(--night-text);
 }
 
-body.night-mode .song-dialog input:disabled,
+body.night-mode .song-dialog input:not(:where(.search-shell input)):disabled,
 body.night-mode .song-dialog textarea:disabled {
   border-color: var(--night-border);
   background: rgba(255, 255, 255, 0.035);
@@ -875,6 +1913,13 @@ body.night-mode .song-dialog .song-dialog-artist-remove-button:hover {
 body.night-mode .song-dialog-warning {
   border-color: rgba(255, 188, 166, 0.28);
   background: rgba(88, 39, 32, 0.32);
+}
+
+body.night-mode .song-dialog-artwork-loading-placeholder,
+body.night-mode .song-dialog-artwork-loading {
+  background:
+    linear-gradient(135deg, rgba(var(--accent-rgb), 0.14), rgba(15, 20, 28, 0.9)),
+    var(--surface-artwork);
 }
 
 body.night-mode .song-dialog-scrollbar-thumb {

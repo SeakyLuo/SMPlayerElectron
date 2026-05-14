@@ -4,33 +4,31 @@ import {
   app,
   globalShortcut,
   nativeImage,
-  shell,
   type BrowserWindow,
   type JumpListCategory,
 } from 'electron'
 
-import type { GlobalMediaCommand, PreferredLanguage } from '../src/shared/contracts'
+import type { GlobalMediaCommand, PreferredLanguage, TrayCommand } from '../src/shared/contracts'
 import { createTranslator } from '../src/shared/i18n'
 
 const windowsJumpListRecentLimit = 10
-const appDisplayName = 'Simple Melody Player'
 
 interface TrayControllerOptions {
   getWindow: () => BrowserWindow | null
   getAppIconPath: () => string
-  getRootPath: () => string
   getPreferredLanguage: () => PreferredLanguage
   getRecentPlayedSongPaths: (limit: number) => string[]
   hideWindow: () => void
   showWindow: () => void
   openAppRoute: (route: string) => void
-  sendTrayCommand: (command: 'scan-library') => void
+  sendTrayCommand: (command: TrayCommand) => void
   requestQuit: () => void
 }
 
 export class TrayController {
   private readonly options: TrayControllerOptions
   private tray: Tray | null = null
+  private isPlaying = false
 
   constructor(options: TrayControllerOptions) {
     this.options = options
@@ -59,63 +57,49 @@ export class TrayController {
 
     const window = this.options.getWindow()
     const isWindowVisible = Boolean(window?.isVisible())
-    const rootPath = this.options.getRootPath()
+    const t = createTranslator(this.options.getPreferredLanguage(), app.getLocale())
     const contextMenu = Menu.buildFromTemplate([
       {
-        label: isWindowVisible ? 'Hide window' : 'Show window',
+        label: isWindowVisible ? t('tray.hideWindow') : t('tray.showWindow'),
         click: () => {
           this.toggleWindowVisibility()
         },
       },
       { type: 'separator' },
       {
-        label: 'Play/Pause',
+        label: this.isPlaying ? t('player.pause') : t('player.play'),
         click: () => {
           this.sendGlobalMediaCommand('play-pause')
         },
       },
       {
-        label: 'Previous',
+        label: t('player.previous'),
         click: () => {
           this.sendGlobalMediaCommand('previous')
         },
       },
       {
-        label: 'Next',
+        label: t('player.next'),
         click: () => {
           this.sendGlobalMediaCommand('next')
         },
       },
       {
-        label: 'Stop',
+        label: t('nowPlaying.quickPlay'),
         click: () => {
-          this.sendGlobalMediaCommand('stop')
+          this.options.sendTrayCommand('quick-play')
         },
       },
       { type: 'separator' },
       {
-        label: 'Open library folder',
-        enabled: Boolean(rootPath),
-        click: () => {
-          void shell.openPath(rootPath)
-        },
-      },
-      {
-        label: 'Scan library',
-        enabled: Boolean(rootPath),
-        click: () => {
-          this.options.sendTrayCommand('scan-library')
-        },
-      },
-      {
-        label: 'Settings',
+        label: t('common.settings'),
         click: () => {
           this.options.openAppRoute('/settings')
         },
       },
       { type: 'separator' },
       {
-        label: 'Quit',
+        label: t('tray.quit'),
         click: () => {
           this.options.requestQuit()
         },
@@ -123,7 +107,16 @@ export class TrayController {
     ])
 
     this.tray.setContextMenu(contextMenu)
-    this.tray.setToolTip(appDisplayName)
+    this.tray.setToolTip(t('app.shell'))
+  }
+
+  setPlaybackState(isPlaying: boolean) {
+    if (this.isPlaying === isPlaying) {
+      return
+    }
+
+    this.isPlaying = isPlaying
+    this.updateMenu()
   }
 
   updateWindowsJumpList() {

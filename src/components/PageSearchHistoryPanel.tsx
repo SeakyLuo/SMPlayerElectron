@@ -1,6 +1,6 @@
-import { Icon } from './icons'
 import type { SearchHistoryEntry } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
+import { SearchHistoryPanel } from './SearchHistoryPanel'
 
 interface PageSearchHistoryPanelProps {
   entries: SearchHistoryEntry[]
@@ -18,50 +18,23 @@ export function PageSearchHistoryPanel({
   onClear,
 }: PageSearchHistoryPanelProps) {
   return (
-    <div className="search-history-panel page-search-history-panel">
-      <div className="search-history-header">
-        <span>{t('sidebar.recentSearches')}</span>
-        <button
-          type="button"
-          onMouseDown={(event) => {
-            event.preventDefault()
-          }}
-          onClick={onClear}
-        >
-          {t('common.clear')}
-        </button>
-      </div>
-      <div className="search-history-list">
-        {entries.map((entry) => (
-          <div className="search-history-item" key={entry.id}>
-            <button
-              type="button"
-              className="search-history-select"
-              onMouseDown={(event) => {
-                event.preventDefault()
-              }}
-              onClick={() => {
-                onSelect(entry.query)
-              }}
-            >
-              <span>{entry.query}</span>
-            </button>
-            <button
-              type="button"
-              className="search-history-remove"
-              aria-label={t('sidebar.removeRecentSearch', { query: entry.query })}
-              onMouseDown={(event) => {
-                event.preventDefault()
-              }}
-              onClick={() => {
-                onRemove(entry.id)
-              }}
-            >
-              <Icon name="close" />
-            </button>
-          </div>
-        ))}
-      </div>
-    </div>
+    <SearchHistoryPanel
+      className="page-search-history-panel"
+      title={t('sidebar.recentSearches')}
+      clearLabel={t('common.clear')}
+      items={entries.map((entry) => ({
+        key: String(entry.id),
+        label: entry.query,
+        value: entry,
+      }))}
+      onClear={onClear}
+      onSelect={(item) => {
+        onSelect(item.value.query)
+      }}
+      onRemove={(item) => {
+        onRemove(item.value.id)
+      }}
+      getRemoveLabel={(item) => t('sidebar.removeRecentSearch', { query: item.value.query })}
+    />
   )
 }

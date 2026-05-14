@@ -24,6 +24,7 @@ import {
   cancelWindowsSpeechRecognition,
   recognizeWindowsSpeech,
 } from './services/windows-speech-recognition'
+import type { TrayCommand } from '../src/shared/contracts'
 import { registerAppIpc } from './ipc/app-ipc'
 import { registerDataIpc } from './ipc/data-ipc'
 import { registerLibraryIpc } from './ipc/library-ipc'
@@ -42,7 +43,6 @@ const windowController = new WindowController()
 const trayController = new TrayController({
   getWindow: () => mainWindow,
   getAppIconPath,
-  getRootPath: () => libraryService!.settingsService.getSettingsSnapshot().rootPath,
   getPreferredLanguage: () => libraryService!.settingsService.getSettingsSnapshot().preferredLanguage,
   getRecentPlayedSongPaths: (limit) => libraryService!.historyService.getRecentPlayedSongPaths(limit),
   hideWindow: () => hideMainWindow(),
@@ -123,7 +123,7 @@ function openAppRoute(route: string) {
   void mainWindow!.webContents.executeJavaScript(`window.location.hash = ${JSON.stringify(route)}`)
 }
 
-function sendTrayCommand(command: 'scan-library') {
+function sendTrayCommand(command: TrayCommand) {
   showMainWindow()
   mainWindow!.webContents.send('app:tray-command', command)
 }
@@ -155,6 +155,7 @@ app.whenReady().then(async () => {
 
   registerAppIpc({
     takePendingOpenSongIds: () => externalAudioFileOpener.takePendingSongIds(),
+    setTrayPlaybackState: (isPlaying) => trayController.setPlaybackState(isPlaying),
   })
   registerLibraryIpc({
     audioDialogExtensions,
@@ -197,6 +198,7 @@ app.whenReady().then(async () => {
   })
   registerDataIpc({
     getLibraryService: () => libraryService!,
+    updateTrayMenu: () => trayController.updateMenu(),
     updateWindowsJumpList: () => trayController.updateWindowsJumpList(),
   })
 
