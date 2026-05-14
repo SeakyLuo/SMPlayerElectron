@@ -74,15 +74,15 @@ body.night-mode .app-shell .player-bar {
     border-color 140ms ease;
 }
 
-.player-track:hover,
-.player-track:focus-visible {
+.player-track:not(:disabled):hover,
+.player-track:not(:disabled):focus-visible {
   background: rgba(33, 43, 58, 0.12);
   border-color: rgba(33, 43, 58, 0.08);
   outline: none;
 }
 
-body.night-mode .app-shell .player-track:hover,
-body.night-mode .app-shell .player-track:focus-visible {
+body.night-mode .app-shell .player-track:not(:disabled):hover,
+body.night-mode .app-shell .player-track:not(:disabled):focus-visible {
   background: rgba(255, 255, 255, 0.07);
   border-color: var(--night-border);
 }
@@ -152,8 +152,8 @@ body.night-mode .app-shell .player-track:focus-visible {
   filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.34));
 }
 
-.player-track:hover .player-artwork-overlay,
-.player-track:focus-visible .player-artwork-overlay {
+.player-track:not(:disabled):hover .player-artwork-overlay,
+.player-track:not(:disabled):focus-visible .player-artwork-overlay {
   opacity: 1;
 }
 

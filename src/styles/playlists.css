@@ -157,7 +157,7 @@
   background: #d13438;
 }
 
-.input-dialog-actions .remove-dialog-primary:hover {
+.input-dialog-actions .remove-dialog-primary:hover:not(:disabled) {
   background: #a4262c;
 }
 
@@ -197,6 +197,14 @@ body.night-mode .input-dialog-actions .input-dialog-primary {
 
 body.night-mode .input-dialog-actions .input-dialog-primary:hover {
   background: var(--accent-strong);
+}
+
+body.night-mode .input-dialog-actions .remove-dialog-primary {
+  background: #d13438;
+}
+
+body.night-mode .input-dialog-actions .remove-dialog-primary:hover:not(:disabled) {
+  background: #a4262c;
 }
 
 .grid-view-holder {

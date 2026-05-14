@@ -25,6 +25,7 @@ interface ReadAudioMetadataBatchOptions {
   concurrency: number
   isCanceled?: () => boolean
   canceledMessage?: string
+  onProgress?: (filePath: string, completedCount: number) => void
 }
 
 export async function readAudioMetadata(
@@ -80,6 +81,7 @@ export async function readAudioMetadataBatch(
 ) {
   const songs = new Array<ScannedSong>(audioFiles.length)
   let nextIndex = 0
+  let completedCount = 0
   const workerCount = Math.min(options.concurrency, audioFiles.length)
 
   await Promise.all(Array.from({ length: workerCount }, async () => {
@@ -91,7 +93,10 @@ export async function readAudioMetadataBatch(
         return
       }
 
-      songs[index] = await readAudioMetadata(thumbnailCachePath, audioFiles[index]!, useFilenameNotMusicName)
+      const audioFile = audioFiles[index]!
+      songs[index] = await readAudioMetadata(thumbnailCachePath, audioFile, useFilenameNotMusicName)
+      completedCount += 1
+      options.onProgress?.(audioFile, completedCount)
       throwIfCanceled(options.isCanceled, options.canceledMessage)
     }
   }))

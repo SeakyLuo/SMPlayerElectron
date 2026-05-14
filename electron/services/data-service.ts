@@ -21,8 +21,24 @@ import { ExternalAudioService } from './external-audio-service.ts'
 import { PendingSongDeleteService } from './pending-song-delete-service.ts'
 
 const NOW_PLAYING_JSON_FILENAME = 'NowPlaying.json'
+
+function tableExists(db: DatabaseSync, tableName: string) {
+  return Boolean(db.prepare(`
+    SELECT 1 AS found
+    FROM sqlite_master
+    WHERE type = 'table'
+      AND name = ?
+    LIMIT 1
+  `).get(tableName))
+}
+
+function tableHasRows(db: DatabaseSync, tableName: string) {
+  return Boolean(db.prepare(`SELECT 1 AS found FROM ${tableName} LIMIT 1`).get())
+}
+
 export class DataService {
   private readonly db: DatabaseSync
+  readonly shouldCheckStartupArtistSplits: boolean
   readonly remoteStore: RemoteStore
   readonly preferenceService: PreferenceService
   readonly historyService: HistoryService
@@ -47,6 +63,11 @@ export class DataService {
 
   constructor(userDataPath: string) {
     this.db = new DatabaseSync(join(userDataPath, SMPLAYER_DB_NAME))
+    const musicTableExistedOnStartup = tableExists(this.db, 'Music')
+    this.shouldCheckStartupArtistSplits =
+      musicTableExistedOnStartup &&
+      tableHasRows(this.db, 'Music') &&
+      !tableExists(this.db, 'MusicArtist')
     initializeSchema(this.db)
 
     this.remoteStore = new RemoteStore(this.db)

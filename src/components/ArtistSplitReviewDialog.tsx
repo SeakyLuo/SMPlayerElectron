@@ -84,6 +84,7 @@ export function ArtistSplitReviewPanel({
   const [mergeExpanded, setMergeExpanded] = useState(true)
   const [directExpanded, setDirectExpanded] = useState(true)
   const [possibleExpanded, setPossibleExpanded] = useState(true)
+  const [applying, setApplying] = useState(false)
   const contentFrameRef = useRef<HTMLDivElement | null>(null)
   const contentRef = useRef<HTMLDivElement | null>(null)
   const scrollbarTrackRef = useRef<HTMLDivElement | null>(null)
@@ -135,6 +136,14 @@ export function ArtistSplitReviewPanel({
       }
       return next
     })
+  }
+  const applySelectedSplits = async () => {
+    setApplying(true)
+    try {
+      await onApply(selectedSplits)
+    } finally {
+      setApplying(false)
+    }
   }
 
   return (
@@ -198,16 +207,20 @@ export function ArtistSplitReviewPanel({
         </div>
       </div>
       <div className="artist-split-review-footer">
-        <button type="button" onClick={onClose}>{t('local.keepArtistSplits')}</button>
+        <button type="button" disabled={applying} onClick={onClose}>{t('local.keepArtistSplits')}</button>
         <button
           type="button"
           className="song-dialog-primary-button"
-          disabled={selectedSplits.length === 0}
+          disabled={applying || selectedSplits.length === 0}
+          aria-busy={applying || undefined}
           onClick={() => {
-            void onApply(selectedSplits)
+            void applySelectedSplits()
           }}
         >
-          {t('local.applySelectedArtistSplits', { count: selectedSplits.length })}
+          {applying ? <span className="artist-split-review-submit-spinner" aria-hidden="true" /> : null}
+          {applying
+            ? t('local.applyingArtistSplits')
+            : t('local.applySelectedArtistSplits', { count: selectedSplits.length })}
         </button>
       </div>
     </>

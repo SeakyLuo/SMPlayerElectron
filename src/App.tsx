@@ -7,6 +7,8 @@ import { DialogHost } from './components/DialogHost'
 import { MediaControl } from './components/MediaControl'
 import { RenameDialog } from './components/RenameDialog'
 import { ReleaseNotesDialog } from './components/ReleaseNotesDialog'
+import { RemoveDialog } from './components/RemoveDialog'
+import { ScanProgressOverlay } from './components/ScanProgressOverlay'
 import { Sidebar } from './components/Sidebar'
 import { shuffleSongIds } from './components/headeredPlaylistModel'
 import { Icon } from './components/icons'
@@ -59,15 +61,6 @@ import {
 import { useLibraryStore } from './state/useLibraryStore'
 import { usePreferenceStore } from './state/usePreferenceStore'
 import './App.css'
-
-const STARTUP_ARTIST_SPLIT_DISMISS_KEY = 'smplayer.startupArtistSplitSuggestions.dismissed'
-
-function getArtistSplitSuggestionFingerprint(result: ScanLibraryResult) {
-  return [...result.artistSplitsApplied, ...result.artistSplitSuggestions, ...result.artistMergeSuggestions]
-    .map((item) => `${item.songId}:${item.artist}:${item.artists.join('|')}`)
-    .sort()
-    .join('\n')
-}
 
 function hasArtistUpdateSuggestions(result: ScanLibraryResult) {
   return result.artistSplitsApplied.length > 0 ||
@@ -131,16 +124,18 @@ function App() {
   const [immersiveHeaderTitle, setImmersiveHeaderTitle] = useState('')
   const [isLibraryQuickJumpOpen, setIsLibraryQuickJumpOpen] = useState(false)
   const [startupArtistSplitResult, setStartupArtistSplitResult] = useState<ScanLibraryResult | null>(null)
+  const [smartArtistFixPromptOpen, setSmartArtistFixPromptOpen] = useState(false)
+  const [smartArtistFixPromptLoading, setSmartArtistFixPromptLoading] = useState(false)
 
   useEffect(() => subscribePopupDialogStackChange(setPopupDialogDepth), [])
   const startupArtistSplitCheckedRef = useRef(false)
   const revealItem = useRevealItem()
 
   const snapshot = useLibraryStore((state) => state.snapshot)
-  const previousSmartMultiArtistRecognitionRef = useRef(snapshot.settings.smartMultiArtistRecognition)
   const loading = useLibraryStore((state) => state.loading)
   const pageLoading = loading || !initialLoadComplete
   const scanning = useLibraryStore((state) => state.scanning)
+  const scanProgress = useLibraryStore((state) => state.scanProgress)
   const moveProgress = useLibraryStore((state) => state.moveProgress)
   const error = useLibraryStore((state) => state.error)
   const refresh = useLibraryStore((state) => state.refresh)
@@ -149,6 +144,7 @@ function App() {
   const loadRecent = useLibraryStore((state) => state.loadRecent)
   const loadSongs = useLibraryStore((state) => state.loadSongs)
   const applyArtistSplits = useLibraryStore((state) => state.applyArtistSplits)
+  const cancelLocalFolderScan = useLibraryStore((state) => state.cancelLocalFolderScan)
   const setSongFavorite = useLibraryStore((state) => state.setSongFavorite)
   const createPlaylist = useLibraryStore((state) => state.createPlaylist)
   const deletePlaylist = useLibraryStore((state) => state.deletePlaylist)
@@ -281,15 +277,17 @@ function App() {
     }
 
     startupArtistSplitCheckedRef.current = true
-    void window.smplayer!.analyzeArtistSplits().then((result) => {
+    void window.smplayer!.shouldCheckStartupArtistSplits().then(async (shouldCheckStartupArtistSplits) => {
+      if (!shouldCheckStartupArtistSplits) {
+        return
+      }
+
+      const result = await window.smplayer!.analyzeArtistSplits()
       if (!hasArtistUpdateSuggestions(result)) {
         return
       }
 
-      const fingerprint = getArtistSplitSuggestionFingerprint(result)
-      if (window.localStorage.getItem(STARTUP_ARTIST_SPLIT_DISMISS_KEY) !== fingerprint) {
-        setStartupArtistSplitResult(result)
-      }
+      setStartupArtistSplitResult(result)
     })
   }, [
     initialLoadComplete,
@@ -298,20 +296,18 @@ function App() {
     snapshot.settings.smartMultiArtistRecognition,
   ])
 
-  useEffect(() => {
-    const wasEnabled = previousSmartMultiArtistRecognitionRef.current
-    previousSmartMultiArtistRecognitionRef.current = snapshot.settings.smartMultiArtistRecognition
-
-    if (!initialLoadComplete || wasEnabled || !snapshot.settings.smartMultiArtistRecognition) {
-      return
-    }
-
-    void window.smplayer!.analyzeArtistSplits().then((result) => {
+  const confirmSmartArtistFix = async () => {
+    setSmartArtistFixPromptLoading(true)
+    try {
+      const result = await window.smplayer!.analyzeArtistSplits()
+      setSmartArtistFixPromptOpen(false)
       if (hasArtistUpdateSuggestions(result)) {
         setStartupArtistSplitResult(result)
       }
-    })
-  }, [initialLoadComplete, snapshot.settings.smartMultiArtistRecognition])
+    } finally {
+      setSmartArtistFixPromptLoading(false)
+    }
+  }
 
   const playback = usePlaybackController(snapshot, initialLoadComplete)
   const playbackCommands = usePlaybackCommands({
@@ -1049,6 +1045,9 @@ function App() {
               submittedSearchQuery,
               searchResultsLoading,
               searchFolderPath,
+              requestSmartArtistFix: () => {
+                setSmartArtistFixPromptOpen(true)
+              },
             }}
           />
         </main>
@@ -1137,7 +1136,9 @@ function App() {
             void playbackCommands.playTrackInQueue(trackId, queueSongIds)
           }}
           onOpenNowPlaying={() => {
-            setShowNowPlayingFullPage(true)
+            if (currentPlaybackSong) {
+              setShowNowPlayingFullPage(true)
+            }
           }}
           isWindowFullScreen={appWindow.isWindowFullScreen}
           onToggleWindowFullScreen={appWindow.toggleWindowFullScreen}
@@ -1173,6 +1174,23 @@ function App() {
           }}
         />
       ) : null}
+      {smartArtistFixPromptOpen ? (
+        <RemoveDialog
+          t={t}
+          title={t('settings.smartMultiArtistFixTitle')}
+          message={t('settings.smartMultiArtistFixMessage')}
+          confirmText={t('settings.smartMultiArtistFixConfirm')}
+          pendingText={t('settings.smartMultiArtistFixPending')}
+          destructive={false}
+          submitting={smartArtistFixPromptLoading}
+          onCancel={() => {
+            setSmartArtistFixPromptOpen(false)
+          }}
+          onConfirm={() => {
+            void confirmSmartArtistFix()
+          }}
+        />
+      ) : null}
       {startupArtistSplitResult ? (
         <ArtistSplitReviewDialog
           t={t}
@@ -1181,21 +1199,24 @@ function App() {
           possibleSplits={startupArtistSplitResult.artistSplitSuggestions}
           mergeSuggestions={startupArtistSplitResult.artistMergeSuggestions}
           onApply={async (splits) => {
-            const fingerprint = getArtistSplitSuggestionFingerprint(startupArtistSplitResult)
             await applyArtistSplits(splits)
-            window.localStorage.setItem(STARTUP_ARTIST_SPLIT_DISMISS_KEY, fingerprint)
             setStartupArtistSplitResult(null)
           }}
           onClose={() => {
-            window.localStorage.setItem(
-              STARTUP_ARTIST_SPLIT_DISMISS_KEY,
-              getArtistSplitSuggestionFingerprint(startupArtistSplitResult),
-            )
             setStartupArtistSplitResult(null)
           }}
         />
       ) : null}
       <DialogHost t={t} />
+      {scanProgress ? (
+        <ScanProgressOverlay
+          progress={scanProgress}
+          t={t}
+          onCancel={() => {
+            void cancelLocalFolderScan()
+          }}
+        />
+      ) : null}
       {moveProgress ? <MoveProgressOverlay progress={moveProgress} t={t} /> : null}
       <InAppNotificationWithButton />
     </div>
