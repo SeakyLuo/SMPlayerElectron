@@ -121,6 +121,7 @@ const api: SmplayerApi = {
   prepareScanLocalFolder: (folderPath) => ipcRenderer.invoke('library:prepare-scan-folder', folderPath),
   scanLocalFolder: (folderPath, operationId, progressMax) => ipcRenderer.invoke('library:scan-folder', folderPath, operationId, progressMax),
   cancelScanLocalFolder: (operationId) => ipcRenderer.invoke('library:cancel-scan-folder', operationId),
+  analyzeArtistSplits: () => ipcRenderer.invoke('library:analyze-artist-splits'),
   applyArtistSplits: (splits) => ipcRenderer.invoke('library:apply-artist-splits', splits),
   onScanLocalFolderProgress: (callback) => {
     const listener = (_event: Electron.IpcRendererEvent, progress: Parameters<typeof callback>[0]) => {
@@ -145,6 +146,7 @@ const api: SmplayerApi = {
     }
   },
   takePendingOpenFiles: () => ipcRenderer.invoke('app:take-pending-open-files'),
+  setTrayPlaybackState: (isPlaying) => ipcRenderer.invoke('app:set-tray-playback-state', isPlaying),
   exportData: () => ipcRenderer.invoke('data:export'),
   importData: () => ipcRenderer.invoke('data:import'),
   sendFeedbackEmail: () => ipcRenderer.invoke('shell:send-feedback-email'),

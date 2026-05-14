@@ -127,9 +127,29 @@
   box-shadow: none;
 }
 
+.uwp-commandbar .uwp-commandbar-button.is-busy:disabled {
+  opacity: 0.8;
+}
+
 .uwp-commandbar .uwp-commandbar-button svg {
   width: 20px;
   height: 20px;
+}
+
+.uwp-commandbar .uwp-commandbar-button-spinner {
+  width: 18px;
+  height: 18px;
+  box-sizing: border-box;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: commandbar-button-spinner-rotate 760ms linear infinite;
+}
+
+@keyframes commandbar-button-spinner-rotate {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .uwp-commandbar .albums-sort-trigger {

@@ -8,6 +8,7 @@ import type {
   LocalFolderSortCriterion,
   ScanLibraryProgress,
 } from '../../src/shared/contracts'
+import { createTranslator } from '../../src/shared/i18n'
 import { SMPLAYER_DB_NAME } from '../services/constants'
 import { DataService } from '../services/data-service'
 import type { MoveConflictResolver } from '../services/local-item-service'
@@ -65,10 +66,12 @@ export function registerLibraryIpc(options: LibraryIpcOptions) {
     getSongService().updateSongPlayCount(songId, playCount),
   )
   ipcMain.handle('library:pick-album-artwork', async (_event, albumName: string) => {
+    const t = createArtworkDialogTranslator(options)
     const result = await showOpenDialog(options.getWindow(), {
-      title: 'Choose Album Artwork',
+      title: t('song.chooseAlbumArtwork'),
+      buttonLabel: t('common.open'),
       properties: ['openFile'],
-      filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp', 'bmp'] }],
+      filters: [{ name: t('song.artworkDialogImagesFilter'), extensions: artworkImageExtensions }],
     })
 
     if (!result.canceled) {
@@ -226,6 +229,9 @@ export function registerLibraryIpc(options: LibraryIpcOptions) {
   ipcMain.handle('library:cancel-scan-folder', (_event, operationId: string) => {
     canceledLocalFolderScanOperationIds.add(operationId)
   })
+  ipcMain.handle('library:analyze-artist-splits', () =>
+    getScanService().analyzeExistingArtistSplits(),
+  )
   ipcMain.handle('library:apply-artist-splits', (_event, splits) =>
     getSongService().applyArtistSplits(splits),
   )
@@ -274,13 +280,15 @@ export function registerLibraryIpc(options: LibraryIpcOptions) {
 }
 
 async function pickArtworkSource(options: LibraryIpcOptions, includeNoArtworkError: boolean) {
+  const t = createArtworkDialogTranslator(options)
   const result = await showOpenDialog(options.getWindow(), {
-    title: 'Choose Album Artwork',
+    title: t('song.chooseAlbumArtwork'),
+    buttonLabel: t('common.open'),
     properties: ['openFile'],
     filters: [
-      { name: 'Artwork or Music', extensions: ['jpg', 'jpeg', 'png', 'webp', 'bmp', ...options.audioDialogExtensions] },
-      { name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp', 'bmp'] },
-      { name: 'Music', extensions: options.audioDialogExtensions },
+      { name: t('song.artworkDialogArtworkOrMusicFilter'), extensions: [...artworkImageExtensions, ...options.audioDialogExtensions] },
+      { name: t('song.artworkDialogImagesFilter'), extensions: artworkImageExtensions },
+      { name: t('song.artworkDialogMusicFilter'), extensions: options.audioDialogExtensions },
     ],
   })
 
@@ -317,6 +325,13 @@ async function pickArtworkSource(options: LibraryIpcOptions, includeNoArtworkErr
       error: 'no-artwork',
     }
   }
+}
+
+const artworkImageExtensions = ['jpg', 'png', 'jpeg', 'webp', 'bmp']
+
+function createArtworkDialogTranslator(options: LibraryIpcOptions) {
+  const settings = options.getLibraryService().settingsService.getSettingsSnapshot()
+  return createTranslator(settings.preferredLanguage, app.getLocale())
 }
 
 async function showOpenDialog(window: BrowserWindow | null, options: OpenDialogOptions) {

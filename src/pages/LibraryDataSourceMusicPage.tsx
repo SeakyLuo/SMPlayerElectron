@@ -95,7 +95,7 @@ export function MusicDataSourceMusicPage({
     }
   }, [dataSource, t])
 
-  if (sourceLoading || !snapshot) {
+  if (!snapshot) {
     return (
       <section className="page-panel library-page">
         {sourceError || error ? <div className="error-banner">{sourceError ?? error}</div> : <LoadingState t={t} />}
@@ -108,7 +108,7 @@ export function MusicDataSourceMusicPage({
       snapshot={snapshot}
       t={t}
       songs={sortLibrarySongs(snapshot.songs, snapshot.settings.musicLibrarySort)}
-      loading={loading}
+      loading={loading || sourceLoading}
       scanning={scanning}
       error={sourceError ?? error}
       selectedTrackId={selectedTrackId}

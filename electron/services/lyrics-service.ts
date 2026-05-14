@@ -22,7 +22,7 @@ import type { SongService } from './song-service.ts'
 
 const LYRICS_REQUEST_TIMEOUT_MS = 10_000
 
-interface SongPathRow {
+export interface LyricsSongLookup {
   title: string
   artist: string
   album: string
@@ -80,6 +80,10 @@ export class LyricsService {
   async saveInternetLyricsToFile(songId: number) {
     const song = this.getSongLookup(songId)
 
+    return this.saveInternetLyricsForSong(song)
+  }
+
+  async saveInternetLyricsForSong(song: LyricsSongLookup) {
     const existingLyrics = await this.getExistingLyrics(song.path)
     if (existingLyrics.rawText.trim()) {
       return { status: 'skipped' as const }
@@ -121,7 +125,7 @@ export class LyricsService {
     return `${host}?q=${encodeURIComponent(searchQuery)}`
   }
 
-  private getSongLookup(songId: number): SongPathRow {
+  private getSongLookup(songId: number): LyricsSongLookup {
     const path = this.songService.getSongPath(songId)
     const song = this.db.prepare(`
       SELECT
@@ -132,7 +136,7 @@ export class LyricsService {
       WHERE Music.Id = ?
         AND Music.State = ?
       LIMIT 1
-    `).get(songId, ACTIVE_STATE.active) as Omit<SongPathRow, 'path'> | undefined
+    `).get(songId, ACTIVE_STATE.active) as Omit<LyricsSongLookup, 'path'> | undefined
 
     if (!song) {
       throw new Error('Song not found.')
@@ -367,7 +371,7 @@ export class LyricsService {
     }
   }
 
-  private async searchInternetLyrics(song: SongPathRow) {
+  private async searchInternetLyrics(song: LyricsSongLookup) {
     const songMid = await this.getSongMid(song)
     if (!songMid) {
       return ''
@@ -395,7 +399,7 @@ export class LyricsService {
       : stripLyricsTimestamps(rawLyrics)
   }
 
-  private async getSongMid(song: SongPathRow) {
+  private async getSongMid(song: LyricsSongLookup) {
     const attempts = this.buildLyricsSearchAttempts(song)
 
     for (const attempt of attempts) {
@@ -408,7 +412,7 @@ export class LyricsService {
     return ''
   }
 
-  private buildLyricsSearchAttempts(song: SongPathRow) {
+  private buildLyricsSearchAttempts(song: LyricsSongLookup) {
     const simplifiedTitle = this.removeBraces(song.title)
     const simplifiedArtist = this.removeBraces(song.artist)
     const attempts = [

@@ -31,6 +31,7 @@ interface CommandBarProps {
 
 interface CommandBarButtonProps {
   active?: boolean
+  busy?: boolean
   canOverflow?: boolean
   className?: string
   disabled?: boolean
@@ -263,6 +264,7 @@ export function CommandBarButton({
   active = false,
   ariaExpanded,
   ariaHasPopup,
+  busy = false,
   className,
   disabled,
   icon,
@@ -276,9 +278,10 @@ export function CommandBarButton({
 }: CommandBarButtonProps) {
   return (
     <button
-      className={clsx('uwp-commandbar-button', active && 'is-active', className)}
+      className={clsx('uwp-commandbar-button', active && 'is-active', busy && 'is-busy', className)}
       type={type}
       disabled={disabled}
+      aria-busy={busy || undefined}
       aria-label={showLabel ? undefined : label}
       title={title}
       aria-haspopup={ariaHasPopup}
@@ -287,7 +290,7 @@ export function CommandBarButton({
       onClick={onClick}
       onPointerDown={onPointerDown}
     >
-      <Icon name={icon} />
+      {busy ? <span className="uwp-commandbar-button-spinner" aria-hidden="true" /> : <Icon name={icon} />}
       {showLabel ? <span className="uwp-commandbar-button-label">{label}</span> : null}
     </button>
   )

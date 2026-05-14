@@ -14,7 +14,7 @@ import { RemoveDialog } from '../components/RemoveDialog'
 import { useFolderPreferenceMenuItem } from '../hooks/useFolderPreferenceMenuItem'
 import { useCustomScrollbar } from '../hooks/useCustomScrollbar'
 import { useSongsAddedUndo } from '../hooks/useSongsAddedUndo'
-import type { LibraryFolder, LibraryPlaylist, LibrarySong, ScanLibraryProgress, ScanLibraryResult } from '../shared/contracts'
+import type { ArtistSplitResultItem, LibraryFolder, LibraryPlaylist, LibrarySong, ScanLibraryProgress, ScanLibraryResult } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
 import { useLibraryStore } from '../state/useLibraryStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
@@ -73,7 +73,7 @@ interface LocalPageProps {
   onOpenFolder: (targetRelativePath: string) => void
   onRefreshFolder: (folderPath: string) => void | ScanLibraryResult | null | Promise<ScanLibraryResult | null | void>
   onCancelRefreshFolder: () => void
-  onApplyArtistSplits: (splits: ScanLibraryResult['artistSplitSuggestions']) => void | Promise<void>
+  onApplyArtistSplits: (splits: ArtistSplitResultItem[]) => void | Promise<void>
   onPlayTrack: (trackId: number, queueSongIds: number[]) => void
   onMoveToMusicOrPlay: (songId: number) => void
   onTogglePlayPause: () => void
@@ -752,22 +752,30 @@ export function LocalPage({
     }
   }
 
-  const applyFolderUpdateArtistSplits = async () => {
-    const suggestions = folderUpdateResultDialog?.result.artistSplitSuggestions ?? []
-    if (suggestions.length === 0) {
+  const applyFolderUpdateArtistSplits = async (splits: ArtistSplitResultItem[]) => {
+    if (splits.length === 0) {
       return
     }
 
-    await onApplyArtistSplits(suggestions)
+    await onApplyArtistSplits(splits)
     setFolderUpdateResultDialog((current) => current
-      ? {
-          ...current,
-          result: {
-            ...current.result,
-            artistSplitsApplied: [...current.result.artistSplitsApplied, ...suggestions],
-            artistSplitSuggestions: [],
-          },
-        }
+      ? (() => {
+          const mergeSongIds = new Set(current.result.artistMergeSuggestions.map((item) => item.songId))
+          return {
+            ...current,
+            result: {
+              ...current.result,
+              artistSplitsApplied: [
+                ...current.result.artistSplitsApplied,
+                ...splits.filter((split) => !mergeSongIds.has(split.songId)),
+              ],
+              artistSplitSuggestions: current.result.artistSplitSuggestions.filter((item) =>
+                !splits.some((split) => split.songId === item.songId)),
+              artistMergeSuggestions: current.result.artistMergeSuggestions.filter((item) =>
+                !splits.some((split) => split.songId === item.songId)),
+            },
+          }
+        })()
       : current)
   }
 
@@ -778,6 +786,7 @@ export function LocalPage({
           result: {
             ...current.result,
             artistSplitSuggestions: [],
+            artistMergeSuggestions: [],
           },
         }
       : current)

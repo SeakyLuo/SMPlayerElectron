@@ -33,7 +33,7 @@ export function MusicLyricsControl({
   onSearch: () => void
   onImport: () => void
   onSave: () => void
-  onReset: () => void
+  onReset?: () => void
   onToggleTimestamps: (checked: boolean) => void
   onLyricsTextChange: (value: string) => void
 }) {
@@ -43,7 +43,7 @@ export function MusicLyricsControl({
         <CommandBarButton icon="search" label={t('common.search')} className="SearchLyricsButton" disabled={loading || saving} onClick={onSearch} />
         <CommandBarButton icon="import" label={t('common.import')} className="ImportLyricsButton" disabled={loading || saving} onClick={onImport} />
         <CommandBarButton icon="save" label={t('settings.save')} className="song-dialog-primary-button save-lyrics-button SaveLyricsButton" disabled={loading || saving} onClick={onSave} />
-        <CommandBarButton icon="undo" label={t('common.reset')} className="reset-lyrics-button ResetLyricsButton" disabled={loading || saving} onClick={onReset} />
+        {onReset ? <CommandBarButton icon="undo" label={t('common.reset')} className="reset-lyrics-button ResetLyricsButton" disabled={loading || saving} onClick={onReset} /> : null}
         {lyricsCanToggleTimestamps ? (
           <label className="song-dialog-lyrics-timestamp-toggle">
             <input type="checkbox" checked={showLyricsTimestamps} disabled={loading || saving} onChange={(event) => onToggleTimestamps(event.currentTarget.checked)} />

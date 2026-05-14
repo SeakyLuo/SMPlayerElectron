@@ -11,6 +11,7 @@ import { Sidebar } from './components/Sidebar'
 import { shuffleSongIds } from './components/headeredPlaylistModel'
 import { Icon } from './components/icons'
 import { InAppNotificationWithButton } from './components/InAppNotificationWithButton'
+import { closeTopPopupDialog, subscribePopupDialogStackChange } from './components/popupDialogStack'
 import { useAppWindowController, useWindowControlsLight } from './hooks/useAppWindowController'
 import { useOpenFilesPlayback } from './hooks/useOpenFilesPlayback'
 import { usePlaybackCommands } from './hooks/usePlaybackCommands'
@@ -28,7 +29,8 @@ import { useUndoableNotificationStore } from './state/useUndoableNotificationSto
 import { LocalTitleGrid } from './pages/LocalTitleGrid'
 import { MiniModePage } from './pages/MiniModePage'
 import { NowPlayingFullPage } from './pages/NowPlayingFullPage'
-import type { LibrarySong } from './shared/contracts'
+import type { LibrarySong, ScanLibraryResult } from './shared/contracts'
+import { ArtistSplitReviewDialog } from './components/ArtistSplitReviewDialog'
 import { getDisplayArtists } from './shared/artists'
 import { createTranslator, resolveLocale } from './shared/i18n'
 import { getNextPlaylistName } from './shared/playlistNames'
@@ -57,6 +59,21 @@ import {
 import { useLibraryStore } from './state/useLibraryStore'
 import { usePreferenceStore } from './state/usePreferenceStore'
 import './App.css'
+
+const STARTUP_ARTIST_SPLIT_DISMISS_KEY = 'smplayer.startupArtistSplitSuggestions.dismissed'
+
+function getArtistSplitSuggestionFingerprint(result: ScanLibraryResult) {
+  return [...result.artistSplitsApplied, ...result.artistSplitSuggestions, ...result.artistMergeSuggestions]
+    .map((item) => `${item.songId}:${item.artist}:${item.artists.join('|')}`)
+    .sort()
+    .join('\n')
+}
+
+function hasArtistUpdateSuggestions(result: ScanLibraryResult) {
+  return result.artistSplitsApplied.length > 0 ||
+    result.artistSplitSuggestions.length > 0 ||
+    result.artistMergeSuggestions.length > 0
+}
 
 function App() {
   useTouchContextMenu()
@@ -102,6 +119,7 @@ function App() {
   const navigate = useNavigate()
   const navigationType = useNavigationType()
   const [navigationDepth, setNavigationDepth] = useState(0)
+  const [popupDialogDepth, setPopupDialogDepth] = useState(0)
   const [showNowPlayingFullPage, setShowNowPlayingFullPage] = useState(false)
   const [startupNightModeActive] = useState(() =>
     document.body.classList.contains('night-mode') || document.documentElement.classList.contains('night-mode'),
@@ -112,9 +130,14 @@ function App() {
   const [compactArtistTitle, setCompactArtistTitle] = useState('')
   const [immersiveHeaderTitle, setImmersiveHeaderTitle] = useState('')
   const [isLibraryQuickJumpOpen, setIsLibraryQuickJumpOpen] = useState(false)
+  const [startupArtistSplitResult, setStartupArtistSplitResult] = useState<ScanLibraryResult | null>(null)
+
+  useEffect(() => subscribePopupDialogStackChange(setPopupDialogDepth), [])
+  const startupArtistSplitCheckedRef = useRef(false)
   const revealItem = useRevealItem()
 
   const snapshot = useLibraryStore((state) => state.snapshot)
+  const previousSmartMultiArtistRecognitionRef = useRef(snapshot.settings.smartMultiArtistRecognition)
   const loading = useLibraryStore((state) => state.loading)
   const pageLoading = loading || !initialLoadComplete
   const scanning = useLibraryStore((state) => state.scanning)
@@ -125,7 +148,7 @@ function App() {
   const loadFolders = useLibraryStore((state) => state.loadFolders)
   const loadRecent = useLibraryStore((state) => state.loadRecent)
   const loadSongs = useLibraryStore((state) => state.loadSongs)
-  const scanLibrary = useLibraryStore((state) => state.scanLibrary)
+  const applyArtistSplits = useLibraryStore((state) => state.applyArtistSplits)
   const setSongFavorite = useLibraryStore((state) => state.setSongFavorite)
   const createPlaylist = useLibraryStore((state) => state.createPlaylist)
   const deletePlaylist = useLibraryStore((state) => state.deletePlaylist)
@@ -166,7 +189,7 @@ function App() {
     setShowNowPlayingFullPage(false)
   }, [])
   const appWindow = useAppWindowController({
-    onScanLibrary: scanLibrary,
+    onQuickPlay: playQuick,
     onEnterMiniMode: handleEnterMiniMode,
   })
   const settingsNightModeActive = snapshot.settings.nightMode === 'on' || (
@@ -239,11 +262,56 @@ function App() {
 
   const {
     releaseNotesDialogVersion,
+    releaseNotesChecked,
     setReleaseNotesDialogVersion,
   } = useReleaseNotesVersion({
     ready: initialLoadComplete,
     lastReleaseNotesVersion: snapshot.settings.lastReleaseNotesVersion,
   })
+
+  useEffect(() => {
+    if (
+      !initialLoadComplete ||
+      !releaseNotesChecked ||
+      releaseNotesDialogVersion ||
+      !snapshot.settings.smartMultiArtistRecognition ||
+      startupArtistSplitCheckedRef.current
+    ) {
+      return
+    }
+
+    startupArtistSplitCheckedRef.current = true
+    void window.smplayer!.analyzeArtistSplits().then((result) => {
+      if (!hasArtistUpdateSuggestions(result)) {
+        return
+      }
+
+      const fingerprint = getArtistSplitSuggestionFingerprint(result)
+      if (window.localStorage.getItem(STARTUP_ARTIST_SPLIT_DISMISS_KEY) !== fingerprint) {
+        setStartupArtistSplitResult(result)
+      }
+    })
+  }, [
+    initialLoadComplete,
+    releaseNotesChecked,
+    releaseNotesDialogVersion,
+    snapshot.settings.smartMultiArtistRecognition,
+  ])
+
+  useEffect(() => {
+    const wasEnabled = previousSmartMultiArtistRecognitionRef.current
+    previousSmartMultiArtistRecognitionRef.current = snapshot.settings.smartMultiArtistRecognition
+
+    if (!initialLoadComplete || wasEnabled || !snapshot.settings.smartMultiArtistRecognition) {
+      return
+    }
+
+    void window.smplayer!.analyzeArtistSplits().then((result) => {
+      if (hasArtistUpdateSuggestions(result)) {
+        setStartupArtistSplitResult(result)
+      }
+    })
+  }, [initialLoadComplete, snapshot.settings.smartMultiArtistRecognition])
 
   const playback = usePlaybackController(snapshot, initialLoadComplete)
   const playbackCommands = usePlaybackCommands({
@@ -252,6 +320,9 @@ function App() {
     currentQueueIndex: playback.currentQueueIndex,
     mode: playback.mode,
   })
+  useEffect(() => {
+    void window.smplayer?.setTrayPlaybackState(playback.isPlaying)
+  }, [playback.isPlaying])
   const {
     searchInput,
     submittedSearchQuery,
@@ -290,6 +361,10 @@ function App() {
   }
 
   const goBackFromSidebar = () => {
+    if (closeTopPopupDialog()) {
+      return
+    }
+
     if (isInAlbumDetail && navigationDepth === 0) {
       navigate('/albums', { replace: true })
       return
@@ -588,7 +663,7 @@ function App() {
   const isHeaderedPlaylistRoute = isInAlbumDetail ||
     location.pathname.startsWith('/playlists/') ||
     location.pathname.startsWith('/favorites')
-  const canNavigateBack = navigationDepth > 0 || isInAlbumDetail || isPlaylistDetailRoute(location.pathname)
+  const canNavigateBack = popupDialogDepth > 0 || navigationDepth > 0 || isInAlbumDetail || isPlaylistDetailRoute(location.pathname)
   const isNavigationRail = isNavigationMinimal ? !isMinimalNavigationOpen : isNavigationCollapsed
   const useCollapsedShellLayout = isNavigationMinimal || isNavigationRail
   const isNavigationOverlayOpen = isNavigationMinimal
@@ -622,6 +697,18 @@ function App() {
     setIsNavigationCollapsed((current) => !current)
   }
 
+  const closeNavigationOverlay = useCallback(() => {
+    if (!isNavigationOverlayOpen) {
+      return
+    }
+
+    if (isNavigationMinimal) {
+      setIsMinimalNavigationOpen(false)
+    } else {
+      setIsNavigationCollapsed(true)
+    }
+  }, [isNavigationMinimal, isNavigationOverlayOpen])
+
   const startMinimalTitlebarDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) {
       return
@@ -646,18 +733,14 @@ function App() {
         return
       }
 
-      if (isNavigationMinimal) {
-        setIsMinimalNavigationOpen(false)
-      } else {
-        setIsNavigationCollapsed(true)
-      }
+      closeNavigationOverlay()
     }
 
     document.addEventListener('pointerdown', closeNavigationOnOutsidePointerDown, true)
     return () => {
       document.removeEventListener('pointerdown', closeNavigationOnOutsidePointerDown, true)
     }
-  }, [isNavigationMinimal, isNavigationOverlayOpen])
+  }, [closeNavigationOverlay, isNavigationOverlayOpen])
 
   const playerControlBindings = {
     isPlaying: playback.isPlaying,
@@ -751,7 +834,7 @@ function App() {
         onGoBack={goBackFromSidebar}
         onNavigate={() => {
           setShowNowPlayingFullPage(false)
-          setIsMinimalNavigationOpen(false)
+          closeNavigationOverlay()
         }}
         onCreatePlaylist={() => {
           setIsCreatePlaylistDialogOpen(true)
@@ -779,13 +862,7 @@ function App() {
         onSearchChange={setSearchInput}
         onSearchCommit={(value, type) => {
           void commitSearchQuery(value, type)
-          if (isNavigationOverlayOpen) {
-            if (isNavigationMinimal) {
-              setIsMinimalNavigationOpen(false)
-            } else {
-              setIsNavigationCollapsed(true)
-            }
-          }
+          closeNavigationOverlay()
         }}
         onSearchClear={() => {
           setSearchInput('')
@@ -1093,6 +1170,28 @@ function App() {
           onClose={async () => {
             await updateSettings({ lastReleaseNotesVersion: releaseNotesDialogVersion })
             setReleaseNotesDialogVersion('')
+          }}
+        />
+      ) : null}
+      {startupArtistSplitResult ? (
+        <ArtistSplitReviewDialog
+          t={t}
+          title={t('local.startupArtistSplitSuggestionsTitle')}
+          directSplits={startupArtistSplitResult.artistSplitsApplied}
+          possibleSplits={startupArtistSplitResult.artistSplitSuggestions}
+          mergeSuggestions={startupArtistSplitResult.artistMergeSuggestions}
+          onApply={async (splits) => {
+            const fingerprint = getArtistSplitSuggestionFingerprint(startupArtistSplitResult)
+            await applyArtistSplits(splits)
+            window.localStorage.setItem(STARTUP_ARTIST_SPLIT_DISMISS_KEY, fingerprint)
+            setStartupArtistSplitResult(null)
+          }}
+          onClose={() => {
+            window.localStorage.setItem(
+              STARTUP_ARTIST_SPLIT_DISMISS_KEY,
+              getArtistSplitSuggestionFingerprint(startupArtistSplitResult),
+            )
+            setStartupArtistSplitResult(null)
           }}
         />
       ) : null}

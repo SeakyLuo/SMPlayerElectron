@@ -50,6 +50,7 @@ export function getRefreshResultMessage(result: ScanLibraryResult, t: Translator
     getRefreshChangeMessage(result.filesMoved, 'local.refreshMovedOne', 'local.refreshMovedMultiple', t),
     result.artistSplitsApplied.length > 0 ? t('local.refreshArtistSplitsAppliedMultiple', { count: result.artistSplitsApplied.length }) : '',
     result.artistSplitSuggestions.length > 0 ? t('local.refreshArtistSplitSuggestionsMultiple', { count: result.artistSplitSuggestions.length }) : '',
+    result.artistMergeSuggestions.length > 0 ? t('local.refreshArtistMergeSuggestionsMultiple', { count: result.artistMergeSuggestions.length }) : '',
   ].filter(Boolean)
 
   return messages.length > 0 ? messages.join(t('common.comma')) : t('local.refreshNoChange')
@@ -60,7 +61,8 @@ export function hasRefreshResultChanges(result: ScanLibraryResult) {
     result.filesRemoved.length > 0 ||
     result.filesMoved.length > 0 ||
     result.artistSplitsApplied.length > 0 ||
-    result.artistSplitSuggestions.length > 0
+    result.artistSplitSuggestions.length > 0 ||
+    result.artistMergeSuggestions.length > 0
 }
 
 function getUpdateResultFileTitle(filePath: string, folderPath: string) {

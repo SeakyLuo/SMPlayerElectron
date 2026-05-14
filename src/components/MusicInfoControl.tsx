@@ -57,7 +57,7 @@ export function MusicInfoControl({
   properties: SongPropertiesSnapshot | null
   onPlay: () => void
   onSave: () => void
-  onReset: () => void
+  onReset?: () => void
   onClearPlayCount: () => void
   onUpdateProperty: (key: keyof SongPropertiesSnapshot, value: string) => void
   onUpdateArtistCell: (index: number, value: string) => void
@@ -72,8 +72,8 @@ export function MusicInfoControl({
     <>
       <CommandBar className="song-dialog-commandbar music-info-control-commandbar MusicInfoControllerCommandBar" overflowLabel={t('player.more')}>
         <CommandBarButton icon={canPause ? 'pause' : 'play'} label={canPause ? t('context.pause') : t('context.play')} className={canPause ? 'PauseButton' : 'PlayButton'} onClick={onPlay} />
-        <CommandBarButton icon="save" label={t('settings.save')} className="song-dialog-primary-button save-music-properties-button SaveMusicPropertiesButton" disabled={controlsDisabled} onClick={onSave} />
-        <CommandBarButton icon="undo" label={t('common.reset')} className="reset-music-properties-button ResetMusicPropertiesButton" disabled={controlsDisabled} onClick={onReset} />
+        <CommandBarButton icon="save" label={t('settings.save')} className="song-dialog-primary-button save-music-properties-button SaveMusicPropertiesButton" disabled={controlsDisabled} busy={saving} onClick={onSave} />
+        {onReset ? <CommandBarButton icon="undo" label={t('common.reset')} className="reset-music-properties-button ResetMusicPropertiesButton" disabled={controlsDisabled} onClick={onReset} /> : null}
         {showBusy ? <div className="music-info-save-progress SaveProgress" /> : null}
       </CommandBar>
       <div className="song-dialog-body music-info-control-scroll-viewer MusicInfoController">

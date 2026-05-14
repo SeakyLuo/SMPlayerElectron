@@ -6,10 +6,11 @@ interface ArtworkImageProps {
   className: string
   title: string
   onError?: () => void
+  onLoad?: () => void
   renderFallback: () => ReactNode
 }
 
-export function ArtworkImage({ src, className, title, onError, renderFallback }: ArtworkImageProps) {
+export function ArtworkImage({ src, className, title, onError, onLoad, renderFallback }: ArtworkImageProps) {
   const [failedSrcs, setFailedSrcs] = useState<Set<string>>(new Set())
 
   if (!src || failedSrcs.has(src)) {
@@ -25,6 +26,7 @@ export function ArtworkImage({ src, className, title, onError, renderFallback }:
         setFailedSrcs((current) => new Set(current).add(src))
         onError?.()
       }}
+      onLoad={onLoad}
     />
   )
 }

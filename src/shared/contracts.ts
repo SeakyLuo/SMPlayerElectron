@@ -7,7 +7,7 @@ export interface AppInfo {
 
 export type PlaybackMode = 'once' | 'repeat' | 'repeat-one' | 'shuffle'
 export type GlobalMediaCommand = 'play-pause' | 'next' | 'previous' | 'stop'
-export type TrayCommand = 'scan-library' | 'show-window'
+export type TrayCommand = 'quick-play' | 'show-window'
 export type NotificationSendMode = 'music-changed' | 'never'
 export type NotificationDisplayMode = 'reminder' | 'normal' | 'quick'
 export type NightMode = 'auto' | 'on' | 'never'
@@ -53,6 +53,8 @@ export type SongArtworkSource = 'cached' | 'embedded' | 'shell' | 'none'
 export interface SongArtworkSnapshot {
   songId: number
   artworkUrl: string
+  sourceUrl: string
+  sourcePath: string
   source: SongArtworkSource
 }
 
@@ -431,6 +433,7 @@ export interface ScanLibraryResult {
   filesMoved: string[]
   artistSplitsApplied: ArtistSplitResultItem[]
   artistSplitSuggestions: ArtistSplitResultItem[]
+  artistMergeSuggestions: ArtistSplitResultItem[]
 }
 
 export interface ArtistSplitResultItem {
@@ -590,10 +593,12 @@ export interface SmplayerApi {
   prepareScanLocalFolder: (folderPath: string) => Promise<ScanLocalFolderPreparation>
   scanLocalFolder: (folderPath: string, operationId?: string, progressMax?: number) => Promise<ScanLibraryResult>
   cancelScanLocalFolder: (operationId: string) => Promise<void>
+  analyzeArtistSplits: () => Promise<ScanLibraryResult>
   applyArtistSplits: (splits: ArtistSplitResultItem[]) => Promise<void>
   onScanLocalFolderProgress: (callback: (progress: ScanLibraryProgress) => void) => () => void
   onMoveLocalItemsProgress: (callback: (progress: MoveLocalItemsProgress) => void) => () => void
   takePendingOpenFiles: () => Promise<number[]>
+  setTrayPlaybackState: (isPlaying: boolean) => Promise<void>
   exportData: () => Promise<DataTransferResult>
   importData: () => Promise<DataTransferResult>
   sendFeedbackEmail: () => Promise<void>

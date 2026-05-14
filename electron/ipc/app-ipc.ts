@@ -4,11 +4,15 @@ import type { AppInfo } from '../../src/shared/contracts'
 
 interface AppIpcOptions {
   takePendingOpenSongIds: () => number[]
+  setTrayPlaybackState: (isPlaying: boolean) => void
 }
 
 export function registerAppIpc(options: AppIpcOptions) {
   ipcMain.handle('app:get-info', () => getAppInfo())
   ipcMain.handle('app:take-pending-open-files', () => options.takePendingOpenSongIds())
+  ipcMain.handle('app:set-tray-playback-state', (_event, isPlaying: boolean) => {
+    options.setTrayPlaybackState(isPlaying)
+  })
 }
 
 function getAppInfo(): AppInfo {

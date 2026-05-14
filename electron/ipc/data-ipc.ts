@@ -13,6 +13,7 @@ import type { DataService } from '../services/data-service'
 
 interface DataIpcOptions {
   getLibraryService: () => DataService
+  updateTrayMenu: () => void
   updateWindowsJumpList: () => void
 }
 
@@ -106,6 +107,7 @@ export function registerDataIpc(options: DataIpcOptions) {
   })
   ipcMain.handle('settings:update', (_event, update) => {
     const result = getSettingsService().updateSettings(update)
+    options.updateTrayMenu()
     options.updateWindowsJumpList()
     return result
   })

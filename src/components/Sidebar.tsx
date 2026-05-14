@@ -7,6 +7,8 @@ import { Icon, type IconName } from './icons'
 import { MenuFlyout } from './MenuFlyout'
 import { getPlaylistCardMenuItems } from './PlaylistMenuItems'
 import { RenameDialog } from './RenameDialog'
+import { SearchField } from './SearchField'
+import { SearchHistoryPanel } from './SearchHistoryPanel'
 import type { LibraryPlaylist, SearchHistoryEntry, SearchHistoryType } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
 
@@ -257,127 +259,65 @@ export function Sidebar({
         <Icon name="menu" />
       </button>
 
-      <div className="search-shell">
-        <label htmlFor="app-search">{t('common.search')}</label>
-        <div className="search-field-shell">
-          <form
-            className={`search-form${searchQuery ? ' has-query' : ''}`}
-            onSubmit={(event) => {
-              event.preventDefault()
-              if (collapsed) {
-                expandAndFocusSearch()
-                return
-              }
+      <SearchField
+        id="app-search"
+        label={t('common.search')}
+        value={searchQuery}
+        placeholder={t('common.search')}
+        searchLabel={t('common.search')}
+        clearLabel={t('common.clear')}
+        inputRef={searchInputRef}
+        onSubmit={(event) => {
+          event.preventDefault()
+          if (collapsed) {
+            expandAndFocusSearch()
+            return
+          }
 
-              commitSearch(searchQuery)
-            }}
-          >
-            <button
-              className="search-commit-button"
-              type="submit"
-              data-tooltip={t('common.search')}
-              onClick={(event) => {
-                if (!collapsed) {
-                  return
-                }
+          commitSearch(searchQuery)
+        }}
+        onCommitButtonClick={(event) => {
+          if (!collapsed) {
+            return
+          }
 
-                event.preventDefault()
-                expandAndFocusSearch()
+          event.preventDefault()
+          expandAndFocusSearch()
+        }}
+        onFocus={() => {
+          setIsSearchFocused(true)
+        }}
+        onBlur={() => {
+          setIsSearchFocused(false)
+        }}
+        onValueChange={onSearchChange}
+        onClear={onSearchClear}
+        dropdown={showRecentSearches ? (
+          <>
+            <div className="dropdown-dismiss-layer" onPointerDown={() => setIsSearchFocused(false)} />
+            <SearchHistoryPanel
+              title={t('sidebar.recentSearches')}
+              clearLabel={t('common.clear')}
+              items={visibleRecentSearches.map((entry) => ({
+                key: String(entry.id),
+                label: entry.query,
+                value: entry,
+              }))}
+              onClear={onRecentSearchesClear}
+              onSelect={(item) => {
+                onSearchChange(item.value.query)
+                commitSearch(item.value.query, item.value.type)
               }}
-            >
-              <Icon name="search" />
-            </button>
-            <input
-              ref={searchInputRef}
-              id="app-search"
-              type="search"
-              placeholder={t('common.search')}
-              value={searchQuery}
-              onFocus={() => {
-                setIsSearchFocused(true)
+              onRemove={(item) => {
+                onRecentSearchRemove(item.value.id)
               }}
-              onBlur={() => {
-                setIsSearchFocused(false)
-              }}
-              onChange={(event) => {
-                onSearchChange(event.currentTarget.value)
-              }}
+              getRemoveLabel={(item) => t('sidebar.removeRecentSearch', {
+                query: item.value.query,
+              })}
             />
-            {searchQuery ? (
-              <button
-                className="search-clear-button"
-                type="button"
-                title={t('common.clear')}
-                aria-label={t('common.clear')}
-                onMouseDown={(event) => {
-                  event.preventDefault()
-                }}
-                onClick={() => {
-                  onSearchClear()
-                }}
-              >
-                <Icon name="close" />
-              </button>
-            ) : null}
-          </form>
-
-          {showRecentSearches ? (
-            <>
-              <div className="dropdown-dismiss-layer" onPointerDown={() => setIsSearchFocused(false)} />
-              <div className="search-history-panel">
-                <div className="search-history-header">
-                  <span>{t('sidebar.recentSearches')}</span>
-                  <button
-                    type="button"
-                    onMouseDown={(event) => {
-                      event.preventDefault()
-                    }}
-                    onClick={() => {
-                      onRecentSearchesClear()
-                    }}
-                  >
-                    {t('common.clear')}
-                  </button>
-                </div>
-                <div className="search-history-list">
-                  {visibleRecentSearches.map((entry) => (
-                    <div className="search-history-item" key={entry.id}>
-                      <button
-                        type="button"
-                        className="search-history-select"
-                        onMouseDown={(event) => {
-                          event.preventDefault()
-                        }}
-                        onClick={() => {
-                          onSearchChange(entry.query)
-                          commitSearch(entry.query, entry.type)
-                        }}
-                      >
-                        <span>{entry.query}</span>
-                      </button>
-                      <button
-                        type="button"
-                        className="search-history-remove"
-                        aria-label={t('sidebar.removeRecentSearch', {
-                          query: entry.query,
-                        })}
-                        onMouseDown={(event) => {
-                          event.preventDefault()
-                        }}
-                        onClick={() => {
-                          onRecentSearchRemove(entry.id)
-                        }}
-                      >
-                        <Icon name="close" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </>
-          ) : null}
-        </div>
-      </div>
+          </>
+        ) : null}
+      />
 
       <nav className="nav-section" aria-label="Library sections">
         <span className="nav-section-label">{t('sidebar.library')}</span>
