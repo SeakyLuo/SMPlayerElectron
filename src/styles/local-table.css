@@ -1688,6 +1688,23 @@ body.night-mode .folder-update-result-item {
   color: var(--night-text);
 }
 
+body.night-mode .song-dialog .folder-update-result-group-toggle {
+  color: var(--night-text);
+}
+
+body.night-mode .song-dialog .folder-update-result-group-toggle > span {
+  color: var(--night-text);
+}
+
+body.night-mode .song-dialog .folder-update-result-group-toggle svg {
+  color: var(--night-muted);
+}
+
+body.night-mode .song-dialog .folder-update-result-group-toggle:hover,
+body.night-mode .song-dialog .folder-update-result-group-toggle:focus-visible {
+  color: color-mix(in srgb, var(--accent) 72%, #f5fbff 28%);
+}
+
 body.night-mode .folder-update-result-actions button {
   border-color: var(--night-border);
   background: rgba(255, 255, 255, 0.07);
@@ -1782,4 +1799,8 @@ body.night-mode .app-shell .local-content-section-count {
   color: currentColor;
   opacity: 0.72;
   font-weight: 650;
+}
+
+body.night-mode .folder-update-result-song-title {
+  color: var(--night-text);
 }

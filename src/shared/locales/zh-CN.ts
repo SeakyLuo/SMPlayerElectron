@@ -595,7 +595,7 @@
     'settings.notificationModeNormal': '普通',
     'settings.notificationModeQuick': '快速',
     'settings.notificationModeReminder': '提醒',
-    'settings.notificationSend': '发送通知：',
+    'settings.notificationSend': '发送通知',
     'settings.notificationSendMusicChanged': '音乐变更',
     'settings.notificationSendNever': '永不发送',
     'settings.nightMode': '夜间模式',
