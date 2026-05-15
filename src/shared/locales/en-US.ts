@@ -620,7 +620,7 @@
     'settings.notificationModeNormal': 'Normal',
     'settings.notificationModeQuick': 'Quick',
     'settings.notificationModeReminder': 'Reminder',
-    'settings.notificationSend': 'Send Notification:',
+    'settings.notificationSend': 'Send Notification',
     'settings.notificationSendMusicChanged': 'Music Changed',
     'settings.notificationSendNever': 'Never',
     'settings.nightMode': 'Night mode',

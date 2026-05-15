@@ -1,13 +1,15 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 import { ArtworkImage } from './ArtworkImage'
 import { DefaultAlbumArtwork } from './DefaultAlbumArtwork'
+import { CustomScrollbar } from './CustomScrollbar'
 import { Icon } from './icons'
 import { PopupDialog } from './PopupDialog'
 import type { AppSettingsUpdate, MusicData, LyricsRequestMode } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
 import { getDisplayArtists } from '../shared/artists'
 import { useSongArtwork } from '../hooks/useSongArtwork'
+import { useCustomScrollbar } from '../hooks/useCustomScrollbar'
 import type { LyricsBatchDetailItem, LyricsBatchDetailResult } from '../state/useLyricsBatchStore'
 import { useLyricsBatchStore } from '../state/useLyricsBatchStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
@@ -96,26 +98,99 @@ function LyricsSelectRow<T extends string>({
   options: Array<{ value: T; label: string }>
   onChange: (value: T) => void
 }) {
+  const [open, setOpen] = useState(false)
+  const [openUpward, setOpenUpward] = useState(false)
+  const [dropdownMaxHeight, setDropdownMaxHeight] = useState<number | undefined>(undefined)
+  const menuRef = useRef<HTMLDivElement | null>(null)
+  const triggerRef = useRef<HTMLButtonElement | null>(null)
+  const optionsRef = useRef<HTMLSpanElement | null>(null)
+  const selectedOption = options.find((option) => option.value === value)
+
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+
+    const closeMenu = (event: PointerEvent) => {
+      const target = event.target
+      if (target instanceof Node && menuRef.current?.contains(target)) {
+        return
+      }
+
+      setOpen(false)
+    }
+
+    document.addEventListener('pointerdown', closeMenu, true)
+    return () => {
+      document.removeEventListener('pointerdown', closeMenu, true)
+    }
+  }, [open])
+
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current || !optionsRef.current) {
+      return
+    }
+
+    const workspaceContent = menuRef.current?.closest('.workspace-content') as HTMLElement | null
+    const boundaryRect = workspaceContent?.getBoundingClientRect()
+    const triggerRect = triggerRef.current.getBoundingClientRect()
+    const optionsRect = optionsRef.current.getBoundingClientRect()
+    const dropdownHeight = optionsRect.height || Math.max(options.length * 38 + 12, 120)
+    const boundaryTop = boundaryRect?.top ?? 8
+    const boundaryBottom = boundaryRect?.bottom ?? (window.innerHeight - 8)
+    const spaceBelow = Math.max(0, boundaryBottom - triggerRect.bottom - 6)
+    const spaceAbove = Math.max(0, triggerRect.top - boundaryTop - 6)
+    const shouldOpenUpward = spaceBelow < dropdownHeight && spaceAbove > spaceBelow
+    const availableSpace = shouldOpenUpward ? spaceAbove : spaceBelow
+
+    setOpenUpward(shouldOpenUpward)
+    setDropdownMaxHeight(Math.max(120, Math.floor(availableSpace)))
+  }, [open, options.length])
+
   return (
-    <label className="settings-row settings-row-with-control">
+    <div className="settings-row settings-row-with-control" ref={menuRef}>
       <span className="settings-row-copy">
         <strong>{label}</strong>
       </span>
-      <select
-        className="settings-path-input"
-        style={{ minWidth: '220px' }}
-        value={value}
-        onChange={(event) => {
-          onChange(event.currentTarget.value as T)
-        }}
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </label>
+      <span className="settings-select-menu">
+        <button
+          ref={triggerRef}
+          type="button"
+          className={open ? 'settings-select-trigger is-open' : 'settings-select-trigger'}
+          onClick={() => {
+            setOpen((current) => !current)
+          }}
+        >
+          <span>{selectedOption?.label}</span>
+          <Icon name="chevronDown" />
+        </button>
+        {open ? (
+          <>
+            <span className="dropdown-dismiss-layer" onPointerDown={() => setOpen(false)} />
+            <span
+              ref={optionsRef}
+              className={openUpward ? 'settings-select-options is-open-upward' : 'settings-select-options'}
+              style={dropdownMaxHeight ? { maxHeight: `${dropdownMaxHeight}px` } : undefined}
+            >
+              {options.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={option.value === value ? 'is-selected' : ''}
+                  onClick={() => {
+                    onChange(option.value)
+                    setOpen(false)
+                  }}
+                >
+                  <Icon name={option.value === value ? 'check' : 'blank'} />
+                  <span>{option.label}</span>
+                </button>
+              ))}
+            </span>
+          </>
+        ) : null}
+      </span>
+    </div>
   )
 }
 
@@ -532,6 +607,15 @@ function LyricsBatchDetailsDialog({
     after: string
   }>>({})
   const [collapsedGroups, setCollapsedGroups] = useState<Partial<Record<LyricsBatchDetailResult, boolean>>>({})
+  const scrollFrameRef = useRef<HTMLDivElement | null>(null)
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null)
+  const scrollbarTrackRef = useRef<HTMLDivElement | null>(null)
+  const onScrollbarPointerDown = useCustomScrollbar({
+    frameRef: scrollFrameRef,
+    scrollContainerRef,
+    scrollbarTrackRef,
+    refreshDependencies: [groupedDetails],
+  })
   const selectedDetail = useMemo(
     () => (selectedDetailId ? details.find((detail) => detail.id === selectedDetailId) ?? null : null),
     [details, selectedDetailId],
@@ -638,8 +722,8 @@ function LyricsBatchDetailsDialog({
         </div>
       )}
     >
-      <div className="lyrics-detail-dialog-content">
-        <div className="lyrics-detail-group-list">
+      <div className="lyrics-detail-dialog-content custom-scrollbar-frame" ref={scrollFrameRef}>
+        <div className="lyrics-detail-group-list custom-scrollbar-container" ref={scrollContainerRef}>
           {groupedDetails.map((group) => (
             <LyricsBatchDetailsGroup
               key={group.result}
@@ -662,6 +746,11 @@ function LyricsBatchDetailsDialog({
             />
           ))}
         </div>
+        <CustomScrollbar
+          className="lyrics-detail-dialog-scrollbar"
+          scrollbarTrackRef={scrollbarTrackRef}
+          onThumbPointerDown={onScrollbarPointerDown}
+        />
       </div>
     </PopupDialog>
   )
@@ -805,6 +894,36 @@ function LyricsDetailArtwork({
   )
 }
 
+function LyricsScrollablePane({
+  className,
+  children,
+}: {
+  className: string
+  children: ReactNode
+}) {
+  const frameRef = useRef<HTMLDivElement | null>(null)
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null)
+  const scrollbarTrackRef = useRef<HTMLDivElement | null>(null)
+  const onScrollbarPointerDown = useCustomScrollbar({
+    frameRef,
+    scrollContainerRef,
+    scrollbarTrackRef,
+  })
+
+  return (
+    <div className={`${className}-frame custom-scrollbar-frame`} ref={frameRef}>
+      <div className={`${className} custom-scrollbar-container`} ref={scrollContainerRef}>
+        {children}
+      </div>
+      <CustomScrollbar
+        className={`${className}-scrollbar`}
+        scrollbarTrackRef={scrollbarTrackRef}
+        onThumbPointerDown={onScrollbarPointerDown}
+      />
+    </div>
+  )
+}
+
 function LyricsDetailExpandedPanel({
   t,
   detail,
@@ -855,9 +974,9 @@ function LyricsDetailExpandedPanel({
                 <span className="lyrics-detail-compare-header-badge is-old">{t('settings.lyricsBatchOldVersion')}</span>
               </div>
             </header>
-            <div className="lyrics-detail-compare-scroll">
+            <LyricsScrollablePane className="lyrics-detail-compare-scroll">
               <pre>{beforeLyrics.trim() ? beforeLyrics : t('settings.lyricsBatchDetailNoLyrics')}</pre>
-            </div>
+            </LyricsScrollablePane>
           </section>
           <span className="lyrics-detail-compare-arrow" aria-hidden="true">
             <Icon name="arrowRight" />
@@ -869,16 +988,18 @@ function LyricsDetailExpandedPanel({
                 <span className="lyrics-detail-compare-header-badge is-new">{t('settings.lyricsBatchNewVersion')}</span>
               </div>
             </header>
-            <div className="lyrics-detail-compare-scroll">
+            <LyricsScrollablePane className="lyrics-detail-compare-scroll">
               <pre>{afterLyrics.trim() ? afterLyrics : t('settings.lyricsBatchDetailNoLyrics')}</pre>
-            </div>
+            </LyricsScrollablePane>
           </section>
         </div>
       ) : null}
       {expandedState?.loading ? <p>{t('nowPlaying.loading')}</p> : null}
       {expandedState?.error ? <p>{t('settings.lyricsBatchDetailLoadFailed')}</p> : null}
       {!isOverwritten && !expandedState?.loading && !expandedState?.error ? (
-        <pre className="lyrics-detail-plain-text">{afterLyrics.trim() ? afterLyrics : t('settings.lyricsBatchDetailNoLyrics')}</pre>
+        <LyricsScrollablePane className="lyrics-detail-plain-text">
+          <pre>{afterLyrics.trim() ? afterLyrics : t('settings.lyricsBatchDetailNoLyrics')}</pre>
+        </LyricsScrollablePane>
       ) : null}
     </div>
   )
