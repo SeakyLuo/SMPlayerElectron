@@ -64,6 +64,10 @@ const paths = {
     <circle key="pin" cx="12" cy="12" r="0.7" fill="currentColor" stroke="none" />,
   ],
   arrowLeft: [<path key="arrow" d="m15 18-6-6 6-6" />],
+  arrowRight: [
+    <path key="line" d="M6 12h11" />,
+    <path key="head" d="m13 7 5 5-5 5" />,
+  ],
   chevronDown: [<path key="chevron" d="m7 10 5 5 5-5" />],
   chevronRight: [<path key="chevron" d="m10 7 5 5-5 5" />],
   chevronUp: [<path key="chevron" d="m7 14 5-5 5 5" />],

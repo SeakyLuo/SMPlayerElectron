@@ -16,6 +16,10 @@
   --surface-card-hover: rgba(var(--accent-rgb), 0.08);
   --surface-card-selected: rgba(var(--accent-rgb), 0.12);
   --surface-artwork: rgba(255, 255, 255, 0.72);
+  --default-artwork-bg:
+    radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.72) 0 24%, transparent 48%),
+    linear-gradient(155deg, rgba(159, 216, 215, 0.42) 0%, rgba(207, 224, 238, 0.28) 44%, rgba(255, 255, 255, 0.1) 45%),
+    linear-gradient(135deg, rgba(247, 249, 252, 0.94) 0%, rgba(227, 234, 242, 0.9) 100%);
   --surface-menu: rgba(250, 251, 253, 0.98);
   --surface-dialog: rgba(250, 252, 255, 0.98);
   --surface-input: rgba(255, 255, 255, 0.84);
@@ -82,6 +86,10 @@ body.night-mode {
   --surface-card-hover: rgba(var(--accent-rgb), 0.14);
   --surface-card-selected: rgba(var(--accent-rgb), 0.18);
   --surface-artwork: rgba(255, 255, 255, 0.08);
+  --default-artwork-bg:
+    radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.1) 0 24%, transparent 48%),
+    linear-gradient(155deg, rgba(65, 124, 154, 0.24) 0%, rgba(52, 70, 92, 0.26) 44%, rgba(255, 255, 255, 0.025) 45%),
+    linear-gradient(135deg, rgba(31, 39, 50, 0.94) 0%, rgba(15, 20, 27, 0.96) 100%);
   --surface-menu: rgba(24, 30, 38, 0.98);
   --surface-dialog: rgba(22, 28, 36, 0.98);
   --surface-input: rgba(255, 255, 255, 0.065);
@@ -147,9 +155,7 @@ a {
   display: grid;
   place-items: center;
   overflow: hidden;
-  background:
-    radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.78), transparent 34%),
-    linear-gradient(145deg, rgba(var(--accent-rgb), 0.13), rgba(245, 248, 252, 0.94));
+  background: var(--default-artwork-bg);
 }
 
 .default-album-artwork-logo {
@@ -158,12 +164,6 @@ a {
   object-fit: contain !important;
   opacity: 0.9;
   filter: drop-shadow(0 10px 18px rgba(38, 57, 82, 0.12));
-}
-
-body.night-mode .default-album-artwork {
-  background:
-    radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.08), transparent 34%),
-    linear-gradient(145deg, rgba(var(--accent-rgb), 0.2), rgba(20, 26, 34, 0.96));
 }
 
 body.night-mode .default-album-artwork-logo {

@@ -1,7 +1,7 @@
 import clsx from 'clsx'
 import { useRef, useState, type CSSProperties, type DragEventHandler, type KeyboardEvent, type PointerEvent as ReactPointerEvent, type Ref } from 'react'
 
-import { getSongArtists } from '../shared/artists'
+import { getSongArtists, joinArtists } from '../shared/artists'
 import type { LibrarySong } from '../shared/contracts'
 import { formatDuration } from '../shared/formatters'
 import type { Translator } from '../shared/i18n'
@@ -87,7 +87,8 @@ export function PlaylistControlItem({
   onTouchReorderCancel,
 }: PlaylistControlItemProps) {
   const artists = getSongArtists(song, t('common.artistUnknown'))
-  const artistLabel = artists.join(', ')
+  const artistSeparator = t('common.artistSeparator')
+  const artistLabel = joinArtists(artists, artistSeparator)
   const albumLabel = song.album || t('common.albumUnknown')
   const artistAlbumLabel = showAlbum ? `${artistLabel} • ${albumLabel}` : artistLabel
   const { artworkUrl, refreshArtwork } = useSongArtwork(song.id, song.artworkUrl)
@@ -333,7 +334,7 @@ export function PlaylistControlItem({
         <span className="now-playing-queue-artists" title={artistAlbumLabel}>
           {artists.map((artist, index) => (
             <span key={`${song.id}-${artist}`}>
-              {index > 0 ? ', ' : null}
+              {index > 0 ? artistSeparator : null}
               <button
                 type="button"
                 className="now-playing-queue-artist"

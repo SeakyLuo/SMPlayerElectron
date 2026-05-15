@@ -357,9 +357,12 @@ export function LocalTableContent({
                   ) : null}
                 </td>
                 <td className="local-table-artist-cell">
-                  {getSongArtists(song, t('common.artistUnknown')).map((artist, index) => (
+                  {(() => {
+                    const songArtists = getSongArtists(song, t('common.artistUnknown'))
+                    const separator = t('common.artistSeparator')
+                    return songArtists.map((artist, index) => (
                     <span key={artist}>
-                      {index > 0 ? ', ' : null}
+                      {index > 0 ? separator : null}
                       <Link
                         className="table-link"
                         to={`/artists?artist=${encodeURIComponent(artist)}`}
@@ -368,7 +371,8 @@ export function LocalTableContent({
                         {artist}
                       </Link>
                     </span>
-                  ))}
+                    ))
+                  })()}
                 </td>
                 <td className="local-table-album-cell">
                   <Link

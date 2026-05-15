@@ -343,7 +343,7 @@ function buildFolderResults(
         ),
       }
     })
-    .filter((result) => result.score > 0)
+    .filter((result) => result.score > 0 && folderByPath.has(result.folderPath))
     .sort((left, right) => right.score - left.score || left.folderPath.localeCompare(right.folderPath))
     .map(({ folderPath, folderSongs, score }) => ({
       score,

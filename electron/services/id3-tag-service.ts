@@ -23,7 +23,7 @@ export class Id3TagService {
 
     const fileBuffer = await readFile(songPath)
     const existingTag = this.readId3Tag(fileBuffer)
-    const audioBuffer = fileBuffer.subarray(existingTag.endOffset)
+    const audioBuffer = this.extractCleanAudioBody(fileBuffer, existingTag.endOffset)
     const tagVersion = existingTag.version === 4 ? 4 : 3
     const replacedFrameIds = new Set([
       'TIT2',
@@ -61,7 +61,7 @@ export class Id3TagService {
 
     const fileBuffer = await readFile(songPath)
     const existingTag = this.readId3Tag(fileBuffer)
-    const audioBuffer = fileBuffer.subarray(existingTag.endOffset)
+    const audioBuffer = this.extractCleanAudioBody(fileBuffer, existingTag.endOffset)
     const tagVersion = existingTag.version === 4 ? 4 : 3
     const preservedFrames = existingTag.frames.filter(
       (frame) => frame.id !== 'USLT' && frame.id !== 'SYLT',
@@ -84,7 +84,7 @@ export class Id3TagService {
 
     const fileBuffer = await readFile(songPath)
     const existingTag = this.readId3Tag(fileBuffer)
-    const audioBuffer = fileBuffer.subarray(existingTag.endOffset)
+    const audioBuffer = this.extractCleanAudioBody(fileBuffer, existingTag.endOffset)
     const tagVersion = existingTag.version === 4 ? 4 : 3
     const preservedFrames = existingTag.frames.filter((frame) => frame.id !== 'APIC')
     const artworkFrames = picture
@@ -118,6 +118,52 @@ export class Id3TagService {
     this.writeSynchsafeSize(header, 6, tagBody.length + padding.length)
 
     await writeFile(songPath, Buffer.concat([header, tagBody, padding, audioBuffer]))
+  }
+
+  // Strips trailing legacy tags (ID3v1 + APEv2) that some MP3 files carry in
+  // addition to the modern ID3v2 header. Keeping them around causes music-
+  // metadata to report inconsistent `artist` / `artists` values when the
+  // legacy tags disagree with TPE1, polluting the MusicArtist table on every
+  // scan even after the user fixed the data through MusicDialog.
+  private extractCleanAudioBody(fileBuffer: Buffer, id3v2EndOffset: number): Buffer {
+    let endIndex = fileBuffer.length
+    let stripped = true
+
+    // A file may interleave ID3v1 and APEv2 (e.g. APEv2 → ID3v1 from the tail).
+    // Loop until both are removed in any order.
+    while (stripped && endIndex > id3v2EndOffset) {
+      stripped = false
+
+      // ID3v1: fixed 128 bytes at the very end, magic "TAG".
+      if (
+        endIndex - id3v2EndOffset >= 128 &&
+        fileBuffer.subarray(endIndex - 128, endIndex - 125).toString('ascii') === 'TAG'
+      ) {
+        endIndex -= 128
+        stripped = true
+        continue
+      }
+
+      // APEv2: 32-byte footer with magic "APETAGEX" at offset 0. Footer's
+      // `size` field (little-endian uint32 at offset 12) covers the body +
+      // footer. If the "has header" flag (bit 31 of `flags` at offset 20) is
+      // set, an additional 32-byte header sits before the body.
+      if (
+        endIndex - id3v2EndOffset >= 32 &&
+        fileBuffer.subarray(endIndex - 32, endIndex - 24).toString('ascii') === 'APETAGEX'
+      ) {
+        const apeSize = fileBuffer.readUInt32LE(endIndex - 32 + 12)
+        const apeFlags = fileBuffer.readUInt32LE(endIndex - 32 + 20)
+        const hasHeader = (apeFlags & 0x80000000) !== 0
+        const totalLength = apeSize + (hasHeader ? 32 : 0)
+        if (totalLength > 0 && endIndex - totalLength >= id3v2EndOffset) {
+          endIndex -= totalLength
+          stripped = true
+        }
+      }
+    }
+
+    return fileBuffer.subarray(id3v2EndOffset, endIndex)
   }
 
   private readId3Tag(fileBuffer: Buffer) {

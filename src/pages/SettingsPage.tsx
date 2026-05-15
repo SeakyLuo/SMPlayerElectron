@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 
 import { Icon } from '../components/icons'
@@ -7,13 +7,12 @@ import { RemoveDialog } from '../components/RemoveDialog'
 import type {
   AppSettingsUpdate,
   MusicData,
-  LyricsRequestMode,
   NightMode,
-  NotificationDisplayMode,
   NotificationSendMode,
   PreferredLanguage,
 } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
+import { LyricsBatchControl } from '../components/LyricsBatchControl'
 import { PreferenceSettingsPage } from './PreferenceSettingsPage'
 
 interface SettingsPageProps {
@@ -214,7 +213,11 @@ function SelectSettingRow<T extends string>({
   onChange,
 }: SelectSettingRowProps<T>) {
   const [open, setOpen] = useState(false)
+  const [openUpward, setOpenUpward] = useState(false)
+  const [dropdownMaxHeight, setDropdownMaxHeight] = useState<number | undefined>(undefined)
   const menuRef = useRef<HTMLDivElement | null>(null)
+  const triggerRef = useRef<HTMLButtonElement | null>(null)
+  const optionsRef = useRef<HTMLSpanElement | null>(null)
   const selectedOption = options.find((option) => option.value === value)
 
   useEffect(() => {
@@ -237,6 +240,27 @@ function SelectSettingRow<T extends string>({
     }
   }, [open])
 
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current || !optionsRef.current) {
+      return
+    }
+
+    const workspaceContent = menuRef.current?.closest('.workspace-content') as HTMLElement | null
+    const boundaryRect = workspaceContent?.getBoundingClientRect()
+    const triggerRect = triggerRef.current.getBoundingClientRect()
+    const optionsRect = optionsRef.current.getBoundingClientRect()
+    const dropdownHeight = optionsRect.height || Math.max(options.length * 38 + 12, 120)
+    const boundaryTop = boundaryRect?.top ?? 8
+    const boundaryBottom = boundaryRect?.bottom ?? (window.innerHeight - 8)
+    const spaceBelow = Math.max(0, boundaryBottom - triggerRect.bottom - 6)
+    const spaceAbove = Math.max(0, triggerRect.top - boundaryTop - 6)
+    const shouldOpenUpward = spaceBelow < dropdownHeight && spaceAbove > spaceBelow
+    const availableSpace = shouldOpenUpward ? spaceAbove : spaceBelow
+
+    setOpenUpward(shouldOpenUpward)
+    setDropdownMaxHeight(Math.max(120, Math.floor(availableSpace)))
+  }, [open, options.length])
+
   return (
     <div className="settings-row settings-row-with-control" ref={menuRef}>
       <span className="settings-row-copy">
@@ -244,6 +268,7 @@ function SelectSettingRow<T extends string>({
       </span>
       <span className="settings-select-menu">
         <button
+          ref={triggerRef}
           type="button"
           className={open ? 'settings-select-trigger is-open' : 'settings-select-trigger'}
           onClick={() => {
@@ -256,7 +281,11 @@ function SelectSettingRow<T extends string>({
         {open ? (
           <>
             <span className="dropdown-dismiss-layer" onPointerDown={() => setOpen(false)} />
-            <span className="settings-select-options">
+            <span
+              ref={optionsRef}
+              className={openUpward ? 'settings-select-options is-open-upward' : 'settings-select-options'}
+              style={dropdownMaxHeight ? { maxHeight: `${dropdownMaxHeight}px` } : undefined}
+            >
               {options.map((option) => (
                 <button
                   key={option.value}
@@ -324,21 +353,13 @@ export function SettingsPage({
   onRequestSmartArtistFix,
   onUpdateSettings,
 }: SettingsPageProps) {
-  const showNotificationSettings = false
+  const showNotificationSettings = true
   const notificationSendOptions: Array<{
     value: NotificationSendMode
     label: string
   }> = [
     { value: 'music-changed', label: t('settings.notificationSendMusicChanged') },
     { value: 'never', label: t('settings.notificationSendNever') },
-  ]
-  const notificationDisplayOptions: Array<{
-    value: NotificationDisplayMode
-    label: string
-  }> = [
-    { value: 'reminder', label: t('settings.notificationModeReminder') },
-    { value: 'normal', label: t('settings.notificationModeNormal') },
-    { value: 'quick', label: t('settings.notificationModeQuick') },
   ]
   const preferredLanguageOptions: Array<{
     value: PreferredLanguage
@@ -356,15 +377,6 @@ export function SettingsPage({
     { value: 'on', label: t('settings.nightModeOn') },
     { value: 'never', label: t('settings.nightModeNever') },
   ]
-  const lyricsSourceOptions: Array<{
-    value: LyricsRequestMode
-    label: string
-  }> = [
-    { value: 'auto', label: t('song.lyrics.auto') },
-    { value: 'internet', label: t('settings.sourceInternet') },
-    { value: 'local', label: t('settings.sourceLocal') },
-    { value: 'embedded', label: t('settings.sourceEmbedded') },
-  ]
   const showSystemLog = () => {
     void window.smplayer?.revealSystemLogs()
   }
@@ -376,28 +388,6 @@ export function SettingsPage({
   const [showImportDataDialog, setShowImportDataDialog] = useState(false)
   const [appVersion, setAppVersion] = useState('')
   const feedbackMenuRef = useRef<HTMLDivElement | null>(null)
-  const [lyricsJob, setLyricsJob] = useState({
-    status: 'idle' as 'idle' | 'running' | 'stopping' | 'done',
-    currentIndex: 0,
-    total: snapshot.songs.length,
-    currentSong: '',
-    saved: 0,
-    skipped: 0,
-    missing: 0,
-    failed: 0,
-    message: '',
-  })
-  const stopLyricsJobRef = useRef(false)
-  const lyricsJobRunIdRef = useRef(0)
-  const mountedRef = useRef(true)
-  const lyricsJobActive = lyricsJob.status === 'running' || lyricsJob.status === 'stopping'
-  const lyricsProgressRatio = lyricsJob.total > 0 ? lyricsJob.currentIndex / lyricsJob.total : 0
-  useEffect(() => {
-    return () => {
-      mountedRef.current = false
-      stopLyricsJobRef.current = true
-    }
-  }, [])
 
   useEffect(() => {
     void window.smplayer?.getAppInfo().then((appInfo) => {
@@ -425,129 +415,6 @@ export function SettingsPage({
       document.removeEventListener('pointerdown', closeFeedbackOptions, true)
     }
   }, [showFeedbackOptions])
-
-  const updateLyricsJob = (update: Partial<typeof lyricsJob>) => {
-    if (mountedRef.current) {
-      setLyricsJob((current) => ({ ...current, ...update }))
-    }
-  }
-
-  const waitForLyricsThrottle = (durationMs: number) =>
-    new Promise((resolve) => {
-      window.setTimeout(resolve, durationMs)
-    })
-
-  const stopLyricsJob = () => {
-    stopLyricsJobRef.current = true
-    lyricsJobRunIdRef.current += 1
-    updateLyricsJob({
-      status: 'done',
-      currentSong: '',
-      message: t('settings.lyricsBatchStopped'),
-    })
-  }
-
-  const startLyricsJob = async () => {
-    const songs = snapshot.songs
-    const runId = lyricsJobRunIdRef.current + 1
-    lyricsJobRunIdRef.current = runId
-    stopLyricsJobRef.current = false
-    setLyricsJob({
-      status: 'running',
-      currentIndex: 0,
-      total: songs.length,
-      currentSong: '',
-      saved: 0,
-      skipped: 0,
-      missing: 0,
-      failed: 0,
-      message: t('settings.lyricsBatchStarting'),
-    })
-    await waitForLyricsThrottle(0)
-
-    let saved = 0
-    let skipped = 0
-    let missing = 0
-    let failed = 0
-    let lastRequestStartedAt = 0
-
-    for (const [index, song] of songs.entries()) {
-      if (lyricsJobRunIdRef.current !== runId) {
-        return
-      }
-
-      if (stopLyricsJobRef.current) {
-        updateLyricsJob({
-          status: 'done',
-          message: t('settings.lyricsBatchStopped'),
-        })
-        return
-      }
-
-      const elapsedSinceLastRequest = Date.now() - lastRequestStartedAt
-      if (lastRequestStartedAt > 0 && elapsedSinceLastRequest < 1000) {
-        await waitForLyricsThrottle(1000 - elapsedSinceLastRequest)
-      }
-
-      if (lyricsJobRunIdRef.current !== runId) {
-        return
-      }
-
-      if (stopLyricsJobRef.current) {
-        updateLyricsJob({
-          status: 'done',
-          message: t('settings.lyricsBatchStopped'),
-        })
-        return
-      }
-
-      updateLyricsJob({
-        currentIndex: index + 1,
-        currentSong: [song.title, song.artist].filter(Boolean).join(' - '),
-        message: t('settings.lyricsBatchRequesting'),
-      })
-      await waitForLyricsThrottle(0)
-
-      if (lyricsJobRunIdRef.current !== runId || stopLyricsJobRef.current) {
-        return
-      }
-
-      try {
-        lastRequestStartedAt = Date.now()
-        const result = await window.smplayer!.saveInternetLyricsToFile(song.id)
-        if (stopLyricsJobRef.current || lyricsJobRunIdRef.current !== runId) {
-          return
-        }
-        if (result.status === 'saved') {
-          saved += 1
-        } else if (result.status === 'skipped') {
-          skipped += 1
-        } else if (result.status === 'missing') {
-          missing += 1
-        } else {
-          failed += 1
-        }
-      } catch {
-        if (stopLyricsJobRef.current || lyricsJobRunIdRef.current !== runId) {
-          return
-        }
-        failed += 1
-      }
-
-      updateLyricsJob({
-        saved,
-        skipped,
-        missing,
-        failed,
-      })
-    }
-
-    updateLyricsJob({
-      status: 'done',
-      currentSong: '',
-      message: t('settings.lyricsBatchDone'),
-    })
-  }
 
   const exportData = async () => {
     setDataTransferState('exporting')
@@ -596,6 +463,7 @@ export function SettingsPage({
       {actionMessage ? <div className="settings-action-message">{actionMessage}</div> : null}
       {dataTransferState !== 'idle' ? (
         <div className="settings-progress-overlay" role="status" aria-live="polite">
+          <div className="app-window-drag-strip" aria-hidden="true" />
           <div className="settings-progress-dialog">
             <span className="settings-progress-ring" aria-hidden="true" />
             <strong>
@@ -658,76 +526,7 @@ export function SettingsPage({
             ) : null}
           </SettingsCard>
 
-          <SettingsCard title={t('settings.lyrics')}>
-            <SelectSettingRow
-              label={t('settings.playerLyricsSource')}
-              value={snapshot.settings.playerLyricsSource}
-              options={lyricsSourceOptions}
-              onChange={(value) => {
-                onUpdateSettings({ playerLyricsSource: value })
-              }}
-            />
-            <ToggleSettingRow
-              label={t('settings.autoLyrics')}
-              checked={snapshot.settings.autoLyrics}
-              onChange={(checked) => {
-                onUpdateSettings({ autoLyrics: checked })
-              }}
-            />
-            <ToggleSettingRow
-              label={t('settings.preserveLyricsTimestamps')}
-              hint={t('settings.preserveLyricsTimestampsHint')}
-              checked={snapshot.settings.preserveInternetLyricsTimestamps}
-              onChange={(checked) => {
-                onUpdateSettings({ preserveInternetLyricsTimestamps: checked })
-              }}
-            />
-            <div className="lyrics-action-row">
-              <SettingsActionButton
-                disabled={lyricsJobActive || snapshot.songs.length === 0}
-                onClick={() => {
-                  void startLyricsJob()
-                }}
-              >
-                {lyricsJobActive ? t('settings.lyricsBatchRunning') : t('settings.addLyrics')}
-              </SettingsActionButton>
-              <span
-                className="settings-hint-icon"
-                title={t('settings.batchAddLyricsCopy')}
-                aria-label={t('settings.batchAddLyricsCopy')}
-              >
-                <Icon name="info" />
-              </span>
-              {lyricsJobActive ? (
-                <SettingsActionButton onClick={stopLyricsJob}>
-                  {t('settings.stopLyricsBatch')}
-                </SettingsActionButton>
-              ) : null}
-            </div>
-
-            {lyricsJob.status !== 'idle' ? (
-              <div className="lyrics-progress-panel">
-                <div className="lyrics-progress-header">
-                  <strong>{lyricsJob.message}</strong>
-                  <span>
-                    {lyricsJob.currentIndex}/{lyricsJob.total}
-                  </span>
-                </div>
-                <div className="lyrics-progress-bar" aria-hidden="true">
-                  <span style={{ width: `${Math.round(lyricsProgressRatio * 100)}%` }} />
-                </div>
-                <div className="lyrics-progress-current">
-                  {lyricsJob.currentSong || t('settings.lyricsBatchNoCurrent')}
-                </div>
-                <div className="lyrics-progress-stats">
-                  <span>{t('settings.lyricsBatchSaved')} {lyricsJob.saved}</span>
-                  <span>{t('settings.lyricsBatchSkipped')} {lyricsJob.skipped}</span>
-                  <span>{t('settings.lyricsBatchMissing')} {lyricsJob.missing}</span>
-                  <span>{t('settings.lyricsBatchFailed')} {lyricsJob.failed}</span>
-                </div>
-              </div>
-            ) : null}
-          </SettingsCard>
+          <LyricsBatchControl t={t} snapshot={snapshot} onUpdateSettings={onUpdateSettings} />
 
           {showNotificationSettings ? (
             <SettingsCard title={t('settings.notification')}>
@@ -737,14 +536,6 @@ export function SettingsPage({
                 options={notificationSendOptions}
                 onChange={(value) => {
                   onUpdateSettings({ notificationSend: value, showNotifications: value !== 'never' })
-                }}
-              />
-              <SelectSettingRow
-                label={t('settings.notificationMode')}
-                value={snapshot.settings.notificationDisplay}
-                options={notificationDisplayOptions}
-                onChange={(value) => {
-                  onUpdateSettings({ notificationDisplay: value })
                 }}
               />
             </SettingsCard>

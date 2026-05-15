@@ -252,7 +252,6 @@ export function getMusicMenuFlyoutItems({
   preferenceItem,
   onUndoPreference,
   onMoveToFolder,
-  onReveal,
   onDelete,
   onHide,
   onSeeArtist,
@@ -260,6 +259,7 @@ export function getMusicMenuFlyoutItems({
   onSeeMusicInfo,
   onSeeLyrics,
   onSeeAlbumArt,
+  onSeeLocal,
 }: {
   song: LibrarySong
   option?: MenuFlyoutOption
@@ -283,7 +283,6 @@ export function getMusicMenuFlyoutItems({
   preferenceItem?: PreferenceItemSnapshot | null
   onUndoPreference?: () => void
   onMoveToFolder?: (folderPath: string) => void | Promise<void>
-  onReveal: () => void | Promise<void>
   onDelete?: () => void
   onHide: () => void | Promise<void>
   onSeeArtist: (artist: string) => void
@@ -291,6 +290,7 @@ export function getMusicMenuFlyoutItems({
   onSeeMusicInfo: () => void
   onSeeLyrics: () => void
   onSeeAlbumArt: () => void
+  onSeeLocal: () => void | Promise<void>
 }) {
   const normalizedOption: Required<MenuFlyoutOption> = {
     showRemove: option?.showRemove ?? false,
@@ -391,14 +391,6 @@ export function getMusicMenuFlyoutItems({
     }
   }
 
-  items.push({
-    key: 'show-in-explorer',
-    text: t('context.reveal'),
-    pendingText: t('context.openingLocal'),
-    icon: 'local',
-    onClick: onReveal,
-  })
-
   if (normalizedOption.showDelete) {
     items.push({ key: 'delete', text: t('context.deleteFromDisk'), icon: 'trash', onClick: onDelete })
   }
@@ -418,6 +410,7 @@ export function getMusicMenuFlyoutItems({
     if (normalizedOption.showAlbumArt) {
       viewItems.push({ key: 'see-album-art', text: t('context.seeAlbumArt'), icon: 'pictures', keepOpen: true, onClick: onSeeAlbumArt })
     }
+    viewItems.push({ key: 'see-local-file', text: t('context.seeLocalFile'), icon: 'local', onClick: onSeeLocal })
   }
 
   if (viewItems.length > 0) {

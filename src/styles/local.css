@@ -594,22 +594,26 @@
 }
 
 .local-song-grid-shell.has-quick-jump {
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0;
+  grid-template-columns: 30px minmax(0, 1fr);
+  column-gap: 12px;
   align-items: start;
 }
 
 .local-song-grid-shell.has-quick-jump .local-song-quick-jump,
 .local-song-grid-shell.has-quick-jump .local-song-grid,
 .local-song-grid-shell.has-quick-jump .local-compact-song-list {
-  grid-column: 1;
   grid-row: 1;
 }
 
 .local-song-grid-shell.has-quick-jump .local-song-quick-jump {
   z-index: 3;
-  justify-self: end;
-  margin-right: 2px;
+  grid-column: 1;
+  justify-self: start;
+}
+
+.local-song-grid-shell.has-quick-jump .local-song-grid,
+.local-song-grid-shell.has-quick-jump .local-compact-song-list {
+  grid-column: 2;
 }
 
 .local-song-grid-item {
@@ -906,10 +910,7 @@
 }
 
 .local-page .grid-artwork-card-cover:has(.grid-artwork-card-cover-fallback) {
-  background:
-    radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.72) 0 24%, transparent 48%),
-    linear-gradient(155deg, rgba(159, 216, 215, 0.42) 0%, rgba(207, 224, 238, 0.28) 44%, rgba(255, 255, 255, 0.1) 45%),
-    linear-gradient(135deg, rgba(247, 249, 252, 0.94) 0%, rgba(227, 234, 242, 0.9) 100%);
+  background: var(--default-artwork-bg);
 }
 
 .local-folder-type-badge {
@@ -1040,19 +1041,56 @@
   white-space: nowrap;
 }
 
-.local-grid-song-playing-icon {
-  display: inline-grid;
-  flex: 0 0 auto;
-  place-items: center;
-  width: 18px;
-  height: 18px;
-  margin-left: auto;
+.local-grid-song-card.is-current .local-grid-song-title-row strong {
   color: var(--accent-strong);
 }
 
-.local-grid-song-playing-icon svg {
-  width: 13px;
-  height: 13px;
+.local-grid-song-playing-wave {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgba(30, 34, 40, 0.72);
+  color: #fff;
+  box-shadow: 0 12px 28px rgba(14, 22, 32, 0.28);
+  opacity: 1;
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  pointer-events: none;
+  transform: translate(-50%, -50%) scale(1);
+  transition:
+    opacity 120ms ease,
+    transform 140ms ease;
+}
+
+.local-grid-song-playing-wave > span {
+  background: #fff;
+}
+
+.local-grid-song-card:hover .local-grid-song-playing-wave,
+.local-grid-song-card:focus-within .local-grid-song-playing-wave {
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.94);
+}
+
+.local-grid-song-card.is-playing .local-grid-song-playing-wave span {
+  animation: playlist-playing-wave 780ms ease-in-out infinite;
+}
+
+.local-grid-song-card.is-playing .local-grid-song-playing-wave span:nth-child(2) {
+  animation-delay: 120ms;
+}
+
+.local-grid-song-card.is-playing .local-grid-song-playing-wave span:nth-child(3) {
+  animation-delay: 240ms;
+}
+
+.local-grid-song-card.is-playing .local-grid-song-playing-wave span:nth-child(4) {
+  animation-delay: 360ms;
 }
 
 .local-grid-song-subtitle {
@@ -1065,6 +1103,10 @@
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.local-grid-song-card.is-current .local-grid-song-subtitle {
+  color: var(--accent-strong);
 }
 
 .grid-artwork-card-copy {
@@ -1274,10 +1316,7 @@ body.night-mode .app-shell .local-page .grid-artwork-card-cover-fallback > img.g
 }
 
 body.night-mode .app-shell .local-page .grid-artwork-card-cover:has(.grid-artwork-card-cover-fallback) {
-  background:
-    radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.1) 0 24%, transparent 48%),
-    linear-gradient(155deg, rgba(65, 124, 154, 0.24) 0%, rgba(52, 70, 92, 0.26) 44%, rgba(255, 255, 255, 0.025) 45%),
-    linear-gradient(135deg, rgba(31, 39, 50, 0.94) 0%, rgba(15, 20, 27, 0.96) 100%);
+  /* background comes from --default-artwork-bg which already switches for night mode */
 }
 
 .move-progress-panel {

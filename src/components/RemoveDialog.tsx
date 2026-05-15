@@ -23,6 +23,7 @@ export function RemoveDialog({
 }) {
   return (
     <div className="input-dialog-overlay" role="presentation">
+      <div className="app-window-drag-strip" aria-hidden="true" />
       <section className="input-dialog remove-dialog" role="dialog" aria-modal="true" aria-labelledby="remove-dialog-title">
         <h3 id="remove-dialog-title">{title}</h3>
         <p className="remove-dialog-message">{message}</p>

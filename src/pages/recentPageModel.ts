@@ -1,4 +1,4 @@
-import { getSongArtists } from '../shared/artists'
+import { getSongArtists, joinArtists } from '../shared/artists'
 import type { LibraryPlaylist, LibrarySong, PreferredLanguage, RecentAlbumPlayback, RecentArtistPlayback, RecentPlaylistPlayback } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
 
@@ -175,7 +175,7 @@ function getRecentAlbumArtistLabel(songs: LibrarySong[], t: Translator) {
     return t('albums.artistsAndMore', { first: artists[0]!, second: artists[1]!, count: artists.length })
   }
 
-  return artists.join(t('albums.artistSeparator'))
+  return joinArtists(artists)
 }
 
 function sameCalendarDate(left: Date, right: Date) {

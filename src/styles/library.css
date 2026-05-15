@@ -365,7 +365,7 @@
   border-radius: 6px;
   object-fit: cover;
   overflow: hidden;
-  background: rgba(var(--accent-rgb), 0.08);
+  background: var(--surface-artwork);
 }
 
 .library-row-artwork-fallback {
@@ -1040,7 +1040,7 @@ body.night-mode .app-shell .table-link {
 }
 
 body.night-mode .app-shell .library-row-artwork {
-  background: rgba(255, 255, 255, 0.08);
+  /* background comes from --surface-artwork which already switches for night mode */
 }
 
 body.night-mode .app-shell .favorite-icon-button:hover,

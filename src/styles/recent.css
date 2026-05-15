@@ -870,6 +870,23 @@
   .recent-appbar-tabs button strong {
     display: none;
   }
+
+  .recent-song-grid-row {
+    row-gap: 10px;
+  }
+
+  .recent-song-tile {
+    grid-template-columns: 72px minmax(0, 1fr);
+    gap: 10px;
+    min-height: 78px;
+    padding: 2px 8px 2px 2px;
+  }
+
+  .recent-song-artwork-wrap,
+  .recent-song-artwork {
+    width: 72px;
+    height: 72px;
+  }
 }
 
 body.night-mode .app-shell .workspace:has(.recent-page) {

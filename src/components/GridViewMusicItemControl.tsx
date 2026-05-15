@@ -53,7 +53,7 @@ export function GridViewMusicItemControl({
   onDragStart,
   onDragEnd,
 }: GridViewMusicItemControlProps) {
-  const artistLabel = getDisplayArtists(song, t('common.artistUnknown'))
+  const artistLabel = getDisplayArtists(song, t('common.artistUnknown'), t('common.artistSeparator'))
   const open = () => {
     if (multiSelect) {
       onToggleSelection(song.id)
@@ -102,6 +102,14 @@ export function GridViewMusicItemControl({
               </span>
             )}
           />
+          {current ? (
+            <span className="playlist-control-item-playing-wave local-grid-song-playing-wave" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+              <span />
+            </span>
+          ) : null}
           {multiSelect ? (
             <span className={selected ? 'local-card-check is-selected' : 'local-card-check'} aria-hidden="true">
               {selected ? <Icon name="check" /> : null}
@@ -142,11 +150,6 @@ export function GridViewMusicItemControl({
         </span>
         <span className="local-grid-song-title-row">
           <strong title={song.title}>{song.title}</strong>
-          {current ? (
-            <span className="local-grid-song-playing-icon" aria-hidden="true">
-              <Icon name="play" />
-            </span>
-          ) : null}
         </span>
         <span className="local-grid-song-subtitle" title={artistLabel}>{artistLabel}</span>
       </div>

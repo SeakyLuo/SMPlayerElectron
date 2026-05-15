@@ -543,6 +543,7 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
         setDurationFromPlayback(0)
         transitionStatus({ type: 'idle' })
       })
+      restoredPlaybackRef.current = true
       return
     }
 
@@ -874,6 +875,7 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
     currentTrack,
     unknownAlbum: createTranslator(snapshot.settings.preferredLanguage)('common.albumUnknown'),
     unknownArtist: createTranslator(snapshot.settings.preferredLanguage)('common.artistUnknown'),
+    artistSeparator: createTranslator(snapshot.settings.preferredLanguage)('common.artistSeparator'),
     isPlaying,
     onPlay: () => {
       void playCurrent()

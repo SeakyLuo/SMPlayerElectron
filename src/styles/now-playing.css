@@ -656,7 +656,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-@container (max-width: 1120px) {
+@container (max-width: 800px) {
   .now-playing-queue-item,
   .now-playing-queue-item:not(.has-album-column),
   .now-playing-queue-item.has-album-column {
@@ -676,7 +676,7 @@
   }
 }
 
-@container (max-width: 800px) {
+@container (max-width: 720px) {
   .now-playing-queue-action.favorite {
     display: none;
   }

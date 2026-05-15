@@ -247,6 +247,24 @@ export function MiniModePage({
   }, [currentSong?.id, playerLyricsSource])
 
   useEffect(() => {
+    const handleLyricsUpdated = (event: Event) => {
+      const songId = (event as CustomEvent<{ songId?: number }>).detail?.songId
+      if (songId == null || currentSong?.id !== songId) {
+        return
+      }
+
+      void window.smplayer!.getLyrics(songId, playerLyricsSource).then((snapshot) => {
+        setLyrics(snapshot)
+      })
+    }
+
+    window.addEventListener('smplayer:lyrics-updated', handleLyricsUpdated)
+    return () => {
+      window.removeEventListener('smplayer:lyrics-updated', handleLyricsUpdated)
+    }
+  }, [currentSong?.id, playerLyricsSource])
+
+  useEffect(() => {
     if (!volumeOpen) {
       hideVolumeTooltip()
       return

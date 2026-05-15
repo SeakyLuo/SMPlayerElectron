@@ -254,7 +254,7 @@ export function AlbumArtLibraryPickerDialog({
                   </span>
                   <span className="recent-song-copy album-art-library-picker-copy">
                     <strong>{choice.song.title}</strong>
-                    <span>{getDisplayArtists(choice.song, t('common.artistUnknown'))}</span>
+                    <span>{getDisplayArtists(choice.song, t('common.artistUnknown'), t('common.artistSeparator'))}</span>
                     <small>{choice.song.album || t('common.albumUnknown')}</small>
                   </span>
                 </div>
@@ -271,7 +271,7 @@ export function AlbumArtLibraryPickerDialog({
               <>
                 <AlbumArtControl title={selectedChoice.song.title} artworkUrl={selectedChoice.artworkUrl} songId={selectedChoice.song.id} />
                 <strong>{selectedChoice.song.title}</strong>
-                <span>{getDisplayArtists(selectedChoice.song, t('common.artistUnknown'))}</span>
+                <span>{getDisplayArtists(selectedChoice.song, t('common.artistUnknown'), t('common.artistSeparator'))}</span>
                 <span>{selectedChoice.song.album || t('common.albumUnknown')}</span>
               </>
             ) : null}

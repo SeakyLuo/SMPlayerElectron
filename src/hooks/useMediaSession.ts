@@ -7,6 +7,7 @@ interface MediaSessionOptions {
   currentTrack: LibrarySong | null
   unknownAlbum: string
   unknownArtist: string
+  artistSeparator: string
   isPlaying: boolean
   onPlay: () => void
   onPause: () => void
@@ -42,6 +43,7 @@ export function useMediaSession({
   currentTrack,
   unknownAlbum,
   unknownArtist,
+  artistSeparator,
   isPlaying,
   onPlay,
   onPause,
@@ -63,7 +65,7 @@ export function useMediaSession({
 
     navigator.mediaSession.metadata = new MediaMetadata({
       title: currentTrack.title,
-      artist: getDisplayArtists(currentTrack, unknownArtist),
+      artist: getDisplayArtists(currentTrack, unknownArtist, artistSeparator),
       album: currentTrack.album || unknownAlbum,
       artwork: currentTrack.artworkUrl
         ? [
@@ -75,7 +77,7 @@ export function useMediaSession({
           ]
         : [],
     })
-  }, [currentTrack, unknownAlbum, unknownArtist])
+  }, [currentTrack, unknownAlbum, unknownArtist, artistSeparator])
 
   useEffect(() => {
     if ('mediaSession' in navigator) {
