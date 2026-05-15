@@ -1034,7 +1034,7 @@ export function HeaderedPlaylistControl({
             onToggleFavorite: () => {
               toggleSongFavoriteWithUndo(songMenu.song)
             },
-            onReveal: () => {
+            onSeeLocal: () => {
               void window.smplayer?.revealItemInFolder(songMenu.song.path)
             },
             onDelete: () => {

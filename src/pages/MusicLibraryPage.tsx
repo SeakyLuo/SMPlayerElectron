@@ -471,6 +471,7 @@ export function MusicLibraryPage({
                 const isCurrent = song.id === selectedTrackId
                 const artistLabel = getDisplayArtists(song, t('common.artistUnknown'))
                 const artists = getSongArtists(song, t('common.artistUnknown'))
+                const artistSeparator = t('common.artistSeparator')
                 const albumLabel = song.album || t('common.albumUnknown')
                 const durationLabel = formatDuration(song.duration)
                 const playCountLabel = song.playCount ? String(song.playCount) : ''
@@ -545,7 +546,7 @@ export function MusicLibraryPage({
                       <div className="music-table-cell-content">
                         {artists.map((artist, index) => (
                           <span key={artist}>
-                            {index > 0 ? ', ' : null}
+                            {index > 0 ? artistSeparator : null}
                             <Link
                               className="table-link"
                               title={artist}

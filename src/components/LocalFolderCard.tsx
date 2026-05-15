@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type DragEvent, type KeyboardEvent, type MouseEvent } from 'react'
 
-import { resolveSongArtworks } from '../hooks/useSongArtwork'
+import { resolveSongArtworkSnapshots } from '../hooks/useSongArtwork'
 import type { LibrarySong } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
 import { FOLDER_ICON_URL } from '../shared/staticAssets'
@@ -16,18 +16,28 @@ function getFolderThumbnailSignature(folder: FolderNode, candidateGroups: Librar
   return `${folder.relativePath}:${candidateGroups.map((groupSongs) => groupSongs.map((song) => song.id).join(',')).join('|')}`
 }
 
+// Mirrors the UWP GridViewFolder.AddThumbnail loop: each album group contributes
+// at most one thumbnail (the first song in that group whose artwork can be
+// resolved). We do NOT deduplicate by source URL — embedded artwork cache keys
+// are derived from the picture bytes, so different albums sharing identical
+// cover bytes (common for live concert sets) would otherwise collapse into a
+// single thumbnail and leave the folder grid with empty tiles.
 async function resolveOriginalFolderThumbnailUrls(candidateGroups: LibrarySong[][], isDisposed: () => boolean) {
   const artworkUrls: string[] = []
 
   for (const groupSongs of candidateGroups) {
-    const artworkBySongId = await resolveSongArtworks(groupSongs.map((song) => song.id))
-    for (const song of groupSongs) {
-      if (isDisposed()) {
-        return artworkUrls
-      }
-      const artworkUrl = artworkBySongId.get(song.id) ?? ''
-      if (artworkUrl) {
-        artworkUrls.push(artworkUrl)
+    const snapshots = await resolveSongArtworkSnapshots(groupSongs.map((song) => song.id))
+    if (isDisposed()) {
+      return artworkUrls
+    }
+    for (const snapshot of snapshots) {
+      // UWP parity: StorageFile.GetThumbnailAsync(MusicView) returns either the
+      // ID3 embedded picture or the Windows shell thumbnail (cover.jpg /
+      // folder.jpg / AlbumArtSmall.jpg etc). Only 'none' should be skipped here
+      // so that folders containing only files with shell-derived artwork still
+      // render a thumbnail instead of falling back to the placeholder icon.
+      if (snapshot && snapshot.artworkUrl && snapshot.source !== 'none') {
+        artworkUrls.push(snapshot.artworkUrl)
         break
       }
     }

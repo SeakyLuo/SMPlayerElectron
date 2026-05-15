@@ -23,6 +23,7 @@ export function ScanProgressOverlay({
 
   return (
     <div className="local-refresh-overlay" role="status" aria-live="polite">
+      <div className="app-window-drag-strip" aria-hidden="true" />
       <section className="local-refresh-dialog">
         <header className="local-refresh-header">
           <span className="local-refresh-header-icon" aria-hidden="true">

@@ -3,7 +3,7 @@ import { join } from 'node:path'
 
 import { Notification, app, ipcMain, shell, type BrowserWindow } from 'electron'
 
-import type { TrackNotificationPayload } from '../../src/shared/contracts'
+import type { PreferredLanguage, TrackNotificationPayload } from '../../src/shared/contracts'
 
 interface ShellIpcOptions {
   getWindow: () => BrowserWindow | null
@@ -11,11 +11,21 @@ interface ShellIpcOptions {
   cancelWindowsSpeechRecognition: () => void
   showNotifications: () => boolean
   getTrackNotificationBody: (songId: number) => Promise<string>
+  getNotificationIconPath: () => string
+  windowsAppUserModelId?: string
+  getPreferredLanguage: () => PreferredLanguage
+}
+
+type WindowsNotificationConstructorOptions = Electron.NotificationConstructorOptions & {
+  appID?: string
 }
 
 const feedbackIssueUrl = 'https://github.com/SeakyLuo/SMPlayerEletron/issues'
 const feedbackEmailAddress = 'luokiss9@qq.com'
-const feedbackEmailSubject = 'Feedback about Simple Melody Player'
+const feedbackEmailSubjectByLanguage = {
+  'en-US': 'Feedback about Simple Melody Player',
+  'zh-CN': '\u5173\u4E8E\u7B80\u97F3\u64AD\u653E\u5668\u7684\u53CD\u9988',
+} as const
 
 export function registerShellIpc(options: ShellIpcOptions) {
   ipcMain.handle('shell:reveal-item', async (_event, itemPath: string) => {
@@ -25,7 +35,7 @@ export function registerShellIpc(options: ShellIpcOptions) {
   ipcMain.handle('shell:create-local-folder', async (_event, rootPath: string, relativePath: string, name: string) => {
     await createLocalFolder(rootPath, relativePath, name)
   })
-  ipcMain.handle('shell:send-feedback-email', () => sendFeedbackEmail())
+  ipcMain.handle('shell:send-feedback-email', () => sendFeedbackEmail(options.getPreferredLanguage()))
   ipcMain.handle('shell:open-feedback-browser', () => openFeedbackInBrowser())
   ipcMain.handle('shell:open-voice-assistant-privacy-settings', () => openVoiceAssistantPrivacySettings())
   ipcMain.handle('voice:recognize', (_event, language: string) => options.recognizeWindowsSpeech(language))
@@ -43,11 +53,15 @@ export function registerShellIpc(options: ShellIpcOptions) {
     const lyricsPreview = await options.getTrackNotificationBody(track.songId)
     const defaultBody = [track.artist, track.album].filter(Boolean).join(' - ') || 'Simple Melody Player'
 
-    const notification = new Notification({
+    const notificationOptions: WindowsNotificationConstructorOptions = {
       title: track.title,
       body: lyricsPreview || defaultBody,
       silent: false,
-    })
+      icon: options.getNotificationIconPath(),
+      appID: process.platform === 'win32' ? options.windowsAppUserModelId : undefined,
+    }
+
+    const notification = new Notification(notificationOptions)
 
     notification.on('click', () => {
       const window = options.getWindow()
@@ -70,9 +84,20 @@ async function createLocalFolder(rootPath: string, relativePath: string, name: s
   await mkdir(join(rootPath, relativePath, name), { recursive: true })
 }
 
-async function sendFeedbackEmail() {
+function resolveFeedbackEmailSubject(preferredLanguage: PreferredLanguage) {
+  if (preferredLanguage === 'en-US' || preferredLanguage === 'zh-CN') {
+    return feedbackEmailSubjectByLanguage[preferredLanguage]
+  }
+
+  const locale = app.getLocale().toLowerCase()
+  return locale.startsWith('zh')
+    ? feedbackEmailSubjectByLanguage['zh-CN']
+    : feedbackEmailSubjectByLanguage['en-US']
+}
+
+async function sendFeedbackEmail(preferredLanguage: PreferredLanguage) {
   const mailtoUrl = new URL(`mailto:${feedbackEmailAddress}`)
-  mailtoUrl.searchParams.set('subject', feedbackEmailSubject)
+  mailtoUrl.searchParams.set('subject', resolveFeedbackEmailSubject(preferredLanguage))
   await shell.openExternal(mailtoUrl.toString())
 }
 

@@ -25,7 +25,7 @@ export function useTrackNotification(currentTrack: LibrarySong | null, t: Transl
     void window.smplayer.showTrackNotification({
       songId: currentTrack.id,
       title: currentTrack.title,
-      artist: getDisplayArtists(currentTrack, t('common.artistUnknown')),
+      artist: getDisplayArtists(currentTrack, t('common.artistUnknown'), t('common.artistSeparator')),
       album: currentTrack.album || t('common.albumUnknown'),
     })
   }, [currentTrack, t])

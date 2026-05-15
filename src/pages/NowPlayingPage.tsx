@@ -867,7 +867,7 @@ export function NowPlayingPage({
                 () => setSongFavorite(songMenu.song.id, songMenu.song.favorite),
               )
             },
-            onReveal: () => {
+            onSeeLocal: () => {
               onRevealSong(songMenu.song.path)
             },
             onDelete: () => {

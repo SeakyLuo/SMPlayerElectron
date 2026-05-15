@@ -47,7 +47,7 @@ export function initializeSchema(db: DatabaseSync) {
       NightMode INTEGER DEFAULT 2,
       NightModeStartTime TEXT DEFAULT '20:00',
       NightModeEndTime TEXT DEFAULT '06:00',
-      NotificationSend INTEGER DEFAULT 0,
+      NotificationSend INTEGER DEFAULT 1,
       NotificationDisplay INTEGER DEFAULT 1,
       LastPage TEXT DEFAULT '',
       LastPlaylist INTEGER DEFAULT 0,

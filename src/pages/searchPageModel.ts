@@ -1,5 +1,5 @@
 import type { AlbumTileData } from '../components/AlbumTile'
-import { getSongArtists } from '../shared/artists'
+import { getSongArtists, joinArtists } from '../shared/artists'
 import type { LibrarySong, PreferenceEntityType } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
 import type { SearchResult, SearchResultType } from '../shared/SearchHelper'
@@ -25,7 +25,7 @@ function getSearchAlbumArtistLabel(songs: LibrarySong[], t: Translator) {
     return t('albums.artistsAndMore', { first: artists[0], second: artists[1], count: artists.length })
   }
 
-  return artists.join(t('albums.artistSeparator'))
+  return joinArtists(artists)
 }
 
 export function getUniqueSongIds(songIds: number[]) {

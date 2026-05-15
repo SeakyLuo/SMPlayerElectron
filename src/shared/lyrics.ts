@@ -2,6 +2,27 @@ import type { LyricsSnapshot } from './contracts'
 
 const lyricsTimestampRegex = /\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\]/g
 const lyricsMetadataRegex = /^\[(ti|ar|al|by|offset):.*\]$/i
+const lyricsLineBreakRegex = /\r\n|[\n\r\u2028\u2029]/g
+const escapedLineBreakRegex = /\\r\\n|\\n|\\r/g
+
+function toSingleDisplayLyricLine(text: string) {
+  if (!text) {
+    return ''
+  }
+
+  const normalizedText = text
+    .replace(escapedLineBreakRegex, '\n')
+    .replace(lyricsLineBreakRegex, '\n')
+
+  for (const segment of normalizedText.split('\n')) {
+    const candidate = segment.trim()
+    if (candidate) {
+      return candidate
+    }
+  }
+
+  return ''
+}
 
 export function getCurrentLyricsLine(
   lyrics: LyricsSnapshot | null,
@@ -24,14 +45,14 @@ export function getCurrentLyricsLine(
       currentText = line.text
     }
 
-    return currentText
+    return toSingleDisplayLyricLine(currentText)
   }
 
   const lyricIndex = Math.min(
     lyrics.lines.length - 1,
     Math.floor(lyrics.lines.length * Math.min(Math.max(progressRatio, 0), 1)),
   )
-  return lyrics.lines[lyricIndex]?.text ?? ''
+  return toSingleDisplayLyricLine(lyrics.lines[lyricIndex]?.text ?? '')
 }
 
 export function hasLyricsTimestamps(rawText: string) {
@@ -41,7 +62,7 @@ export function hasLyricsTimestamps(rawText: string) {
 
 export function stripLyricsTimestamps(rawText: string) {
   return rawText
-    .split(/\r?\n/)
+    .split(lyricsLineBreakRegex)
     .map((line) => {
       const trimmedLine = line.trim()
       if (lyricsMetadataRegex.test(trimmedLine)) {
@@ -55,9 +76,9 @@ export function stripLyricsTimestamps(rawText: string) {
 }
 
 export function mergePlainLyricsWithTimedRaw(rawText: string, plainText: string) {
-  const plainLines = plainText.split(/\r?\n/)
+  const plainLines = plainText.split(lyricsLineBreakRegex)
   let plainLineIndex = 0
-  const mergedLines = rawText.split(/\r?\n/).map((line) => {
+  const mergedLines = rawText.split(lyricsLineBreakRegex).map((line) => {
     const timestampTags = line.match(lyricsTimestampRegex)
     if (!timestampTags) {
       if (lyricsMetadataRegex.test(line.trim())) {

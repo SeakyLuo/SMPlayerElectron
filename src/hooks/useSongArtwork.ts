@@ -154,6 +154,13 @@ export async function resolveSongArtworks(songIds: number[], force = false) {
   return new Map(uniqueSongIds.map((songId) => [songId, artworkUrlCache.get(songId) ?? '']))
 }
 
+export async function resolveSongArtworkSnapshots(songIds: number[]) {
+  const uniqueSongIds = [...new Set(songIds)]
+  const snapshots = await window.smplayer!.getSongArtworkSnapshots(uniqueSongIds)
+  const snapshotsBySongId = new Map(snapshots.map((snapshot) => [snapshot.songId, snapshot]))
+  return uniqueSongIds.map((songId) => snapshotsBySongId.get(songId))
+}
+
 export function useSongArtwork(songId: number | null | undefined, artworkUrl = '') {
   const [resolvedArtworkUrl, setResolvedArtworkUrl] = useState(() =>
     songId == null ? '' : getUsableArtworkUrl(songId, artworkUrl),

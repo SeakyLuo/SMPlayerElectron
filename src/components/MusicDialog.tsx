@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 
-import { getDisplayArtists, getSongArtists, normalizeArtists } from '../shared/artists'
+import { getDisplayArtists, getSongArtists, joinArtists, normalizeArtists } from '../shared/artists'
 import type { LibrarySong, LyricsSnapshot, SongPropertiesSnapshot } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
 import { hasLyricsTimestamps, mergePlainLyricsWithTimedRaw, stripLyricsTimestamps } from '../shared/lyrics'
@@ -17,6 +17,10 @@ import { PopupDialog } from './PopupDialog'
 
 type SongDialogMode = 'properties' | 'lyrics' | 'album-art'
 type PendingLyricsSnapshot = { songId: number; title: string; lyrics: string }
+
+function dispatchLyricsUpdatedEvent(songId: number) {
+  window.dispatchEvent(new CustomEvent('smplayer:lyrics-updated', { detail: { songId } }))
+}
 
 function normalizeArtworkMatchText(value: string) {
   return value
@@ -161,6 +165,7 @@ export function MusicDialog({
         setLyrics((current) => current ? { ...current, rawText: snapshot.lyrics } : current)
         onSaved?.()
       }
+      dispatchLyricsUpdatedEvent(snapshot.songId)
       setPendingSwitchLyrics((current) => current?.songId === snapshot.songId ? null : current)
       if (refreshLatestLyrics) {
         const currentTitle = getCurrentTrackTitle() || song.title
@@ -328,7 +333,7 @@ export function MusicDialog({
         artworkUrl: snapshot.artworkUrl,
         sourceUrl: snapshot.sourceUrl,
         sourcePath: snapshot.sourcePath,
-        artistName: getDisplayArtists(recommendationCandidate.song, t('common.artistUnknown')),
+        artistName: getDisplayArtists(recommendationCandidate.song, t('common.artistUnknown'), t('common.artistSeparator')),
       })
     })
 
@@ -384,8 +389,8 @@ export function MusicDialog({
       artists[index] = value
       return {
         ...current,
-        artist: normalizeArtists(artists).join(', '),
         artists,
+        artist: joinArtists(normalizeArtists(artists)),
       }
     })
   }
@@ -411,7 +416,7 @@ export function MusicDialog({
       const nextArtists = artists.length > 0 ? artists : ['']
       return {
         ...current,
-        artist: normalizeArtists(nextArtists).join(', '),
+        artist: joinArtists(normalizeArtists(nextArtists)),
         artists: nextArtists,
       }
     })
@@ -504,7 +509,7 @@ export function MusicDialog({
         albumArtist: properties.albumArtist.trim(),
         publisher: properties.publisher.trim(),
       }
-      nextProperties.artist = nextProperties.artists.join(', ')
+      nextProperties.artist = joinArtists(nextProperties.artists)
       if (!isPropertiesModified(nextProperties, originalProperties)) {
         setProperties(nextProperties)
         setOriginalProperties(nextProperties)

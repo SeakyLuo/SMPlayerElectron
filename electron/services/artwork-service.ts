@@ -1,5 +1,5 @@
 import { readFile, stat } from 'node:fs/promises'
-import { extname } from 'node:path'
+import { basename, extname } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 import { pathToFileURL } from 'node:url'
 
@@ -9,6 +9,9 @@ import type { SongArtworkSnapshot, SongArtworkSource } from '../../src/shared/co
 import { ACTIVE_STATE, AUDIO_EXTENSIONS } from './constants.ts'
 import {
   getArtworkFormat,
+  getShellThumbnailCachePath,
+  isLikelyImage,
+  selectBestPicture,
   shouldRebuildShellThumbnail,
   writeArtworkCache,
   writeShellThumbnailCache,
@@ -159,7 +162,7 @@ export class ArtworkService {
         duration: false,
         skipCovers: false,
       })
-      const thumbnailPath = await writeArtworkCache(this.thumbnailCachePath, `${sourcePath}:selected-artwork`, metadata.common.picture?.[0])
+      const thumbnailPath = await writeArtworkCache(this.thumbnailCachePath, `${sourcePath}:selected-artwork`, selectBestPicture(metadata.common.picture))
       if (!thumbnailPath) {
         throw new Error('No album art found in the selected music file.')
       }
@@ -261,7 +264,20 @@ export class ArtworkService {
       try {
         await stat(song.thumbnailPath)
         if (!shouldRebuildShellThumbnail(this.thumbnailCachePath, song.path, song.thumbnailPath)) {
-          return { fileUrl: pathToFileURL(song.thumbnailPath).href, source: 'cached', cacheKey: song.thumbnailPath }
+          // Verify the cached thumbnail is actually an image. Older library
+          // entries may point at non-image data (e.g. an ID3v2 link-frame
+          // whose URL string was treated as picture.data, or a stray APIC
+          // frame whose payload turned out to be header bytes). When the
+          // first 12 bytes don't match a known image header we treat the
+          // cache entry as polluted and fall through to the rebuild branch
+          // so the fix can heal historical pollution without forcing a
+          // full rescan. nativeImage isn't strict enough — it tolerates
+          // many malformed payloads — so we sniff magic bytes directly.
+          const head = await readFile(song.thumbnailPath, { flag: 'r' }).then((buf) => buf.subarray(0, 16)).catch(() => undefined)
+          if (head && isLikelyImage(head)) {
+            const isShell = basename(song.thumbnailPath) === basename(getShellThumbnailCachePath(this.thumbnailCachePath, song.path))
+            return { fileUrl: pathToFileURL(song.thumbnailPath).href, source: isShell ? 'shell' : 'cached', cacheKey: song.thumbnailPath }
+          }
         }
       } catch {
         // Rebuild stale thumbnail cache entries below.
@@ -273,7 +289,7 @@ export class ArtworkService {
         duration: false,
         skipCovers: false,
       })
-      const thumbnailPath = await writeArtworkCache(this.thumbnailCachePath, song.path, metadata.common.picture?.[0])
+      const thumbnailPath = await writeArtworkCache(this.thumbnailCachePath, song.path, selectBestPicture(metadata.common.picture))
 
       if (thumbnailPath) {
         this.db.prepare(`

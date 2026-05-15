@@ -185,6 +185,9 @@ app.whenReady().then(async () => {
     cancelWindowsSpeechRecognition,
     showNotifications: () => Boolean(libraryService?.settingsService.getSettingsSnapshot().showNotifications),
     getTrackNotificationBody: () => Promise.resolve(''),
+    getNotificationIconPath: getAppIconPath,
+    windowsAppUserModelId,
+    getPreferredLanguage: () => libraryService?.settingsService.getSettingsSnapshot().preferredLanguage ?? 'system',
   })
   registerWindowIpc({
     getWindow: () => mainWindow!,

@@ -76,6 +76,7 @@ export class ScanService {
   private readonly markFileInactiveStatement
   private readonly upsertFolderStatement
   private readonly upsertMusicStatement
+  private readonly updateMusicArtistStatement
   private readonly upsertFileStatement
   private readonly songArtistSync
 
@@ -116,6 +117,9 @@ export class ScanService {
         State = excluded.State
       RETURNING Id
     `)
+    this.updateMusicArtistStatement = this.db.prepare(
+      'UPDATE Music SET Artist = ? WHERE Id = ?',
+    )
     this.upsertFileStatement = this.db.prepare(`
       INSERT INTO File (Path, ParentId, FileId, FileType, State)
       VALUES (?, ?, ?, 0, ?)
@@ -287,7 +291,9 @@ export class ScanService {
       throw error
     }
 
-    await pruneThumbnailCache(this.thumbnailCachePath, this.getActiveThumbnailPaths())
+    // Run thumbnail cache pruning in the background so we don't block the IPC return.
+    // Failures are already swallowed inside pruneThumbnailCache.
+    void pruneThumbnailCache(this.thumbnailCachePath, this.getActiveThumbnailPaths())
 
     return {
       rootPath,
@@ -551,11 +557,16 @@ export class ScanService {
       throw error
     }
 
+    // Run lyrics auto-fetch and thumbnail cache pruning in the background so the
+    // scan IPC returns as soon as the database transaction commits. Lyrics fetch
+    // can hit the network, and pruneThumbnailCache walks the cache directory.
     if (settings.AutoLyrics && autoLyricsSongs.length > 0) {
-      await this.autoAddLyrics(autoLyricsSongs)
+      void this.autoAddLyrics(autoLyricsSongs).catch(() => {
+        // Ignore lyrics fetch failures so the scan itself stays successful.
+      })
     }
 
-    await pruneThumbnailCache(this.thumbnailCachePath, this.getActiveThumbnailPaths())
+    void pruneThumbnailCache(this.thumbnailCachePath, this.getActiveThumbnailPaths())
 
     return {
       rootPath,
@@ -644,10 +655,25 @@ export class ScanService {
       }
       const mergeArtists = artistMergePlan.get(song)
       const splitArtists = mergeArtists ? undefined : artistSplitPlan.autoSplits.get(song)
-      const artists = song.artist ? [song.artist] : []
+      // Always prefer the multi-value `artists` array parsed from the audio
+      // file's tags. Falling back to `[song.artist]` (a pre-joined display
+      // string like "周杰伦, 温岚") would persist a composite row in
+      // MusicArtist and corrupt later artist split/merge plans.
+      const baseArtists = song.artists.length > 0
+        ? song.artists
+        : (song.artist ? [song.artist] : [])
+      // When the smart split confidently auto-applies a split, write the
+      // split result instead of the original tag so MusicArtist matches the
+      // user-visible Music.Artist string.
+      const artists = splitArtists && splitArtists.length > 1 ? splitArtists : baseArtists
 
       this.songArtistSync.sync(musicRow.Id, artists)
       if (splitArtists && splitArtists.length > 1) {
+        // Keep Music.Artist in sync with the split result. upsertMusicStatement
+        // already wrote song.artist (the raw tag string which may use a
+        // non-standard separator like '/' or ';'), so overwrite it with the
+        // normalised ', '-joined form that matches the MusicArtist rows.
+        this.updateMusicArtistStatement.run(splitArtists.join(', '), musicRow.Id)
         applied.push(this.toArtistSplitResultItem(musicRow.Id, song, splitArtists))
       }
       if (mergeArtists) {
@@ -964,7 +990,13 @@ export class ScanService {
 
     for (const song of scannedSongs) {
       const sourceArtists = this.getArtistMergeSourceArtists(song, artistSplitPlan)
-      const mergedArtists = this.getMergedArtists(sourceArtists, artistUsage, expandedCandidatesByArtistKey)
+      // Older libraries may persist a single MusicArtist row that already
+      // concatenates multiple known artists (e.g. "周杰伦,温岚"). Without
+      // exploding such composites here, the grouping logic below would treat
+      // "周杰伦,温岚" and "温岚" as a single containment group and collapse them
+      // into the most-used single artist, dropping the rest.
+      const explodedArtists = this.explodeKnownCompositeArtists(sourceArtists, artistUsage)
+      const mergedArtists = this.getMergedArtists(explodedArtists, artistUsage, expandedCandidatesByArtistKey)
 
       if (this.haveArtistNamesChanged(sourceArtists, mergedArtists)) {
         mergeSuggestions.set(song, mergedArtists)
@@ -972,6 +1004,22 @@ export class ScanService {
     }
 
     return mergeSuggestions
+  }
+
+  private explodeKnownCompositeArtists(artists: string[], artistUsage: Map<string, ArtistUsage>) {
+    const result: string[] = []
+    for (const artist of artists) {
+      const parts = this.splitSmartArtistCandidate(artist)
+      if (
+        parts.length > 1 &&
+        parts.every((part) => artistUsage.has(this.getArtistKey(this.normalizeArtistMergeName(part))))
+      ) {
+        result.push(...parts)
+      } else {
+        result.push(artist)
+      }
+    }
+    return this.normalizeArtistMergeNames(result)
   }
 
   private getArtistUsage(scannedSongs: ScannedSong[], includeScannedSongs: boolean) {

@@ -46,7 +46,7 @@ export function getHeaderPlaylistInfo(songs: LibrarySong[], t: Translator) {
 export function getAlbumPreferenceDisplayName(albumName: string, songs: LibrarySong[], t: Translator) {
   const albumTitle = albumName || t('common.albumUnknown')
   const firstSong = songs[0]
-  const artist = firstSong ? getDisplayArtists(firstSong, t('common.artistUnknown')) : t('common.artistUnknown')
+  const artist = firstSong ? getDisplayArtists(firstSong, t('common.artistUnknown'), t('common.artistSeparator')) : t('common.artistUnknown')
   return `${albumTitle} - ${artist}`
 }
 

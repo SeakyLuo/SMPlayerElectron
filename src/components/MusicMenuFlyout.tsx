@@ -181,7 +181,7 @@ export function MusicMenuFlyout({
                 () => setSongFavorite(menu.song.id, menu.song.favorite),
               )
             },
-            onReveal: () => {
+            onSeeLocal: () => {
               onRevealSong(menu.song.path)
             },
             onDelete: () => {

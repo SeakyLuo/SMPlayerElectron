@@ -393,7 +393,13 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
       }
 
       const result = await window.smplayer.scanLibrary(undefined, operationId || undefined, progressMax)
-      await get().refresh(undefined, { silent: true })
+      // Hide the scan progress overlay as soon as the IPC returns. The library
+      // refresh runs in the background so the caller can show the result
+      // notification without waiting for a full library re-fetch.
+      removeProgressListener?.()
+      removeProgressListener = null
+      set({ scanning: false, scanProgress: null })
+      void get().refresh(undefined, { silent: true })
       return result
     } catch (error) {
       set({ error: getErrorMessage(error) })
@@ -443,7 +449,13 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
       })
 
       const result = await window.smplayer.scanLocalFolder(folderPath, operationId, preparation.progressMax)
-      await get().refresh({ songs: true, folders: true, recent: false }, { silent: true })
+      // Hide the scan progress overlay as soon as the IPC returns. The library
+      // refresh runs in the background so the caller can show the result
+      // notification without waiting for a full library re-fetch.
+      removeProgressListener?.()
+      removeProgressListener = null
+      set({ scanning: false, scanProgress: null })
+      void get().refresh({ songs: true, folders: true, recent: false }, { silent: true })
       return result
     } catch (error) {
       const errorMessage = getErrorMessage(error)

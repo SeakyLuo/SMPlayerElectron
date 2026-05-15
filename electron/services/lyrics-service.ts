@@ -57,6 +57,23 @@ export class LyricsService {
       return this.createLyricsSnapshot(embeddedLyrics, embeddedLyrics ? 'music-file' : 'none')
     }
 
+    if (mode === 'auto') {
+      const embeddedLyrics = await this.getEmbeddedLyrics(song.path)
+      const localSnapshot = sidecarLyrics
+        ?? this.createLyricsSnapshot(embeddedLyrics, embeddedLyrics ? 'music-file' : 'none')
+
+      if (localSnapshot.isSynced) {
+        return localSnapshot
+      }
+
+      const internetSnapshot = await this.getSyncedInternetLyrics(song)
+      if (internetSnapshot) {
+        return internetSnapshot
+      }
+
+      return localSnapshot
+    }
+
     if (mode !== 'internet' && sidecarLyrics) {
       return sidecarLyrics
     }
@@ -64,9 +81,7 @@ export class LyricsService {
     if (mode === 'internet') {
       const settings = this.settingsService.getSettings()
       const internetLyrics = this.prepareInternetLyrics(await this.searchInternetLyrics(song), settings)
-      const snapshot = this.createLyricsSnapshot(internetLyrics, internetLyrics ? 'internet' : 'none')
-      await this.maybePersistFetchedLyrics(song.path, snapshot)
-      return snapshot
+      return this.createLyricsSnapshot(internetLyrics, internetLyrics ? 'internet' : 'none')
     }
 
     const embeddedLyrics = await this.getEmbeddedLyrics(song.path)
@@ -75,6 +90,16 @@ export class LyricsService {
     }
 
     return this.createLyricsSnapshot('', 'none')
+  }
+
+  private async getSyncedInternetLyrics(song: LyricsSongLookup) {
+    const rawLyrics = await this.searchInternetLyrics(song)
+    if (!rawLyrics.trim()) {
+      return null
+    }
+
+    const snapshot = this.createLyricsSnapshot(rawLyrics, 'internet')
+    return snapshot.isSynced && snapshot.lines.length > 0 ? snapshot : null
   }
 
   async saveInternetLyricsToFile(songId: number) {
@@ -158,20 +183,6 @@ export class LyricsService {
     return this.createLyricsSnapshot(embeddedLyrics, embeddedLyrics ? 'music-file' : 'none')
   }
 
-  private async maybePersistFetchedLyrics(
-    songPath: string,
-    lyrics: LyricsSnapshot,
-  ) {
-    if (lyrics.source !== 'internet' || !lyrics.rawText.trim()) {
-      return
-    }
-
-    try {
-      await this.writeLyricsToSongPath(songPath, lyrics.rawText)
-    } catch {
-      // Ignore tag write failures so playback and lyric loading stay non-blocking.
-    }
-  }
 
   private async writeLyricsToSongPath(songPath: string, rawLyrics: string) {
     const extension = extname(songPath)
@@ -250,7 +261,7 @@ export class LyricsService {
     let lineId = 0
     const parsedLines: LyricsLine[] = []
 
-    for (const rawLine of rawText.split(/\r?\n/)) {
+    for (const rawLine of rawText.split(/\r\n|[\n\r\u2028\u2029]/)) {
       const line = rawLine.trim()
       if (!line) {
         continue
@@ -387,6 +398,10 @@ export class LyricsService {
         return ''
       }
 
+      if (this.isNoLyricsPlaceholder(lyrics)) {
+        return ''
+      }
+
       return lyrics
     } catch {
       return ''
@@ -394,9 +409,27 @@ export class LyricsService {
   }
 
   private prepareInternetLyrics(rawLyrics: string, settings: SettingsRow) {
+    if (this.isNoLyricsPlaceholder(rawLyrics)) {
+      return ''
+    }
+
     return settings.PreserveInternetLyricsTimestamps
       ? rawLyrics
       : stripLyricsTimestamps(rawLyrics)
+  }
+
+  private isNoLyricsPlaceholder(rawLyrics: string) {
+    const normalized = rawLyrics
+      .replace(/\[(ti|ar|al|by|offset):[^\]]*\]/gi, ' ')
+      .replace(/\[\d{1,2}:\d{2}(?:[.:]\d{1,3})?\]/g, ' ')
+      .replace(/[^\p{L}\p{N}]+/gu, '')
+      .toLocaleLowerCase()
+
+    if (!normalized) {
+      return false
+    }
+
+    return normalized.includes('此歌曲为没有填词的纯音乐请您欣赏')
   }
 
   private async getSongMid(song: LyricsSongLookup) {

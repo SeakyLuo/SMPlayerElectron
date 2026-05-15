@@ -448,8 +448,8 @@ function App() {
         id: currentPlaybackSong.id,
         title: currentPlaybackSong.title,
         artist:
+          getDisplayArtists(currentPlaybackSong, t('common.artistUnknown'), t('common.artistSeparator')) ||
           currentPlaybackSong.artist ||
-          getDisplayArtists(currentPlaybackSong, t('common.artistUnknown')) ||
           currentPlaybackSong.album ||
           t('common.artistUnknown'),
         artworkUrl:

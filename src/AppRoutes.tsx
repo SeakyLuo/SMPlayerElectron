@@ -28,6 +28,7 @@ import { usePreferenceStore } from './state/usePreferenceStore'
 import { sortLibrarySongs } from './shared/sorting'
 import { MONOTONE_ICON_URL } from './shared/staticAssets'
 import { Icon } from './components/icons'
+import { LoadingState } from './components/LoadingState'
 import { FolderUpdateResultDialog } from './pages/FolderUpdateResultDialog'
 import type { FolderNode } from './pages/localFolderModel'
 import {
@@ -93,13 +94,7 @@ function MissingLibraryRootPage({
   return (
     <section className="page-panel local-page">
       {loading ? (
-        <div className="empty-state local-empty-state">
-          <span className="local-empty-state-artwork" aria-hidden="true">
-            <img src={MONOTONE_ICON_URL} alt="" />
-          </span>
-          <h3>{t('local.noRoot')}</h3>
-          <p>{t('local.noRootCopy')}</p>
-        </div>
+        <LoadingState t={t} />
       ) : (
         <div className="empty-state local-empty-state">
           <span className="local-empty-state-artwork" aria-hidden="true">
@@ -1060,7 +1055,7 @@ export function AppRoutes({ context }: AppRoutesProps) {
               selectedTrackId={playback.currentTrackId}
               isPlaying={playback.isPlaying}
               onPlaySong={(songId) => {
-                void playbackCommands.playTrackInQueue(songId, visibleSongs.map((song) => song.id))
+                void playbackCommands.addNextAndPlay(songId)
               }}
               onOpenSongMenu={() => {}}
               onApplyArtistSplits={async (splits: ArtistSplitResultItem[]) => {

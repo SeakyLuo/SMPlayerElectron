@@ -321,6 +321,7 @@ export function NowPlayingFullPage({
     }
   }, [cancelLyricScrollAnimation, currentSongId])
 
+
   useEffect(() => {
     activeLyricsIndexRef.current = activeLyricsIndex
   }, [activeLyricsIndex])

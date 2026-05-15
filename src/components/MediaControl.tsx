@@ -964,6 +964,24 @@ export function MediaControl({
   }
 
   useEffect(() => {
+    const handleLyricsUpdated = (event: Event) => {
+      const songId = (event as CustomEvent<{ songId?: number }>).detail?.songId
+      if (songId == null || currentSong?.id !== songId) {
+        return
+      }
+
+      void window.smplayer!.getLyrics(songId, playerLyricsSource).then((snapshot) => {
+        setLyrics(snapshot)
+      })
+    }
+
+    window.addEventListener('smplayer:lyrics-updated', handleLyricsUpdated)
+    return () => {
+      window.removeEventListener('smplayer:lyrics-updated', handleLyricsUpdated)
+    }
+  }, [currentSong?.id, playerLyricsSource])
+
+  useEffect(() => {
     let isDisposed = false
 
     extractArtworkColorRgb(usableArtworkUrl)
@@ -1118,6 +1136,11 @@ export function MediaControl({
               setMoreMenu(null)
               setDialogMode('album-art')
             },
+            onSeeLocal: () => {
+              if (currentSong) {
+                void window.smplayer?.revealItemInFolder(currentSong.path)
+              }
+            },
             isWindowFullScreen,
             onToggleWindowFullScreen,
             onEnterMiniMode,
@@ -1172,6 +1195,7 @@ function getPlayerMoreMenuItems({
   onSeeMusicInfo,
   onSeeLyrics,
   onSeeAlbumArt,
+  onSeeLocal,
   isWindowFullScreen,
   onToggleWindowFullScreen,
   onEnterMiniMode,
@@ -1200,6 +1224,7 @@ function getPlayerMoreMenuItems({
   onSeeMusicInfo: () => void
   onSeeLyrics: () => void
   onSeeAlbumArt: () => void
+  onSeeLocal: () => void | Promise<void>
   isWindowFullScreen: boolean
   onToggleWindowFullScreen: () => void
   onEnterMiniMode: () => void
@@ -1286,6 +1311,7 @@ function getPlayerMoreMenuItems({
     { key: 'see-music-info', text: t('context.seeMusicInfo'), icon: 'info', keepOpen: true, onClick: onSeeMusicInfo },
     { key: 'see-lyrics', text: t('context.seeLyrics'), icon: 'lyrics', keepOpen: true, onClick: onSeeLyrics },
     { key: 'see-album-art', text: t('context.seeAlbumArt'), icon: 'pictures', keepOpen: true, onClick: onSeeAlbumArt },
+    { key: 'see-local-file', text: t('context.seeLocalFile'), icon: 'local', onClick: onSeeLocal },
   ]
 
   items.push(

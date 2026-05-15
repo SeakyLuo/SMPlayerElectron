@@ -217,6 +217,18 @@
   -webkit-app-region: no-drag;
 }
 
+.app-window-drag-strip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 138px;
+  height: 36px;
+  z-index: 1000;
+  -webkit-app-region: drag;
+  app-region: drag;
+  pointer-events: auto;
+}
+
 .local-refresh-dialog {
   width: min(560px, calc(100vw - 32px));
   border: 1px solid rgba(204, 213, 224, 0.7);
@@ -1200,14 +1212,14 @@
 }
 
 .app-shell.nav-minimal .local-song-grid-shell.has-quick-jump {
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0;
+  grid-template-columns: 22px minmax(0, 1fr);
+  column-gap: 10px;
 }
 
 .app-shell.nav-minimal .local-song-grid-shell.has-quick-jump .local-song-quick-jump {
   grid-column: 1;
   grid-row: 1;
-  justify-self: end;
+  justify-self: start;
   width: 22px;
   min-height: 380px;
 }
@@ -1217,7 +1229,7 @@
 }
 
 .app-shell.nav-minimal .local-song-grid-shell.has-quick-jump .local-compact-song-list {
-  grid-column: 1;
+  grid-column: 2;
 }
 
 .app-shell.nav-minimal .local-compact-song-list {

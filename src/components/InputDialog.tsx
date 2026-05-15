@@ -60,6 +60,7 @@ export function InputDialog({
 
   return (
     <div className="input-dialog-overlay" role="presentation">
+      <div className="app-window-drag-strip" aria-hidden="true" />
       <section className="input-dialog" role="dialog" aria-modal="true" aria-labelledby="input-dialog-title">
         <h3 id="input-dialog-title">{title}</h3>
         <input
