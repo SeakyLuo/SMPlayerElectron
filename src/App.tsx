@@ -816,6 +816,7 @@ function App() {
           <span className={canNavigateBack ? 'minimal-titlebar-title has-back-button' : 'minimal-titlebar-title'}>
             {t('app.shell')}
           </span>
+          <div className="minimal-titlebar-spacer drag-spacer" />
         </div>
       ) : null}
       <Sidebar
@@ -1010,6 +1011,7 @@ function App() {
                 <h1>{currentPageTitle}</h1>
               </div>
             )}
+            <div className="appbar-spacer drag-spacer" />
             <div className="status-pills">
               <span>{t('app.songsCached', { count: snapshot.counts.songs })}</span>
             </div>
@@ -1177,7 +1179,7 @@ function App() {
       {smartArtistFixPromptOpen ? (
         <RemoveDialog
           t={t}
-          title={t('settings.smartMultiArtistFixTitle')}
+          title={t('settings.smartMultiArtistFix')}
           message={t('settings.smartMultiArtistFixMessage')}
           confirmText={t('settings.smartMultiArtistFixConfirm')}
           pendingText={t('settings.smartMultiArtistFixPending')}

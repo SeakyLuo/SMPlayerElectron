@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
+import { useEffect, useCallback, useMemo, useRef, useState, type MouseEvent } from 'react'
 import clsx from 'clsx'
 import { useNavigate } from 'react-router-dom'
 
@@ -100,6 +100,7 @@ export function AlbumsPage({
   const albumGridScrollFrameRef = useRef<HTMLDivElement | null>(null)
   const albumGridScrollbarTrackRef = useRef<HTMLDivElement | null>(null)
   const albumGridRef = useRef<HTMLDivElement | null>(null)
+  const albumGridObserverRef = useRef<ResizeObserver | null>(null)
   const [albumScrollTop, setAlbumScrollTop] = useState(0)
   const [albumViewportHeight, setAlbumViewportHeight] = useState(640)
   const [albumGridWidth, setAlbumGridWidth] = useState(960)
@@ -224,26 +225,23 @@ export function AlbumsPage({
     setAlbumPreferenceItems(new Map(settings.albums.map((item) => [item.itemId, item])))
   }
 
-  useLayoutEffect(() => {
-    const albumGrid = albumGridRef.current
-    if (!albumGrid) {
-      return
+  const setAlbumGridRef = useCallback((node: HTMLDivElement | null) => {
+    albumGridRef.current = node
+    if (albumGridObserverRef.current) {
+      albumGridObserverRef.current.disconnect()
+      albumGridObserverRef.current = null
     }
-
-    const measureAlbumGrid = () => {
-      setAlbumViewportHeight(albumGrid.clientHeight)
-      setAlbumGridWidth(albumGrid.clientWidth - ALBUM_GRID_RIGHT_PADDING)
-    }
-
-    measureAlbumGrid()
-    const animationFrame = window.requestAnimationFrame(measureAlbumGrid)
-    const resizeObserver = new ResizeObserver(measureAlbumGrid)
-
-    resizeObserver.observe(albumGrid)
-
-    return () => {
-      window.cancelAnimationFrame(animationFrame)
-      resizeObserver.disconnect()
+    if (node) {
+      const measureAlbumGrid = () => {
+        setAlbumViewportHeight(node.clientHeight)
+        setAlbumGridWidth(node.clientWidth - ALBUM_GRID_RIGHT_PADDING)
+      }
+      measureAlbumGrid()
+      const resizeObserver = new ResizeObserver(() => {
+        measureAlbumGrid()
+      })
+      resizeObserver.observe(node)
+      albumGridObserverRef.current = resizeObserver
     }
   }, [])
 
@@ -552,7 +550,7 @@ export function AlbumsPage({
           <div className="albums-grid-scroll-frame custom-scrollbar-frame" ref={albumGridScrollFrameRef}>
             <div
               className="albums-grid custom-scrollbar-container"
-              ref={albumGridRef}
+              ref={setAlbumGridRef}
               onScroll={(event) => {
                 setAlbumScrollTop(event.currentTarget.scrollTop)
               }}

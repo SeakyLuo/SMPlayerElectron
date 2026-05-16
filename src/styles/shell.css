@@ -29,7 +29,7 @@
   --immersive-topbar-background:
     linear-gradient(180deg, rgba(var(--immersive-header-cover-rgb, 91, 135, 182), var(--immersive-topbar-cover-alpha-start)), rgba(var(--immersive-header-cover-rgb, 91, 135, 182), var(--immersive-topbar-cover-alpha-end))),
     rgba(246, 249, 252, var(--immersive-topbar-surface-alpha));
-  --immersive-topbar-filter: blur(var(--immersive-topbar-blur)) saturate(150%);
+  --immersive-topbar-filter: blur(var(--immersive-topbar-blur)) saturate(calc(100% + var(--immersive-header-collapse-progress) * 50%));
   --immersive-topbar-shadow: 0 1px 0 rgba(17, 24, 39, var(--immersive-topbar-shadow-alpha));
   --immersive-topbar-noise-opacity: 0;
   --immersive-topbar-highlight-alpha: 0;
@@ -184,7 +184,7 @@ body.night-mode .app-shell.nav-minimal .minimal-titlebar {
   overflow: hidden;
   isolation: isolate;
   background: transparent;
-  color: #fff;
+  color: #111827;
   box-shadow: none;
 }
 

@@ -520,7 +520,7 @@ export function SettingsPage({
                   onClick={onRequestSmartArtistFix}
                 >
                   <Icon name="users" />
-                  {t('settings.smartMultiArtistFixConfirm')}
+                  {t('settings.smartMultiArtistFix')}
                 </button>
               </div>
             ) : null}

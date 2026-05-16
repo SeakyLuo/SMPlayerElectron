@@ -1,4 +1,5 @@
 import type { ComponentProps, DragEvent, RefObject } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 
 import { CustomScrollbar } from '../components/CustomScrollbar'
@@ -117,9 +118,51 @@ export function LocalTableContent({
   onAddSong: (song: LibrarySong, x: number, y: number) => void
   onJumpToSongKey: (key: string) => void
 }) {
+  const [scrollTop, setScrollTop] = useState(0)
+  const [viewportHeight, setViewportHeight] = useState(800)
+  const shellObserverRef = useRef<ResizeObserver | null>(null)
+
+  const setShellRef = useCallback((node: HTMLDivElement | null) => {
+    if (shellRef) (shellRef as any).current = node
+
+    if (shellObserverRef.current) {
+      shellObserverRef.current.disconnect()
+      shellObserverRef.current = null
+    }
+
+    if (node) {
+      setViewportHeight(node.clientHeight)
+      const ro = new ResizeObserver(() => setViewportHeight(node.clientHeight))
+      ro.observe(node)
+      shellObserverRef.current = ro
+    }
+  }, [shellRef])
+
+  const ROW_HEIGHT = 48
+  const OVERSCAN = 10
+
+  const folderCount = showFolderItems ? childFolders.length : 0
+  const songCount = showSongItems ? currentSongs.length : 0
+  const totalRows = folderCount + songCount
+
+  const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN)
+  const endIndex = Math.min(totalRows, Math.ceil((scrollTop + viewportHeight) / ROW_HEIGHT) + OVERSCAN)
+
+  const topSpacerHeight = startIndex * ROW_HEIGHT
+  const bottomSpacerHeight = Math.max(0, (totalRows - endIndex) * ROW_HEIGHT)
+
+  const visibleFolders = showFolderItems ? childFolders.slice(startIndex, Math.min(folderCount, endIndex)) : []
+  const songStartIndex = Math.max(0, startIndex - folderCount)
+  const songEndIndex = Math.max(0, endIndex - folderCount)
+  const visibleSongs = showSongItems ? currentSongs.slice(songStartIndex, songEndIndex) : []
+
   return (
     <div className="local-scroll-frame custom-scrollbar-frame" ref={frameRef}>
-      <div className="table-shell local-table-shell custom-scrollbar-container" ref={shellRef}>
+      <div
+        className="table-shell local-table-shell custom-scrollbar-container"
+        ref={setShellRef}
+        onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
+      >
         <table className="music-table">
           <thead>
             <tr>
@@ -129,6 +172,7 @@ export function LocalTableContent({
             </tr>
           </thead>
           <tbody>
+            {topSpacerHeight > 0 && <tr style={{ height: topSpacerHeight }}><td colSpan={5} style={{ padding: 0, border: 0 }}></td></tr>}
             {showLocalSectionHeaders && childFolders.length > 0 ? (
               <LocalTableSectionHeader
                 count={childFolders.length}
@@ -137,7 +181,7 @@ export function LocalTableContent({
                 onToggle={onToggleFoldersExpanded}
               />
             ) : null}
-            {showFolderItems ? childFolders.map((folder) => (
+            {showFolderItems ? visibleFolders.map((folder) => (
               <tr
                 key={folder.relativePath}
                 className={joinClassNames(
@@ -269,7 +313,9 @@ export function LocalTableContent({
                 </td>
               </tr>
             ) : null}
-            {showSongItems ? currentSongs.map((song, index) => (
+            {showSongItems ? visibleSongs.map((song, localIndex) => {
+              const index = songStartIndex + localIndex
+              return (
               <tr
                 key={`${currentRelativePath}-${song.id}`}
                 ref={(element) => {
@@ -303,7 +349,7 @@ export function LocalTableContent({
                   onOpenSongMenu(song, event.clientX, event.clientY)
                 }}
               >
-                <td className="local-table-name-cell local-table-song-name-cell">
+                <td className="local-table-play-cell" onDoubleClick={() => onPlayTrack(song.id, queueSongIds)}>
                   {multiSelect ? (
                     <span className={selectedSongIds.has(song.id) ? 'local-check is-selected' : 'local-check'}>
                       {selectedSongIds.has(song.id) ? <Icon name="check" /> : null}
@@ -316,63 +362,67 @@ export function LocalTableContent({
                       <img className="local-table-type-icon" src={LOCAL_FILE_TYPE_ICON_URL} alt="" />
                     )}
                   </span>
-                  <span className="local-table-primary-text">{song.title}</span>
-                  {!multiSelect ? (
-                    <span className="local-table-item-actions local-table-song-actions">
-                      <button
-                        type="button"
-                        title={t('context.play')}
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          if (song.id === selectedTrackId && isPlaying) {
-                            onTogglePlayPause()
-                          } else {
-                            onMoveToMusicOrPlay(song.id)
-                          }
-                        }}
-                      >
-                        <Icon name={song.id === selectedTrackId && isPlaying ? 'pause' : 'play'} />
-                      </button>
-                      <button
-                        type="button"
-                        title={t('context.addToPlaylist')}
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          onAddSong(song, event.clientX, event.clientY)
-                        }}
-                      >
-                        <Icon name="plus" />
-                      </button>
-                      <button
-                        type="button"
-                        title={t('context.playNext')}
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          onPlayNext(song.id)
-                        }}
-                      >
-                        <Icon name="playNext" />
-                      </button>
-                    </span>
-                  ) : null}
                 </td>
-                <td className="local-table-artist-cell">
-                  {(() => {
-                    const songArtists = getSongArtists(song, t('common.artistUnknown'))
-                    const separator = t('common.artistSeparator')
-                    return songArtists.map((artist, index) => (
-                    <span key={artist}>
-                      {index > 0 ? separator : null}
-                      <Link
-                        className="table-link"
-                        to={`/artists?artist=${encodeURIComponent(artist)}`}
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        {artist}
-                      </Link>
-                    </span>
-                    ))
-                  })()}
+                <td className="local-table-title-cell" onDoubleClick={() => onPlayTrack(song.id, queueSongIds)}>
+                  <div className="local-table-title-wrap">
+                    <span className="local-table-primary-text">{song.title}</span>
+                    {!multiSelect ? (
+                      <span className="local-table-item-actions local-table-song-actions">
+                        <button
+                          type="button"
+                          title={t('context.play')}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            if (song.id === selectedTrackId && isPlaying) {
+                              onTogglePlayPause()
+                            } else {
+                              onMoveToMusicOrPlay(song.id)
+                            }
+                          }}
+                        >
+                          <Icon name={song.id === selectedTrackId && isPlaying ? 'pause' : 'play'} />
+                        </button>
+                        <button
+                          type="button"
+                          title={t('context.addToPlaylist')}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            onAddSong(song, event.clientX, event.clientY)
+                          }}
+                        >
+                          <Icon name="plus" />
+                        </button>
+                        <button
+                          type="button"
+                          title={t('context.playNext')}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            onPlayNext(song.id)
+                          }}
+                        >
+                          <Icon name="playNext" />
+                        </button>
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="local-table-secondary-text">
+                    {(() => {
+                      const songArtists = getSongArtists(song, t('common.artistUnknown'))
+                      const separator = t('common.artistSeparator')
+                      return songArtists.map((artist, index) => (
+                      <span key={artist}>
+                        {index > 0 ? separator : null}
+                        <Link
+                          className="table-link"
+                          to={`/artists?artist=${encodeURIComponent(artist)}`}
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          {artist}
+                        </Link>
+                      </span>
+                      ))
+                    })()}
+                  </div>
                 </td>
                 <td className="local-table-album-cell">
                   <Link
@@ -384,7 +434,9 @@ export function LocalTableContent({
                   </Link>
                 </td>
               </tr>
-            )) : null}
+              )
+            }) : null}
+            {bottomSpacerHeight > 0 && <tr style={{ height: bottomSpacerHeight }}><td colSpan={5} style={{ padding: 0, border: 0 }}></td></tr>}
           </tbody>
         </table>
       </div>

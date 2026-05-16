@@ -284,9 +284,10 @@ export function NowPlayingFullPage({
     }
 
     setLyricsLoading(true)
+    setDisplayLyrics(null)
     void window.smplayer!.getLyrics(currentSongId, 'auto').then((snapshot) => {
       setDisplayLyrics({ trackId: currentSongId, lyrics: snapshot })
-    setLyricsLoading(false)
+      setLyricsLoading(false)
     })
   }, [currentSongId])
 
@@ -308,6 +309,7 @@ export function NowPlayingFullPage({
     let canceled = false
     cancelLyricScrollAnimation()
     setLyricsLoading(true)
+    setDisplayLyrics(null)
     void window.smplayer!.getLyrics(currentSongId, 'auto').then((snapshot) => {
       if (!canceled) {
         setDisplayLyrics({ trackId: currentSongId, lyrics: snapshot })

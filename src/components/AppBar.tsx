@@ -37,6 +37,7 @@ export function AppBar({
         </button>
         {children}
       </div>
+      <div className="appbar-spacer drag-spacer" />
       {actions ? <div className="appbar-actions">{actions}</div> : null}
       <div className="appbar-bottom" id={APPBAR_PAGE_BOTTOM_ID} />
     </header>

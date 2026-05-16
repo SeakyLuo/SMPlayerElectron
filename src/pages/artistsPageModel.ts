@@ -227,9 +227,13 @@ export function buildArtistGroups(songs: LibrarySong[], t: Translator) {
 
   return [...groups.values()]
     .map((artist) => {
-      const artworkSong = artist.songs
-        .filter((song) => song.artworkUrl)
-        .sort((left, right) => Date.parse(right.dateAdded) - Date.parse(left.dateAdded))[0]
+      const songsByAlbumOrder = artist.songs
+        .slice()
+        .sort((left, right) =>
+          compareArtistText(left.album || t('common.albumUnknown'), right.album || t('common.albumUnknown'))
+          || compareArtistText(left.title, right.title),
+        )
+      const artworkSong = songsByAlbumOrder.find((song) => song.artworkUrl)
       const latestSong = artist.songs
         .slice()
         .sort((left, right) => Date.parse(right.dateAdded) - Date.parse(left.dateAdded))[0]!

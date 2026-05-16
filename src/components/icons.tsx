@@ -45,7 +45,6 @@ import {
   PreviousRegular,
   SaveRegular,
   SearchRegular,
-  SelectAllOffRegular,
   SelectAllOnRegular,
   SettingsRegular,
   StarRegular,
@@ -73,9 +72,7 @@ const paths = {
   chevronUp: [<path key="chevron" d="m7 14 5-5 5 5" />],
   check: [<path key="check" d="m5 12 4 4 10-10" />],
   clearSelection: [
-    <path key="box" d="M5 5h14v14H5z" />,
-    <path key="x1" d="m9 9 6 6" />,
-    <path key="x2" d="m15 9-6 6" />,
+    <path key="box" d="M4 4h6M14 4h6M20 4v6M20 14v6M20 20h-6M10 20H4M4 20v-6M4 10V4" />,
   ],
   clear: [
     <path key="list1" d="M5 7h10" />,
@@ -326,6 +323,10 @@ const paths = {
     <circle key="left" cx="7" cy="18" r="3" />,
     <circle key="right" cx="17" cy="16" r="3" />,
   ],
+  invertSelection: [
+    <path key="curve" d="M20 7c0 4-3 7-8 7H7" />,
+    <path key="head" d="M10 12l-3 2 3 2" />,
+  ],
   sort: [
     <path key="top" d="M4 7h11" />,
     <path key="topArrow" d="m12 4 3 3-3 3" />,
@@ -397,7 +398,6 @@ const fluentIcons: Partial<Record<IconName, FluentIconComponent>> = {
   chevronRight: ChevronRightRegular,
   chevronUp: ChevronUpRegular,
   check: CheckmarkRegular,
-  clearSelection: SelectAllOffRegular,
   clear: DismissRegular,
   close: DismissRegular,
   copy: CopyRegular,
@@ -455,6 +455,8 @@ export function Icon({ name, className, ...props }: IconProps & { name: IconName
       ? 1.45
     : name === 'dice'
       ? 1.55
+    : name === 'invertSelection'
+      ? 1.4
     : name.startsWith('volume')
       ? 1.3
       : 2.2
