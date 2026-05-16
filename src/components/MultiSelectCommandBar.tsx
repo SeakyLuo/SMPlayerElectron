@@ -105,7 +105,7 @@ export function MultiSelectCommandBar({
 
   const selectionMenuItems: MenuFlyoutItem[] = [
     { key: 'select-all', text: t('albums.selectAll'), icon: 'selectAll', onClick: onSelectAll },
-    { key: 'reverse-selection', text: t('albums.reverseSelection'), icon: 'sort', onClick: onReverseSelection },
+    { key: 'reverse-selection', text: t('albums.reverseSelection'), icon: 'invertSelection', onClick: onReverseSelection },
     { key: 'clear-selection', text: t('albums.clearSelection'), icon: 'clearSelection', onClick: onClearSelection },
   ]
 
@@ -212,7 +212,7 @@ export function MultiSelectCommandBar({
           <span>{t('albums.selectAll')}</span>
         </button>
         <button type="button" className="multi-select-command-selection-action" onClick={onReverseSelection}>
-          <Icon name="sort" />
+          <Icon name="invertSelection" />
           <span>{t('albums.reverseSelection')}</span>
         </button>
         <button type="button" className="multi-select-command-selection-action" onClick={onClearSelection}>

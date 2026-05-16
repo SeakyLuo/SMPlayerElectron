@@ -426,11 +426,13 @@
   display: grid;
   place-items: center;
   width: 20px;
+  height: 100%;
   min-height: 0;
   border: 0;
   border-radius: 5px;
   background: transparent;
   color: var(--text-muted);
+  padding: 0;
   font-size: 10px;
   font-weight: 650;
   line-height: 1;
@@ -459,7 +461,7 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
-  padding: 8px 8px 18px 14px;
+  padding: 8px 8px calc(var(--player-top-radius) + 12px) 14px;
   scrollbar-gutter: stable;
 }
 
@@ -518,7 +520,15 @@
 }
 
 .app-shell.nav-minimal .albums-quick-jump {
-  padding: 2px 0 18px;
+  overflow-y: auto;
+  padding: 2px 0 calc(var(--player-top-radius) + 12px);
+  scrollbar-width: none;
+}
+
+.app-shell.nav-minimal .albums-quick-jump::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .app-shell.nav-minimal .albums-grid-scroll-frame {
@@ -527,7 +537,7 @@
 
 .app-shell.nav-minimal .albums-grid-scroll-frame .albums-grid {
   height: 100%;
-  padding: 8px 0 18px 14px;
+  padding: 8px 0 calc(var(--player-top-radius) + 12px) 14px;
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-gutter: auto;

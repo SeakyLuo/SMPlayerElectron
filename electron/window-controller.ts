@@ -20,7 +20,7 @@ export class WindowController {
 
     this.stopDrag()
     const startCursor = screen.getCursorScreenPoint()
-    const [startX, startY] = window.getPosition()
+    const startBounds = window.getBounds()
 
     this.windowDragInterval = setInterval(() => {
       if (window.isDestroyed()) {
@@ -29,10 +29,11 @@ export class WindowController {
       }
 
       const cursor = screen.getCursorScreenPoint()
-      window.setPosition(
-        Math.round(startX + cursor.x - startCursor.x),
-        Math.round(startY + cursor.y - startCursor.y),
-      )
+      window.setBounds({
+        ...startBounds,
+        x: Math.round(startBounds.x + cursor.x - startCursor.x),
+        y: Math.round(startBounds.y + cursor.y - startCursor.y),
+      })
     }, 16)
   }
 

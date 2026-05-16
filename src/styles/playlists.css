@@ -34,7 +34,7 @@
 .app-shell.nav-minimal .grid-view-holder-grid {
   row-gap: 2px;
   padding-top: 2px;
-  padding-bottom: 2px;
+  padding-bottom: calc(var(--player-top-radius) + 2px);
 }
 
 .input-dialog-overlay {

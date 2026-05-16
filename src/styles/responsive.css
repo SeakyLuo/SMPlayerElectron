@@ -478,7 +478,7 @@
 
 .app-shell.nav-minimal .albums-grid,
 .app-shell.nav-minimal .albums-quick-jump {
-  padding-bottom: 2px;
+  padding-bottom: calc(var(--player-top-radius) + 2px);
 }
 
 .app-shell.nav-minimal .albums-grid {
@@ -555,5 +555,44 @@ body.night-mode .app-shell.nav-minimal .workspace-header .appbar-commandbar .uwp
   background: transparent;
   color: var(--night-subtle);
   box-shadow: none;
+}
+
+@media (max-width: 720px) {
+  .app-shell.nav-minimal .artists-master {
+    padding: 0 12px 0;
+  }
+
+  .app-shell.nav-minimal .artists-list-shell {
+    gap: 2px;
+  }
+
+  .app-shell.nav-minimal .artists-master-scroll-frame .artists-list {
+    padding-bottom: calc(var(--player-top-radius) + 2px);
+  }
+
+  .app-shell.nav-minimal .artists-quick-jump,
+  .app-shell.nav-minimal .albums-quick-jump {
+    padding-top: 2px;
+    padding-bottom: calc(var(--player-top-radius) + 2px);
+    overflow: hidden;
+  }
+
+  .app-shell.nav-minimal .artists-quick-jump button {
+    padding: 0;
+    font-size: 10px;
+  }
+
+  .app-shell.nav-minimal .artists-master .artist-list-item {
+    padding: 4px 6px;
+    column-gap: 10px;
+  }
+
+  .app-shell.nav-minimal .artists-master .artist-list-copy strong {
+    font-size: 14px;
+  }
+
+  .app-shell.nav-minimal .artists-master .artist-list-copy small {
+    font-size: 12px;
+  }
 }
 

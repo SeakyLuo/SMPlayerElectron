@@ -235,6 +235,7 @@ export function MiniModePage({
     }
 
     let isDisposed = false
+    setLyrics(null)
     void window.smplayer!.getLyrics(currentSong.id, playerLyricsSource).then((snapshot) => {
       if (!isDisposed) {
         setLyrics(snapshot)

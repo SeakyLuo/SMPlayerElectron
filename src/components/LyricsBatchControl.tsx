@@ -249,6 +249,15 @@ export function LyricsBatchControl({ t, snapshot, onUpdateSettings }: LyricsBatc
     let backupBytes = 0
     let lastRequestStartedAt = 0
 
+    const throttleRemoteLyricsRequest = async () => {
+      const elapsedSinceLastRequest = Date.now() - lastRequestStartedAt
+      const interval = 200
+      if (lastRequestStartedAt > 0 && elapsedSinceLastRequest < interval) {
+        await waitForLyricsThrottle(interval - elapsedSinceLastRequest)
+      }
+      lastRequestStartedAt = Date.now()
+    }
+
     const complete = (status: 'done' | 'canceled', message: string) => {
       finishLyricsJob(runId, status, message)
       const summary = [
@@ -287,12 +296,6 @@ export function LyricsBatchControl({ t, snapshot, onUpdateSettings }: LyricsBatc
         }
       }
 
-      const elapsedSinceLastRequest = Date.now() - lastRequestStartedAt
-      const interval = 200
-      if (lastRequestStartedAt > 0 && elapsedSinceLastRequest < interval) {
-        await waitForLyricsThrottle(interval - elapsedSinceLastRequest)
-      }
-
       const stateBeforeSong = useLyricsBatchStore.getState()
       if (stateBeforeSong.lyricsJobRunId !== runId) {
         return
@@ -321,26 +324,34 @@ export function LyricsBatchControl({ t, snapshot, onUpdateSettings }: LyricsBatc
         let targetRawLyrics = ''
 
         if (!overwriteMode) {
-          lastRequestStartedAt = Date.now()
-          const result = await window.smplayer!.saveInternetLyricsToFile(song.id)
-          if (result.status === 'saved') {
-            saved += 1
-            detailResult = 'saved'
-          } else if (result.status === 'skipped') {
+          const localLyrics = await window.smplayer!.getLyrics(song.id, 'local')
+          sourceRawLyrics = localLyrics.rawText
+          if (sourceRawLyrics.trim()) {
             skipped += 1
             detailResult = 'skipped'
             detailReason = 'already-exists'
-          } else if (result.status === 'missing') {
-            missing += 1
-            detailResult = 'missing'
           } else {
-            failed += 1
-            detailResult = 'failed'
+            await throttleRemoteLyricsRequest()
+            const result = await window.smplayer!.saveInternetLyricsToFile(song.id)
+            if (result.status === 'saved') {
+              saved += 1
+              detailResult = 'saved'
+            } else if (result.status === 'skipped') {
+              skipped += 1
+              detailResult = 'skipped'
+              detailReason = 'already-exists'
+            } else if (result.status === 'missing') {
+              missing += 1
+              detailResult = 'missing'
+            } else {
+              failed += 1
+              detailResult = 'failed'
+            }
           }
         } else {
           const localLyrics = await window.smplayer!.getLyrics(song.id, 'local')
           sourceRawLyrics = localLyrics.rawText
-          lastRequestStartedAt = Date.now()
+          await throttleRemoteLyricsRequest()
           const internetLyrics = await window.smplayer!.getLyrics(song.id, 'internet')
           targetRawLyrics = internetLyrics.rawText
 

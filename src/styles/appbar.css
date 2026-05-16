@@ -184,7 +184,7 @@
   overflow: hidden;
   isolation: isolate;
   background: transparent;
-  color: #fff;
+  color: #111827;
   box-shadow: var(--immersive-topbar-shadow);
 }
 

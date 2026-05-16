@@ -1483,7 +1483,7 @@ body.night-mode .app-shell .album-art-recommendation-preview {
     display: flex;
     align-items: center;
     height: var(--dialog-toolbar-offset);
-    padding: 0 138px 0 8px;
+    padding: 0 0 0 8px;
     box-sizing: border-box;
     color: var(--text-primary);
     -webkit-app-region: no-drag !important;

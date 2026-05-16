@@ -248,17 +248,16 @@ export function Sidebar({
           </button>
         ) : null}
         <span className="sidebar-app-name">{appName}</span>
+        <div className="sidebar-titlebar-spacer drag-spacer" />
       </div>
       <button
         className="sidebar-collapse-button"
         type="button"
         aria-label={collapsed ? t('sidebar.expandNavigation') : t('sidebar.collapseNavigation')}
-        data-tooltip={collapsed ? t('sidebar.expandNavigation') : t('sidebar.collapseNavigation')}
         onClick={onToggleCollapsed}
       >
-        <Icon name="menu" />
+        <Icon name='menu' />
       </button>
-
       <SearchField
         id="app-search"
         label={t('common.search')}
