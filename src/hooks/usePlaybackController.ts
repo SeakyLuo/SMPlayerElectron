@@ -1,6 +1,6 @@
 import { startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
-import type { MusicData, LibrarySong, PlaybackMode, PlaybackRuntimeSettings } from '../shared/contracts'
+import type { MusicData, LibrarySong, PlaybackMode, PlaybackRuntimeSettings, PlaybackSettingsUpdate } from '../shared/contracts'
 import {
   currentIndex,
   moveNext,
@@ -83,6 +83,8 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
   const progressSyncTimerRef = useRef<number | null>(null)
   const stalledProgressStartedAtRef = useRef<number | null>(null)
   const stalledProgressSecondsRef = useRef(0)
+  const volumePersistenceTimerRef = useRef<number | null>(null)
+  const pendingVolumePersistenceRef = useRef<PlaybackSettingsUpdate | null>(null)
   const failedTrackIdsRef = useRef(new Set<number>())
   const recoverFromPlaybackFailureRef = useRef<() => Promise<void>>(async () => {})
   const finishCurrentTrackRef = useRef<() => Promise<void>>(async () => {})
@@ -215,6 +217,31 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
     progressSecondsRef,
     getPlaybackSongIds,
   })
+
+  const flushVolumePersistence = useCallback(() => {
+    const update = pendingVolumePersistenceRef.current
+    if (!update) {
+      return
+    }
+
+    pendingVolumePersistenceRef.current = null
+    if (volumePersistenceTimerRef.current != null) {
+      window.clearTimeout(volumePersistenceTimerRef.current)
+      volumePersistenceTimerRef.current = null
+    }
+    void persistPlaybackSettings(update)
+  }, [persistPlaybackSettings])
+
+  const scheduleVolumePersistence = useCallback((update: PlaybackSettingsUpdate) => {
+    pendingVolumePersistenceRef.current = update
+    if (volumePersistenceTimerRef.current != null) {
+      window.clearTimeout(volumePersistenceTimerRef.current)
+    }
+
+    volumePersistenceTimerRef.current = window.setTimeout(() => {
+      flushVolumePersistence()
+    }, 180)
+  }, [flushVolumePersistence])
 
   const clearStalledTimer = useCallback(() => {
     if (stalledTimerRef.current != null) {
@@ -512,6 +539,10 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
     clamp,
   })
 
+  useEffect(() => () => {
+    flushVolumePersistence()
+  }, [flushVolumePersistence])
+
   useEffect(() => {
     if (!ready) {
       return
@@ -777,6 +808,7 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
     (nextVolume: number) => {
       const audio = audioRef.current
       const normalizedVolume = clamp(nextVolume, 0, 100)
+      let nextMuted: boolean | undefined
 
       volumeRef.current = normalizedVolume
       setVolume(normalizedVolume)
@@ -787,14 +819,15 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
           audio.muted = false
           isMutedRef.current = false
           setIsMuted(false)
-          void persistPlaybackSettings({ volume: normalizedVolume, isMuted: false })
-          return
+          nextMuted = false
         }
       }
 
-      void persistPlaybackSettings({ volume: normalizedVolume })
+      scheduleVolumePersistence(nextMuted === undefined
+        ? { volume: normalizedVolume }
+        : { volume: normalizedVolume, isMuted: nextMuted })
     },
-    [persistPlaybackSettings],
+    [scheduleVolumePersistence],
   )
 
   const toggleMute = useCallback(() => {

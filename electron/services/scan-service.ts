@@ -145,8 +145,6 @@ export class ScanService {
       throw new Error(`Selected music library is not a directory: ${rootPath}`)
     }
 
-    this.setRootPath(rootPath)
-
     const startedAt = Date.now()
     const folders: string[] = []
     const audioFiles: string[] = []
@@ -290,6 +288,8 @@ export class ScanService {
       this.db.exec('ROLLBACK')
       throw error
     }
+
+    this.setRootPath(rootPath)
 
     // Run thumbnail cache pruning in the background so we don't block the IPC return.
     // Failures are already swallowed inside pruneThumbnailCache.

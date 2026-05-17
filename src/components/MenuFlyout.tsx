@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 
 import type { MenuFlyoutItem, MenuFlyoutPosition } from './MenuFlyoutHelper'
 import { Icon } from './icons'
+import { VolumeSlider } from './VolumeSlider'
 import { getVolumeIconName } from './volumeIcon'
 
 const MENU_FLYOUT_VERTICAL_PADDING = 12
@@ -311,42 +312,12 @@ function getMenuFlyoutItemsHeight(items: MenuFlyoutItem[]) {
 function MenuFlyoutVolumeItem({ item, onPointerEnter }: { item: MenuFlyoutItem; onPointerEnter: () => void }) {
   const volumeValue = item.volumeValue ?? 0
   const volumeTitle = item.text
-  const [tooltipActive, setTooltipActive] = useState(false)
-  const tooltipTimerRef = useRef<number | null>(null)
-  const volumeTooltipValue = Math.round(volumeValue)
-  const tooltipAnchorLeft = `${volumeValue}%`
-  const volumeIconName = getVolumeIconName(volumeValue, item.volumeMuted === true)
-
-  const clearTooltipTimer = () => {
-    if (tooltipTimerRef.current != null) {
-      window.clearTimeout(tooltipTimerRef.current)
-      tooltipTimerRef.current = null
-    }
-  }
-
-  const showTooltip = (timeout = 900) => {
-    clearTooltipTimer()
-    setTooltipActive(true)
-    tooltipTimerRef.current = window.setTimeout(() => {
-      setTooltipActive(false)
-      tooltipTimerRef.current = null
-    }, timeout)
-  }
-
-  const keepTooltipVisible = () => {
-    clearTooltipTimer()
-    setTooltipActive(true)
-  }
-
-  const commitVolumeChange = (value: string) => {
-    item.onVolumeChange?.(Number(value))
-  }
+  const [liveVolumeValue, setLiveVolumeValue] = useState(volumeValue)
+  const volumeIconName = getVolumeIconName(liveVolumeValue, item.volumeMuted === true)
 
   useEffect(() => {
-    return () => {
-      clearTooltipTimer()
-    }
-  }, [])
+    setLiveVolumeValue(volumeValue)
+  }, [volumeValue])
 
   return (
     <div className="library-context-volume-item" role="menuitem" aria-label={volumeTitle} onPointerEnter={onPointerEnter}>
@@ -360,59 +331,15 @@ function MenuFlyoutVolumeItem({ item, onPointerEnter }: { item: MenuFlyoutItem; 
       >
         <Icon name={volumeIconName} />
       </button>
-      <div
-        className={`library-context-volume-slider-wrap${tooltipActive ? ' is-active' : ''}${item.disabled ? ' is-disabled' : ''}`}
-        style={{
-          '--range-progress': `${volumeValue}%`,
-          '--volume-tooltip-left': tooltipAnchorLeft,
-          '--volume-tooltip-anchor-left': tooltipAnchorLeft,
-        } as CSSProperties}
-      >
-        <input
-          className="media-slider library-context-volume-slider"
-          type="range"
-          min="0"
-          max="100"
-          value={volumeValue}
-          disabled={item.disabled}
-          style={{ '--range-progress': `${volumeValue}%` } as CSSProperties}
-          onChange={() => {
-            keepTooltipVisible()
-          }}
-          onInput={(event) => {
-            commitVolumeChange(event.currentTarget.value)
-          }}
-          onPointerDown={() => {
-            keepTooltipVisible()
-          }}
-          onPointerEnter={() => {
-            keepTooltipVisible()
-          }}
-          onPointerLeave={() => {
-            setTooltipActive(false)
-          }}
-          onPointerUp={(event) => {
-            commitVolumeChange(event.currentTarget.value)
-            showTooltip(650)
-          }}
-          onPointerCancel={() => {
-            setTooltipActive(false)
-          }}
-          onLostPointerCapture={(event) => {
-            commitVolumeChange(event.currentTarget.value)
-            showTooltip(650)
-          }}
-          onFocus={() => {
-            keepTooltipVisible()
-          }}
-          onBlur={() => {
-            setTooltipActive(false)
-          }}
-          aria-label={volumeTitle}
-          aria-valuetext={String(volumeTooltipValue)}
-        />
-        <span className="volume-slider-tooltip" aria-hidden="true">{volumeTooltipValue}</span>
-      </div>
+      <VolumeSlider
+        className="library-context-volume-slider-wrap"
+        inputClassName="media-slider library-context-volume-slider"
+        value={volumeValue}
+        disabled={item.disabled}
+        ariaLabel={volumeTitle}
+        onChange={item.onVolumeChange}
+        onLiveValueChange={setLiveVolumeValue}
+      />
     </div>
   )
 }

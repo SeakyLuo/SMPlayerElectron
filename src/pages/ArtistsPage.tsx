@@ -21,6 +21,7 @@ import type { Translator } from '../shared/i18n'
 import { getQuickJumpTooltip } from '../shared/quickJumpTooltip'
 import { removeQueueRange } from '../shared/queueUndo'
 import { useLibraryStore } from '../state/useLibraryStore'
+import { useStoredMultiSelect, useStoredNumberSet } from '../state/usePageSelectionStore'
 import { usePreferenceStore } from '../state/usePreferenceStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
 import { useSongArtwork } from '../hooks/useSongArtwork'
@@ -115,8 +116,8 @@ export function ArtistsPage({
   const [artistSearchFocused, setArtistSearchFocused] = useState(false)
   const [appBarSearchOpen, setAppBarSearchOpen] = useState(false)
   const [selectedArtistName, setSelectedArtistName] = useState('')
-  const [multiSelect, setMultiSelect] = useState(false)
-  const [selectedSongIds, setSelectedSongIds] = useState<Set<number>>(new Set())
+  const [multiSelect, setMultiSelect] = useStoredMultiSelect('artists')
+  const [selectedSongIds, setSelectedSongIds] = useStoredNumberSet('artists', 'selectedSongIds')
   const [addToMenu, setAddToMenu] = useState<(MenuFlyoutPosition & { songIds: number[]; defaultPlaylistName: string }) | null>(null)
   const [playlistNameDialog, setPlaylistNameDialog] = useState<{ defaultName: string; songIds: number[] } | null>(null)
   const [songContextMenu, setSongContextMenu] = useState<MusicMenuFlyoutState | null>(null)

@@ -13,6 +13,7 @@ import type { LibraryPlaylist, LibrarySong, PreferenceItemSnapshot } from '../sh
 import type { Translator } from '../shared/i18n'
 import { insertQueueEntries, insertQueueSongs, removeQueueRange } from '../shared/queueUndo'
 import { useLibraryStore } from '../state/useLibraryStore'
+import { useStoredMultiSelect, useStoredNumberSet } from '../state/usePageSelectionStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
 import { getDefaultNewPlaylistName, getNextPlaylistName, getParentFolderPath, refreshSongPreferenceItem, type NowPlayingAddToMenuState, type NowPlayingSongMenuState } from './nowPlayingFullModel'
 
@@ -62,8 +63,8 @@ export function NowPlayingFullPlaylist({
   onClose: () => void
   onPanelRequest: (panel: FullPanel) => void
 }) {
-  const [multiSelect, setMultiSelect] = useState(false)
-  const [selectedQueueIndexes, setSelectedQueueIndexes] = useState<Set<number>>(new Set())
+  const [multiSelect, setMultiSelect] = useStoredMultiSelect('now-playing-full')
+  const [selectedQueueIndexes, setSelectedQueueIndexes] = useStoredNumberSet('now-playing-full', 'selectedQueueIndexes')
   const [songMenu, setSongMenu] = useState<NowPlayingSongMenuState | null>(null)
   const [addToMenu, setAddToMenu] = useState<NowPlayingAddToMenuState | null>(null)
   const [songPreferenceItem, setSongPreferenceItem] = useState<PreferenceItemSnapshot | null>(null)

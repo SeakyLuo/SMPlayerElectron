@@ -17,7 +17,7 @@ const LOCAL_FILE_TYPE_ICON_URL = COLORFUL_ICON_URL
 
 export function LocalTableContent({
   frameRef,
-  shellRef,
+  onShellRefChange,
   scrollbarTrackRef,
   onThumbPointerDown,
   childFolders,
@@ -68,7 +68,7 @@ export function LocalTableContent({
   onJumpToSongKey,
 }: {
   frameRef: RefObject<HTMLDivElement | null>
-  shellRef: RefObject<HTMLDivElement | null>
+  onShellRefChange: (node: HTMLDivElement | null) => void
   scrollbarTrackRef: RefObject<HTMLDivElement | null>
   onThumbPointerDown: ComponentProps<typeof CustomScrollbar>['onThumbPointerDown']
   childFolders: FolderNode[]
@@ -123,7 +123,7 @@ export function LocalTableContent({
   const shellObserverRef = useRef<ResizeObserver | null>(null)
 
   const setShellRef = useCallback((node: HTMLDivElement | null) => {
-    if (shellRef) (shellRef as any).current = node
+    onShellRefChange(node)
 
     if (shellObserverRef.current) {
       shellObserverRef.current.disconnect()
@@ -136,7 +136,7 @@ export function LocalTableContent({
       ro.observe(node)
       shellObserverRef.current = ro
     }
-  }, [shellRef])
+  }, [onShellRefChange])
 
   const ROW_HEIGHT = 48
   const OVERSCAN = 10

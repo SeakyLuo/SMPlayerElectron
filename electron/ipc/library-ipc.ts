@@ -198,7 +198,6 @@ export function registerLibraryIpc(options: LibraryIpcOptions) {
     }
 
     const [rootPath] = result.filePaths
-    getSettingsService().setRootPath(rootPath)
 
     return { rootPath }
   })

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
 import { CommandBar, CommandBarButton } from '../components/CommandBar'
@@ -17,6 +17,7 @@ import { useSongsAddedUndo } from '../hooks/useSongsAddedUndo'
 import type { ArtistSplitResultItem, LibraryFolder, LibraryPlaylist, LibrarySong, ScanLibraryResult } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
 import { useLibraryStore } from '../state/useLibraryStore'
+import { useStoredMultiSelect, useStoredNumberSet, useStoredStringSet } from '../state/usePageSelectionStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
 import { MONOTONE_ICON_URL } from '../shared/staticAssets'
 import {
@@ -189,10 +190,11 @@ export function LocalPage({
   onHiddenFoldersListButtonClick,
 }: LocalPageProps) {
   const currentRelativePath = routeRelativePath
+  const previousRelativePathRef = useRef(currentRelativePath)
   const [sortMode, setSortMode] = useState<LocalSortMode>('title')
-  const [multiSelect, setMultiSelect] = useState(false)
-  const [selectedFolderPaths, setSelectedFolderPaths] = useState<Set<string>>(new Set())
-  const [selectedSongIds, setSelectedSongIds] = useState<Set<number>>(new Set())
+  const [multiSelect, setMultiSelect] = useStoredMultiSelect('local')
+  const [selectedFolderPaths, setSelectedFolderPaths] = useStoredStringSet('local', 'selectedFolderPaths')
+  const [selectedSongIds, setSelectedSongIds] = useStoredNumberSet('local', 'selectedSongIds')
   const [selectedListItemKey, setSelectedListItemKey] = useState('')
   const [createdFolderPaths, setCreatedFolderPaths] = useState<Set<string>>(new Set())
   const [, setLocalNotification] = useState('')
@@ -239,6 +241,9 @@ export function LocalPage({
   const localTableScrollFrameRef = useRef<HTMLDivElement | null>(null)
   const localTableScrollbarTrackRef = useRef<HTMLDivElement | null>(null)
   const localTableShellRef = useRef<HTMLDivElement | null>(null)
+  const setLocalTableShellRef = useCallback((node: HTMLDivElement | null) => {
+    localTableShellRef.current = node
+  }, [])
   const localSongItemRefs = useRef<Array<HTMLElement | null>>([])
   const { getFolderPreferenceMenuItem } = useFolderPreferenceMenuItem(t)
   const { nodes, songsById } = useMemo(
@@ -363,7 +368,10 @@ export function LocalPage({
   }
 
   useEffect(() => {
-    ClearMultiSelectStatus()
+    if (previousRelativePathRef.current !== currentRelativePath) {
+      ClearMultiSelectStatus()
+      previousRelativePathRef.current = currentRelativePath
+    }
     setSelectedListItemKey('')
     setLocalNotification('')
   }, [currentRelativePath])
@@ -1218,7 +1226,7 @@ export function LocalPage({
       ) : (
         <LocalTableContent
           frameRef={localTableScrollFrameRef}
-          shellRef={localTableShellRef}
+          onShellRefChange={setLocalTableShellRef}
           scrollbarTrackRef={localTableScrollbarTrackRef}
           onThumbPointerDown={onLocalTableScrollbarPointerDown}
           childFolders={childFolders}
@@ -1562,4 +1570,3 @@ export function LocalPage({
     </section>
   )
 }
-

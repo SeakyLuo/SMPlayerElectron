@@ -20,6 +20,7 @@ import { compareLocalText, getLocalTextQuickJumpBucket, LOCAL_TEXT_QUICK_JUMP_KE
 import { useSongArtwork } from '../hooks/useSongArtwork'
 import { useCustomScrollbar } from '../hooks/useCustomScrollbar'
 import { useSongsAddedUndo } from '../hooks/useSongsAddedUndo'
+import { useStoredNumberSet, useStoredSelectionAnchorSongId } from '../state/usePageSelectionStore'
 
 interface MusicLibraryPageProps {
   snapshot: MusicData
@@ -120,8 +121,8 @@ export function MusicLibraryPage({
   const tableShellRef = useRef<HTMLDivElement | null>(null)
   const [contextMenu, setContextMenu] = useState<MusicMenuFlyoutState | null>(null)
   const [selectionMenu, setSelectionMenu] = useState<MenuFlyoutPosition | null>(null)
-  const [selectedSongIds, setSelectedSongIds] = useState<Set<number>>(new Set())
-  const [selectionAnchorSongId, setSelectionAnchorSongId] = useState<number | null>(null)
+  const [selectedSongIds, setSelectedSongIds] = useStoredNumberSet('music-library', 'selectedSongIds')
+  const [selectionAnchorSongId, setSelectionAnchorSongId] = useStoredSelectionAnchorSongId('music-library')
   const [columnWidths, setColumnWidths] = useState<ColumnWidths>(DEFAULT_COLUMN_WIDTHS)
   const [scrollTop, setScrollTop] = useState(0)
   const [viewportSize, setViewportSize] = useState({ height: 640, width: 1160 })

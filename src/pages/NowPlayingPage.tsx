@@ -16,6 +16,7 @@ import type { Translator } from '../shared/i18n'
 import { insertQueueEntries, insertQueueSongs, removeQueueRange } from '../shared/queueUndo'
 import { quickPlay } from '../shared/QuickPlayHelper'
 import { useLibraryStore } from '../state/useLibraryStore'
+import { useStoredMultiSelect, useStoredNumberSet } from '../state/usePageSelectionStore'
 import { usePreferenceStore } from '../state/usePreferenceStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
 import { useCustomScrollbar } from '../hooks/useCustomScrollbar'
@@ -91,8 +92,8 @@ export function NowPlayingPage({
   onClearQueue,
   onOpenImmersiveMode,
 }: NowPlayingPageProps) {
-  const [multiSelect, setMultiSelect] = useState(false)
-  const [selectedQueueIndexes, setSelectedQueueIndexes] = useState<Set<number>>(new Set())
+  const [multiSelect, setMultiSelect] = useStoredMultiSelect('now-playing')
+  const [selectedQueueIndexes, setSelectedQueueIndexes] = useStoredNumberSet('now-playing', 'selectedQueueIndexes')
   const [randomMenuPosition, setRandomMenuPosition] = useState<MenuFlyoutPosition | null>(null)
   const [songMenu, setSongMenu] = useState<NowPlayingSongMenuState | null>(null)
   const [addToMenu, setAddToMenu] = useState<NowPlayingAddToMenuState | null>(null)

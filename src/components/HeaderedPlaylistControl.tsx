@@ -6,6 +6,7 @@ import type { Translator } from '../shared/i18n'
 import { removeQueueRange } from '../shared/queueUndo'
 import { COLORFUL_BACKGROUND_URL } from '../shared/staticAssets'
 import { useLibraryStore } from '../state/useLibraryStore'
+import { useStoredMultiSelect, useStoredNumberSet } from '../state/usePageSelectionStore'
 import { usePreferenceStore } from '../state/usePreferenceStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
 import { useDeleteSongFromDisk } from '../hooks/useDeleteSongFromDisk'
@@ -195,8 +196,9 @@ export function HeaderedPlaylistControl({
   const songListRef = useRef<HTMLDivElement | null>(null)
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false)
   const onScrollbarPointerDown = useHeaderedPlaylistScroll(controlRef, title, setIsHeaderCollapsed)
-  const [selectionMode, setSelectionMode] = useState(false)
-  const [selectedSongIds, setSelectedSongIds] = useState<Set<number>>(new Set())
+  const selectionStateKey = `headered-playlist:${preferenceType ?? type}:${preferenceItemId ?? title}`
+  const [selectionMode, setSelectionMode] = useStoredMultiSelect(selectionStateKey)
+  const [selectedSongIds, setSelectedSongIds] = useStoredNumberSet(selectionStateKey, 'selectedSongIds')
   const [addToMenu, setAddToMenu] = useState<(MenuFlyoutPosition & { songIds: number[] }) | null>(null)
   const [sortMenu, setSortMenu] = useState<MenuFlyoutPosition | null>(null)
   const [preferenceMenu, setPreferenceMenu] = useState<MenuFlyoutPosition | null>(null)

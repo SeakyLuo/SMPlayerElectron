@@ -2,7 +2,7 @@
   "name": "smplayer",
   "private": true,
   "version": "3.0.0",
-  "description": "Local music player",
+  "description": "Simple Melody Player",
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -48,7 +48,7 @@
     "vite-plugin-electron-renderer": "^0.14.6"
   },
   "build": {
-    "appId": "com.seaky.smplayer",
+    "appId": "com.seaky.simplemelodyplayer",
     "productName": "简音播放器",
     "copyright": "Copyright © 2026 Seaky",
     "asar": true,
@@ -149,6 +149,9 @@
     },
     "nsis": {
       "oneClick": false,
+      "installerIcon": "public/app-icon.ico",
+      "uninstallerIcon": "public/app-icon.ico",
+      "installerHeaderIcon": "public/app-icon.ico",
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
@@ -161,7 +164,7 @@
       "desktop": {
         "entry": {
           "Name": "简音播放器",
-          "Comment": "Local music player"
+          "Comment": "Simple Melody Player"
         }
       },
       "target": [
