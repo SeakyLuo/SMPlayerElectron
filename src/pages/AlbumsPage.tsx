@@ -19,6 +19,7 @@ import type { Translator } from '../shared/i18n'
 import { getQuickJumpTooltip } from '../shared/quickJumpTooltip'
 import { compareLocalText, getLocalTextQuickJumpBucket, LOCAL_TEXT_QUICK_JUMP_KEYS } from '../shared/textCompare'
 import { useLibraryStore } from '../state/useLibraryStore'
+import { useStoredMultiSelect, useStoredStringSet } from '../state/usePageSelectionStore'
 import { usePreferenceStore } from '../state/usePreferenceStore'
 import { useCustomScrollbar } from '../hooks/useCustomScrollbar'
 import { useSongsAddedUndo } from '../hooks/useSongsAddedUndo'
@@ -91,8 +92,8 @@ export function AlbumsPage({
   const [reverseDisplayOrder, setReverseDisplayOrder] = useState(false)
   const [sortMenu, setSortMenu] = useState<MenuFlyoutPosition | null>(null)
   const [processing, setProcessing] = useState(false)
-  const [multiSelect, setMultiSelect] = useState(false)
-  const [selectedAlbumNames, setSelectedAlbumNames] = useState<Set<string>>(new Set())
+  const [multiSelect, setMultiSelect] = useStoredMultiSelect('albums')
+  const [selectedAlbumNames, setSelectedAlbumNames] = useStoredStringSet('albums', 'selectedAlbumNames')
   const [albumContextMenu, setAlbumContextMenu] = useState<(MenuFlyoutPosition & { album: AlbumView }) | null>(null)
   const [addToMenu, setAddToMenu] = useState<(MenuFlyoutPosition & { songIds: number[]; defaultPlaylistName: string }) | null>(null)
   const [albumArtPreview, setAlbumArtPreview] = useState<AlbumView | null>(null)

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerE
 import type { MediaControlTrack, VoiceAssistantResponse } from '../components/MediaControl'
 import { DEFAULT_ARTWORK_URL, getRepeatOneTitle, getRepeatTitle } from '../components/mediaControlModel'
 import { VoiceAssistantFlyout, type VoiceAssistantFlyoutHandle } from '../components/VoiceAssistantFlyout'
+import { VolumeSlider } from '../components/VolumeSlider'
 import { Icon, type IconName } from '../components/icons'
 import { getVolumeIconName } from '../components/volumeIcon'
 import { useSongArtwork } from '../hooks/useSongArtwork'
@@ -72,11 +73,10 @@ export function MiniModePage({
   const [controlsVisible, setControlsVisible] = useState(false)
   const [voiceAssistantOpen, setVoiceAssistantOpen] = useState(false)
   const [voiceAssistantAvailable, setVoiceAssistantAvailable] = useState(false)
-  const [volumeTooltipActive, setVolumeTooltipActive] = useState(false)
+  const [liveVolumeValue, setLiveVolumeValue] = useState(() => disabled ? 0 : Math.min(Math.max(volume, 0), 100))
   const [lyrics, setLyrics] = useState<LyricsSnapshot | null>(null)
   const isProgressSeekingRef = useRef(false)
   const controlsHideTimerRef = useRef<number | null>(null)
-  const volumeTooltipTimerRef = useRef<number | null>(null)
   const volumeButtonRef = useRef<HTMLButtonElement | null>(null)
   const volumePanelRef = useRef<HTMLDivElement | null>(null)
   const voiceAssistantFlyoutRef = useRef<VoiceAssistantFlyoutHandle>(null)
@@ -103,10 +103,9 @@ export function MiniModePage({
     [lyrics, progressRatio, progressSeconds],
   )
   const volumeValue = disabled ? 0 : Math.min(Math.max(volume, 0), 100)
-  const volumeDisplayValue = Math.round(volumeValue)
   const playTitle = isPlaying ? t('player.pause') : t('player.play')
   const volumeTitle = isMuted ? t('player.unmute') : t('player.mute')
-  const volumeIconName = getVolumeIconName(volumeValue, isMuted)
+  const volumeIconName = getVolumeIconName(liveVolumeValue, isMuted)
   const favoriteTitle = track.favorite ? t('player.unlike') : t('player.like')
   const repeatTitle = mode === 'repeat-one' ? getRepeatOneTitle(t, mode) : getRepeatTitle(t, mode)
   const repeatIconName: IconName = mode === 'repeat-one' ? 'repeatOne' : 'repeat'
@@ -167,43 +166,6 @@ export function MiniModePage({
     }, 5000)
   }
 
-  const clearVolumeTooltipTimer = () => {
-    if (volumeTooltipTimerRef.current != null) {
-      window.clearTimeout(volumeTooltipTimerRef.current)
-      volumeTooltipTimerRef.current = null
-    }
-  }
-
-  const keepVolumeTooltipVisible = () => {
-    if (disabled) {
-      return
-    }
-
-    clearVolumeTooltipTimer()
-    setVolumeTooltipActive(true)
-  }
-
-  const showVolumeTooltip = (duration = 900) => {
-    if (disabled) {
-      return
-    }
-
-    keepVolumeTooltipVisible()
-    volumeTooltipTimerRef.current = window.setTimeout(() => {
-      setVolumeTooltipActive(false)
-      volumeTooltipTimerRef.current = null
-    }, duration)
-  }
-
-  const hideVolumeTooltip = () => {
-    clearVolumeTooltipTimer()
-    setVolumeTooltipActive(false)
-  }
-
-  const commitVolumeChange = (value: string) => {
-    onVolumeChange(Number(value))
-  }
-
   useEffect(() => {
     void window.smplayer?.getAppInfo().then((appInfo) => {
       setVoiceAssistantAvailable(appInfo.platform === 'win32')
@@ -212,8 +174,11 @@ export function MiniModePage({
 
   useEffect(() => () => {
     clearControlsHideTimer()
-    clearVolumeTooltipTimer()
   }, [])
+
+  useEffect(() => {
+    setLiveVolumeValue(volumeValue)
+  }, [volumeValue])
 
   useEffect(() => {
     if (volumeOpen || voiceAssistantOpen || isProgressSeeking) {
@@ -267,7 +232,6 @@ export function MiniModePage({
 
   useEffect(() => {
     if (!volumeOpen) {
-      hideVolumeTooltip()
       return
     }
 
@@ -431,56 +395,18 @@ export function MiniModePage({
                 <Icon name={volumeIconName} />
               </button>
               {volumeOpen ? (
-                <div
+                <VolumeSlider
                   ref={volumePanelRef}
-                  className={`mini-mode-volume-popover${volumeTooltipActive ? ' is-active' : ''}${disabled ? ' is-disabled' : ''}`}
-                  style={{ '--volume-tooltip-bottom': `${volumeValue}%` } as CSSProperties}
-                >
-                  <input
-                    className="mini-mode-volume-slider"
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={volumeValue}
-                    style={{ '--range-progress': `${volumeValue}%` } as CSSProperties}
-                    disabled={disabled}
-                    onChange={() => {
-                      keepVolumeTooltipVisible()
-                    }}
-                    onInput={(event) => {
-                      commitVolumeChange(event.currentTarget.value)
-                    }}
-                    onPointerDown={() => {
-                      keepVolumeTooltipVisible()
-                    }}
-                    onPointerEnter={() => {
-                      keepVolumeTooltipVisible()
-                    }}
-                    onPointerLeave={() => {
-                      hideVolumeTooltip()
-                    }}
-                    onPointerUp={(event) => {
-                      commitVolumeChange(event.currentTarget.value)
-                      showVolumeTooltip(650)
-                    }}
-                    onPointerCancel={() => {
-                      hideVolumeTooltip()
-                    }}
-                    onLostPointerCapture={(event) => {
-                      commitVolumeChange(event.currentTarget.value)
-                      showVolumeTooltip(650)
-                    }}
-                    onFocus={() => {
-                      keepVolumeTooltipVisible()
-                    }}
-                    onBlur={() => {
-                      hideVolumeTooltip()
-                    }}
-                    aria-label={t('player.volume')}
-                    aria-valuetext={String(volumeDisplayValue)}
-                  />
-                  <span className="volume-slider-tooltip" aria-hidden="true">{volumeDisplayValue}</span>
-                </div>
+                  className="mini-mode-volume-popover"
+                  inputClassName="mini-mode-volume-slider"
+                  orientation="vertical"
+                  value={volumeValue}
+                  disabled={disabled}
+                  ariaLabel={t('player.volume')}
+                  showTooltipOnMount
+                  onChange={onVolumeChange}
+                  onLiveValueChange={setLiveVolumeValue}
+                />
               ) : null}
             </div>
           </div>

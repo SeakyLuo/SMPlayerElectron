@@ -24,7 +24,8 @@ import {
   cancelWindowsSpeechRecognition,
   recognizeWindowsSpeech,
 } from './services/windows-speech-recognition'
-import type { TrayCommand } from '../src/shared/contracts'
+import type { PreferredLanguage, TrayCommand } from '../src/shared/contracts'
+import { createTranslator } from '../src/shared/i18n'
 import { registerAppIpc } from './ipc/app-ipc'
 import { registerDataIpc } from './ipc/data-ipc'
 import { registerLibraryIpc } from './ipc/library-ipc'
@@ -69,7 +70,17 @@ app.commandLine.appendSwitch(
 registerMediaProtocolSchemes()
 
 const audioDialogExtensions = [...AUDIO_EXTENSIONS].map((extension) => extension.slice(1))
-const windowsAppUserModelId = 'com.seaky.smplayer'
+const windowsAppUserModelId = 'com.seaky.simplemelodyplayer'
+
+function getPreferredLanguage(): PreferredLanguage {
+  return libraryService?.settingsService.getSettingsSnapshot().preferredLanguage ?? 'system'
+}
+
+function updateAppName(preferredLanguage = getPreferredLanguage()) {
+  app.setName(createTranslator(preferredLanguage, app.getLocale())('app.shell'))
+}
+
+updateAppName()
 
 if (process.platform === 'win32') {
   app.setAppUserModelId(windowsAppUserModelId)
@@ -141,6 +152,7 @@ app.on('open-file', (event, filePath) => {
 app.whenReady().then(async () => {
   app.setPath('userData', await resolveUserDataPath())
   libraryService = new DataService(app.getPath('userData'))
+  updateAppName()
   await libraryService.pendingSongDeleteService.commitAll()
   trayController.updateWindowsJumpList()
   remotePlayServer = new RemotePlayServer(
@@ -201,6 +213,7 @@ app.whenReady().then(async () => {
   })
   registerDataIpc({
     getLibraryService: () => libraryService!,
+    updateAppName,
     updateTrayMenu: () => trayController.updateMenu(),
     updateWindowsJumpList: () => trayController.updateWindowsJumpList(),
   })

@@ -7,6 +7,7 @@ import {
   type BrowserWindow,
   type JumpListCategory,
 } from 'electron'
+import { basename } from 'node:path'
 
 import type { GlobalMediaCommand, PreferredLanguage, TrayCommand } from '../src/shared/contracts'
 import { createTranslator } from '../src/shared/i18n'
@@ -125,36 +126,27 @@ export class TrayController {
     }
 
     const t = createTranslator(this.options.getPreferredLanguage(), app.getLocale())
-    const canUseRecentFileCategory = app.isPackaged &&
-      !process.env.PORTABLE_EXECUTABLE_DIR &&
-      !process.env.PORTABLE_EXECUTABLE_FILE
-    const recentFileItems = canUseRecentFileCategory
-      ? this.options.getRecentPlayedSongPaths(windowsJumpListRecentLimit).map((filePath) => ({
-          type: 'file' as const,
-          path: filePath,
-        }))
+    const recentSongPaths = this.options.getRecentPlayedSongPaths(windowsJumpListRecentLimit)
+    app.clearRecentDocuments()
+    for (const filePath of recentSongPaths) {
+      app.addRecentDocument(filePath)
+    }
+
+    const categories: JumpListCategory[] = recentSongPaths.length > 0
+      ? [{
+          type: 'custom',
+          name: t('common.recent'),
+          items: recentSongPaths.map((filePath) => ({
+            type: 'task',
+            title: basename(filePath),
+            description: filePath,
+            program: process.execPath,
+            args: quoteWindowsArgument(filePath),
+            iconPath: this.options.getAppIconPath(),
+            iconIndex: 0,
+          })),
+        }]
       : []
-    const categories: JumpListCategory[] = [
-      ...(recentFileItems.length > 0
-        ? [{
-            type: 'custom' as const,
-            name: t('common.recent'),
-            items: recentFileItems,
-          }]
-        : []),
-      {
-        type: 'tasks',
-        items: [{
-          type: 'task',
-          title: t('app.shell'),
-          description: t('app.shell'),
-          program: process.execPath,
-          args: '--smplayer-show-window',
-          iconPath: this.options.getAppIconPath(),
-          iconIndex: 0,
-        }],
-      },
-    ]
 
     app.setJumpList(categories)
   }
@@ -205,4 +197,8 @@ export class TrayController {
 
     return icon.resize({ width: 18, height: 18 })
   }
+}
+
+function quoteWindowsArgument(value: string) {
+  return `"${value}"`
 }

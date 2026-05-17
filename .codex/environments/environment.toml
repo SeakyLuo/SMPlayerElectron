@@ -12,3 +12,18 @@ command = '''
 npm.cmd install
 npm.cmd run dev
 '''
+
+[[actions]]
+name = "构建"
+icon = "tool"
+command = "npm.cmd run build"
+
+[[actions]]
+name = "打包"
+icon = "tool"
+command = "npm.cmd run dist:win"
+
+[[actions]]
+name = "打包winstore"
+icon = "tool"
+command = "npm.cmd run dist:win:store"

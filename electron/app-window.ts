@@ -1,4 +1,4 @@
-import { Notification, BrowserWindow, shell } from 'electron'
+import { Notification, BrowserWindow, nativeImage, shell } from 'electron'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
@@ -41,6 +41,7 @@ let hasShownTrayHint = false
 export async function createMainWindow(options: MainWindowOptions) {
   const startupNightModeActive = getStartupNightModeActive(options.getSettings())
   const defaultWindowMinimumSize = options.windowController.getDefaultMinimumSize()
+  const appIcon = nativeImage.createFromPath(options.getAppIconPath())
   const window = new BrowserWindow({
     width: 1460,
     height: 940,
@@ -62,7 +63,7 @@ export async function createMainWindow(options: MainWindowOptions) {
     vibrancy: process.platform === 'darwin' ? 'under-window' : undefined,
     visualEffectState: 'active',
     title: 'Simple Melody Player',
-    icon: options.getAppIconPath(),
+    icon: appIcon,
     webPreferences: {
       contextIsolation: true,
       preload: join(__dirname, 'preload.mjs'),
@@ -71,6 +72,7 @@ export async function createMainWindow(options: MainWindowOptions) {
       ],
     },
   })
+  window.setIcon(appIcon)
   options.onCreated(window)
 
   window.on('close', (event) => {

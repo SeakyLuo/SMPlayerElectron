@@ -56,8 +56,8 @@ interface LibraryStoreState {
   loadRecent: () => Promise<void>
   loadRequiredData: (requirements: LibraryDataRequirements) => Promise<void>
   refresh: (requirements?: LibraryDataRequirements, options?: LibraryRefreshOptions) => Promise<void>
-  pickLibraryRoot: () => Promise<boolean>
-  scanLibrary: () => Promise<ScanLibraryResult | null>
+  pickLibraryRoot: () => Promise<string | null>
+  scanLibrary: (rootPath?: string) => Promise<ScanLibraryResult | null>
   scanLocalFolder: (folderPath: string) => Promise<ScanLibraryResult | null>
   applyArtistSplits: (splits: ArtistSplitResultItem[]) => Promise<void>
   cancelLocalFolderScan: () => Promise<void>
@@ -319,24 +319,20 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
   },
   pickLibraryRoot: async () => {
     if (!window.smplayer) {
-      return false
+      return null
     }
 
     set({ error: null })
 
     try {
       const result = await window.smplayer.pickLibraryRoot()
-      if (result.rootPath) {
-        await get().refresh(undefined, { silent: true })
-        return true
-      }
-      return false
+      return result.rootPath
     } catch (error) {
       set({ error: getErrorMessage(error) })
-      return false
+      return null
     }
   },
-  scanLibrary: async () => {
+  scanLibrary: async (selectedRootPath) => {
     if (!window.smplayer) {
       return null
     }
@@ -345,7 +341,7 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
       return null
     }
 
-    const rootPath = get().snapshot.settings.rootPath
+    const rootPath = selectedRootPath ?? get().snapshot.settings.rootPath
     const operationId = rootPath ? crypto.randomUUID() : ''
     let removeProgressListener: (() => void) | null = null
 
@@ -392,7 +388,7 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
           : state)
       }
 
-      const result = await window.smplayer.scanLibrary(undefined, operationId || undefined, progressMax)
+      const result = await window.smplayer.scanLibrary(selectedRootPath, operationId || undefined, progressMax)
       // Hide the scan progress overlay as soon as the IPC returns. The library
       // refresh runs in the background so the caller can show the result
       // notification without waiting for a full library re-fetch.

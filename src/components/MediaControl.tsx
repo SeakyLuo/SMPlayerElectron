@@ -19,6 +19,7 @@ import { getAddToPlaylistMenuFlyoutItem, getPreferenceMenuFlyoutItem, type MenuF
 import { MusicDialog } from './MusicDialog'
 import { usePreferenceStore } from '../state/usePreferenceStore'
 import { VoiceAssistantFlyout, type VoiceAssistantFlyoutHandle, type VoiceAssistantResponse } from './VoiceAssistantFlyout'
+import { VolumeSlider } from './VolumeSlider'
 import { getVolumeIconName } from './volumeIcon'
 import { DEFAULT_ARTWORK_URL, getRepeatOneTitle, getRepeatTitle, getShuffleTitle } from './mediaControlModel'
 
@@ -175,10 +176,6 @@ function getNextPlaybackMode(mode: PlaybackMode): PlaybackMode {
   return 'once'
 }
 
-function clampVolume(value: number) {
-  return Math.min(Math.max(value, 0), 100)
-}
-
 function setPlaybackModeFromCurrent({
   mode,
   targetMode,
@@ -254,16 +251,14 @@ export function MediaControlButtons({
 }: MediaControlButtonsProps) {
   const playTitle = isPlaying ? t('player.pause') : t('player.play')
   const volumeTitle = isMuted ? t('player.unmute') : t('player.mute')
-  const [volumeTooltipActive, setVolumeTooltipActive] = useState(false)
   const [compactVolumeOpen, setCompactVolumeOpen] = useState(false)
   const [modeMenu, setModeMenu] = useState<MenuFlyoutPosition | null>(null)
-  const volumeTooltipTimerRef = useRef<number | null>(null)
+  const [liveVolumeValue, setLiveVolumeValue] = useState(volumeValue)
   const compactVolumeButtonRef = useRef<HTMLButtonElement | null>(null)
   const compactVolumePanelRef = useRef<HTMLDivElement | null>(null)
   const modeLongPressTimerRef = useRef<number | null>(null)
   const suppressNextModeClickRef = useRef(false)
-  const volumeDisplayValue = Math.round(volumeValue)
-  const volumeIconName = getVolumeIconName(volumeValue, isMuted)
+  const volumeIconName = getVolumeIconName(liveVolumeValue, isMuted)
   const modeTitle = `${t('player.playbackMode')}: ${getPlaybackModeName(t, mode)}`
   const modeIconName = getPlaybackModeIcon(mode)
 
@@ -282,59 +277,11 @@ export function MediaControlButtons({
     setPlaybackMode(getNextPlaybackMode(mode))
   }
 
-  const clearVolumeTooltipTimer = () => {
-    if (volumeTooltipTimerRef.current != null) {
-      window.clearTimeout(volumeTooltipTimerRef.current)
-      volumeTooltipTimerRef.current = null
-    }
-  }
-
   const clearModeLongPressTimer = () => {
     if (modeLongPressTimerRef.current != null) {
       window.clearTimeout(modeLongPressTimerRef.current)
       modeLongPressTimerRef.current = null
     }
-  }
-
-  const showVolumeTooltip = (duration = 900) => {
-    if (disabled) {
-      return
-    }
-
-    clearVolumeTooltipTimer()
-    setVolumeTooltipActive(true)
-    volumeTooltipTimerRef.current = window.setTimeout(() => {
-      setVolumeTooltipActive(false)
-      volumeTooltipTimerRef.current = null
-    }, duration)
-  }
-
-  const hideVolumeTooltip = () => {
-    clearVolumeTooltipTimer()
-    setVolumeTooltipActive(false)
-  }
-
-  const keepVolumeTooltipVisible = () => {
-    if (disabled) {
-      return
-    }
-
-    clearVolumeTooltipTimer()
-    setVolumeTooltipActive(true)
-  }
-
-  const commitVolumeChange = (value: string) => {
-    onVolumeChange(Number(value))
-  }
-
-  const commitHorizontalVolumePointer = (event: PointerEvent<HTMLInputElement>) => {
-    const rect = event.currentTarget.getBoundingClientRect()
-    onVolumeChange(Math.round(clampVolume(((event.clientX - rect.left) / rect.width) * 100)))
-  }
-
-  const commitVerticalVolumePointer = (event: PointerEvent<HTMLInputElement>) => {
-    const rect = event.currentTarget.getBoundingClientRect()
-    onVolumeChange(Math.round(clampVolume(((rect.bottom - event.clientY) / rect.height) * 100)))
   }
 
   const openModeMenu = (button: HTMLButtonElement) => {
@@ -344,13 +291,15 @@ export function MediaControlButtons({
   }
 
   useEffect(() => () => {
-    clearVolumeTooltipTimer()
     clearModeLongPressTimer()
   }, [])
 
   useEffect(() => {
+    setLiveVolumeValue(volumeValue)
+  }, [volumeValue])
+
+  useEffect(() => {
     if (!compactVolumeOpen) {
-      hideVolumeTooltip()
       return
     }
 
@@ -443,13 +392,7 @@ export function MediaControlButtons({
               className={compactVolumeOpen ? 'is-active' : ''}
               onClick={() => {
                 setModeMenu(null)
-                setCompactVolumeOpen((current) => {
-                  const nextOpen = !current
-                  if (nextOpen) {
-                    showVolumeTooltip(900)
-                  }
-                  return nextOpen
-                })
+                setCompactVolumeOpen((current) => !current)
               }}
               aria-label={volumeTitle}
               title={volumeTitle}
@@ -457,63 +400,18 @@ export function MediaControlButtons({
               <Icon name={volumeIconName} />
             </button>
             {compactVolumeOpen ? (
-              <div
+              <VolumeSlider
                 ref={compactVolumePanelRef}
-                className={`mini-mode-volume-popover player-compact-volume-popover${volumeTooltipActive ? ' is-active' : ''}${disabled ? ' is-disabled' : ''}`}
-                style={{ '--volume-tooltip-bottom': `${volumeValue}%` } as CSSProperties}
-              >
-                <input
-                  className="mini-mode-volume-slider"
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={volumeValue}
-                  style={{ '--range-progress': `${volumeValue}%` } as CSSProperties}
-                  disabled={disabled}
-                  onChange={() => {
-                    keepVolumeTooltipVisible()
-                  }}
-                  onInput={(event) => {
-                    commitVolumeChange(event.currentTarget.value)
-                  }}
-                  onPointerDown={(event) => {
-                    event.currentTarget.setPointerCapture(event.pointerId)
-                    commitVerticalVolumePointer(event)
-                    keepVolumeTooltipVisible()
-                  }}
-                  onPointerMove={(event) => {
-                    if (event.buttons === 1) {
-                      commitVerticalVolumePointer(event)
-                    }
-                  }}
-                  onPointerEnter={() => {
-                    keepVolumeTooltipVisible()
-                  }}
-                  onPointerLeave={() => {
-                    hideVolumeTooltip()
-                  }}
-                  onPointerUp={(event) => {
-                    commitVolumeChange(event.currentTarget.value)
-                    showVolumeTooltip(650)
-                  }}
-                  onPointerCancel={() => {
-                    hideVolumeTooltip()
-                  }}
-                  onLostPointerCapture={(event) => {
-                    commitVolumeChange(event.currentTarget.value)
-                    showVolumeTooltip(650)
-                  }}
-                  onFocus={() => {
-                    keepVolumeTooltipVisible()
-                  }}
-                  onBlur={() => {
-                    hideVolumeTooltip()
-                  }}
-                  aria-label={t('player.volume')}
-                  aria-valuetext={String(volumeDisplayValue)}
-                />
-                <span className="volume-slider-tooltip" aria-hidden="true">{volumeDisplayValue}</span>
-              </div>
+                className="mini-mode-volume-popover player-compact-volume-popover"
+                inputClassName="mini-mode-volume-slider"
+                orientation="vertical"
+                value={volumeValue}
+                disabled={disabled}
+                ariaLabel={t('player.volume')}
+                showTooltipOnMount
+                onChange={onVolumeChange}
+                onLiveValueChange={setLiveVolumeValue}
+              />
             ) : null}
           </div>
           <button
@@ -526,66 +424,15 @@ export function MediaControlButtons({
           >
             <Icon name={volumeIconName} />
           </button>
-          <div
-            className={`volume-slider-wrap${volumeTooltipActive ? ' is-active' : ''}${disabled ? ' is-disabled' : ''}`}
-            style={{
-              '--range-progress': `${volumeValue}%`,
-              '--volume-tooltip-left': `${volumeValue}%`,
-              '--volume-tooltip-anchor-left': `${volumeValue}%`,
-            } as CSSProperties}
-          >
-            <input
-              className="media-slider"
-              type="range"
-              min="0"
-              max="100"
-              value={volumeValue}
-              style={{ '--range-progress': `${volumeValue}%` } as CSSProperties}
-              disabled={disabled}
-              onChange={() => {
-                keepVolumeTooltipVisible()
-              }}
-              onInput={(event) => {
-                commitVolumeChange(event.currentTarget.value)
-              }}
-              onPointerDown={(event) => {
-                event.currentTarget.setPointerCapture(event.pointerId)
-                commitHorizontalVolumePointer(event)
-                keepVolumeTooltipVisible()
-              }}
-              onPointerMove={(event) => {
-                if (event.buttons === 1) {
-                  commitHorizontalVolumePointer(event)
-                }
-              }}
-              onPointerEnter={() => {
-                keepVolumeTooltipVisible()
-              }}
-              onPointerLeave={() => {
-                hideVolumeTooltip()
-              }}
-              onPointerUp={(event) => {
-                commitVolumeChange(event.currentTarget.value)
-                showVolumeTooltip(650)
-              }}
-              onPointerCancel={() => {
-                hideVolumeTooltip()
-              }}
-              onLostPointerCapture={(event) => {
-                commitVolumeChange(event.currentTarget.value)
-                showVolumeTooltip(650)
-              }}
-              onFocus={() => {
-                showVolumeTooltip(900)
-              }}
-              onBlur={() => {
-                hideVolumeTooltip()
-              }}
-              aria-label={t('player.volume')}
-              aria-valuetext={String(volumeDisplayValue)}
-            />
-            <span className="volume-slider-tooltip" aria-hidden="true">{volumeDisplayValue}</span>
-          </div>
+          <VolumeSlider
+            className="volume-slider-wrap"
+            inputClassName="media-slider"
+            value={volumeValue}
+            disabled={disabled}
+            ariaLabel={t('player.volume')}
+            onChange={onVolumeChange}
+            onLiveValueChange={setLiveVolumeValue}
+          />
           <button
             type="button"
             disabled={disabled || trackId == null}

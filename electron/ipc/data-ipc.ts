@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 
 import type {
+  AppSettingsUpdate,
   LibraryPlaylist,
   PlaybackRuntimeSettings,
   PlaylistSortCriterion,
@@ -13,6 +14,7 @@ import type { DataService } from '../services/data-service'
 
 interface DataIpcOptions {
   getLibraryService: () => DataService
+  updateAppName: (preferredLanguage?: AppSettingsUpdate['preferredLanguage']) => void
   updateTrayMenu: () => void
   updateWindowsJumpList: () => void
 }
@@ -107,6 +109,7 @@ export function registerDataIpc(options: DataIpcOptions) {
   })
   ipcMain.handle('settings:update', (_event, update) => {
     const result = getSettingsService().updateSettings(update)
+    options.updateAppName(getSettingsService().getSettingsSnapshot().preferredLanguage)
     options.updateTrayMenu()
     options.updateWindowsJumpList()
     return result

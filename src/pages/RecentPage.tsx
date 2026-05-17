@@ -33,6 +33,7 @@ import { getSongsAddedMessage, getSongsByIds, shuffleSongIds } from './artistsPa
 import { RecentSearchList } from './RecentSearchList'
 import { removeQueueRange } from '../shared/queueUndo'
 import { useLibraryStore } from '../state/useLibraryStore'
+import { useStoredMultiSelect, useStoredNumberSet, useStoredStringSet } from '../state/usePageSelectionStore'
 import { usePreferenceStore } from '../state/usePreferenceStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
 
@@ -175,10 +176,10 @@ export function RecentPage({
 }: RecentPageProps) {
   const [activeTab, setActiveTab] = useState<RecentTab>('added')
   const [activePlayedFilter, setActivePlayedFilter] = useState<RecentPlayedFilter>('songs')
-  const [multiSelect, setMultiSelect] = useState(false)
-  const [selectedSongIds, setSelectedSongIds] = useState<Set<number>>(new Set())
-  const [selectedCollectionKeys, setSelectedCollectionKeys] = useState<Set<string>>(new Set())
-  const [selectedSearchIds, setSelectedSearchIds] = useState<Set<number>>(new Set())
+  const [multiSelect, setMultiSelect] = useStoredMultiSelect('recent')
+  const [selectedSongIds, setSelectedSongIds] = useStoredNumberSet('recent', 'selectedSongIds')
+  const [selectedCollectionKeys, setSelectedCollectionKeys] = useStoredStringSet('recent', 'selectedCollectionKeys')
+  const [selectedSearchIds, setSelectedSearchIds] = useStoredNumberSet('recent', 'selectedSearchIds')
   const [songMenu, setSongMenu] = useState<RecentSongMenuState | null>(null)
   const [addToMenu, setAddToMenu] = useState<RecentAddToMenuState | null>(null)
   const [artistMenu, setArtistMenu] = useState<RecentArtistMenuState | null>(null)
@@ -313,14 +314,10 @@ export function RecentPage({
 
   const switchTab = (tab: RecentTab) => {
     setActiveTab(tab)
-    setMultiSelect(false)
-    clearSelection()
   }
 
   const switchPlayedFilter = (filter: RecentPlayedFilter) => {
     setActivePlayedFilter(filter)
-    setMultiSelect(false)
-    clearSelection()
     setRecentPlayedTimelineLabel('')
   }
 
@@ -1756,4 +1753,3 @@ function getRecentSelectionDefaultName(
 
   return t('recent.played')
 }
-

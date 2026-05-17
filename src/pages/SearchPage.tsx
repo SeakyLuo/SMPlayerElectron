@@ -27,6 +27,7 @@ import {
   type SearchResultType,
 } from '../shared/SearchHelper'
 import { useLibraryStore } from '../state/useLibraryStore'
+import { useStoredMultiSelect, useStoredNumberSet, useStoredStringSet } from '../state/usePageSelectionStore'
 import { usePreferenceStore } from '../state/usePreferenceStore'
 import { buildFolderIndex } from './localFolderModel'
 import {
@@ -142,9 +143,9 @@ export function SearchPage({
   const [songAddMenu, setSongAddMenu] = useState<SearchSongAddMenuState | null>(null)
   const [cardContextMenu, setCardContextMenu] = useState<SearchResultContextMenuState | null>(null)
   const [albumArtPreview, setAlbumArtPreview] = useState<SearchResult | null>(null)
-  const [searchSelectionMode, setSearchSelectionMode] = useState(false)
-  const [selectedSongIds, setSelectedSongIds] = useState<Set<number>>(new Set())
-  const [selectedCardKeys, setSelectedCardKeys] = useState<Set<string>>(new Set())
+  const [searchSelectionMode, setSearchSelectionMode] = useStoredMultiSelect('search')
+  const [selectedSongIds, setSelectedSongIds] = useStoredNumberSet('search', 'selectedSongIds')
+  const [selectedCardKeys, setSelectedCardKeys] = useStoredStringSet('search', 'selectedCardKeys')
   const [preferenceItems, setPreferenceItems] = useState<Map<string, PreferenceItemSnapshot>>(new Map())
   const searchPageRef = useRef<HTMLElement | null>(null)
   const hideMultiSelectCommandBarAfterOperation = useLibraryStore(

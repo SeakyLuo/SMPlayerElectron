@@ -288,9 +288,9 @@ export function AppRoutes({ context }: AppRoutesProps) {
 
     showNotification(message, 3000)
   }
-  const scanLibraryWithNotification = () => {
+  const scanLibraryWithNotification = (rootPath?: string) => {
     void (async () => {
-      const result = await scanLibrary()
+      const result = await scanLibrary(rootPath)
       if (result) {
         await loadRequiredData({ songs: true, folders: true })
         showScanLibraryResult(result)
@@ -298,9 +298,9 @@ export function AppRoutes({ context }: AppRoutesProps) {
     })()
   }
   const pickLibraryRootAndScan = () => {
-    void pickLibraryRoot().then((picked: boolean) => {
-      if (picked) {
-        scanLibraryWithNotification()
+    void pickLibraryRoot().then((rootPath) => {
+      if (rootPath) {
+        scanLibraryWithNotification(rootPath)
       }
     })
   }
@@ -339,11 +339,9 @@ export function AppRoutes({ context }: AppRoutesProps) {
                     isPlaying={playback.isPlaying}
                     searchQuery={pageSearchQuery}
                     onPickLibraryRoot={() => {
-                      void pickLibraryRoot()
+                      pickLibraryRootAndScan()
                     }}
-                    onScanLibrary={() => {
-                      scanLibraryWithNotification()
-                    }}
+                    onScanLibrary={scanLibraryWithNotification}
                     onPlayTrack={(trackId, queueSongIds) => {
                       void playbackCommands.playTrackInQueue(trackId, queueSongIds)
                     }}
@@ -737,9 +735,9 @@ export function AppRoutes({ context }: AppRoutesProps) {
                   scanning={scanning}
                   error={error}
                   onPickLibraryRoot={() => {
-                    void pickLibraryRoot().then((picked: boolean) => {
-                      if (picked) {
-                        scanLibraryWithNotification()
+                    void pickLibraryRoot().then((rootPath) => {
+                      if (rootPath) {
+                        scanLibraryWithNotification(rootPath)
                       }
                     })
                   }}
@@ -1028,9 +1026,9 @@ export function AppRoutes({ context }: AppRoutesProps) {
                   scanning={scanning}
                   error={error}
                   onPickLibraryRoot={() => {
-                    void pickLibraryRoot().then((picked: boolean) => {
-                      if (picked) {
-                        scanLibraryWithNotification()
+                    void pickLibraryRoot().then((rootPath) => {
+                      if (rootPath) {
+                        scanLibraryWithNotification(rootPath)
                       }
                     })
                   }}
