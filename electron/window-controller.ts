@@ -1,6 +1,6 @@
 import { screen, type BrowserWindow, type Rectangle } from 'electron'
 
-const defaultWindowMinimumSize = { width: 506, height: 740 }
+const defaultWindowMinimumSize = { width: 506, height: 840 }
 const miniModeWindowSize = { width: 360, height: 360 }
 
 export class WindowController {

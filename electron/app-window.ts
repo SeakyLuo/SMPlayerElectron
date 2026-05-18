@@ -87,7 +87,8 @@ export async function createMainWindow(options: MainWindowOptions) {
       return
     }
 
-    const bounds = window.isMaximized() ? window.getNormalBounds() : window.getBounds()
+    const rawBounds = window.isMaximized() ? window.getNormalBounds() : window.getBounds()
+    const bounds = clampMainWindowBounds(rawBounds, defaultWindowMinimumSize)
     options.saveWindowState({ bounds, maximized: window.isMaximized() })
   }
 
@@ -129,6 +130,9 @@ export async function createMainWindow(options: MainWindowOptions) {
     options.updateTrayMenu()
   })
   window.once('ready-to-show', () => {
+    if (!settings.mainWindowMaximized) {
+      window.setBounds(initialBounds, false)
+    }
     options.showWindow()
   })
 
@@ -178,16 +182,23 @@ function resolveInitialMainWindowBounds(
     }
   }
 
-  const display = screen.getDisplayMatching(parsedBounds)
+  return clampMainWindowBounds(parsedBounds, minimumSize)
+}
+
+function clampMainWindowBounds(
+  bounds: Rectangle,
+  minimumSize: { width: number; height: number },
+): Rectangle {
+  const display = screen.getDisplayMatching(bounds)
   const workArea = display.workArea
-  const width = Math.min(Math.max(parsedBounds.width, minimumSize.width), workArea.width)
-  const height = Math.min(Math.max(parsedBounds.height, minimumSize.height), workArea.height)
+  const width = Math.min(Math.max(bounds.width, minimumSize.width), workArea.width)
+  const height = Math.min(Math.max(bounds.height, minimumSize.height), workArea.height)
 
   return {
     width,
     height,
-    x: Math.min(Math.max(parsedBounds.x, workArea.x), workArea.x + workArea.width - width),
-    y: Math.min(Math.max(parsedBounds.y, workArea.y), workArea.y + workArea.height - height),
+    x: Math.min(Math.max(bounds.x, workArea.x), workArea.x + workArea.width - width),
+    y: Math.min(Math.max(bounds.y, workArea.y), workArea.y + workArea.height - height),
   }
 }
 

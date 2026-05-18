@@ -45,6 +45,7 @@ interface CommandBarButtonProps {
   ariaHasPopup?: boolean | 'menu' | 'listbox' | 'tree' | 'grid' | 'dialog'
   onClick?: MouseEventHandler<HTMLButtonElement>
   onOverflowClick?: (position: MenuFlyoutPosition) => void
+  overflowSubmenu?: MenuFlyoutItem[]
   onPointerDown?: PointerEventHandler<HTMLButtonElement>
 }
 
@@ -239,7 +240,11 @@ function commandBarButtonToMenuFlyoutItem(
     text: button.props.label,
     icon: button.props.icon,
     disabled: button.props.disabled,
+    submenu: button.props.disabled ? undefined : button.props.overflowSubmenu,
     onClick: () => {
+      if (button.props.overflowSubmenu) {
+        return
+      }
       if (button.props.onOverflowClick) {
         button.props.onOverflowClick(overflowPosition ?? { x: 0, y: 0 })
         return
