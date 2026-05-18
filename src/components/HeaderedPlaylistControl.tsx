@@ -488,6 +488,27 @@ export function HeaderedPlaylistControl({
     })
   }
 
+  const getSortMenuItems = (): MenuFlyoutItem[] => [
+    {
+      key: 'reverse',
+      text: captionFor('sort.reverse'),
+      onClick: reverseSort,
+    },
+    {
+      key: 'sort-separator',
+      text: '',
+      separator: true,
+    },
+    ...sortOptions.map((criterion) => ({
+      key: criterion,
+      text: captionFor(`sort.${criterion}`),
+      icon: criterion === activeSortCriterion ? 'check' as const : undefined,
+      onClick: () => {
+        commitSort(criterion)
+      },
+    })),
+  ]
+
   const requestClear = () => {
     void requestConfirmDialog({
       title: captionFor('clear'),
@@ -585,10 +606,7 @@ export function HeaderedPlaylistControl({
           event.stopPropagation()
           openSortMenuFromButton(event.currentTarget)
         }}
-        onOverflowClick={(position) => {
-          setPreferenceMenu(null)
-          setSortMenu(position)
-        }}
+        overflowSubmenu={getSortMenuItems()}
       />
       {canRename ? (
         <CommandBarButton
@@ -639,10 +657,7 @@ export function HeaderedPlaylistControl({
       text: captionFor('sort'),
       icon: 'sort',
       disabled: songs.length === 0,
-      onClick: () => {
-        setPreferenceMenu(null)
-        setSortMenu(getToolbarOverflowMenuPosition())
-      },
+      submenu: getSortMenuItems(),
     })
 
     if (canRename) {
@@ -916,26 +931,7 @@ export function HeaderedPlaylistControl({
           onClose={() => {
             setSortMenu(null)
           }}
-          items={[
-            {
-              key: 'reverse',
-              text: captionFor('sort.reverse'),
-              onClick: reverseSort,
-            },
-            {
-              key: 'sort-separator',
-              text: '',
-              separator: true,
-            },
-            ...sortOptions.map((criterion) => ({
-              key: criterion,
-              text: captionFor(`sort.${criterion}`),
-              icon: criterion === activeSortCriterion ? 'check' as const : undefined,
-              onClick: () => {
-                commitSort(criterion)
-              },
-            })),
-          ]}
+          items={getSortMenuItems()}
         />
       ) : null}
 

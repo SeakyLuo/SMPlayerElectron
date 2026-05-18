@@ -281,7 +281,7 @@ function renderMenuItem(
     return <MenuFlyoutVolumeItem item={item} key={item.key} onPointerEnter={() => setActiveSubmenuKey(null)} />
   }
 
-  if (item.submenu) {
+  if (item.submenu && !item.disabled) {
     return (
       <MenuFlyoutSubmenu
         item={item}
