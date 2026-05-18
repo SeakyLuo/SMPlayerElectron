@@ -168,11 +168,9 @@ export function NowPlayingFullPage({
   const createPlaylist = useLibraryStore((state) => state.createPlaylist)
   const removeSongFromPlaylist = useLibraryStore((state) => state.removeSongFromPlaylist)
   const folders = useLibraryStore((state) => state.snapshot.folders)
-  const updateSettings = useLibraryStore((state) => state.updateSettings)
   const nightMode = useLibraryStore((state) => state.snapshot.settings.nightMode)
   const nightModeStartTime = useLibraryStore((state) => state.snapshot.settings.nightModeStartTime)
   const nightModeEndTime = useLibraryStore((state) => state.snapshot.settings.nightModeEndTime)
-  const desktopLyricsEnabled = useLibraryStore((state) => state.snapshot.settings.desktopLyricsEnabled)
   const showUndoableNotification = useUndoableNotificationStore((state) => state.show)
   const { progressSeconds, durationSeconds } = usePlaybackProgress()
   const [currentClockMinute, setCurrentClockMinute] = useState(getCurrentClockMinute)
@@ -633,10 +631,6 @@ export function NowPlayingFullPage({
       preferenceItem,
       t,
       onQuickPlay: playQuick,
-      desktopLyricsEnabled,
-      onToggleDesktopLyrics: () => {
-        void updateSettings({ desktopLyricsEnabled: !desktopLyricsEnabled })
-      },
       onPlaySongs: playSongIds,
       onSavePlaylist: saveQueueAsPlaylist,
       onClearQueue: () => {

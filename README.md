@@ -102,6 +102,12 @@ For development:
 npm run dev
 ```
 
+## License
+
+This project is source-available for learning, personal use, and non-commercial forks.
+
+You may fork, modify, and redistribute this project for non-commercial purposes, but you may not sell it, publish it as a paid product, monetize it, or use it in any commercial product or service without explicit permission from the author.
+
 ## Important Files
 
 - `electron/main.ts`

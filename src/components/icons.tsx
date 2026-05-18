@@ -463,8 +463,8 @@ export function Icon({ name, className, ...props }: IconProps & { name: IconName
       ? 1.45
     : name === 'dice'
       ? 1.55
-    : name === 'invertSelection'
-      ? 1.4
+    : name === 'invertSelection' || name === 'clearSelection'
+      ? 1.25
     : name.startsWith('volume')
       ? 1.3
       : 2.2

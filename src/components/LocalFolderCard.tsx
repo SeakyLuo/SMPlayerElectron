@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type DragEvent, type KeyboardEvent, type 
 
 import { resolveSongArtworkSnapshots } from '../hooks/useSongArtwork'
 import type { LibrarySong } from '../shared/contracts'
+import { formatFolderCardStats, formatLocalFolderSongCount } from '../shared/i18nCounts'
 import type { Translator } from '../shared/i18n'
 import { FOLDER_ICON_URL } from '../shared/staticAssets'
 import { getOriginalFolderThumbnailCandidateGroups, type FolderNode } from '../pages/localFolderModel'
@@ -115,6 +116,9 @@ export function LocalFolderCard({
   onRevealFolder,
   onOpenFolder,
   onToggleSelection,
+  treeExpanded,
+  treeExpandable = false,
+  onToggleTreeExpanded,
   onDragStart,
   onDragOver,
   onDragLeave,
@@ -138,6 +142,9 @@ export function LocalFolderCard({
   onRevealFolder?: (folder: FolderNode) => void
   onOpenFolder: (targetRelativePath: string) => void
   onToggleSelection: (folderPath: string) => void
+  treeExpanded?: boolean
+  treeExpandable?: boolean
+  onToggleTreeExpanded?: () => void
   onDragStart?: (event: DragEvent, folder: FolderNode) => void
   onDragOver?: (event: DragEvent, folder: FolderNode) => void
   onDragLeave?: (event: DragEvent, folder: FolderNode) => void
@@ -157,8 +164,26 @@ export function LocalFolderCard({
       openFolder()
     }
   }
+  const folderInfo = folder.childPaths.length > 0
+    ? formatFolderCardStats(t, folder.childPaths.length, folder.directSongIds.length)
+    : formatLocalFolderSongCount(t, folder.directSongIds.length)
   const listContent = (
     <>
+      {onToggleTreeExpanded ? (
+        <button
+          className="local-folder-list-tree-toggle"
+          type="button"
+          disabled={!treeExpandable}
+          aria-label={folder.name}
+          aria-expanded={treeExpandable ? treeExpanded : undefined}
+          onClick={(event) => {
+            event.stopPropagation()
+            onToggleTreeExpanded()
+          }}
+        >
+          {treeExpandable ? <Icon name={treeExpanded ? 'chevronDown' : 'chevronRight'} /> : null}
+        </button>
+      ) : null}
       {multiSelect ? (
         <span className={selected ? 'local-card-check is-selected' : 'local-card-check'} aria-hidden="true">
           {selected ? <Icon name="check" /> : null}
@@ -171,6 +196,7 @@ export function LocalFolderCard({
         <span className="local-folder-list-name" title={folder.path}>{folder.name}</span>
       </span>
       <span className="local-folder-list-trailing">
+        <span className="local-folder-list-info">{folderInfo}</span>
         {!multiSelect ? (
           <span className="local-folder-list-actions">
             <button
@@ -237,7 +263,6 @@ export function LocalFolderCard({
             ) : null}
           </span>
         ) : null}
-        <Icon name="chevronRight" />
       </span>
     </>
   )
@@ -316,9 +341,7 @@ export function LocalFolderCard({
           {selected ? <Icon name="check" /> : null}
         </span>
       ) : null}
-      subtitle={folder.childPaths.length > 0
-        ? t('local.folderCardStats', { folders: folder.childPaths.length, songs: folder.directSongIds.length })
-        : t('local.folderSongsShort', { count: folder.directSongIds.length })}
+      subtitle={folderInfo}
       title={folder.name}
     />
   )

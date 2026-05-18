@@ -35,7 +35,10 @@ export const supportedLocales = [
 
 export type Locale = typeof supportedLocales[number]
 export type TranslationValues = Record<string, string | number>
-export type Translator = (key: string, values?: TranslationValues) => string
+export type Translator = {
+  (key: string, values?: TranslationValues): string
+  readonly locale?: Locale
+}
 
 const translations: Record<Locale, Partial<Record<string, string>>> = {
   'en-US': enUS,
@@ -143,7 +146,9 @@ export function createTranslator(
   const baseDictionary = locale === 'zh-Hant' ? zhCN : enUS
   const dictionary: Record<string, string> = { ...baseDictionary, ...translations[locale] }
 
-  return (key, values) => formatMessage(dictionary[key] ?? key, values)
+  const translator = ((key: string, values?: TranslationValues) => formatMessage(dictionary[key] ?? key, values)) as Translator
+  Object.defineProperty(translator, 'locale', { value: locale })
+  return translator
 }
 
 export function formatMessage(message: string, values?: TranslationValues) {

@@ -4,6 +4,7 @@ import { GridArtworkCardContent } from './GridArtworkCardContent'
 import { Icon } from './icons'
 import { getPlaylistArtworkDisplayUrls, usePlaylistArtwork } from './playlistArtwork'
 import type { LibraryPlaylist, LibrarySong } from '../shared/contracts'
+import { formatPlaylistSongCount } from '../shared/i18nCounts'
 import type { Translator } from '../shared/i18n'
 
 interface GridViewHolderProps {
@@ -94,7 +95,7 @@ export function GridViewHolder({
         artworkUrls={getPlaylistArtworkDisplayUrls(artworkUrls)}
         fallbackIcon="playlists"
         selectedMark={selectedMark}
-        subtitle={subtitle ?? t('playlists.songCount', { count: playlist.songCount })}
+        subtitle={subtitle ?? formatPlaylistSongCount(t, playlist.songCount)}
         title={playlist.name}
       />
       {showDragHandle ? (

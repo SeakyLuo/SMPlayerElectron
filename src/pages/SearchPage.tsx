@@ -369,7 +369,7 @@ export function SearchPage({
   }, [normalizedQuery, searchFolderPath])
 
   return (
-    <section className="page-panel search-page" ref={searchPageRef}>
+    <section className={`page-panel search-page${searchSelectionMode ? ' is-selection-mode' : ''}`} ref={searchPageRef}>
       {hasResults ? (
         <>
           <AppBarBottomPortal>

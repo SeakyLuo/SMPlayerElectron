@@ -36,6 +36,7 @@ import type { ExternalAppCommand, LibrarySong, ScanLibraryResult } from './share
 import { ArtistSplitReviewDialog } from './components/ArtistSplitReviewDialog'
 import { getDisplayArtists } from './shared/artists'
 import { createTranslator, resolveVoiceAssistantLocale } from './shared/i18n'
+import { formatSongsCached } from './shared/i18nCounts'
 import { getNextPlaylistName } from './shared/playlistNames'
 import { quickPlay } from './shared/QuickPlayHelper'
 import { AppRoutes } from './AppRoutes'
@@ -67,6 +68,22 @@ function hasArtistUpdateSuggestions(result: ScanLibraryResult) {
   return result.artistSplitsApplied.length > 0 ||
     result.artistSplitSuggestions.length > 0 ||
     result.artistMergeSuggestions.length > 0
+}
+
+function LocalTitleGridPlaceholder() {
+  return (
+    <div className="local-title-grid is-placeholder">
+      <div className="current-path-grid" />
+      <nav className="folder-chain-list-view" aria-label="Music">
+        <span className="folder-chain-item is-current">
+          <span className="folder-chain-item-path-button">Music</span>
+          <span className="folder-chain-item-dropdown-button" aria-hidden="true">
+            <Icon name="chevronRight" />
+          </span>
+        </span>
+      </nav>
+    </div>
+  )
 }
 
 function App() {
@@ -750,6 +767,7 @@ function App() {
       snapshot.nowPlaying.songIds.length,
       snapshot.playlists.filter((playlist) => !playlist.isBuiltIn).length,
     ))
+  const showAppBarTitle = initialLoadComplete || compactArtistTitle || immersiveHeaderTitle
   const toggleNavigation = () => {
     if (isNavigationMinimal) {
       setIsMinimalNavigationOpen((current) => !current)
@@ -1024,8 +1042,12 @@ function App() {
                   await moveLocalItemsToFolder(songIds, folderPaths, targetFolderPath)
                 }}
               />
-            ) : (
+            ) : isLocalRoute ? (
+              <LocalTitleGridPlaceholder />
+            ) : showAppBarTitle ? (
               <h1>{currentPageTitle}</h1>
+            ) : (
+              <span className="appbar-title-placeholder" aria-hidden="true" />
             )}
           </AppBar>
         ) : (
@@ -1072,14 +1094,18 @@ function App() {
                   await moveLocalItemsToFolder(songIds, folderPaths, targetFolderPath)
                 }}
               />
-            ) : (
+            ) : isLocalRoute ? (
+              <LocalTitleGridPlaceholder />
+            ) : showAppBarTitle ? (
               <div className="appbar-title-drag-region">
                 <h1>{currentPageTitle}</h1>
               </div>
+            ) : (
+              <div className="appbar-title-drag-region appbar-title-placeholder" aria-hidden="true" />
             )}
             <div className="appbar-spacer drag-spacer" />
             <div className="status-pills">
-              <span>{t('app.songsCached', { count: snapshot.counts.songs })}</span>
+              <span>{formatSongsCached(t, snapshot.counts.songs)}</span>
             </div>
           </header>
         )}

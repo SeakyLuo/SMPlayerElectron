@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 
 import type { LibrarySong } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
+import { formatSongsAddedTo } from '../shared/i18nCounts'
 import { removeQueueRange } from '../shared/queueUndo'
 import { useLibraryStore } from '../state/useLibraryStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
@@ -16,7 +17,7 @@ export function useSongsAddedUndo(songs: LibrarySong[], t: Translator) {
   const getSongsAddedMessage = (songIds: number[], target: string) =>
     songIds.length === 1
       ? t('notification.songAddedTo', { title: songsById.get(songIds[0]!)!.title, target })
-      : t('notification.songsAddedTo', { count: songIds.length, target })
+      : formatSongsAddedTo(t, songIds.length, target)
 
   const showUndo = (message: string, action: () => void | Promise<void>) => {
     showUndoableNotification(message, t('common.undo'), action)

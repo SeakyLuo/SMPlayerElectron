@@ -11,12 +11,13 @@ import { LoadingState } from '../components/LoadingState'
 import { MenuFlyout } from '../components/MenuFlyout'
 import { getAddToPlaylistMenuFlyoutItem, getAddToPlaylistMenuFlyoutItems, getPreferenceMenuFlyoutItem, type MenuFlyoutItem, type MenuFlyoutPosition } from '../components/MenuFlyoutHelper'
 import { MusicMenuFlyout, type MusicMenuFlyoutState } from '../components/MusicMenuFlyout'
-import { MultiSelectCommandBar } from '../components/MultiSelectCommandBar'
+import { MultiSelectCommandBar, MULTI_SELECT_COMMAND_BAR_SCROLL_SPACER } from '../components/MultiSelectCommandBar'
 import { PageSearchHistoryPanel } from '../components/PageSearchHistoryPanel'
 import { RenameDialog } from '../components/RenameDialog'
 import { PlaylistControlItem } from '../components/PlaylistControlItem'
 import type { LibraryPlaylist, LibrarySong, PreferenceItemSnapshot, PreferenceSettingsSnapshot, SearchHistoryEntry } from '../shared/contracts'
 import { formatDuration } from '../shared/formatters'
+import { formatArtistAlbumSummary, formatArtistSummary } from '../shared/i18nCounts'
 import type { Translator } from '../shared/i18n'
 import { getQuickJumpTooltip } from '../shared/quickJumpTooltip'
 import { removeQueueRange } from '../shared/queueUndo'
@@ -641,10 +642,7 @@ export function ArtistsPage({
                     <span className="artist-list-copy">
                       <strong>{artist.name}</strong>
                       <small>
-                        {t('artists.artistSummary', {
-                          albums: artist.albumCount,
-                          songs: artist.songs.length,
-                        })}
+                        {formatArtistSummary(t, artist.albumCount, artist.songs.length)}
                       </small>
                     </span>
                   </div>
@@ -684,20 +682,14 @@ export function ArtistsPage({
                   <Icon name="arrowLeft" />
                 </button>
                 <p className="artist-detail-compact-summary">
-                  {t('artists.artistSummary', {
-                    albums: selectedArtist.albumCount,
-                    songs: selectedArtist.songs.length,
-                  })}
+                  {formatArtistSummary(t, selectedArtist.albumCount, selectedArtist.songs.length)}
                 </p>
                 <div className="artist-detail-compact-command-spacer" />
               </div>
               <div>
                 <h2>{selectedArtist.name}</h2>
                 <p>
-                  {t('artists.artistSummary', {
-                    albums: selectedArtist.albumCount,
-                    songs: selectedArtist.songs.length,
-                  })}
+                  {formatArtistSummary(t, selectedArtist.albumCount, selectedArtist.songs.length)}
                 </p>
               </div>
               <div className="artist-detail-actions">
@@ -742,10 +734,7 @@ export function ArtistsPage({
                       <div className="artist-album-copy">
                         <Link to={getAlbumRoute(routeBase, album.name)}>{album.name}</Link>
                         <p>
-                          {t('artists.albumSummary', {
-                            songs: album.songs.length,
-                            duration: formatDuration(album.duration),
-                          })}
+                          {formatArtistAlbumSummary(t, album.songs.length, formatDuration(album.duration))}
                         </p>
                       </div>
                       <div className="artist-album-actions">
@@ -833,6 +822,9 @@ export function ArtistsPage({
               {artistAlbumVirtualWindow.bottomSpacerHeight > 0 ? (
                 <div className="artist-album-virtual-spacer" style={{ height: artistAlbumVirtualWindow.bottomSpacerHeight }} />
               ) : null}
+              {multiSelect ? (
+                <div className="artist-album-virtual-spacer" style={{ height: MULTI_SELECT_COMMAND_BAR_SCROLL_SPACER }} />
+              ) : null}
             </div>
           </>
         ) : (
@@ -905,6 +897,10 @@ export function ArtistsPage({
               onRecordAlbumPlayed(groupMenu.label)
             }
             onPlayTrack(shuffledSongIds[0]!, shuffledSongIds)
+          }}
+          onEnterMultiSelect={() => {
+            setMultiSelect(true)
+            clearSelection()
           }}
           onSelectSongs={selectSongs}
           onLocateArtist={(artistName) => {
@@ -1014,6 +1010,7 @@ function ArtistGroupContextMenu({
   onRequestCreatePlaylist,
   onClose,
   onPlaySongs,
+  onEnterMultiSelect,
   onSelectSongs,
   onLocateArtist,
   onSeeAlbum,
@@ -1028,6 +1025,7 @@ function ArtistGroupContextMenu({
   onRequestCreatePlaylist: (defaultName: string, songIds: number[]) => void
   onClose: () => void
   onPlaySongs: (songIds: number[]) => void
+  onEnterMultiSelect: () => void
   onSelectSongs: (songIds: number[]) => void
   onLocateArtist: (artistName: string) => void
   onSeeAlbum: (albumName: string) => void
@@ -1109,7 +1107,11 @@ function ArtistGroupContextMenu({
           text: menu.type === 'artist' ? t('common.multiSelect') : t('context.select'),
           icon: 'multiSelect',
           onClick: () => {
-            onSelectSongs(songIds)
+            if (menu.type === 'artist') {
+              onEnterMultiSelect()
+            } else {
+              onSelectSongs(songIds)
+            }
           },
         },
         getPreferenceMenuFlyoutItem({

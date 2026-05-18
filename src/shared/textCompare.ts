@@ -31,18 +31,9 @@ const LOCAL_TEXT_PINYIN_BOUNDARIES = [
   ['Z', '匝'],
 ] as const
 
-function getLocalTextSortBucket(value: string) {
-  const trimmedValue = value.trim()
-  if (!trimmedValue) {
-    return 0
-  }
-
-  return /^[0-9A-Za-z]/.test(trimmedValue) ? 1 : 2
-}
-
 export function compareLocalText(left: string, right: string) {
-  const leftBucket = getLocalTextSortBucket(left)
-  const rightBucket = getLocalTextSortBucket(right)
+  const leftBucket = LOCAL_TEXT_QUICK_JUMP_KEYS.indexOf(getLocalTextQuickJumpBucket(left))
+  const rightBucket = LOCAL_TEXT_QUICK_JUMP_KEYS.indexOf(getLocalTextQuickJumpBucket(right))
 
   if (leftBucket !== rightBucket) {
     return leftBucket - rightBucket

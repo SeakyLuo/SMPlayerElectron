@@ -16,6 +16,7 @@ import { useCustomScrollbar } from '../hooks/useCustomScrollbar'
 import { useSongsAddedUndo } from '../hooks/useSongsAddedUndo'
 import type { ArtistSplitResultItem, LibraryFolder, LibraryPlaylist, LibrarySong, ScanLibraryResult } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
+import { formatDeleteSelectedLocalItemsConfirm, formatFolderCardStats, formatMovedLocalItems } from '../shared/i18nCounts'
 import { useLibraryStore } from '../state/useLibraryStore'
 import { useStoredMultiSelect, useStoredNumberSet, useStoredStringSet } from '../state/usePageSelectionStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
@@ -34,7 +35,7 @@ import {
 } from './localFolderModel'
 import { buildLocalMoveToFolderMenuItems } from './localMoveToFolderMenu'
 import { FolderUpdateResultDialog } from './FolderUpdateResultDialog'
-import { LocalGridContent } from './LocalGridContent'
+import { LocalGridContent, type LocalCompactTreeRow } from './LocalGridContent'
 import { LocalTableContent } from './LocalTableContent'
 import {
   areSetsEqual,
@@ -135,6 +136,74 @@ function joinAbsolutePath(parentPath: string, name: string) {
   return `${parentPath.replace(/[\\/]+$/, '')}${separator}${name}`
 }
 
+function buildLocalCompactFolderTreeRows({
+  childFolders,
+  nodes,
+  songsById,
+  expandedFolderPaths,
+  sortMode,
+  searchQuery,
+}: {
+  childFolders: FolderNode[]
+  nodes: Map<string, FolderNode>
+  songsById: Map<number, LibrarySong>
+  expandedFolderPaths: Set<string>
+  sortMode: LocalSortMode
+  searchQuery: string
+}) {
+  const rows: LocalCompactTreeRow[] = []
+  let songIndex = 0
+  const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase()
+
+  const appendFolder = (folder: FolderNode, depth: number) => {
+    const nestedFolders = sortFolders(folder.childPaths
+      .map((childPath) => nodes.get(childPath)!)
+      .filter((child) => !normalizedSearchQuery || child.name.toLocaleLowerCase().includes(normalizedSearchQuery)))
+    const nestedSongs = sortSongs(
+      folder.directSongIds
+        .map((songId) => songsById.get(songId)!)
+        .filter((song) => matchesSongSearch(song, searchQuery)),
+      sortMode,
+      localSortModeFromCriterion(folder.criterion),
+    )
+    const expanded = expandedFolderPaths.has(folder.relativePath)
+    const expandable = nestedFolders.length > 0 || nestedSongs.length > 0
+
+    rows.push({
+      key: `folder:${folder.relativePath}`,
+      type: 'folder',
+      folder,
+      depth,
+      expanded,
+      expandable,
+    })
+
+    if (!expanded) {
+      return
+    }
+
+    for (const childFolder of nestedFolders) {
+      appendFolder(childFolder, depth + 1)
+    }
+    for (const song of nestedSongs) {
+      rows.push({
+        key: `song:${folder.relativePath}:${song.id}`,
+        type: 'song',
+        song,
+        depth: depth + 1,
+        songIndex,
+      })
+      songIndex += 1
+    }
+  }
+
+  for (const folder of childFolders) {
+    appendFolder(folder, 0)
+  }
+
+  return rows
+}
+
 function LocalEmptyState({
   children,
 }: {
@@ -205,6 +274,7 @@ export function LocalPage({
   const localItemsDragPayloadRef = useRef<LocalItemsDragPayload | null>(null)
   const [foldersExpanded, setFoldersExpanded] = useState(true)
   const [songsExpanded, setSongsExpanded] = useState(true)
+  const [treeExpandedFolderPaths, setTreeExpandedFolderPaths] = useState<Set<string>>(new Set())
   const [isCompactLayout, setIsCompactLayout] = useState(() => window.innerWidth < LOCAL_COMPACT_BREAKPOINT)
   const resumeHiddenStorageItemByPath = useLibraryStore((state) => state.resumeHiddenStorageItemByPath)
   const hideMultiSelectCommandBarAfterOperation = useLibraryStore(
@@ -309,6 +379,33 @@ export function LocalPage({
   const visibleSongIds = useMemo(() => currentSongs.map((song) => song.id), [currentSongs])
   const visibleSongIdSet = useMemo(() => new Set(visibleSongIds), [visibleSongIds])
   const queueSongIds = visibleSongIds
+  const localCompactFolderTreeRows = useMemo(
+    () => buildLocalCompactFolderTreeRows({
+      childFolders,
+      nodes,
+      songsById,
+      expandedFolderPaths: treeExpandedFolderPaths,
+      sortMode,
+      searchQuery,
+    }),
+    [childFolders, nodes, searchQuery, songsById, sortMode, treeExpandedFolderPaths],
+  )
+  const localCompactFolderTreeFolderPaths = useMemo(
+    () => localCompactFolderTreeRows
+      .filter((row): row is Extract<LocalCompactTreeRow, { type: 'folder' }> => row.type === 'folder')
+      .map((row) => row.folder.relativePath),
+    [localCompactFolderTreeRows],
+  )
+  const localCompactFolderTreeSongIds = useMemo(
+    () => localCompactFolderTreeRows
+      .filter((row): row is Extract<LocalCompactTreeRow, { type: 'song' }> => row.type === 'song')
+      .map((row) => row.song.id),
+    [localCompactFolderTreeRows],
+  )
+  const localCompactSelectableSongIds = useMemo(
+    () => [...localCompactFolderTreeSongIds, ...visibleSongIds],
+    [localCompactFolderTreeSongIds, visibleSongIds],
+  )
   const songQuickJumpMap = useMemo(
     () => buildLocalSongQuickJumpMap(currentSongs, sortMode, currentSortMode, t),
     [currentSongs, currentSortMode, sortMode, t],
@@ -319,13 +416,22 @@ export function LocalPage({
     () => new Set(childFolders.map((folder) => folder.relativePath)),
     [childFolders],
   )
+  const selectableFolderPathSet = useMemo(
+    () => isCompactLayout ? new Set(localCompactFolderTreeFolderPaths) : childFolderPathSet,
+    [childFolderPathSet, isCompactLayout, localCompactFolderTreeFolderPaths],
+  )
+  const selectableSongIds = isCompactLayout ? localCompactSelectableSongIds : visibleSongIds
+  const selectableSongIdSet = useMemo(
+    () => isCompactLayout ? new Set(localCompactSelectableSongIds) : visibleSongIdSet,
+    [isCompactLayout, localCompactSelectableSongIds, visibleSongIdSet],
+  )
   const effectiveSelectedFolderPaths = useMemo(
-    () => [...selectedFolderPaths].filter((folderPath) => childFolderPathSet.has(folderPath)),
-    [childFolderPathSet, selectedFolderPaths],
+    () => [...selectedFolderPaths].filter((folderPath) => selectableFolderPathSet.has(folderPath)),
+    [selectableFolderPathSet, selectedFolderPaths],
   )
   const effectiveSelectedSongIds = useMemo(
-    () => [...selectedSongIds].filter((songId) => visibleSongIdSet.has(songId)),
-    [selectedSongIds, visibleSongIdSet],
+    () => [...selectedSongIds].filter((songId) => selectableSongIdSet.has(songId)),
+    [selectableSongIdSet, selectedSongIds],
   )
   const selectedQueueSongIds = useMemo(
     () => [
@@ -387,6 +493,7 @@ export function LocalPage({
     currentSongs.length,
     foldersExpanded,
     isCompactLayout,
+    localCompactFolderTreeRows.length,
     showLocalSectionHeaders,
     songsExpanded,
   ]
@@ -405,11 +512,11 @@ export function LocalPage({
 
   useEffect(() => {
     setSelectedFolderPaths((current) => {
-      const next = new Set([...current].filter((folderPath) => childFolderPathSet.has(folderPath)))
+      const next = new Set([...current].filter((folderPath) => selectableFolderPathSet.has(folderPath)))
       return areSetsEqual(current, next) ? current : next
     })
     setSelectedSongIds((current) => {
-      const next = new Set([...current].filter((songId) => visibleSongIdSet.has(songId)))
+      const next = new Set([...current].filter((songId) => selectableSongIdSet.has(songId)))
       return areSetsEqual(current, next) ? current : next
     })
     setCreatedFolderPaths((current) => {
@@ -419,13 +526,13 @@ export function LocalPage({
 
     if (selectedListItemKey.startsWith('folder:')) {
       const folderPath = selectedListItemKey.slice('folder:'.length)
-      if (!childFolderPathSet.has(folderPath)) {
+      if (!selectableFolderPathSet.has(folderPath)) {
         setSelectedListItemKey('')
       }
     }
     if (selectedListItemKey.startsWith('song:')) {
       const songId = Number(selectedListItemKey.slice('song:'.length))
-      if (!visibleSongIdSet.has(songId)) {
+      if (!selectableSongIdSet.has(songId)) {
         setSelectedListItemKey('')
       }
     }
@@ -442,7 +549,7 @@ export function LocalPage({
     if (songAddMenu && !songsById.has(songAddMenu.song.id)) {
       setSongAddMenu(null)
     }
-  }, [childFolderPathSet, folderAddMenu, folderMenu, nodes, selectedListItemKey, songAddMenu, songMenu, songsById, visibleSongIdSet])
+  }, [folderAddMenu, folderMenu, nodes, selectableFolderPathSet, selectableSongIdSet, selectedListItemKey, songAddMenu, songMenu, songsById])
 
   useEffect(() => {
     setSortMode(currentSortMode)
@@ -633,7 +740,7 @@ export function LocalPage({
     const movedItemCount = songIds.length + folderPaths.length
     const message = movedItemCount === 1 && songIds.length === 1
       ? t('notification.movedSong', { title: songsById.get(songIds[0])!.title })
-      : t('notification.movedLocalItems', { count: movedItemCount })
+      : formatMovedLocalItems(t, movedItemCount)
 
     showUndo(message, async () => {
       const songIdsByFolder = new Map<string, number[]>()
@@ -828,7 +935,7 @@ export function LocalPage({
     const selectedCount = effectiveSelectedSongIds.length + selectedFolderAbsolutePaths.length
     setRemoveDialog({
       title: t('context.deleteFromDisk'),
-      message: t('local.deleteSelectedConfirm', { count: selectedCount }),
+      message: formatDeleteSelectedLocalItemsConfirm(t, selectedCount),
       onConfirm: async () => {
         await onDeleteLocalItems(effectiveSelectedSongIds, selectedFolderAbsolutePaths)
         setRemoveDialog(null)
@@ -951,15 +1058,17 @@ export function LocalPage({
   }
 
   const selectAllLocalItems = () => {
-    setSelectedFolderPaths(new Set(childFolders.map((folder) => folder.relativePath)))
-    setSelectedSongIds(new Set(visibleSongIds))
+    setSelectedFolderPaths(new Set(isCompactLayout ? localCompactFolderTreeFolderPaths : childFolders.map((folder) => folder.relativePath)))
+    setSelectedSongIds(new Set(selectableSongIds))
   }
 
   const reverseLocalSelection = () => {
-    setSelectedFolderPaths((current) => new Set(childFolders
-      .map((folder) => folder.relativePath)
+    const folderPaths = isCompactLayout
+      ? localCompactFolderTreeFolderPaths
+      : childFolders.map((folder) => folder.relativePath)
+    setSelectedFolderPaths((current) => new Set(folderPaths
       .filter((folderPath) => !current.has(folderPath))))
-    setSelectedSongIds((current) => new Set(visibleSongIds.filter((songId) => !current.has(songId))))
+    setSelectedSongIds((current) => new Set(selectableSongIds.filter((songId) => !current.has(songId))))
   }
 
   const clearLocalSelection = () => {
@@ -973,6 +1082,18 @@ export function LocalPage({
 
   const toggleSongsExpanded = () => {
     setSongsExpanded((current) => !current)
+  }
+
+  const toggleTreeFolderExpanded = (folderPath: string) => {
+    setTreeExpandedFolderPaths((current) => {
+      const next = new Set(current)
+      if (next.has(folderPath)) {
+        next.delete(folderPath)
+      } else {
+        next.add(folderPath)
+      }
+      return next
+    })
   }
 
   const openFolderAddMenu = (folder: FolderNode, x: number, y: number) => {
@@ -1065,7 +1186,7 @@ export function LocalPage({
     { key: 'toolbar-sort-album', text: t('local.sortByAlbum'), icon: sortMode === 'album' ? 'check' : undefined, onClick: () => updateSortMode('album') },
   ]
   return (
-    <section className="page-panel local-page">
+    <section className={`page-panel local-page${multiSelect ? ' is-selection-mode' : ''}`}>
       <div className="local-toolbar">
         <CommandBar
           className="local-commandbar"
@@ -1081,10 +1202,7 @@ export function LocalPage({
           ] : []}
           content={(
             <p>
-              {t('local.headerStats', {
-                folders: childFolders.length,
-                songs: currentSongs.length,
-              })}
+              {formatFolderCardStats(t, childFolders.length, currentSongs.length)}
             </p>
           )}
         >
@@ -1189,11 +1307,16 @@ export function LocalPage({
               showSongQuickJump={showSongQuickJump}
               songQuickJumpBasisName={songQuickJumpBasisName}
               songQuickJumpMap={songQuickJumpMap}
+              compactTreeRows={localCompactFolderTreeRows}
+              compactQueueSongIds={localCompactFolderTreeSongIds}
+              sortMode={sortMode}
+              currentSortMode={currentSortMode}
               queueSongIds={queueSongIds}
               t={t}
               localSongItemRefs={localSongItemRefs}
               onToggleFoldersExpanded={toggleFoldersExpanded}
               onToggleSongsExpanded={toggleSongsExpanded}
+              onToggleTreeFolderExpanded={toggleTreeFolderExpanded}
               onPlayFolder={shuffleFolder}
               onAddFolder={openFolderAddMenu}
               onRefreshFolder={refreshFolder}
@@ -1231,6 +1354,7 @@ export function LocalPage({
           onThumbPointerDown={onLocalTableScrollbarPointerDown}
           childFolders={childFolders}
           currentSongs={currentSongs}
+          treeRows={localCompactFolderTreeRows}
           currentRelativePath={currentRelativePath}
           selectedFolderPaths={selectedFolderPaths}
           selectedSongIds={selectedSongIds}
@@ -1247,11 +1371,12 @@ export function LocalPage({
           showSongQuickJump={showSongQuickJump}
           songQuickJumpBasisName={songQuickJumpBasisName}
           songQuickJumpMap={songQuickJumpMap}
-          queueSongIds={queueSongIds}
+          queueSongIds={localCompactSelectableSongIds}
           t={t}
           localSongItemRefs={localSongItemRefs}
           onToggleFoldersExpanded={toggleFoldersExpanded}
           onToggleSongsExpanded={toggleSongsExpanded}
+          onToggleTreeFolderExpanded={toggleTreeFolderExpanded}
           onToggleFolderSelection={toggleFolderSelection}
           onSelectListItem={setSelectedListItemKey}
           onOpenFolder={onOpenFolder}

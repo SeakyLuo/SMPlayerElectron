@@ -1,6 +1,7 @@
 import { getSongArtists } from './artists'
 import type { AppSettingsUpdate, LibraryFolder, LibraryPlaylist, LibrarySong, SearchSortCriterion } from './contracts'
 import type { Translator } from './i18n'
+import { formatArtistCount, formatArtistSummary, formatSongCount, formatTrackCount } from './i18nCounts'
 
 export interface SearchResult {
   title: string
@@ -167,7 +168,7 @@ export function buildSearchResults(
       return {
         score,
         title: entity.name,
-        subtitle: t('cards.songCount', { count: entity.songCount }),
+        subtitle: formatSongCount(t, entity.songCount),
         artworkUrl: playlistSongs.find((song) => song.artworkUrl)?.artworkUrl ?? '',
         path: `/playlists/${entity.id}`,
         songCount: entity.songCount,
@@ -221,7 +222,7 @@ function buildArtistResults(
       return {
         score,
         title: artist,
-        subtitle: t('artists.artistSummary', { albums: albums.size, songs: artistSongs.length }),
+        subtitle: formatArtistSummary(t, albums.size, artistSongs.length),
         artworkUrl: artistSongs.find((song) => song.artworkUrl)?.artworkUrl ?? '',
         path: `/artists?artist=${encodeURIComponent(artist)}`,
         songCount: artistSongs.length,
@@ -273,8 +274,8 @@ function buildAlbumResults(
       score,
       title: album,
       subtitle: t('cards.albumSubtitle', {
-        tracks: t('cards.trackCount', { count: albumSongs.length }),
-        artists: t('cards.artistCount', { count: artists.length }),
+        tracks: formatTrackCount(t, albumSongs.length),
+        artists: formatArtistCount(t, artists.length),
       }),
       artworkUrl: albumSongs.find((song) => song.artworkUrl)?.artworkUrl ?? '',
       path: `/albums?album=${encodeURIComponent(album)}`,
@@ -348,7 +349,7 @@ function buildFolderResults(
     .map(({ folderPath, folderSongs, score }) => ({
       score,
       title: getPathLabel(folderPath) || t('local.libraryRoot'),
-      subtitle: t('cards.songCount', { count: folderSongs.length }),
+      subtitle: formatSongCount(t, folderSongs.length),
       artworkUrl: folderSongs.find((song) => song.artworkUrl)?.artworkUrl ?? '',
       path: '/local',
       localFolderRelativePath: getRelativeFolderPath(folderPath, rootPath),
@@ -482,4 +483,3 @@ export function isFolderUnderFolder(candidatePath: string, folderPath: string) {
 
   return normalizedCandidatePath === normalizedFolderPath || normalizedCandidatePath.startsWith(`${normalizedFolderPath}/`)
 }
-
