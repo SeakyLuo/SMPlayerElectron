@@ -91,6 +91,12 @@ export class TrayController {
           this.options.sendTrayCommand('quick-play')
         },
       },
+      {
+        label: t('player.desktopLyrics'),
+        click: () => {
+          this.options.sendTrayCommand('toggle-desktop-lyrics')
+        },
+      },
       { type: 'separator' },
       {
         label: t('common.settings'),

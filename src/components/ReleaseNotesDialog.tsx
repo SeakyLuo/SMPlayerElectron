@@ -14,10 +14,11 @@ export function ReleaseNotesDialog({
 }) {
   const releaseNoteLanguage =
     preferredLanguage === 'zh-CN' ||
+    preferredLanguage === 'zh-Hant' ||
     (preferredLanguage === 'system' && navigator.language.toLowerCase().startsWith('zh'))
       ? 'zh'
       : 'en'
-  const releaseNotes = getReleaseNotes(releaseNoteLanguage)
+  const releaseNotes = getReleaseNotes(releaseNoteLanguage, t)
 
   return (
     <PopupDialog

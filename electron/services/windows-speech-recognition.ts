@@ -133,7 +133,7 @@ function escapePowerShellSingleQuotedString(value: string) {
 }
 
 function getWindowsSpeechRecognitionScript(language: string) {
-  const cultureName = language.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en-US'
+  const cultureName = language
 
   return `
 $ErrorActionPreference = 'Stop'

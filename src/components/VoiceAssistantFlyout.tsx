@@ -290,6 +290,7 @@ export const VoiceAssistantFlyout = forwardRef<VoiceAssistantFlyoutHandle, Voice
               <section className="release-note-version">
                 <h3>{t('voiceAssistant.notice')}</h3>
                 <ol>
+                  <li>{t('voiceAssistant.noticeCommandLanguage')}</li>
                   <li>{t('voiceAssistant.noticeSmartness')}</li>
                   <li>{t('voiceAssistant.noticeCommandIntro')}</li>
                   <li>{t('voiceAssistant.noticeExample')}</li>

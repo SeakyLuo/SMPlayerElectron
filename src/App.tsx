@@ -23,6 +23,7 @@ import { useReleaseNotesVersion } from './hooks/useReleaseNotesVersion'
 import { useScrollbarHoverClass } from './hooks/useScrollbarHoverClass'
 import { useCustomScrollbar } from './hooks/useCustomScrollbar'
 import { useDeleteSongFromDisk } from './hooks/useDeleteSongFromDisk'
+import { useDesktopLyricsBridge } from './hooks/useDesktopLyricsBridge'
 import { useSearchController } from './hooks/useSearchController'
 import { useTrackNotification } from './hooks/useTrackNotification'
 import { useTouchContextMenu } from './hooks/useTouchContextMenu'
@@ -31,10 +32,10 @@ import { useUndoableNotificationStore } from './state/useUndoableNotificationSto
 import { LocalTitleGrid } from './pages/LocalTitleGrid'
 import { MiniModePage } from './pages/MiniModePage'
 import { NowPlayingFullPage } from './pages/NowPlayingFullPage'
-import type { LibrarySong, ScanLibraryResult } from './shared/contracts'
+import type { ExternalAppCommand, LibrarySong, ScanLibraryResult } from './shared/contracts'
 import { ArtistSplitReviewDialog } from './components/ArtistSplitReviewDialog'
 import { getDisplayArtists } from './shared/artists'
-import { createTranslator, resolveLocale } from './shared/i18n'
+import { createTranslator, resolveVoiceAssistantLocale } from './shared/i18n'
 import { getNextPlaylistName } from './shared/playlistNames'
 import { quickPlay } from './shared/QuickPlayHelper'
 import { AppRoutes } from './AppRoutes'
@@ -186,6 +187,9 @@ function App() {
   }, [])
   const appWindow = useAppWindowController({
     onQuickPlay: playQuick,
+    onToggleDesktopLyrics: () => {
+      void updateSettings({ desktopLyricsEnabled: !snapshot.settings.desktopLyricsEnabled })
+    },
     onEnterMiniMode: handleEnterMiniMode,
   })
   const settingsNightModeActive = snapshot.settings.nightMode === 'on' || (
@@ -435,6 +439,25 @@ function App() {
   const currentPlaybackSong = playback.currentTrack
     ? songsById.get(playback.currentTrack.id) ?? playback.currentTrack
     : null
+  useDesktopLyricsBridge({
+    currentSong: currentPlaybackSong,
+    isPlaying: playback.isPlaying,
+    settings: snapshot.settings,
+    nightModeActive,
+    onNext: () => {
+      void playback.playNext()
+    },
+    onOpenSettings: () => {
+      navigate('/settings#desktop-lyrics')
+    },
+    onPrevious: () => {
+      void playback.playPrevious()
+    },
+    onTogglePlayPause: () => {
+      void playback.togglePlayPause()
+    },
+    updateSettings,
+  })
   const nowPlayingSongs = useMemo(
     () =>
       snapshot.nowPlaying.songIds
@@ -654,6 +677,49 @@ function App() {
     playQuick,
     commitSearchQuery,
   })
+  const externalCommandHandlerRef = useRef<(command: ExternalAppCommand) => void>(() => {})
+  externalCommandHandlerRef.current = (command) => {
+    if (command.type === 'voice-command') {
+      void voiceAssistant.handleVoiceCommand(command.text)
+      return
+    }
+
+    if (command.type === 'tray-command') {
+      if (command.command === 'quick-play') {
+        void playQuick()
+      } else if (command.command === 'toggle-desktop-lyrics') {
+        void updateSettings({ desktopLyricsEnabled: !snapshot.settings.desktopLyricsEnabled })
+      }
+      return
+    }
+
+    if (command.command === 'play-pause') {
+      void playback.togglePlayPause()
+    } else if (command.command === 'next') {
+      void playback.playNext()
+    } else if (command.command === 'previous') {
+      void playback.playPrevious()
+    } else {
+      playback.stop()
+    }
+  }
+
+  useEffect(() => {
+    if (!window.smplayer) {
+      return
+    }
+
+    const handleExternalAppCommand = (command: ExternalAppCommand) => {
+      externalCommandHandlerRef.current(command)
+    }
+    const unsubscribe = window.smplayer.onExternalCommand(handleExternalAppCommand)
+    void window.smplayer.takePendingExternalCommands().then((commands) => {
+      for (const command of commands) {
+        handleExternalAppCommand(command)
+      }
+    })
+    return unsubscribe
+  }, [])
 
   const isLocalRoute = location.pathname === '/local'
   const isHeaderedPlaylistRoute = isInAlbumDetail ||
@@ -764,7 +830,7 @@ function App() {
     onVoiceCommand: voiceAssistant.handleVoiceCommand,
     getVoiceHint: voiceAssistant.getVoiceHint,
     getVoiceHelpText: voiceAssistant.getVoiceHelpText,
-    voiceLanguage: resolveLocale(snapshot.settings.preferredLanguage),
+    voiceLanguage: resolveVoiceAssistantLocale(snapshot.settings.preferredLanguage),
   }
 
   if (appWindow.isMiniMode) {

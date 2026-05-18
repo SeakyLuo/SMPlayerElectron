@@ -36,6 +36,7 @@ export interface PlaybackController {
   mode: PlaybackMode
   playTrack: (trackId: number, queueSongIds?: number[], queueIndex?: number) => Promise<void>
   togglePlayPause: () => Promise<void>
+  stop: () => void
   playNext: () => Promise<void>
   playPrevious: () => Promise<void>
   seekToRatio: (ratio: number) => void
@@ -674,6 +675,14 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
     }
   }, [])
 
+  const stop = useCallback(() => {
+    const audio = audioRef.current
+    if (audio) {
+      audio.pause()
+      void persistPlaybackSettings({ musicProgress: audio.currentTime })
+    }
+  }, [persistPlaybackSettings])
+
   const togglePlayPause = useCallback(async () => {
     const audio = audioRef.current
     if (!audio || audio.paused) {
@@ -953,13 +962,7 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
     onPlayPrevious: () => {
       void playPrevious()
     },
-    onStop: () => {
-      const audio = audioRef.current
-      if (audio) {
-        audio.pause()
-        void persistPlaybackSettings({ musicProgress: audio.currentTime })
-      }
-    },
+    onStop: stop,
   })
 
   return {
@@ -973,6 +976,7 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
     mode,
     playTrack,
     togglePlayPause,
+    stop,
     playNext,
     playPrevious,
     seekToRatio,

@@ -89,6 +89,10 @@ function resolveFeedbackEmailSubject(preferredLanguage: PreferredLanguage) {
     return feedbackEmailSubjectByLanguage[preferredLanguage]
   }
 
+  if (preferredLanguage === 'zh-Hant') {
+    return feedbackEmailSubjectByLanguage['zh-CN']
+  }
+
   const locale = app.getLocale().toLowerCase()
   return locale.startsWith('zh')
     ? feedbackEmailSubjectByLanguage['zh-CN']

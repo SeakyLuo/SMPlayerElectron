@@ -185,6 +185,7 @@ export function GridViewMusicItemControl({
           className="recent-song-artwork"
           src={song.artworkUrl}
           title={song.title}
+          showFallbackWhileLoading
           renderFallback={() => (
             <span className="recent-song-artwork recent-song-artwork-fallback" aria-hidden="true">
               <DefaultAlbumArtwork className="recent-song-artwork-fallback-image" />

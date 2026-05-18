@@ -3,6 +3,8 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type { SmplayerApi } from '../src/shared/contracts'
 
 const startupNightModeActive = process.argv.includes('--smplayer-startup-night-mode=1')
+const reportedRendererIssueKeys = new Set<string>()
+const MAX_REPORTED_RENDERER_ISSUE_KEYS = 100
 
 type StartupDocument = {
   documentElement?: {
@@ -13,8 +15,48 @@ type StartupDocument = {
     classList?: { add: (className: string) => void }
     style?: { backgroundColor: string }
   }
-  getElementById?: (id: string) => { style?: { setProperty?: (name: string, value: string) => void } } | null
+  readyState?: string
+  getElementById?: (id: string) => RendererElement | null
   addEventListener?: (type: string, listener: () => void, options: { once: boolean }) => void
+}
+
+type RendererElement = {
+  childElementCount?: number
+  tagName?: string
+  id?: string
+  className?: string
+  textContent?: string | null
+  currentSrc?: string
+  src?: string
+  href?: string
+  style?: {
+    setProperty?: (name: string, value: string) => void
+  }
+  getBoundingClientRect?: () => {
+    width: number
+    height: number
+  }
+  querySelectorAll?: (selector: string) => ArrayLike<RendererElement>
+}
+
+type RendererErrorEvent = {
+  error: unknown
+  message: string
+  filename: string
+  lineno: number
+  colno: number
+  target?: unknown
+}
+
+type RendererUnhandledRejectionEvent = {
+  reason: unknown
+}
+
+type RendererGlobal = typeof globalThis & {
+  addEventListener: {
+    (type: 'error', listener: (event: RendererErrorEvent) => void, options?: boolean): void
+    (type: 'unhandledrejection', listener: (event: RendererUnhandledRejectionEvent) => void): void
+  }
 }
 
 function applyStartupNightMode() {
@@ -42,8 +84,140 @@ if (startupNightModeActive) {
   }
 }
 
+function getRendererErrorPayload(error: unknown, fallbackMessage: string) {
+  if (error instanceof Error) {
+    return {
+      type: error.name || 'Error',
+      message: error.message,
+      stackTrace: error.stack ?? '',
+      source: '',
+      line: 0,
+      column: 0,
+    }
+  }
+
+  return {
+    type: 'Error',
+    message: fallbackMessage,
+    stackTrace: '',
+    source: '',
+    line: 0,
+    column: 0,
+  }
+}
+
+function reportRendererIssue(payload: ReturnType<typeof getRendererErrorPayload>) {
+  const issueKey = [
+    payload.type,
+    payload.message,
+    payload.source,
+    payload.line,
+    payload.column,
+  ].join('|')
+
+  if (reportedRendererIssueKeys.has(issueKey)) {
+    return
+  }
+  if (reportedRendererIssueKeys.size >= MAX_REPORTED_RENDERER_ISSUE_KEYS) {
+    return
+  }
+  reportedRendererIssueKeys.add(issueKey)
+  ipcRenderer.send('app-center:renderer-issue', payload)
+}
+
+;(globalThis as RendererGlobal).addEventListener('error', (event) => {
+  const payload = getRendererErrorPayload(event.error, event.message || 'Resource load failed')
+  reportRendererIssue({
+    ...payload,
+    type: event.error instanceof Error ? payload.type : 'RendererResourceLoadFailure',
+    source: event.filename || getResourceSource(event.target),
+    line: event.lineno,
+    column: event.colno,
+  })
+}, true)
+
+;(globalThis as RendererGlobal).addEventListener('unhandledrejection', (event) => {
+  reportRendererIssue(getRendererErrorPayload(event.reason, 'Unhandled promise rejection'))
+})
+
+function scheduleBlankScreenCheck(delayMs: number) {
+  setTimeout(() => {
+    const rendererDocument = (globalThis as unknown as { document?: StartupDocument }).document
+    const root = rendererDocument?.getElementById?.('root')
+    if (!root || hasVisibleRootContent(root)) {
+      return
+    }
+
+    reportRendererIssue({
+      type: 'RendererBlankScreen',
+      message: `rootContentMissing delayMs=${delayMs} readyState=${rendererDocument?.readyState ?? ''}`,
+      stackTrace: '',
+      source: 'renderer',
+      line: 0,
+      column: 0,
+    })
+  }, delayMs)
+}
+
+function hasVisibleRootContent(root: RendererElement) {
+  if (!root.childElementCount) {
+    return false
+  }
+
+  const elements = root.querySelectorAll?.('*')
+  const maxElementsToInspect = Math.min(elements?.length ?? 0, 80)
+  for (let index = 0; index < maxElementsToInspect; index += 1) {
+    const element = elements![index]!
+    const rect = element.getBoundingClientRect?.()
+    if (rect && rect.width > 1 && rect.height > 1) {
+      return true
+    }
+  }
+
+  return Boolean(root.textContent?.trim())
+}
+
+function getResourceSource(target: unknown) {
+  const element = target as RendererElement
+  return element.currentSrc || element.src || element.href || describeResourceElement(element)
+}
+
+function describeResourceElement(element: RendererElement) {
+  return [
+    element.tagName ?? 'resource',
+    element.id ? `#${element.id}` : '',
+    typeof element.className === 'string' && element.className ? `.${element.className.split(/\s+/).join('.')}` : '',
+  ].join('')
+}
+
+const originalConsoleError = console.error.bind(console)
+console.error = (...values: unknown[]) => {
+  reportRendererIssue({
+    type: 'RendererConsoleError',
+    message: values.map((value) => value instanceof Error ? value.stack || value.message : String(value)).join('\n'),
+    stackTrace: values.find((value): value is Error => value instanceof Error)?.stack ?? '',
+    source: 'console.error',
+    line: 0,
+    column: 0,
+  })
+  originalConsoleError(...values)
+}
+
+function scheduleStartupBlankScreenChecks() {
+  scheduleBlankScreenCheck(8000)
+  scheduleBlankScreenCheck(20000)
+}
+
+const startupDocument = (globalThis as unknown as { document?: StartupDocument }).document
+if (startupDocument?.readyState === 'complete' || startupDocument?.readyState === 'interactive') {
+  scheduleStartupBlankScreenChecks()
+} else {
+  startupDocument?.addEventListener?.('DOMContentLoaded', scheduleStartupBlankScreenChecks, { once: true })
+}
+
 const api: SmplayerApi = {
   getAppInfo: () => ipcRenderer.invoke('app:get-info'),
+  getSystemFonts: () => ipcRenderer.invoke('app:get-system-fonts'),
   getLibraryShell: () => ipcRenderer.invoke('library:get-shell'),
   getLibrarySettings: () => ipcRenderer.invoke('library:get-settings'),
   getLibraryCounts: () => ipcRenderer.invoke('library:get-counts'),
@@ -61,6 +235,7 @@ const api: SmplayerApi = {
   getSongProperties: (songId) => ipcRenderer.invoke('library:get-song-properties', songId),
   updateSongProperties: (songId, update) => ipcRenderer.invoke('library:update-song-properties', songId, update),
   updateSongPlayCount: (songId, playCount) => ipcRenderer.invoke('library:update-song-play-count', songId, playCount),
+  updateSongLyricsOffset: (songId, lyricsOffsetMs) => ipcRenderer.invoke('library:update-song-lyrics-offset', songId, lyricsOffsetMs),
   getLyrics: (songId, mode) => ipcRenderer.invoke('lyrics:get', songId, mode),
   importLyrics: () => ipcRenderer.invoke('lyrics:import'),
   saveSongLyrics: (songId, rawLyrics) => ipcRenderer.invoke('lyrics:save', songId, rawLyrics),
@@ -147,9 +322,21 @@ const api: SmplayerApi = {
     }
   },
   takePendingOpenFiles: () => ipcRenderer.invoke('app:take-pending-open-files'),
+  takePendingExternalCommands: () => ipcRenderer.invoke('app:take-pending-external-commands'),
   setTrayPlaybackState: (isPlaying) => ipcRenderer.invoke('app:set-tray-playback-state', isPlaying),
   exportData: () => ipcRenderer.invoke('data:export'),
   importData: () => ipcRenderer.invoke('data:import'),
+  onDataTransferState: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, state: Parameters<typeof callback>[0]) => {
+      callback(state)
+    }
+
+    ipcRenderer.on('data:transfer-state', listener)
+
+    return () => {
+      ipcRenderer.removeListener('data:transfer-state', listener)
+    }
+  },
   sendFeedbackEmail: () => ipcRenderer.invoke('shell:send-feedback-email'),
   openFeedbackInBrowser: () => ipcRenderer.invoke('shell:open-feedback-browser'),
   openVoiceAssistantPrivacySettings: () => ipcRenderer.invoke('shell:open-voice-assistant-privacy-settings'),
@@ -248,6 +435,17 @@ const api: SmplayerApi = {
       ipcRenderer.removeListener('app:tray-command', listener)
     }
   },
+  onExternalCommand: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, command: Parameters<typeof callback>[0]) => {
+      callback(command)
+    }
+
+    ipcRenderer.on('app:external-command', listener)
+
+    return () => {
+      ipcRenderer.removeListener('app:external-command', listener)
+    }
+  },
   onWindowFullScreenChange: (callback) => {
     const listener = (_event: Electron.IpcRendererEvent, fullScreen: boolean) => {
       callback(fullScreen)
@@ -279,6 +477,30 @@ const api: SmplayerApi = {
 
     return () => {
       ipcRenderer.removeListener('app:open-files', listener)
+    }
+  },
+  updateDesktopLyricsState: (state) => ipcRenderer.invoke('desktop-lyrics:update-state', state),
+  onDesktopLyricsState: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, state: Parameters<typeof callback>[0]) => {
+      callback(state)
+    }
+
+    ipcRenderer.on('desktop-lyrics:state', listener)
+
+    return () => {
+      ipcRenderer.removeListener('desktop-lyrics:state', listener)
+    }
+  },
+  requestDesktopLyricsCommand: (command) => ipcRenderer.invoke('desktop-lyrics:request-command', command),
+  onDesktopLyricsCommand: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, command: Parameters<typeof callback>[0]) => {
+      callback(command)
+    }
+
+    ipcRenderer.on('desktop-lyrics:command', listener)
+
+    return () => {
+      ipcRenderer.removeListener('desktop-lyrics:command', listener)
     }
   },
 }

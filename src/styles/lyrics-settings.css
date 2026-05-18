@@ -1013,6 +1013,39 @@
   bottom: calc(100% + 6px);
 }
 
+.settings-select-search {
+  position: sticky;
+  top: -6px;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 240px;
+  min-height: 36px;
+  margin: -6px -6px 2px;
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(126, 139, 154, 0.14);
+  background: rgba(255, 255, 255, 0.98);
+}
+
+.settings-select-search svg {
+  width: 16px;
+  height: 16px;
+  color: var(--text-muted);
+}
+
+.settings-select-search input {
+  min-width: 0;
+  height: 30px;
+  border: 0;
+  background: transparent;
+  color: var(--text-strong);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
 .settings-select-options button {
   display: grid;
   grid-template-columns: 20px minmax(0, 1fr);
@@ -1047,6 +1080,14 @@
 .settings-select-options svg {
   width: 16px;
   height: 16px;
+}
+
+.settings-select-empty {
+  display: block;
+  padding: 12px 10px;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
 }
 
 
@@ -1212,6 +1253,20 @@ body.night-mode .app-shell .settings-select-options {
   border-color: var(--night-border);
   background: rgba(24, 30, 38, 0.98);
   box-shadow: 0 18px 44px rgba(0, 0, 0, 0.34);
+}
+
+body.night-mode .app-shell .settings-select-search {
+  border-bottom-color: var(--night-border);
+  background: rgba(24, 30, 38, 0.98);
+}
+
+body.night-mode .app-shell .settings-select-search svg,
+body.night-mode .app-shell .settings-select-empty {
+  color: var(--night-muted);
+}
+
+body.night-mode .app-shell .settings-select-search input {
+  color: var(--night-text);
 }
 
 body.night-mode .app-shell .settings-time-column button,

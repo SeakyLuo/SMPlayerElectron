@@ -144,8 +144,9 @@ export class LyricsService {
 
     const settings = this.settingsService.getSettings()
     const preferredLanguage = mapPreferredLanguage(settings.VoiceAssistantPreferredLanguage)
-    const keyword = preferredLanguage === 'zh-CN' ? '\u6b4c\u8bcd' : 'lyrics'
-    const host = preferredLanguage === 'zh-CN' ? 'https://cn.bing.com/search' : 'https://www.bing.com/search'
+    const isChineseLanguage = preferredLanguage === 'zh-CN' || preferredLanguage === 'zh-Hant'
+    const keyword = isChineseLanguage ? '\u6b4c\u8bcd' : 'lyrics'
+    const host = isChineseLanguage ? 'https://cn.bing.com/search' : 'https://www.bing.com/search'
     const searchQuery = [keyword, song.title, song.artist].filter(Boolean).join(' ')
     return `${host}?q=${encodeURIComponent(searchQuery)}`
   }
