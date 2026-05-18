@@ -168,9 +168,11 @@ export function NowPlayingFullPage({
   const createPlaylist = useLibraryStore((state) => state.createPlaylist)
   const removeSongFromPlaylist = useLibraryStore((state) => state.removeSongFromPlaylist)
   const folders = useLibraryStore((state) => state.snapshot.folders)
+  const updateSettings = useLibraryStore((state) => state.updateSettings)
   const nightMode = useLibraryStore((state) => state.snapshot.settings.nightMode)
   const nightModeStartTime = useLibraryStore((state) => state.snapshot.settings.nightModeStartTime)
   const nightModeEndTime = useLibraryStore((state) => state.snapshot.settings.nightModeEndTime)
+  const desktopLyricsEnabled = useLibraryStore((state) => state.snapshot.settings.desktopLyricsEnabled)
   const showUndoableNotification = useUndoableNotificationStore((state) => state.show)
   const { progressSeconds, durationSeconds } = usePlaybackProgress()
   const [currentClockMinute, setCurrentClockMinute] = useState(getCurrentClockMinute)
@@ -186,14 +188,16 @@ export function NowPlayingFullPage({
   const artistLabel = currentSong ? getDisplayArtists(currentSong, t('common.artistUnknown')) : t('common.artistUnknown')
   const albumLabel = currentSong?.album || t('common.albumUnknown')
   const disabled = !currentSong
+  const lyricsOffsetMs = currentSong?.lyricsOffsetMs ?? 0
   const currentLyrics = displayLyrics && displayLyrics.trackId === currentSongId ? displayLyrics.lyrics : null
   const showUndo = (message: string, action: () => void | Promise<void>) => {
     showUndoableNotification(message, t('common.undo'), action)
   }
-  const lyricsProgressRatio = effectiveDuration > 0 ? progressValue / effectiveDuration : 0
+  const lyricsProgressValue = Math.max(0, progressValue + lyricsOffsetMs / 1000)
+  const lyricsProgressRatio = effectiveDuration > 0 ? lyricsProgressValue / effectiveDuration : 0
   const displayLyricsLines = useMemo(
-    () => getImmersiveLyricsLines(currentLyrics, progressValue, lyricsProgressRatio, effectiveDuration),
-    [currentLyrics, effectiveDuration, lyricsProgressRatio, progressValue],
+    () => getImmersiveLyricsLines(currentLyrics, lyricsProgressValue, lyricsProgressRatio, effectiveDuration),
+    [currentLyrics, effectiveDuration, lyricsProgressRatio, lyricsProgressValue],
   )
   const activeLyricsIndex = useMemo(
     () => displayLyricsLines.findIndex((line) => line.active),
@@ -629,6 +633,10 @@ export function NowPlayingFullPage({
       preferenceItem,
       t,
       onQuickPlay: playQuick,
+      desktopLyricsEnabled,
+      onToggleDesktopLyrics: () => {
+        void updateSettings({ desktopLyricsEnabled: !desktopLyricsEnabled })
+      },
       onPlaySongs: playSongIds,
       onSavePlaylist: saveQueueAsPlaylist,
       onClearQueue: () => {

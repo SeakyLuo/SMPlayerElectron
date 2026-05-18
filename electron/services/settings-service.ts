@@ -33,6 +33,14 @@ export interface SettingsRow {
   PlayerLyricsSource: number
   SaveLyricsImmediately: number
   PreserveInternetLyricsTimestamps: number
+  DesktopLyricsEnabled: number
+  DesktopLyricsLocked: number
+  DesktopLyricsColor: string
+  DesktopLyricsStrokeColor: string
+  DesktopLyricsFontSize: number
+  DesktopLyricsFontFamily: string
+  DesktopLyricsOpacity: number
+  DesktopLyricsBounds: string
   UseFilenameNotMusicName: number
   SmartMultiArtistRecognition: number
   MusicLibraryCriterion: number
@@ -88,6 +96,14 @@ export class SettingsService {
         PlayerLyricsSource,
         SaveLyricsImmediately,
         PreserveInternetLyricsTimestamps,
+        DesktopLyricsEnabled,
+        DesktopLyricsLocked,
+        DesktopLyricsColor,
+        DesktopLyricsStrokeColor,
+        DesktopLyricsFontSize,
+        DesktopLyricsFontFamily,
+        DesktopLyricsOpacity,
+        DesktopLyricsBounds,
         UseFilenameNotMusicName,
         SmartMultiArtistRecognition,
         MusicLibraryCriterion,
@@ -143,6 +159,14 @@ export class SettingsService {
         PlayerLyricsSource = ?,
         SaveLyricsImmediately = ?,
         PreserveInternetLyricsTimestamps = ?,
+        DesktopLyricsEnabled = ?,
+        DesktopLyricsLocked = ?,
+        DesktopLyricsColor = ?,
+        DesktopLyricsStrokeColor = ?,
+        DesktopLyricsFontSize = ?,
+        DesktopLyricsFontFamily = ?,
+        DesktopLyricsOpacity = ?,
+        DesktopLyricsBounds = ?,
         MusicLibraryCriterion = ?,
         AlbumsCriterion = ?,
         SearchArtistsCriterion = ?,
@@ -245,6 +269,14 @@ export class SettingsService {
         update.preserveInternetLyricsTimestamps ??
           Boolean(settings.PreserveInternetLyricsTimestamps),
       ),
+      Number(update.desktopLyricsEnabled ?? Boolean(settings.DesktopLyricsEnabled)),
+      Number(update.desktopLyricsLocked ?? Boolean(settings.DesktopLyricsLocked)),
+      update.desktopLyricsColor ?? settings.DesktopLyricsColor,
+      update.desktopLyricsStrokeColor ?? settings.DesktopLyricsStrokeColor,
+      update.desktopLyricsFontSize ?? settings.DesktopLyricsFontSize,
+      update.desktopLyricsFontFamily ?? settings.DesktopLyricsFontFamily,
+      update.desktopLyricsOpacity ?? settings.DesktopLyricsOpacity,
+      update.desktopLyricsBounds ?? settings.DesktopLyricsBounds,
       toMusicLibrarySortValue(
         update.musicLibrarySort ?? mapMusicLibrarySort(settings.MusicLibraryCriterion),
       ),
@@ -311,6 +343,14 @@ export function toSettingsSnapshot(settings: SettingsRow): SettingsSnapshot {
     playerLyricsSource: mapLyricsRequestMode(settings.PlayerLyricsSource),
     saveLyricsImmediately: true,
     preserveInternetLyricsTimestamps: Boolean(settings.PreserveInternetLyricsTimestamps),
+    desktopLyricsEnabled: Boolean(settings.DesktopLyricsEnabled),
+    desktopLyricsLocked: Boolean(settings.DesktopLyricsLocked),
+    desktopLyricsColor: settings.DesktopLyricsColor || '#4aa8ff',
+    desktopLyricsStrokeColor: settings.DesktopLyricsStrokeColor || '',
+    desktopLyricsFontSize: settings.DesktopLyricsFontSize,
+    desktopLyricsFontFamily: settings.DesktopLyricsFontFamily,
+    desktopLyricsOpacity: settings.DesktopLyricsOpacity,
+    desktopLyricsBounds: settings.DesktopLyricsBounds,
     preferredLanguage: mapPreferredLanguage(settings.VoiceAssistantPreferredLanguage),
     musicLibrarySort: mapMusicLibrarySort(settings.MusicLibraryCriterion),
     albumsSort: mapAlbumSort(settings.AlbumsCriterion),
@@ -388,6 +428,32 @@ export function mapPreferredLanguage(languageValue: number): PreferredLanguage {
       return 'en-US'
     case 2:
       return 'zh-CN'
+    case 3:
+      return 'fr'
+    case 4:
+      return 'ru'
+    case 5:
+      return 'ja'
+    case 6:
+      return 'de'
+    case 7:
+      return 'pt-BR'
+    case 8:
+      return 'es'
+    case 9:
+      return 'it'
+    case 10:
+      return 'zh-Hant'
+    case 11:
+      return 'nl'
+    case 12:
+      return 'cs'
+    case 13:
+      return 'uk'
+    case 14:
+      return 'sv'
+    case 15:
+      return 'id'
     default:
       return 'system'
   }
@@ -399,6 +465,32 @@ function toPreferredLanguageValue(language: PreferredLanguage) {
       return 2
     case 'en-US':
       return 1
+    case 'fr':
+      return 3
+    case 'ru':
+      return 4
+    case 'ja':
+      return 5
+    case 'de':
+      return 6
+    case 'pt-BR':
+      return 7
+    case 'es':
+      return 8
+    case 'it':
+      return 9
+    case 'zh-Hant':
+      return 10
+    case 'nl':
+      return 11
+    case 'cs':
+      return 12
+    case 'uk':
+      return 13
+    case 'sv':
+      return 14
+    case 'id':
+      return 15
     default:
       return 0
   }

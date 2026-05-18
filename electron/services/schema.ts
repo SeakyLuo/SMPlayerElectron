@@ -79,6 +79,14 @@ export function initializeSchema(db: DatabaseSync) {
       PlayerLyricsSource INTEGER DEFAULT 3,
       SaveLyricsImmediately INTEGER DEFAULT 0,
       PreserveInternetLyricsTimestamps INTEGER DEFAULT 1,
+      DesktopLyricsEnabled INTEGER DEFAULT 0,
+      DesktopLyricsLocked INTEGER DEFAULT 0,
+      DesktopLyricsColor TEXT DEFAULT '#4aa8ff',
+      DesktopLyricsStrokeColor TEXT DEFAULT '#111111',
+      DesktopLyricsFontSize INTEGER DEFAULT 28,
+      DesktopLyricsFontFamily TEXT DEFAULT 'system',
+      DesktopLyricsOpacity INTEGER DEFAULT 88,
+      DesktopLyricsBounds TEXT DEFAULT '',
       QuitOnClose INTEGER DEFAULT 1
     );
 
@@ -92,6 +100,7 @@ export function initializeSchema(db: DatabaseSync) {
       ThumbnailPath TEXT DEFAULT '',
       Duration INTEGER DEFAULT 0,
       PlayCount INTEGER DEFAULT 0,
+      LyricsOffsetMs INTEGER DEFAULT 0,
       DateAdded TEXT DEFAULT '',
       State INTEGER DEFAULT 1
     );
@@ -262,6 +271,7 @@ export function initializeSchema(db: DatabaseSync) {
   renameColumnIfPresent(db, 'Music', 'ArtworkPath', 'ThumbnailPath')
   addColumnIfMissing(db, 'Music', 'AlbumId', `AlbumId INTEGER DEFAULT 0`)
   addColumnIfMissing(db, 'Music', 'ThumbnailPath', `ThumbnailPath TEXT DEFAULT ''`)
+  addColumnIfMissing(db, 'Music', 'LyricsOffsetMs', `LyricsOffsetMs INTEGER DEFAULT 0`)
   addColumnIfMissing(db, 'RemoteSetting', 'DeviceId', `DeviceId TEXT DEFAULT ''`)
   addColumnIfMissing(db, 'RemoteSetting', 'DeviceName', `DeviceName TEXT DEFAULT ''`)
   addColumnIfMissing(db, 'RemoteSetting', 'ShareEnabled', `ShareEnabled INTEGER DEFAULT 0`)
@@ -307,6 +317,14 @@ export function initializeSchema(db: DatabaseSync) {
     ['PlayerLyricsSource', `PlayerLyricsSource INTEGER DEFAULT 3`],
     ['SaveLyricsImmediately', `SaveLyricsImmediately INTEGER DEFAULT 0`],
     ['PreserveInternetLyricsTimestamps', `PreserveInternetLyricsTimestamps INTEGER DEFAULT 1`],
+    ['DesktopLyricsEnabled', `DesktopLyricsEnabled INTEGER DEFAULT 0`],
+    ['DesktopLyricsLocked', `DesktopLyricsLocked INTEGER DEFAULT 0`],
+    ['DesktopLyricsColor', `DesktopLyricsColor TEXT DEFAULT '#4aa8ff'`],
+    ['DesktopLyricsStrokeColor', `DesktopLyricsStrokeColor TEXT DEFAULT '#111111'`],
+    ['DesktopLyricsFontSize', `DesktopLyricsFontSize INTEGER DEFAULT 28`],
+    ['DesktopLyricsFontFamily', `DesktopLyricsFontFamily TEXT DEFAULT 'system'`],
+    ['DesktopLyricsOpacity', `DesktopLyricsOpacity INTEGER DEFAULT 88`],
+    ['DesktopLyricsBounds', `DesktopLyricsBounds TEXT DEFAULT ''`],
     ['QuitOnClose', `QuitOnClose INTEGER DEFAULT 1`],
     ['NightMode', `NightMode INTEGER DEFAULT 2`],
     ['NightModeStartTime', `NightModeStartTime TEXT DEFAULT '20:00'`],

@@ -145,6 +145,14 @@ const paths = {
     <path key="top" d="M3.5 10h17" />,
     <path key="slash" d="M4.5 4.5 19.5 19.5" />,
   ],
+  lock: [
+    <rect key="body" x="5" y="10" width="14" height="10" rx="2" />,
+    <path key="shackle" d="M8 10V8a4 4 0 0 1 8 0v2" />,
+  ],
+  unlock: [
+    <rect key="body" x="5" y="10" width="14" height="10" rx="2" />,
+    <path key="shackle" d="M8 10V8a4 4 0 0 1 7.5-2" />,
+  ],
   heart: [
     <path
       key="heart"

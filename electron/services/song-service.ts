@@ -20,6 +20,7 @@ export class SongService {
   private readonly getSongPathStatement
   private readonly updateSongPlayCountStatement
   private readonly updateSongDurationStatement
+  private readonly updateSongLyricsOffsetStatement
   private readonly songArtistSync
 
   constructor(db: DatabaseSync, id3TagService: Id3TagService) {
@@ -51,6 +52,12 @@ export class SongService {
           Duration <= 0
           OR ABS(Duration - ?) > 1
         )
+    `)
+    this.updateSongLyricsOffsetStatement = this.db.prepare(`
+      UPDATE Music
+      SET LyricsOffsetMs = ?
+      WHERE Id = ?
+        AND State = ?
     `)
     this.songArtistSync = new SongArtistSync(this.db)
   }
@@ -204,6 +211,10 @@ export class SongService {
 
   updateSongPlayCount(songId: number, playCount: number) {
     this.updateSongPlayCountStatement.run(playCount, songId, ACTIVE_STATE.active)
+  }
+
+  updateSongLyricsOffset(songId: number, lyricsOffsetMs: number) {
+    this.updateSongLyricsOffsetStatement.run(lyricsOffsetMs, songId, ACTIVE_STATE.active)
   }
 
   applyArtistSplits(splits: ArtistSplitResultItem[]) {

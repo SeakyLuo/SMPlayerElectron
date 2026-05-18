@@ -63,6 +63,7 @@ interface LibraryStoreState {
   cancelLocalFolderScan: () => Promise<void>
   setSongFavorite: (songId: number, favorite: boolean) => Promise<void>
   setSongsFavorite: (songIds: number[], favorite: boolean) => Promise<void>
+  updateSongLyricsOffset: (songId: number, lyricsOffsetMs: number) => Promise<void>
   createPlaylist: (name: string, songIds?: number[]) => Promise<void>
   deletePlaylist: (playlistId: number) => Promise<void>
   restorePlaylist: (playlist: LibraryPlaylist, restoreIndex: number) => Promise<void>
@@ -505,6 +506,30 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
       await window.smplayer.setSongsFavorite(songIds, favorite)
       set((state) => ({
         snapshot: patchPlaylistSongs(state.snapshot, getFavoritePlaylistId(state.snapshot), songIds, favorite),
+      }))
+    } catch (error) {
+      set({ error: getErrorMessage(error) })
+    }
+  },
+  updateSongLyricsOffset: async (songId, lyricsOffsetMs) => {
+    if (!window.smplayer) {
+      return
+    }
+
+    set({ error: null })
+
+    try {
+      await window.smplayer.updateSongLyricsOffset(songId, lyricsOffsetMs)
+      set((state) => ({
+        snapshot: {
+          ...state.snapshot,
+          songs: state.snapshot.songs.map((song) =>
+            song.id === songId ? { ...song, lyricsOffsetMs } : song,
+          ),
+          recentSongs: state.snapshot.recentSongs.map((song) =>
+            song.id === songId ? { ...song, lyricsOffsetMs } : song,
+          ),
+        },
       }))
     } catch (error) {
       set({ error: getErrorMessage(error) })

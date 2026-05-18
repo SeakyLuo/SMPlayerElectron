@@ -2,11 +2,13 @@ import { useCallback, useEffect, useState, type PointerEvent as ReactPointerEven
 
 interface AppWindowControllerOptions {
   onQuickPlay: () => void | Promise<unknown>
+  onToggleDesktopLyrics: () => void | Promise<unknown>
   onEnterMiniMode: () => void
 }
 
 export function useAppWindowController({
   onQuickPlay,
+  onToggleDesktopLyrics,
   onEnterMiniMode,
 }: AppWindowControllerOptions) {
   const [isWindowFullScreen, setIsWindowFullScreen] = useState(false)
@@ -36,9 +38,11 @@ export function useAppWindowController({
     return window.smplayer?.onTrayCommand((command) => {
       if (command === 'quick-play') {
         void onQuickPlay()
+      } else if (command === 'toggle-desktop-lyrics') {
+        void onToggleDesktopLyrics()
       }
     })
-  }, [onQuickPlay])
+  }, [onQuickPlay, onToggleDesktopLyrics])
 
   const startWindowDrag = useCallback((event: ReactPointerEvent<HTMLElement>) => {
     event.currentTarget.setPointerCapture(event.pointerId)

@@ -442,7 +442,6 @@ export function LyricsBatchControl({ t, snapshot, onUpdateSettings }: LyricsBatc
     <section className="settings-card">
       <header className="settings-card-header">
         <h3>{t('settings.lyrics')}</h3>
-        <p>{t('settings.batchAddLyricsCopy')}</p>
       </header>
       <div className="settings-card-body">
         <LyricsSelectRow

@@ -1,4 +1,4 @@
-import { copyFile, mkdir } from 'node:fs/promises'
+import { copyFile, mkdir, rm } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 
 import { app, dialog, ipcMain, session, shell, type BrowserWindow, type OpenDialogOptions, type SaveDialogOptions } from 'electron'
@@ -64,6 +64,9 @@ export function registerLibraryIpc(options: LibraryIpcOptions) {
   )
   ipcMain.handle('library:update-song-play-count', (_event, songId: number, playCount: number) =>
     getSongService().updateSongPlayCount(songId, playCount),
+  )
+  ipcMain.handle('library:update-song-lyrics-offset', (_event, songId: number, lyricsOffsetMs: number) =>
+    getSongService().updateSongLyricsOffset(songId, lyricsOffsetMs),
   )
   ipcMain.handle('library:pick-album-artwork', async (_event, albumName: string) => {
     const t = createLibraryDialogTranslator(options)
@@ -155,13 +158,15 @@ export function registerLibraryIpc(options: LibraryIpcOptions) {
   ipcMain.handle('preferences:get-settings', () => getPreferenceService().getPreferenceSettings())
   ipcMain.handle('lyrics:get', (_event, songId: number, mode) => getLyricsService().getLyrics(songId, mode))
   ipcMain.handle('lyrics:import', async () => {
+    const t = createLibraryDialogTranslator(options)
     const result = await showOpenDialog(options.getWindow(), {
-      title: 'Import Lyrics',
+      title: t('song.importLyrics'),
+      buttonLabel: t('common.open'),
       properties: ['openFile'],
       filters: [
-        { name: 'Lyrics or Music', extensions: ['lrc', 'txt', ...options.audioDialogExtensions] },
-        { name: 'Lyrics', extensions: ['lrc', 'txt'] },
-        { name: 'Music', extensions: options.audioDialogExtensions },
+        { name: t('song.lyricsDialogLyricsOrMusicFilter'), extensions: ['lrc', 'txt', ...options.audioDialogExtensions] },
+        { name: t('song.lyricsDialogLyricsFilter'), extensions: ['lrc', 'txt'] },
+        { name: t('song.artworkDialogMusicFilter'), extensions: options.audioDialogExtensions },
       ],
     })
 
@@ -256,26 +261,31 @@ export function registerLibraryIpc(options: LibraryIpcOptions) {
   ipcMain.handle('library:apply-artist-splits', (_event, splits) =>
     getSongService().applyArtistSplits(splits),
   )
-  ipcMain.handle('data:export', async () => {
+  ipcMain.handle('data:export', async (event) => {
+    const t = createLibraryDialogTranslator(options)
     const result = await showSaveDialog(options.getWindow(), {
-      title: 'Export Data',
+      title: t('settings.exportData'),
+      buttonLabel: t('settings.save'),
       defaultPath: join(app.getPath('documents'), SMPLAYER_DB_NAME),
-      filters: [{ name: 'Simple Melody Player Database', extensions: ['db'] }],
+      filters: [{ name: t('settings.dataDialogDatabaseFilter'), extensions: ['db'] }],
     })
 
     if (result.canceled || !result.filePath) {
       return { canceled: true, path: null }
     }
 
+    event.sender.send('data:transfer-state', 'exporting')
     getLibraryService().flush()
     await copyFile(join(app.getPath('userData'), SMPLAYER_DB_NAME), result.filePath)
     return { canceled: false, path: result.filePath }
   })
-  ipcMain.handle('data:import', async () => {
+  ipcMain.handle('data:import', async (event) => {
+    const t = createLibraryDialogTranslator(options)
     const result = await showOpenDialog(options.getWindow(), {
-      title: 'Import Data',
+      title: t('settings.importData'),
+      buttonLabel: t('common.open'),
       defaultPath: app.getPath('documents'),
-      filters: [{ name: 'Simple Melody Player Database', extensions: ['db'] }],
+      filters: [{ name: t('settings.dataDialogDatabaseFilter'), extensions: ['db'] }],
       properties: ['openFile'],
     })
 
@@ -284,17 +294,44 @@ export function registerLibraryIpc(options: LibraryIpcOptions) {
     }
 
     const [sourcePath] = result.filePaths
+    event.sender.send('data:transfer-state', 'importing')
     const currentRootPath = getSettingsService().getSettingsSnapshot().rootPath
-    const targetPath = join(app.getPath('userData'), SMPLAYER_DB_NAME)
-    getLibraryService().close()
-    await mkdir(app.getPath('userData'), { recursive: true })
-    await copyFile(sourcePath, targetPath)
-    const nextLibraryService = new DataService(app.getPath('userData'))
-    options.setLibraryService(nextLibraryService)
-    const importedRootPath = nextLibraryService.settingsService.getSettingsSnapshot().rootPath
-    if (currentRootPath && importedRootPath && currentRootPath !== importedRootPath) {
-      nextLibraryService.localItemService.replaceRootPathReferences(importedRootPath, currentRootPath)
+    const userDataPath = app.getPath('userData')
+    const targetPath = join(userDataPath, SMPLAYER_DB_NAME)
+    const backupPath = join(userDataPath, `${SMPLAYER_DB_NAME}.import-backup`)
+    const previousLibraryService = getLibraryService()
+    let nextLibraryService: DataService | null = null
+
+    previousLibraryService.flush()
+    await mkdir(userDataPath, { recursive: true })
+    await copyFile(targetPath, backupPath)
+    previousLibraryService.close()
+
+    try {
+      await copyFile(sourcePath, targetPath)
+      nextLibraryService = new DataService(userDataPath)
+      const importedRootPath = nextLibraryService.settingsService.getSettingsSnapshot().rootPath
+      if (currentRootPath && importedRootPath && currentRootPath !== importedRootPath) {
+        nextLibraryService.localItemService.replaceRootPathReferences(importedRootPath, currentRootPath)
+      } else if (importedRootPath) {
+        await nextLibraryService.scanService.scanAll(importedRootPath, {
+          operationId: 'data-import',
+          onProgress: (progress: ScanLibraryProgress) => {
+            event.sender.send('library:scan-folder-progress', progress)
+          },
+        })
+      }
+      options.setLibraryService(nextLibraryService)
+      nextLibraryService = null
+    } catch (error) {
+      nextLibraryService?.close()
+      await copyFile(backupPath, targetPath)
+      options.setLibraryService(new DataService(userDataPath))
+      throw error
+    } finally {
+      await rm(backupPath, { force: true })
     }
+
     options.updateWindowsJumpList()
     return { canceled: false, path: sourcePath }
   })

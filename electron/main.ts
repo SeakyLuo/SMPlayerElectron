@@ -15,6 +15,8 @@ import {
 import { DataService } from './services/data-service'
 import { AUDIO_EXTENSIONS } from './services/constants'
 import { getAppIconPath } from './services/app-assets'
+import { registerAppCenterCrashReporting } from './services/app-center-crash-reporter'
+import { extractExternalCommandUrls, parseExternalCommandUrl } from './services/external-command-service'
 import { createMoveConflictResolver, trashPathIfExists } from './services/local-file-actions'
 import { ExternalAudioFileOpener } from './services/open-file-coordinator'
 import { registerMediaProtocols, registerMediaProtocolSchemes } from './services/media-protocols'
@@ -24,8 +26,9 @@ import {
   cancelWindowsSpeechRecognition,
   recognizeWindowsSpeech,
 } from './services/windows-speech-recognition'
-import type { PreferredLanguage, TrayCommand } from '../src/shared/contracts'
+import type { ExternalAppCommand, PreferredLanguage, TrayCommand } from '../src/shared/contracts'
 import { createTranslator } from '../src/shared/i18n'
+import { DesktopLyricsWindowController } from './desktop-lyrics-window'
 import { registerAppIpc } from './ipc/app-ipc'
 import { registerDataIpc } from './ipc/data-ipc'
 import { registerLibraryIpc } from './ipc/library-ipc'
@@ -40,6 +43,8 @@ let libraryService: DataService | null = null
 let remotePlayServer: RemotePlayServer | null = null
 let isQuitting = false
 let committingPendingDeletesBeforeQuit = false
+let externalCommandRendererReady = false
+const pendingExternalCommands: ExternalAppCommand[] = []
 const windowController = new WindowController()
 const trayController = new TrayController({
   getWindow: () => mainWindow,
@@ -59,6 +64,19 @@ const externalAudioFileOpener = new ExternalAudioFileOpener({
   getLibraryService: () => libraryService,
   getWindow: () => mainWindow,
   showWindow: () => showMainWindow(),
+})
+const desktopLyricsWindowController = new DesktopLyricsWindowController({
+  getSettings: () => libraryService!.settingsService.getSettingsSnapshot(),
+  getAppIconPath,
+  saveBounds: (bounds) => {
+    libraryService!.settingsService.updateSettings({ desktopLyricsBounds: JSON.stringify(bounds) })
+  },
+  sendCommand: (command) => {
+    if (command.type === 'open-settings') {
+      showMainWindow()
+    }
+    mainWindow?.webContents.send('desktop-lyrics:command', command)
+  },
 })
 const resolveMoveConflict = createMoveConflictResolver(() => mainWindow)
 
@@ -85,6 +103,9 @@ updateAppName()
 if (process.platform === 'win32') {
   app.setAppUserModelId(windowsAppUserModelId)
 }
+
+app.setAsDefaultProtocolClient('smplayer')
+registerAppCenterCrashReporting()
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
 if (!gotSingleInstanceLock) {
@@ -139,9 +160,40 @@ function sendTrayCommand(command: TrayCommand) {
   mainWindow!.webContents.send('app:tray-command', command)
 }
 
+function takePendingExternalCommands() {
+  externalCommandRendererReady = true
+  return pendingExternalCommands.splice(0)
+}
+
+function dispatchExternalCommand(command: ExternalAppCommand) {
+  if (!mainWindow || !externalCommandRendererReady) {
+    pendingExternalCommands.push(command)
+    showMainWindow()
+    return
+  }
+
+  showMainWindow()
+  mainWindow.webContents.send('app:external-command', command)
+}
+
+function dispatchExternalCommandUrls(argv: string[]) {
+  for (const rawUrl of extractExternalCommandUrls(argv)) {
+    const command = parseExternalCommandUrl(rawUrl)
+    if (command) {
+      dispatchExternalCommand(command)
+    }
+  }
+}
+
 app.on('second-instance', (_event, argv) => {
   showMainWindow()
+  dispatchExternalCommandUrls(argv)
   void externalAudioFileOpener.openFromShell(argv)
+})
+
+app.on('open-url', (event, url) => {
+  event.preventDefault()
+  dispatchExternalCommandUrls([url])
 })
 
 app.on('open-file', (event, filePath) => {
@@ -167,7 +219,10 @@ app.whenReady().then(async () => {
 
   registerAppIpc({
     takePendingOpenSongIds: () => externalAudioFileOpener.takePendingSongIds(),
+    takePendingExternalCommands,
     setTrayPlaybackState: (isPlaying) => trayController.setPlaybackState(isPlaying),
+    updateDesktopLyricsState: (state) => desktopLyricsWindowController.updateState(state),
+    requestDesktopLyricsCommand: (command) => desktopLyricsWindowController.requestCommand(command),
   })
   registerLibraryIpc({
     audioDialogExtensions,
@@ -219,6 +274,7 @@ app.whenReady().then(async () => {
   })
 
   await createWindow()
+  dispatchExternalCommandUrls(process.argv)
   await externalAudioFileOpener.openPendingFromArgv(process.argv)
   trayController.createTray()
   trayController.registerGlobalMediaShortcuts()
@@ -248,6 +304,7 @@ app.on('before-quit', (event) => {
 })
 
 app.on('will-quit', () => {
+  desktopLyricsWindowController.close()
   trayController.unregisterGlobalMediaShortcuts()
 })
 

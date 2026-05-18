@@ -12,7 +12,7 @@ export function ScanProgressOverlay({
 }: {
   progress: ScanLibraryProgress
   t: Translator
-  onCancel: () => void
+  onCancel?: () => void
 }) {
   const [stopConfirmOpen, setStopConfirmOpen] = useState(false)
   const progressRatio = Math.min(1, progress.progress / progress.max)
@@ -59,17 +59,19 @@ export function ScanProgressOverlay({
             </span>
           </div>
         </div>
-        <button
-          type="button"
-          className="local-refresh-stop-button"
-          disabled={!progress.canCancel}
-          onClick={() => {
-            setStopConfirmOpen(true)
-          }}
-        >
-          {t('local.updateFolderProgressStop')}
-        </button>
-        {stopConfirmOpen && progress.canCancel ? (
+        {onCancel ? (
+          <button
+            type="button"
+            className="local-refresh-stop-button"
+            disabled={!progress.canCancel}
+            onClick={() => {
+              setStopConfirmOpen(true)
+            }}
+          >
+            {t('local.updateFolderProgressStop')}
+          </button>
+        ) : null}
+        {stopConfirmOpen && progress.canCancel && onCancel ? (
           <RemoveDialog
             t={t}
             title={t('local.updateFolderProgressStopConfirmTitle')}

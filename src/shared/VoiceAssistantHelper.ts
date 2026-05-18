@@ -1,6 +1,8 @@
 import type { PreferredLanguage } from './contracts'
+import { resolveLocale } from './i18n'
 import { VoiceAssistantChineseHelper } from './VoiceAssistantChineseHelper'
 import { VoiceAssistantEnglishHelper } from './VoiceAssistantEnglishHelper'
+import { isLocalizedVoiceAssistantLocale, VoiceAssistantLocalizedHelper } from './VoiceAssistantLocalizedHelper'
 
 export const MatchType = {
   Play: 'Play',
@@ -66,15 +68,23 @@ export class VoiceAssistantHelper {
   static readonly option = 'i'
 
   static handle(text: string, language: PreferredLanguage): CommandResult {
-    const handler = VoiceAssistantHelper.isChinese(language)
-      ? new VoiceAssistantChineseHelper()
-      : new VoiceAssistantEnglishHelper()
+    const locale = resolveLocale(language)
+    if (locale.startsWith('zh')) {
+      return new VoiceAssistantChineseHelper().handle(text.trim())
+    }
 
-    return handler.handle(text.trim())
+    if (isLocalizedVoiceAssistantLocale(locale)) {
+      const localizedCommand = new VoiceAssistantLocalizedHelper(locale).handle(text.trim())
+      return localizedCommand.type === MatchType.MatchNone
+        ? new VoiceAssistantEnglishHelper().handle(text.trim())
+        : localizedCommand
+    }
+
+    return new VoiceAssistantEnglishHelper().handle(text.trim())
   }
 
   static isChinese(language: PreferredLanguage) {
-    return language === 'zh-CN' || (language === 'system' && navigator.language.toLocaleLowerCase().startsWith('zh'))
+    return resolveLocale(language).startsWith('zh')
   }
 
   static fractionToDouble(fraction: string) {

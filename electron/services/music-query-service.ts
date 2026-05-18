@@ -82,6 +82,7 @@ export class MusicQueryService {
         Music.Album AS album,
         Music.Duration AS duration,
         Music.PlayCount AS playCount,
+        Music.LyricsOffsetMs AS lyricsOffsetMs,
         CAST(Music.DateAdded AS TEXT) AS dateAdded,
         EXISTS(
           SELECT 1
@@ -125,6 +126,7 @@ export class MusicQueryService {
         Music.Album AS album,
         Music.Duration AS duration,
         Music.PlayCount AS playCount,
+        Music.LyricsOffsetMs AS lyricsOffsetMs,
         CAST(Music.DateAdded AS TEXT) AS dateAdded,
         CAST(RecentRecord.Time AS TEXT) AS playedAt,
         EXISTS(
@@ -343,6 +345,7 @@ export class MusicQueryService {
       album,
       duration: song.duration,
       playCount: song.playCount,
+      lyricsOffsetMs: song.lyricsOffsetMs,
       dateAdded: this.normalizeStoredDate(song.dateAdded),
       favorite: Boolean(song.favorite),
     }

@@ -1,8 +1,9 @@
-import { Notification, BrowserWindow, nativeImage, shell } from 'electron'
+import { app, Notification, BrowserWindow, nativeImage, shell } from 'electron'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import type { SettingsSnapshot } from '../src/shared/contracts'
+import { createTranslator } from '../src/shared/i18n'
 import type { WindowController } from './window-controller'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -39,7 +40,9 @@ interface MainWindowOptions {
 let hasShownTrayHint = false
 
 export async function createMainWindow(options: MainWindowOptions) {
-  const startupNightModeActive = getStartupNightModeActive(options.getSettings())
+  const settings = options.getSettings()
+  const t = createTranslator(settings.preferredLanguage, app.getLocale())
+  const startupNightModeActive = getStartupNightModeActive(settings)
   const defaultWindowMinimumSize = options.windowController.getDefaultMinimumSize()
   const appIcon = nativeImage.createFromPath(options.getAppIconPath())
   const window = new BrowserWindow({
@@ -62,7 +65,7 @@ export async function createMainWindow(options: MainWindowOptions) {
     backgroundMaterial: process.platform === 'win32' ? 'mica' : undefined,
     vibrancy: process.platform === 'darwin' ? 'under-window' : undefined,
     visualEffectState: 'active',
-    title: 'Simple Melody Player',
+    title: t('app.shell'),
     icon: appIcon,
     webPreferences: {
       contextIsolation: true,
@@ -90,8 +93,8 @@ export async function createMainWindow(options: MainWindowOptions) {
     if (!hasShownTrayHint && Notification.isSupported()) {
       hasShownTrayHint = true
       new Notification({
-        title: 'Simple Melody Player is still running',
-        body: 'The window was hidden to the system tray. Use the tray icon to restore or quit.',
+        title: t('app.trayRunningTitle'),
+        body: t('app.trayRunningBody'),
         silent: true,
       }).show()
     }

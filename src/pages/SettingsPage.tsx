@@ -1,19 +1,25 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
+import { useLocation } from 'react-router-dom'
 
 import { Icon } from '../components/icons'
 import { ReleaseNotesDialog } from '../components/ReleaseNotesDialog'
 import { RemoveDialog } from '../components/RemoveDialog'
 import type {
   AppSettingsUpdate,
+  DesktopLyricsFontFamily,
+  ScanLibraryProgress,
   MusicData,
   NightMode,
   NotificationSendMode,
   PreferredLanguage,
+  DataTransferState,
 } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
 import { LyricsBatchControl } from '../components/LyricsBatchControl'
 import { PreferenceSettingsPage } from './PreferenceSettingsPage'
+import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
+import { ScanProgressOverlay } from '../components/ScanProgressOverlay'
 
 interface SettingsPageProps {
   t: Translator
@@ -41,6 +47,9 @@ interface SelectSettingRowProps<T extends string> {
     value: T
     label: string
   }>
+  searchable?: boolean
+  searchPlaceholder?: string
+  emptyLabel?: string
   onChange: (value: T) => void
 }
 
@@ -52,6 +61,22 @@ interface TimeSettingRowProps {
   endValue: string
   onStartChange: (value: string) => void
   onEndChange: (value: string) => void
+}
+
+interface RangeSettingRowProps {
+  label: string
+  value: number
+  min: number
+  max: number
+  step: number
+  valueLabel: string
+  onChange: (value: number) => void
+}
+
+interface ColorSettingRowProps {
+  label: string
+  value: string
+  onChange: (value: string) => void
 }
 
 const TIME_HOURS = Array.from({ length: 24 }, (_, index) => index.toString().padStart(2, '0'))
@@ -206,19 +231,80 @@ function TimeSettingRow({
   )
 }
 
+function RangeSettingRow({
+  label,
+  value,
+  min,
+  max,
+  step,
+  valueLabel,
+  onChange,
+}: RangeSettingRowProps) {
+  return (
+    <div className="settings-row settings-row-with-control settings-range-row">
+      <span className="settings-row-copy">
+        <strong>{label}</strong>
+      </span>
+      <span className="settings-range-control">
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={step}
+          value={value}
+          style={{ '--range-progress': `${((value - min) / (max - min)) * 100}%` } as CSSProperties}
+          onChange={(event) => {
+            onChange(Number(event.currentTarget.value))
+          }}
+        />
+        <span>{valueLabel}</span>
+      </span>
+    </div>
+  )
+}
+
+function ColorSettingRow({ label, value, onChange }: ColorSettingRowProps) {
+  return (
+    <div className="settings-row settings-row-with-control settings-color-row">
+      <span className="settings-row-copy">
+        <strong>{label}</strong>
+      </span>
+      <label className="settings-color-control">
+        <input
+          type="color"
+          value={value}
+          onChange={(event) => {
+            onChange(event.currentTarget.value)
+          }}
+          aria-label={label}
+        />
+        <span style={{ backgroundColor: value }} aria-hidden="true" />
+        <em>{value.toUpperCase()}</em>
+      </label>
+    </div>
+  )
+}
+
 function SelectSettingRow<T extends string>({
   label,
   value,
   options,
+  searchable,
+  searchPlaceholder,
+  emptyLabel,
   onChange,
 }: SelectSettingRowProps<T>) {
   const [open, setOpen] = useState(false)
   const [openUpward, setOpenUpward] = useState(false)
   const [dropdownMaxHeight, setDropdownMaxHeight] = useState<number | undefined>(undefined)
+  const [searchQuery, setSearchQuery] = useState('')
   const menuRef = useRef<HTMLDivElement | null>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
   const optionsRef = useRef<HTMLSpanElement | null>(null)
   const selectedOption = options.find((option) => option.value === value)
+  const filteredOptions = searchQuery
+    ? options.filter((option) => option.label.toLocaleLowerCase().includes(searchQuery.toLocaleLowerCase()))
+    : options
 
   useEffect(() => {
     if (!open) {
@@ -240,6 +326,12 @@ function SelectSettingRow<T extends string>({
     }
   }, [open])
 
+  useEffect(() => {
+    if (!open) {
+      setSearchQuery('')
+    }
+  }, [open])
+
   useLayoutEffect(() => {
     if (!open || !triggerRef.current || !optionsRef.current) {
       return
@@ -248,18 +340,22 @@ function SelectSettingRow<T extends string>({
     const workspaceContent = menuRef.current?.closest('.workspace-content') as HTMLElement | null
     const boundaryRect = workspaceContent?.getBoundingClientRect()
     const triggerRect = triggerRef.current.getBoundingClientRect()
-    const optionsRect = optionsRef.current.getBoundingClientRect()
-    const dropdownHeight = optionsRect.height || Math.max(options.length * 38 + 12, 120)
+    const dropdownHeight = Math.max(optionsRef.current.scrollHeight, filteredOptions.length * 38 + 12, 120)
     const boundaryTop = boundaryRect?.top ?? 8
     const boundaryBottom = boundaryRect?.bottom ?? (window.innerHeight - 8)
     const spaceBelow = Math.max(0, boundaryBottom - triggerRect.bottom - 6)
     const spaceAbove = Math.max(0, triggerRect.top - boundaryTop - 6)
     const shouldOpenUpward = spaceBelow < dropdownHeight && spaceAbove > spaceBelow
     const availableSpace = shouldOpenUpward ? spaceAbove : spaceBelow
+    const fullHeightTolerance = 56
 
     setOpenUpward(shouldOpenUpward)
-    setDropdownMaxHeight(Math.max(120, Math.floor(availableSpace)))
-  }, [open, options.length])
+    setDropdownMaxHeight(
+      availableSpace >= dropdownHeight - fullHeightTolerance
+        ? Math.ceil(dropdownHeight)
+        : Math.max(120, Math.floor(availableSpace)),
+    )
+  }, [filteredOptions.length, open])
 
   return (
     <div className="settings-row settings-row-with-control" ref={menuRef}>
@@ -286,7 +382,19 @@ function SelectSettingRow<T extends string>({
               className={openUpward ? 'settings-select-options is-open-upward' : 'settings-select-options'}
               style={dropdownMaxHeight ? { maxHeight: `${dropdownMaxHeight}px` } : undefined}
             >
-              {options.map((option) => (
+              {searchable ? (
+                <span className="settings-select-search">
+                  <Icon name="search" />
+                  <input
+                    value={searchQuery}
+                    placeholder={searchPlaceholder}
+                    onChange={(event) => {
+                      setSearchQuery(event.currentTarget.value)
+                    }}
+                  />
+                </span>
+              ) : null}
+              {filteredOptions.map((option) => (
                 <button
                   key={option.value}
                   type="button"
@@ -300,6 +408,9 @@ function SelectSettingRow<T extends string>({
                   <span>{option.label}</span>
                 </button>
               ))}
+              {filteredOptions.length === 0 ? (
+                <span className="settings-select-empty">{emptyLabel}</span>
+              ) : null}
             </span>
           </>
         ) : null}
@@ -308,13 +419,24 @@ function SelectSettingRow<T extends string>({
   )
 }
 
-function SettingsCard({ title, children }: { title: string; children: ReactNode }) {
+function SettingsCard({
+  title,
+  id,
+  headerAction,
+  children,
+}: {
+  title: string
+  id?: string
+  headerAction?: ReactNode
+  children?: ReactNode
+}) {
   return (
-    <section className="settings-card">
+    <section id={id} className="settings-card">
       <header className="settings-card-header">
         <h3>{title}</h3>
+        {headerAction}
       </header>
-      <div className="settings-card-body">{children}</div>
+      {children ? <div className="settings-card-body">{children}</div> : null}
     </section>
   )
 }
@@ -353,6 +475,7 @@ export function SettingsPage({
   onRequestSmartArtistFix,
   onUpdateSettings,
 }: SettingsPageProps) {
+  const location = useLocation()
   const showNotificationSettings = true
   const notificationSendOptions: Array<{
     value: NotificationSendMode
@@ -366,8 +489,21 @@ export function SettingsPage({
     label: string
   }> = [
     { value: 'system', label: t('settings.languageSystem') },
-    { value: 'en-US', label: t('settings.languageEnglish') },
-    { value: 'zh-CN', label: t('settings.languageChinese') },
+    { value: 'en-US', label: 'English' },
+    { value: 'zh-CN', label: '简体中文' },
+    { value: 'fr', label: 'Français' },
+    { value: 'ru', label: 'Русский' },
+    { value: 'ja', label: '日本語' },
+    { value: 'de', label: 'Deutsch' },
+    { value: 'pt-BR', label: 'Português (Brasil)' },
+    { value: 'es', label: 'Español' },
+    { value: 'it', label: 'Italiano' },
+    { value: 'zh-Hant', label: '繁體中文' },
+    { value: 'nl', label: 'Nederlands' },
+    { value: 'cs', label: 'Čeština' },
+    { value: 'uk', label: 'Українська' },
+    { value: 'sv', label: 'Svenska' },
+    { value: 'id', label: 'Bahasa Indonesia' },
   ]
   const nightModeOptions: Array<{
     value: NightMode
@@ -380,18 +516,60 @@ export function SettingsPage({
   const showSystemLog = () => {
     void window.smplayer?.revealSystemLogs()
   }
-  const [actionMessage, setActionMessage] = useState('')
-  const [dataTransferState, setDataTransferState] = useState<'idle' | 'importing' | 'exporting' | 'reloading'>('idle')
+  const [dataTransferState, setDataTransferState] = useState<DataTransferState>('idle')
+  const [dataImportProgress, setDataImportProgress] = useState<ScanLibraryProgress | null>(null)
   const [showReleaseNotes, setShowReleaseNotes] = useState(false)
   const [showPreferenceSettings, setShowPreferenceSettings] = useState(false)
   const [showFeedbackOptions, setShowFeedbackOptions] = useState(false)
   const [showImportDataDialog, setShowImportDataDialog] = useState(false)
   const [appVersion, setAppVersion] = useState('')
+  const [systemFonts, setSystemFonts] = useState<string[]>([])
   const feedbackMenuRef = useRef<HTMLDivElement | null>(null)
+  const showNotification = useUndoableNotificationStore((state) => state.showMessage)
+  const desktopLyricsFontNames = snapshot.settings.desktopLyricsFontFamily === 'system' ||
+    systemFonts.includes(snapshot.settings.desktopLyricsFontFamily)
+    ? systemFonts
+    : [snapshot.settings.desktopLyricsFontFamily, ...systemFonts]
+  const desktopLyricsFontOptions: Array<{
+    value: DesktopLyricsFontFamily
+    label: string
+  }> = [
+    { value: 'system', label: t('settings.desktopLyricsFontSystem') },
+    ...desktopLyricsFontNames.map((fontName) => ({
+      value: fontName,
+      label: fontName,
+    })),
+  ]
+
+  useLayoutEffect(() => {
+    if (location.hash !== '#desktop-lyrics') {
+      return
+    }
+
+    document.getElementById('desktop-lyrics')?.scrollIntoView({ block: 'center' })
+  }, [location.hash])
 
   useEffect(() => {
     void window.smplayer?.getAppInfo().then((appInfo) => {
       setAppVersion(appInfo.version)
+    })
+  }, [])
+
+  useEffect(() => {
+    void window.smplayer?.getSystemFonts().then(setSystemFonts)
+  }, [])
+
+  useEffect(() => {
+    return window.smplayer?.onDataTransferState((state) => {
+      setDataTransferState(state)
+    })
+  }, [])
+
+  useEffect(() => {
+    return window.smplayer?.onScanLocalFolderProgress((progress) => {
+      if (progress.operationId === 'data-import') {
+        setDataImportProgress(progress)
+      }
     })
   }, [])
 
@@ -417,18 +595,16 @@ export function SettingsPage({
   }, [showFeedbackOptions])
 
   const exportData = async () => {
-    setDataTransferState('exporting')
-    setActionMessage(t('settings.exportingData'))
+    setDataTransferState('openingExport')
 
     try {
       const result = await window.smplayer?.exportData()
       if (!result || result.canceled) {
-        setActionMessage('')
         return
       }
-      setActionMessage(t('settings.dataExported'))
-    } catch (error) {
-      setActionMessage(error instanceof Error ? error.message : t('settings.dataExportFailed'))
+      showNotification(t('settings.dataExported'))
+    } catch {
+      showNotification(t('settings.dataExportFailed'))
     } finally {
       setDataTransferState('idle')
     }
@@ -436,46 +612,51 @@ export function SettingsPage({
 
   const importData = async () => {
     setShowImportDataDialog(false)
-    setDataTransferState('importing')
-    setActionMessage(t('settings.importingData'))
+    setDataImportProgress(null)
+    setDataTransferState('openingImport')
 
     try {
       const result = await window.smplayer?.importData()
       if (!result || result.canceled) {
-        setActionMessage('')
         setDataTransferState('idle')
         return
       }
+      setDataImportProgress(null)
       setDataTransferState('reloading')
-      setActionMessage(t('settings.dataImported'))
+      showNotification(t('settings.dataImported'))
       window.setTimeout(() => {
         window.location.reload()
       }, 300)
-    } catch (error) {
+    } catch {
+      setDataImportProgress(null)
       setDataTransferState('idle')
-      setActionMessage(error instanceof Error ? error.message : t('settings.dataImportFailed'))
+      showNotification(t('settings.dataImportFailed'))
     }
   }
 
   return (
     <section className="page-panel settings-page">
       {error ? <div className="error-banner">{error}</div> : null}
-      {actionMessage ? <div className="settings-action-message">{actionMessage}</div> : null}
-      {dataTransferState !== 'idle' ? (
+      {dataTransferState !== 'idle' && !dataImportProgress ? (
         <div className="settings-progress-overlay" role="status" aria-live="polite">
           <div className="app-window-drag-strip" aria-hidden="true" />
           <div className="settings-progress-dialog">
             <span className="settings-progress-ring" aria-hidden="true" />
             <strong>
-              {dataTransferState === 'importing'
-                ? t('settings.importingData')
-                : dataTransferState === 'exporting'
-                  ? t('settings.exportingData')
-                  : t('settings.dataImported')}
+              {dataTransferState === 'openingImport'
+                ? t('settings.openingImportData')
+                : dataTransferState === 'openingExport'
+                  ? t('settings.openingExportData')
+                  : dataTransferState === 'importing'
+                    ? t('settings.importingData')
+                    : dataTransferState === 'exporting'
+                      ? t('settings.exportingData')
+                      : t('settings.dataImported')}
             </strong>
           </div>
         </div>
       ) : null}
+      {dataImportProgress ? <ScanProgressOverlay progress={dataImportProgress} t={t} /> : null}
 
       <div className="settings-board">
         <div className="settings-column">
@@ -528,18 +709,99 @@ export function SettingsPage({
 
           <LyricsBatchControl t={t} snapshot={snapshot} onUpdateSettings={onUpdateSettings} />
 
-          {showNotificationSettings ? (
-            <SettingsCard title={t('settings.notification')}>
-              <SelectSettingRow
-                label={t('settings.notificationSend')}
-                value={snapshot.settings.notificationSend}
-                options={notificationSendOptions}
-                onChange={(value) => {
-                  onUpdateSettings({ notificationSend: value, showNotifications: value !== 'never' })
-                }}
-              />
-            </SettingsCard>
-          ) : null}
+          <SettingsCard
+            id="desktop-lyrics"
+            title={t('settings.desktopLyrics')}
+            headerAction={(
+              <label className="settings-header-switch" aria-label={t('settings.desktopLyrics')}>
+                <input
+                  className="settings-switch"
+                  type="checkbox"
+                  checked={snapshot.settings.desktopLyricsEnabled}
+                  onChange={(event) => {
+                    onUpdateSettings({ desktopLyricsEnabled: event.currentTarget.checked })
+                  }}
+                />
+              </label>
+            )}
+          >
+            {snapshot.settings.desktopLyricsEnabled ? (
+              <>
+                <ColorSettingRow
+                  label={t('settings.desktopLyricsColor')}
+                  value={snapshot.settings.desktopLyricsColor}
+                  onChange={(value) => {
+                    onUpdateSettings({ desktopLyricsColor: value })
+                  }}
+                />
+                <ToggleSettingRow
+                  label={t('settings.desktopLyricsStroke')}
+                  checked={Boolean(snapshot.settings.desktopLyricsStrokeColor)}
+                  onChange={(checked) => {
+                    onUpdateSettings({ desktopLyricsStrokeColor: checked ? '#111111' : '' })
+                  }}
+                />
+                {snapshot.settings.desktopLyricsStrokeColor ? (
+                  <ColorSettingRow
+                    label={t('settings.desktopLyricsStrokeColor')}
+                    value={snapshot.settings.desktopLyricsStrokeColor}
+                    onChange={(value) => {
+                      onUpdateSettings({ desktopLyricsStrokeColor: value })
+                    }}
+                  />
+                ) : null}
+                <SelectSettingRow
+                  label={t('settings.desktopLyricsFontFamily')}
+                  value={snapshot.settings.desktopLyricsFontFamily}
+                  options={desktopLyricsFontOptions}
+                  searchable
+                  searchPlaceholder={t('settings.desktopLyricsFontSearch')}
+                  emptyLabel={t('settings.desktopLyricsFontNoResults')}
+                  onChange={(value) => {
+                    onUpdateSettings({ desktopLyricsFontFamily: value })
+                  }}
+                />
+                <RangeSettingRow
+                  label={t('settings.desktopLyricsFontSize')}
+                  min={20}
+                  max={48}
+                  step={1}
+                  value={snapshot.settings.desktopLyricsFontSize}
+                  valueLabel={`${snapshot.settings.desktopLyricsFontSize}px`}
+                  onChange={(value) => {
+                    onUpdateSettings({ desktopLyricsFontSize: value })
+                  }}
+                />
+                <RangeSettingRow
+                  label={t('settings.desktopLyricsOpacity')}
+                  min={45}
+                  max={100}
+                  step={1}
+                  value={snapshot.settings.desktopLyricsOpacity}
+                  valueLabel={`${snapshot.settings.desktopLyricsOpacity}%`}
+                  onChange={(value) => {
+                    onUpdateSettings({ desktopLyricsOpacity: value })
+                  }}
+                />
+                <div className="settings-button-row">
+                  <SettingsActionButton
+                    onClick={() => {
+                      onUpdateSettings({
+                        desktopLyricsColor: '#4aa8ff',
+                        desktopLyricsStrokeColor: '#111111',
+                        desktopLyricsFontSize: 28,
+                        desktopLyricsFontFamily: 'system',
+                        desktopLyricsOpacity: 88,
+                      })
+                    }}
+                  >
+                    <Icon name="undo" />
+                    {t('settings.desktopLyricsRestoreDefaults')}
+                  </SettingsActionButton>
+                </div>
+              </>
+            ) : null}
+          </SettingsCard>
 
         </div>
 
@@ -618,6 +880,19 @@ export function SettingsPage({
               </SettingsActionButton>
             </div>
           </SettingsCard>
+
+          {showNotificationSettings ? (
+            <SettingsCard title={t('settings.notification')}>
+              <SelectSettingRow
+                label={t('settings.notificationSend')}
+                value={snapshot.settings.notificationSend}
+                options={notificationSendOptions}
+                onChange={(value) => {
+                  onUpdateSettings({ notificationSend: value, showNotifications: value !== 'never' })
+                }}
+              />
+            </SettingsCard>
+          ) : null}
 
           <SettingsCard title={t('settings.others')}>
             <ToggleSettingRow

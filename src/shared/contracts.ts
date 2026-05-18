@@ -7,7 +7,11 @@ export interface AppInfo {
 
 export type PlaybackMode = 'once' | 'repeat' | 'repeat-one' | 'shuffle'
 export type GlobalMediaCommand = 'play-pause' | 'next' | 'previous' | 'stop'
-export type TrayCommand = 'quick-play' | 'show-window'
+export type TrayCommand = 'quick-play' | 'show-window' | 'toggle-desktop-lyrics'
+export type ExternalAppCommand =
+  | { type: 'global-media-command'; command: GlobalMediaCommand }
+  | { type: 'tray-command'; command: TrayCommand }
+  | { type: 'voice-command'; text: string }
 export type NotificationSendMode = 'music-changed' | 'never'
 export type NotificationDisplayMode = 'reminder' | 'normal' | 'quick'
 export type NightMode = 'auto' | 'on' | 'never'
@@ -44,6 +48,7 @@ export interface LibrarySong {
   album: string
   duration: number
   playCount: number
+  lyricsOffsetMs: number
   dateAdded: string
   favorite: boolean
 }
@@ -194,7 +199,24 @@ export interface SearchSnapshot {
 
 export type LyricsSource = 'none' | 'lrc-file' | 'text-file' | 'music-file' | 'internet'
 export type LyricsRequestMode = 'internet' | 'local' | 'embedded' | 'auto'
-export type PreferredLanguage = 'system' | 'en-US' | 'zh-CN'
+export type DesktopLyricsFontFamily = string
+export type PreferredLanguage =
+  | 'system'
+  | 'en-US'
+  | 'zh-CN'
+  | 'fr'
+  | 'ru'
+  | 'ja'
+  | 'de'
+  | 'pt-BR'
+  | 'es'
+  | 'it'
+  | 'zh-Hant'
+  | 'nl'
+  | 'cs'
+  | 'uk'
+  | 'sv'
+  | 'id'
 export type PreferenceEntityType =
   | 'song'
   | 'artist'
@@ -295,6 +317,52 @@ export interface TrackNotificationPayload {
   album: string
 }
 
+export interface DesktopLyricsBounds {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export interface DesktopLyricsDisplayState {
+  visible: boolean
+  loading: boolean
+  playing: boolean
+  locked: boolean
+  nightMode: boolean
+  opacity: number
+  fontSize: number
+  fontFamily: string
+  textColor: string
+  strokeColor: string
+  lyricText: string
+  fallbackText: string
+  songTitle: string
+  artist: string
+  progressSeconds: number
+  offsetMs: number
+  labels: {
+    close: string
+    lock: string
+    next: string
+    playPause: string
+    previous: string
+    settings: string
+    unlock: string
+    resetOffset: string
+  }
+}
+
+export type DesktopLyricsCommand =
+  | { type: 'disable' }
+  | { type: 'next' }
+  | { type: 'open-settings' }
+  | { type: 'play-pause' }
+  | { type: 'previous' }
+  | { type: 'toggle-lock' }
+  | { type: 'offset'; deltaMs: number }
+  | { type: 'reset-offset' }
+
 export interface VoiceRecognitionResult {
   text: string
   error?: 'unsupported-platform' | 'unavailable' | 'privacy-required' | 'no-speech' | 'audio-capture' | 'canceled' | 'failed'
@@ -333,6 +401,14 @@ export interface SettingsSnapshot {
   playerLyricsSource: LyricsRequestMode
   saveLyricsImmediately: boolean
   preserveInternetLyricsTimestamps: boolean
+  desktopLyricsEnabled: boolean
+  desktopLyricsLocked: boolean
+  desktopLyricsColor: string
+  desktopLyricsStrokeColor: string
+  desktopLyricsFontSize: number
+  desktopLyricsFontFamily: DesktopLyricsFontFamily
+  desktopLyricsOpacity: number
+  desktopLyricsBounds: string
   preferredLanguage: PreferredLanguage
   musicLibrarySort: MusicLibrarySortCriterion
   albumsSort: AlbumSortCriterion
@@ -478,6 +554,8 @@ export interface DataTransferResult {
   path: string | null
 }
 
+export type DataTransferState = 'idle' | 'openingImport' | 'openingExport' | 'importing' | 'exporting' | 'reloading'
+
 export interface PlaybackSettingsUpdate {
   lastMusicIndex?: number
   volume?: number
@@ -503,6 +581,14 @@ export interface AppSettingsUpdate {
   playerLyricsSource?: LyricsRequestMode
   saveLyricsImmediately?: boolean
   preserveInternetLyricsTimestamps?: boolean
+  desktopLyricsEnabled?: boolean
+  desktopLyricsLocked?: boolean
+  desktopLyricsColor?: string
+  desktopLyricsStrokeColor?: string
+  desktopLyricsFontSize?: number
+  desktopLyricsFontFamily?: DesktopLyricsFontFamily
+  desktopLyricsOpacity?: number
+  desktopLyricsBounds?: string
   preferredLanguage?: PreferredLanguage
   musicLibrarySort?: MusicLibrarySortCriterion
   albumsSort?: AlbumSortCriterion
@@ -526,6 +612,7 @@ export interface ViewStateUpdate {
 
 export interface SmplayerApi {
   getAppInfo: () => Promise<AppInfo>
+  getSystemFonts: () => Promise<string[]>
   getLibraryShell: () => Promise<LibraryShellSnapshot>
   getLibrarySettings: () => Promise<SettingsSnapshot>
   getLibraryCounts: () => Promise<LibraryCounts>
@@ -543,6 +630,7 @@ export interface SmplayerApi {
   getSongProperties: (songId: number) => Promise<SongPropertiesSnapshot>
   updateSongProperties: (songId: number, update: SongPropertiesUpdate) => Promise<void>
   updateSongPlayCount: (songId: number, playCount: number) => Promise<void>
+  updateSongLyricsOffset: (songId: number, lyricsOffsetMs: number) => Promise<void>
   getLyrics: (songId: number, mode?: LyricsRequestMode) => Promise<LyricsSnapshot>
   importLyrics: () => Promise<LyricsImportResult>
   saveSongLyrics: (songId: number, rawLyrics: string) => Promise<void>
@@ -606,9 +694,11 @@ export interface SmplayerApi {
   onScanLocalFolderProgress: (callback: (progress: ScanLibraryProgress) => void) => () => void
   onMoveLocalItemsProgress: (callback: (progress: MoveLocalItemsProgress) => void) => () => void
   takePendingOpenFiles: () => Promise<number[]>
+  takePendingExternalCommands: () => Promise<ExternalAppCommand[]>
   setTrayPlaybackState: (isPlaying: boolean) => Promise<void>
   exportData: () => Promise<DataTransferResult>
   importData: () => Promise<DataTransferResult>
+  onDataTransferState: (callback: (state: DataTransferState) => void) => () => void
   sendFeedbackEmail: () => Promise<void>
   openFeedbackInBrowser: () => Promise<void>
   openVoiceAssistantPrivacySettings: () => Promise<void>
@@ -657,7 +747,12 @@ export interface SmplayerApi {
   updateSongDuration: (songId: number, duration: number) => Promise<void>
   onGlobalMediaCommand: (callback: (command: GlobalMediaCommand) => void) => () => void
   onTrayCommand: (callback: (command: TrayCommand) => void) => () => void
+  onExternalCommand: (callback: (command: ExternalAppCommand) => void) => () => void
   onWindowFullScreenChange: (callback: (fullScreen: boolean) => void) => () => void
   onWindowMiniModeChange: (callback: (miniMode: boolean) => void) => () => void
   onOpenFiles: (callback: (songIds: number[]) => void) => () => void
+  updateDesktopLyricsState: (state: DesktopLyricsDisplayState) => Promise<void>
+  onDesktopLyricsState: (callback: (state: DesktopLyricsDisplayState) => void) => () => void
+  requestDesktopLyricsCommand: (command: DesktopLyricsCommand) => Promise<void>
+  onDesktopLyricsCommand: (callback: (command: DesktopLyricsCommand) => void) => () => void
 }

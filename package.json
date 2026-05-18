@@ -11,6 +11,7 @@
     "typecheck": "tsc -b",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "check:i18n": "node scripts/check-i18n.mjs",
     "preview": "vite preview",
     "test:voice": "node scripts/voice-assistant-parity.mjs",
     "pack": "npm run build && electron-builder --dir",
@@ -97,6 +98,14 @@
         "role": "Viewer"
       }
     ],
+    "protocols": [
+      {
+        "name": "Simple Melody Player",
+        "schemes": [
+          "smplayer"
+        ]
+      }
+    ],
     "mac": {
       "category": "public.app-category.music",
       "target": [
@@ -132,7 +141,20 @@
       "backgroundColor": "#F8F8F8",
       "languages": [
         "en-US",
-        "zh-CN"
+        "zh-CN",
+        "fr",
+        "ru",
+        "ja",
+        "de",
+        "pt-BR",
+        "es",
+        "it",
+        "zh-Hant",
+        "nl",
+        "cs",
+        "uk",
+        "sv",
+        "id"
       ],
       "minVersion": "10.0.17763.0",
       "maxVersionTested": "10.0.17763.0",

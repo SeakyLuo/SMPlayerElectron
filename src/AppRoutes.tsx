@@ -199,6 +199,9 @@ export function AppRoutes({ context }: AppRoutesProps) {
   const scanLibrary = useLibraryStore((state) => state.scanLibrary)
   const scanLocalFolder = useLibraryStore((state) => state.scanLocalFolder)
   const loadRequiredData = useLibraryStore((state) => state.loadRequiredData)
+  const songsLoaded = useLibraryStore((state) => state.songsLoaded)
+  const foldersLoaded = useLibraryStore((state) => state.foldersLoaded)
+  const recentLoaded = useLibraryStore((state) => state.recentLoaded)
   const applyArtistSplits = useLibraryStore((state) => state.applyArtistSplits)
   const setSongFavorite = useLibraryStore((state) => state.setSongFavorite)
   const addSongToPlaylist = useLibraryStore((state) => state.addSongToPlaylist)
@@ -239,6 +242,9 @@ export function AppRoutes({ context }: AppRoutesProps) {
   const targetArtistQuery = routeSearchParams.get('artist')
   const targetAlbumQuery = routeSearchParams.get('album')
   const pageSearchQuery = routeSearchParams.get('search') ?? ''
+  const songsPageLoading = pageLoading || !songsLoaded
+  const songsFoldersPageLoading = songsPageLoading || !foldersLoaded
+  const songsRecentPageLoading = songsPageLoading || !recentLoaded
   const localMusicDataSource = useMemo(
     () => createLocalMusicDataSource(snapshot, updateSettings),
     [snapshot, updateSettings],
@@ -332,7 +338,7 @@ export function AppRoutes({ context }: AppRoutesProps) {
                   <MusicDataSourceMusicPage
                     dataSource={localMusicDataSource}
                     t={t}
-                    loading={pageLoading}
+                    loading={songsPageLoading}
                     scanning={scanning}
                     error={error}
                     selectedTrackId={playback.currentTrackId}
@@ -393,7 +399,7 @@ export function AppRoutes({ context }: AppRoutesProps) {
                   error={error}
                   playlists={snapshot.playlists}
                   favoritePlaylistId={snapshot.favorites.playlistId}
-                  loading={pageLoading}
+                  loading={songsPageLoading}
                   scanning={scanning}
                   targetArtistName={targetArtistQuery ?? undefined}
                   onPlayTrack={(trackId, queueSongIds) => {
@@ -456,7 +462,7 @@ export function AppRoutes({ context }: AppRoutesProps) {
                     <AlbumDetailRoute
                     albumName={targetAlbumQuery}
                     songs={snapshot.songs}
-                    loading={pageLoading}
+                    loading={songsPageLoading}
                     t={t}
                     selectedTrackId={playback.currentTrackId}
                     isPlaying={playback.isPlaying}
@@ -499,7 +505,7 @@ export function AppRoutes({ context }: AppRoutesProps) {
                     playlists={snapshot.playlists}
                     favoritePlaylistId={snapshot.favorites.playlistId}
                     t={t}
-                    loading={pageLoading}
+                    loading={songsPageLoading}
                     scanning={scanning}
                     onPlayTrack={(trackId, queueSongIds) => {
                       void playbackCommands.playTrackInQueue(trackId, queueSongIds)
@@ -545,7 +551,7 @@ export function AppRoutes({ context }: AppRoutesProps) {
                   <AlbumDetailRoute
                   albumName={targetAlbumQuery ?? undefined}
                   songs={snapshot.songs}
-                  loading={pageLoading}
+                  loading={songsPageLoading}
                   t={t}
                   selectedTrackId={playback.currentTrackId}
                   isPlaying={playback.isPlaying}
@@ -591,7 +597,7 @@ export function AppRoutes({ context }: AppRoutesProps) {
                 <RequireLibraryData songs recent>
                   <NowPlayingPage
                   songs={nowPlayingSongs}
-                  loading={pageLoading}
+                  loading={songsRecentPageLoading}
                   librarySongs={snapshot.songs}
                   recentSongs={snapshot.recentSongs}
                   playlists={snapshot.playlists}
@@ -651,7 +657,7 @@ export function AppRoutes({ context }: AppRoutesProps) {
                   recentAlbums={snapshot.recentAlbums}
                   recentArtists={snapshot.recentArtists}
                   recentSearches={snapshot.search.recentSearches}
-                  loading={pageLoading}
+                  loading={songsRecentPageLoading}
                   playlists={snapshot.playlists}
                   favoritePlaylistId={snapshot.favorites.playlistId}
                   favoriteSongIds={snapshot.favorites.songIds}
@@ -731,7 +737,7 @@ export function AppRoutes({ context }: AppRoutesProps) {
                   selectedTrackId={playback.currentTrackId}
                   isPlaying={playback.isPlaying}
                   searchQuery=""
-                  loading={pageLoading}
+                  loading={songsFoldersPageLoading}
                   scanning={scanning}
                   error={error}
                   onPickLibraryRoot={() => {
@@ -830,7 +836,7 @@ export function AppRoutes({ context }: AppRoutesProps) {
                 <RequireLibraryData songs>
                   <PlaylistsPage
                   snapshot={snapshot}
-                  loading={pageLoading}
+                  loading={songsPageLoading}
                   t={t}
                   selectedTrackId={playback.currentTrackId}
                   isPlaying={playback.isPlaying}
@@ -902,7 +908,7 @@ export function AppRoutes({ context }: AppRoutesProps) {
                 <RequireLibraryData songs>
                   <MyFavoritesPage
                   songs={favoriteSongs}
-                  loading={pageLoading}
+                  loading={songsPageLoading}
                   playlists={snapshot.playlists}
                   favoritePlaylistId={snapshot.favorites.playlistId}
                   sortCriterion={snapshot.favorites.sortCriterion}
@@ -951,7 +957,7 @@ export function AppRoutes({ context }: AppRoutesProps) {
                   t={t}
                   query={searchResultQuery}
                   requestedQuery={submittedSearchQuery}
-                  loading={searchResultsLoading || pageLoading}
+                  loading={searchResultsLoading || songsFoldersPageLoading}
                   songs={snapshot.songs}
                   folders={snapshot.folders}
                   playlists={snapshot.playlists}
@@ -1022,7 +1028,7 @@ export function AppRoutes({ context }: AppRoutesProps) {
                   <SettingsPage
                   t={t}
                   snapshot={snapshot}
-                  loading={pageLoading}
+                  loading={songsPageLoading}
                   scanning={scanning}
                   error={error}
                   onPickLibraryRoot={() => {

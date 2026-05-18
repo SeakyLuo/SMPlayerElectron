@@ -507,7 +507,7 @@ body.night-mode .app-shell .media-progress-loading {
   grid-row: 1;
   grid-template-columns: 36px 148px 36px;
   justify-self: end;
-  gap: 8px;
+  gap: 14px;
 }
 
 .player-compact-volume-action {

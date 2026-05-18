@@ -1,3 +1,5 @@
+import type { Translator } from './i18n'
+
 export interface ReleaseNoteEntry {
   version: string
   items: string[]
@@ -6,9 +8,15 @@ export interface ReleaseNoteEntry {
 type ReleaseNoteText = {
   en: string
   zh: string
+  i18nKey?: string
 }
 
 const text = {
+  architectureFeedback: {
+    en: 'This new architecture release includes extensive changes. Feedback is welcome from Settings > Others.',
+    zh: '全新架构版本进行了大量调整，欢迎通过【设置】—>【其他】进行反馈。',
+    i18nKey: 'releaseNotes.architectureFeedback',
+  },
   modernUi: {
     en: 'Changed to a more modern UI.',
     zh: '改成了更加现代的 UI。',
@@ -17,9 +25,13 @@ const text = {
     en: 'Added night mode settings, including automatic switching by time.',
     zh: '新增夜间模式设置，支持按时间自动切换。',
   },
-  removedNotificationLyrics: {
-    en: 'Removed lyrics in system notifications because the Electron version cannot update Windows notifications continuously like the original UWP toast.',
-    zh: '移除了系统通知中的歌词显示，因为 Electron 版本无法像原 UWP Toast 那样持续更新 Windows 通知。',
+  multiLanguageSupport: {
+    en: 'Added more interface languages. You can switch language in Settings or follow the system language.',
+    zh: '新增更多界面语言。你可以在设置中切换语言，或跟随系统语言。',
+  },
+  desktopLyricsReplacement: {
+    en: 'Added desktop lyrics as a replacement for lyrics in system notifications.',
+    zh: '新增桌面歌词，作为通知歌词的替代方案。',
   },
   tilesUnsupported: {
     en: 'Start menu tiles are no longer supported in this version.',
@@ -332,7 +344,7 @@ const text = {
 } satisfies Record<string, ReleaseNoteText>
 
 const releaseNoteDefinitions: Array<{ version: string; items: Array<keyof typeof text> }> = [
-  { version: '3.0.0', items: ['modernUi', 'nightMode', 'multiArtistRecognition', 'removedNotificationLyrics', 'tilesUnsupported'] },
+  { version: '3.0.0', items: ['architectureFeedback', 'modernUi', 'nightMode', 'multiLanguageSupport', 'multiArtistRecognition', 'desktopLyricsReplacement', 'tilesUnsupported'] },
   { version: '2.10.7', items: ['newUiComing', 'renameToSimpleMelodyPlayer', 'bugFixes'] },
   { version: '2.10.3', items: ['bugFixes'] },
   { version: '2.10.1', items: ['switchLanguageSupported', 'improvedVoiceAssistant'] },
@@ -381,9 +393,12 @@ const releaseNoteDefinitions: Array<{ version: string; items: Array<keyof typeof
   { version: 'History Updates', items: ['openWithSmplayer', 'supportsMultiSelect'] },
 ]
 
-export function getReleaseNotes(language: 'en' | 'zh'): ReleaseNoteEntry[] {
+export function getReleaseNotes(language: 'en' | 'zh', t?: Translator): ReleaseNoteEntry[] {
   return releaseNoteDefinitions.map((entry) => ({
     version: entry.version,
-    items: entry.items.map((key) => text[key][language]),
+    items: entry.items.map((key) => {
+      const item = text[key]
+      return 'i18nKey' in item && item.i18nKey && t ? t(item.i18nKey) : item[language]
+    }),
   }))
 }

@@ -564,19 +564,19 @@ export class LocalItemStateService {
         SET RootPath = replace(RootPath, ?, ?)
       `).run(originalPath, nextPath)
       this.db.prepare(`
-        UPDATE Music
+        UPDATE OR REPLACE Music
         SET Path = replace(Path, ?, ?)
       `).run(originalPath, nextPath)
       this.db.prepare(`
-        UPDATE Folder
+        UPDATE OR REPLACE Folder
         SET Path = replace(Path, ?, ?)
       `).run(originalPath, nextPath)
       this.db.prepare(`
-        UPDATE File
+        UPDATE OR REPLACE File
         SET Path = replace(Path, ?, ?)
       `).run(originalPath, nextPath)
       this.db.prepare(`
-        UPDATE HiddenStorageItem
+        UPDATE OR REPLACE HiddenStorageItem
         SET Path = replace(Path, ?, ?)
       `).run(originalPath, nextPath)
       this.db.exec('COMMIT')
