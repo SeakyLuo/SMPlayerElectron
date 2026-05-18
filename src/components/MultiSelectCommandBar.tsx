@@ -12,6 +12,8 @@ interface MultiSelectCommandBarPlaylist {
   name: string
 }
 
+export const MULTI_SELECT_COMMAND_BAR_SCROLL_SPACER = 108
+
 interface MultiSelectCommandBarProps {
   visible: boolean
   selectedCount: number
@@ -58,6 +60,7 @@ export function MultiSelectCommandBar({
 }: MultiSelectCommandBarProps) {
   const hasSelection = selectedCount > 0
   const anchorRef = useRef<HTMLSpanElement | null>(null)
+  const moreButtonRef = useRef<HTMLButtonElement | null>(null)
   const hideAfterOperation = useLibraryStore((state) => state.snapshot.settings.hideMultiSelectCommandBarAfterOperation)
   const [selectionMenu, setSelectionMenu] = useState<MenuFlyoutPosition | null>(null)
   const [layout, setLayout] = useState({
@@ -104,6 +107,32 @@ export function MultiSelectCommandBar({
   }
 
   const selectionMenuItems: MenuFlyoutItem[] = [
+    ...(onRemove ? [{
+      key: 'remove-selected',
+      text: removeLabel ?? t('context.removeFromList'),
+      icon: 'trash' as const,
+      disabled: !hasSelection,
+      onClick: () => {
+        onRemove()
+        hideIfNeeded()
+      },
+    }] : []),
+    ...extraActions.map((action) => ({
+      key: action.key,
+      text: action.text,
+      icon: action.icon,
+      disabled: action.disabled,
+      onClick: () => {
+        const anchor = moreButtonRef.current
+        if (anchor) {
+          action.onClick({ currentTarget: anchor } as MouseEvent<HTMLButtonElement>)
+        }
+        if (action.hideAfterClick) {
+          hideIfNeeded()
+        }
+      },
+    })),
+    { key: 'command-separator', text: '', separator: true },
     { key: 'select-all', text: t('albums.selectAll'), icon: 'selectAll', onClick: onSelectAll },
     { key: 'reverse-selection', text: t('albums.reverseSelection'), icon: 'invertSelection', onClick: onReverseSelection },
     { key: 'clear-selection', text: t('albums.clearSelection'), icon: 'clearSelection', onClick: onClearSelection },
@@ -136,6 +165,7 @@ export function MultiSelectCommandBar({
         {showPlay && onPlay ? (
           <button
             type="button"
+            className="multi-select-command-play-action"
             disabled={!hasSelection}
             onClick={() => {
               onPlay()
@@ -147,14 +177,14 @@ export function MultiSelectCommandBar({
           </button>
         ) : null}
         {showAddTo && onAddToPlaylistMenuClick ? (
-          <button type="button" disabled={!hasSelection} onClick={onAddToPlaylistMenuClick}>
+          <button type="button" className="multi-select-command-add-action" disabled={!hasSelection} onClick={onAddToPlaylistMenuClick}>
             <Icon name="plus" />
             <span>{t('albums.addSelectedTo')}</span>
             <Icon name="chevronDown" />
           </button>
         ) : null}
         {showAddTo && playlists.length > 0 && onAddToPlaylist && !onAddToPlaylistMenuClick ? (
-          <label className={hasSelection ? 'multi-select-command-select' : 'multi-select-command-select is-disabled'}>
+          <label className={hasSelection ? 'multi-select-command-select multi-select-command-add-action' : 'multi-select-command-select multi-select-command-add-action is-disabled'}>
             <Icon name="plus" />
             <span>{t('albums.addSelectedTo')}</span>
             <select
@@ -180,6 +210,7 @@ export function MultiSelectCommandBar({
         {onRemove ? (
           <button
             type="button"
+            className="multi-select-command-overflow-action"
             disabled={!hasSelection}
             onClick={() => {
               onRemove()
@@ -187,11 +218,12 @@ export function MultiSelectCommandBar({
             }}
           >
             <Icon name="trash" />
-            <span>{removeLabel}</span>
+            <span>{removeLabel ?? t('context.removeFromList')}</span>
           </button>
         ) : null}
         {extraActions.map((action) => (
           <button
+            className="multi-select-command-overflow-action"
             key={action.key}
             type="button"
             disabled={action.disabled}
@@ -222,6 +254,7 @@ export function MultiSelectCommandBar({
         <button
           type="button"
           className="multi-select-command-more"
+          ref={moreButtonRef}
           aria-label={t('player.more')}
           title={t('player.more')}
           onClick={(event) => {

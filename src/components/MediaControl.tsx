@@ -717,11 +717,9 @@ export function MediaControl({
   const createPlaylist = useLibraryStore((state) => state.createPlaylist)
   const addSongToPlaylist = useLibraryStore((state) => state.addSongToPlaylist)
   const replaceNowPlaying = useLibraryStore((state) => state.replaceNowPlaying)
-  const updateSettings = useLibraryStore((state) => state.updateSettings)
   const removeSongFromPlaylist = useLibraryStore((state) => state.removeSongFromPlaylist)
   const snapshotQueueSongIds = useLibraryStore((state) => state.snapshot.nowPlaying.songIds)
   const playerLyricsSource = useLibraryStore((state) => state.snapshot.settings.playerLyricsSource)
-  const desktopLyricsEnabled = useLibraryStore((state) => state.snapshot.settings.desktopLyricsEnabled)
   const refreshPreferences = usePreferenceStore((state) => state.refresh)
   const showUndoableNotification = useUndoableNotificationStore((state) => state.show)
   const { progressSeconds, durationSeconds } = usePlaybackProgress()
@@ -932,10 +930,6 @@ export function MediaControl({
             preferenceItem,
             t,
             onQuickPlay,
-            desktopLyricsEnabled,
-            onToggleDesktopLyrics: () => {
-              void updateSettings({ desktopLyricsEnabled: !desktopLyricsEnabled })
-            },
             onAddToNowPlaying: () => {
               if (currentSong) {
                 const insertedIndex = snapshotQueueSongIds.length
@@ -1032,8 +1026,6 @@ function getPlayerMoreMenuItems({
   preferenceItem,
   t,
   onQuickPlay,
-  desktopLyricsEnabled,
-  onToggleDesktopLyrics,
   onAddToNowPlaying,
   onCreatePlaylist,
   onAddToPlaylist,
@@ -1063,8 +1055,6 @@ function getPlayerMoreMenuItems({
   preferenceItem: PreferenceItemSnapshot | null
   t: Translator
   onQuickPlay: () => void | Promise<void>
-  desktopLyricsEnabled: boolean
-  onToggleDesktopLyrics: () => void
   onAddToNowPlaying: () => void
   onCreatePlaylist: (name: string) => void
   onAddToPlaylist: (playlistId: number) => void
@@ -1091,12 +1081,6 @@ function getPlayerMoreMenuItems({
 }) {
   const items: MenuFlyoutItem[] = [
     { key: 'quick-play', text: t('nowPlaying.quickPlay'), icon: 'play', onClick: onQuickPlay },
-    {
-      key: 'desktop-lyrics',
-      text: desktopLyricsEnabled ? t('player.hideDesktopLyrics') : t('player.showDesktopLyrics'),
-      icon: 'lyrics',
-      onClick: onToggleDesktopLyrics,
-    },
   ]
   const volumeValue = Math.min(Math.max(volume, 0), 100)
 

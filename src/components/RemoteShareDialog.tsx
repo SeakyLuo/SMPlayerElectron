@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 
 import type { AuthorizedDevice, RemoteHost, RemoteShareStatus } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
+import { formatRemoteConnected } from '../shared/i18nCounts'
 import { Icon } from './icons'
 import { PopupDialog } from './PopupDialog'
 
@@ -81,7 +82,7 @@ export function RemoteShareDialog({
       setRemoteAddress('')
       setRemotePassword('')
       setRemoteHosts(await window.smplayer!.getRemoteHosts())
-      setMessage(t('remoteShare.connected', { name: result.host.name, count: result.songCount }))
+      setMessage(formatRemoteConnected(t, result.host.name, result.songCount))
     } catch {
       setMessage(t('remoteShare.connectFailed'))
     } finally {

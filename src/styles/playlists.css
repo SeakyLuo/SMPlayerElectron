@@ -27,6 +27,10 @@
   padding: 8px 8px 18px 14px;
 }
 
+.playlists-page > .grid-view-holder-grid {
+  padding-bottom: calc(var(--player-top-radius) + 74px);
+}
+
 .app-shell.nav-minimal .playlists-page.page-panel {
   padding-bottom: 0;
 }
@@ -35,6 +39,10 @@
   row-gap: 2px;
   padding-top: 2px;
   padding-bottom: calc(var(--player-top-radius) + 2px);
+}
+
+.app-shell.nav-minimal .playlists-page > .grid-view-holder-grid {
+  padding-bottom: calc(var(--player-top-radius) + 74px);
 }
 
 .input-dialog-overlay {
@@ -361,8 +369,8 @@ body.night-mode .input-dialog-actions .remove-dialog-primary:hover:not(:disabled
 }
 
 .playlists-page .grid-artwork-card-actions {
-  left: 90px;
-  top: 90px;
+  left: 50%;
+  top: 50%;
   grid-template-columns: repeat(2, 48px);
   gap: 10px;
 }

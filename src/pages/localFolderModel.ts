@@ -1,5 +1,6 @@
 import { getDisplayArtists } from '../shared/artists'
 import type { LibraryFolder, LibrarySong, LocalFolderSortCriterion } from '../shared/contracts'
+import { compareLocalText } from '../shared/textCompare'
 
 export type LocalSortMode = LocalFolderSortCriterion
 
@@ -30,20 +31,6 @@ interface FolderChainChildItem {
   name: string
   path: string
   isHighlighted: boolean
-}
-
-const localTextCollator = new Intl.Collator('zh-Hans-CN-u-co-pinyin', {
-  numeric: true,
-  sensitivity: 'base',
-})
-
-function getLocalTextSortBucket(value: string) {
-  const trimmedValue = value.trim()
-  if (!trimmedValue) {
-    return 0
-  }
-
-  return /^[0-9A-Za-z]/.test(trimmedValue) ? 1 : 2
 }
 
 export function normalizePath(value: string) {
@@ -131,17 +118,6 @@ export function getOriginalFolderThumbnailCandidateGroups(
   return candidateGroups
 }
 
-function compareLocalText(left: string, right: string) {
-  const leftBucket = getLocalTextSortBucket(left)
-  const rightBucket = getLocalTextSortBucket(right)
-
-  if (leftBucket !== rightBucket) {
-    return leftBucket - rightBucket
-  }
-
-  return localTextCollator.compare(left, right)
-}
-
 function getFolderFlattenedSongIds(node: FolderNode, nodes: Map<string, FolderNode>): number[] {
   return [
     ...node.childPaths.flatMap((childPath) => getFolderFlattenedSongIds(nodes.get(childPath)!, nodes)),
@@ -159,9 +135,11 @@ function getFolderFlattenedThumbnailSongIds(node: FolderNode, nodes: Map<string,
 function compareSongByFolderCriterion(left: LibrarySong, right: LibrarySong, criterion: number): number {
   switch (criterion) {
     case 1:
-      return compareLocalText(getDisplayArtists(left), getDisplayArtists(right))
+      return compareLocalText(getDisplayArtists(left), getDisplayArtists(right)) ||
+        compareLocalText(left.title, right.title)
     case 2:
-      return compareLocalText(left.album, right.album)
+      return compareLocalText(left.album, right.album) ||
+        compareLocalText(left.title, right.title)
     case 3:
       return left.duration - right.duration
     case 4:
@@ -344,11 +322,13 @@ export function sortSongs(songs: LibrarySong[], mode: LocalSortMode, baseMode: L
 
   return songs.slice().sort((left, right) => {
     if (mode === 'artist') {
-      return compareLocalText(getDisplayArtists(left), getDisplayArtists(right))
+      return compareLocalText(getDisplayArtists(left), getDisplayArtists(right)) ||
+        compareLocalText(left.title, right.title)
     }
 
     if (mode === 'album') {
-      return compareLocalText(left.album || '', right.album || '')
+      return compareLocalText(left.album, right.album) ||
+        compareLocalText(left.title, right.title)
     }
 
     return compareLocalText(left.title, right.title)

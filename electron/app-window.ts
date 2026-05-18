@@ -1,8 +1,8 @@
-import { app, Notification, BrowserWindow, nativeImage, shell } from 'electron'
+import { app, Notification, BrowserWindow, nativeImage, screen, shell, type Rectangle } from 'electron'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
-import type { SettingsSnapshot } from '../src/shared/contracts'
+import type { MainWindowBounds, SettingsSnapshot } from '../src/shared/contracts'
 import { createTranslator } from '../src/shared/i18n'
 import type { WindowController } from './window-controller'
 
@@ -35,6 +35,7 @@ interface MainWindowOptions {
   hideWindow: () => void
   showWindow: () => void
   updateTrayMenu: () => void
+  saveWindowState: (state: { bounds: MainWindowBounds; maximized: boolean }) => void
 }
 
 let hasShownTrayHint = false
@@ -45,9 +46,9 @@ export async function createMainWindow(options: MainWindowOptions) {
   const startupNightModeActive = getStartupNightModeActive(settings)
   const defaultWindowMinimumSize = options.windowController.getDefaultMinimumSize()
   const appIcon = nativeImage.createFromPath(options.getAppIconPath())
+  const initialBounds = resolveInitialMainWindowBounds(settings, defaultWindowMinimumSize)
   const window = new BrowserWindow({
-    width: 1460,
-    height: 940,
+    ...initialBounds,
     minWidth: defaultWindowMinimumSize.width,
     minHeight: defaultWindowMinimumSize.height,
     show: false,
@@ -76,9 +77,22 @@ export async function createMainWindow(options: MainWindowOptions) {
     },
   })
   window.setIcon(appIcon)
+  if (settings.mainWindowMaximized) {
+    window.maximize()
+  }
   options.onCreated(window)
 
+  const saveMainWindowState = () => {
+    if (window.isDestroyed() || window.isFullScreen() || options.windowController.getMiniMode()) {
+      return
+    }
+
+    const bounds = window.isMaximized() ? window.getNormalBounds() : window.getBounds()
+    options.saveWindowState({ bounds, maximized: window.isMaximized() })
+  }
+
   window.on('close', (event) => {
+    saveMainWindowState()
     if (options.isQuitting()) {
       return
     }
@@ -102,6 +116,10 @@ export async function createMainWindow(options: MainWindowOptions) {
   window.on('closed', () => {
     options.windowController.stopDrag()
   })
+  window.on('moved', saveMainWindowState)
+  window.on('resized', saveMainWindowState)
+  window.on('maximize', saveMainWindowState)
+  window.on('unmaximize', saveMainWindowState)
   window.on('enter-full-screen', () => options.windowController.emitFullScreenChange(window))
   window.on('leave-full-screen', () => options.windowController.emitFullScreenChange(window))
   window.on('show', () => {
@@ -140,6 +158,60 @@ export async function createMainWindow(options: MainWindowOptions) {
   }
 
   return window
+}
+
+function resolveInitialMainWindowBounds(
+  settings: SettingsSnapshot,
+  minimumSize: { width: number; height: number },
+): Rectangle {
+  const parsedBounds = parseMainWindowBounds(settings.mainWindowBounds)
+  if (!parsedBounds) {
+    const workArea = screen.getPrimaryDisplay().workArea
+    const width = Math.min(1460, workArea.width)
+    const height = Math.min(940, workArea.height)
+
+    return {
+      width,
+      height,
+      x: Math.round(workArea.x + (workArea.width - width) / 2),
+      y: Math.round(workArea.y + (workArea.height - height) / 2),
+    }
+  }
+
+  const display = screen.getDisplayMatching(parsedBounds)
+  const workArea = display.workArea
+  const width = Math.min(Math.max(parsedBounds.width, minimumSize.width), workArea.width)
+  const height = Math.min(Math.max(parsedBounds.height, minimumSize.height), workArea.height)
+
+  return {
+    width,
+    height,
+    x: Math.min(Math.max(parsedBounds.x, workArea.x), workArea.x + workArea.width - width),
+    y: Math.min(Math.max(parsedBounds.y, workArea.y), workArea.y + workArea.height - height),
+  }
+}
+
+function parseMainWindowBounds(rawBounds: string): MainWindowBounds | null {
+  if (!rawBounds) {
+    return null
+  }
+
+  const value = JSON.parse(rawBounds) as Partial<MainWindowBounds>
+  if (
+    typeof value.x === 'number' &&
+    typeof value.y === 'number' &&
+    typeof value.width === 'number' &&
+    typeof value.height === 'number'
+  ) {
+    return {
+      x: value.x,
+      y: value.y,
+      width: value.width,
+      height: value.height,
+    }
+  }
+
+  return null
 }
 
 function resolveStartupRoute(lastPage: string) {

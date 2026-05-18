@@ -4,6 +4,7 @@ import { useRevealItem } from '../hooks/useRevealItem'
 import type { LibrarySong, SongPropertiesSnapshot } from '../shared/contracts'
 import { formatBytes, formatDuration } from '../shared/formatters'
 import type { Translator } from '../shared/i18n'
+import { formatSongPlayCountTitle } from '../shared/i18nCounts'
 import { CommandBar, CommandBarButton } from './CommandBar'
 import { Icon } from './icons'
 
@@ -119,7 +120,7 @@ export function MusicInfoControl({
             </PropertyRow>
             <PropertyRow label={t('common.playCount')} labelClassName="PlayCountTextBlock">
               <span className="song-dialog-inline-field music-property-inline-field">
-                <input className="play-count-text-block PlayCountTextBlock" value={properties.playCount || ''} disabled title={properties.playCount === 0 ? t('song.notPlayedYet', { title: song.title }) : t('song.hasBeenPlayed', { title: song.title, count: properties.playCount })} />
+                <input className="play-count-text-block PlayCountTextBlock" value={properties.playCount || ''} disabled title={properties.playCount === 0 ? t('song.notPlayedYet', { title: song.title }) : formatSongPlayCountTitle(t, song.title, properties.playCount)} />
                 {properties.playCount > 0 ? <button type="button" className="clear-play-count-button ClearPlayCountButton" onClick={onClearPlayCount}>{t('song.clearPlayCount')}</button> : null}
               </span>
             </PropertyRow>

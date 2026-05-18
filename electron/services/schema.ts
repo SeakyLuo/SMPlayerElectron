@@ -87,6 +87,8 @@ export function initializeSchema(db: DatabaseSync) {
       DesktopLyricsFontFamily TEXT DEFAULT 'system',
       DesktopLyricsOpacity INTEGER DEFAULT 88,
       DesktopLyricsBounds TEXT DEFAULT '',
+      MainWindowBounds TEXT DEFAULT '',
+      MainWindowMaximized INTEGER DEFAULT 0,
       QuitOnClose INTEGER DEFAULT 1
     );
 
@@ -325,6 +327,8 @@ export function initializeSchema(db: DatabaseSync) {
     ['DesktopLyricsFontFamily', `DesktopLyricsFontFamily TEXT DEFAULT 'system'`],
     ['DesktopLyricsOpacity', `DesktopLyricsOpacity INTEGER DEFAULT 88`],
     ['DesktopLyricsBounds', `DesktopLyricsBounds TEXT DEFAULT ''`],
+    ['MainWindowBounds', `MainWindowBounds TEXT DEFAULT ''`],
+    ['MainWindowMaximized', `MainWindowMaximized INTEGER DEFAULT 0`],
     ['QuitOnClose', `QuitOnClose INTEGER DEFAULT 1`],
     ['NightMode', `NightMode INTEGER DEFAULT 2`],
     ['NightModeStartTime', `NightModeStartTime TEXT DEFAULT '20:00'`],

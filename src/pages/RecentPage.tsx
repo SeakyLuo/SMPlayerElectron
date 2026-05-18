@@ -13,10 +13,11 @@ import { Icon } from '../components/icons'
 import { LoadingState } from '../components/LoadingState'
 import { MenuFlyout } from '../components/MenuFlyout'
 import { getAddToPlaylistMenuFlyoutItem, getMusicMenuFlyoutItems, getPreferenceMenuFlyoutItem } from '../components/MenuFlyoutHelper'
-import { MultiSelectCommandBar } from '../components/MultiSelectCommandBar'
+import { MultiSelectCommandBar, MULTI_SELECT_COMMAND_BAR_SCROLL_SPACER } from '../components/MultiSelectCommandBar'
 import { MusicDialog } from '../components/MusicDialog'
 import type { LibraryPlaylist, LibrarySong, PreferredLanguage, PreferenceItemSnapshot, PreferenceSettingsSnapshot, RecentAlbumPlayback, RecentArtistPlayback, RecentLibrarySong, RecentPlaylistPlayback, SearchHistoryEntry } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
+import { formatSongsAddedTo } from '../shared/i18nCounts'
 import { useRecentScrollbar } from '../hooks/useRecentScrollbar'
 import {
   buildRecentAlbumViews,
@@ -780,7 +781,7 @@ export function RecentPage({
                         title: songsById.get(addToMenu.songIds[0]!)!.title,
                         target: t('common.nowPlaying'),
                       })
-                    : t('notification.songsAddedTo', { count: addToMenu.songIds.length, target: t('common.nowPlaying') }),
+                    : formatSongsAddedTo(t, addToMenu.songIds.length, t('common.nowPlaying')),
                   () => replaceNowPlaying(removeQueueRange(useLibraryStore.getState().snapshot.nowPlaying.songIds, insertedIndex, addToMenu.songIds.length)),
                 )
                 hideSelectionAfterOperation()
@@ -794,7 +795,7 @@ export function RecentPage({
                         title: songsById.get(nextFavoriteSongIds[0]!)!.title,
                         target: t('common.myFavorites'),
                       })
-                    : t('notification.songsAddedTo', { count: nextFavoriteSongIds.length, target: t('common.myFavorites') }),
+                    : formatSongsAddedTo(t, nextFavoriteSongIds.length, t('common.myFavorites')),
                   () => removeSongsFromPlaylist(favoritePlaylistId, nextFavoriteSongIds),
                 )
                 hideSelectionAfterOperation()
@@ -816,7 +817,7 @@ export function RecentPage({
                         title: songsById.get(addToMenu.songIds[0]!)!.title,
                         target: targetPlaylist.name,
                       })
-                    : t('notification.songsAddedTo', { count: addToMenu.songIds.length, target: targetPlaylist.name }),
+                    : formatSongsAddedTo(t, addToMenu.songIds.length, targetPlaylist.name),
                   () => removeSongsFromPlaylist(playlistId, addToMenu.songIds),
                 )
                 hideSelectionAfterOperation()
@@ -1548,6 +1549,7 @@ function RecentSongGrid({
   const showSongMoreButton = columnWidth >= 330
   const layout = useMemo(() => buildRecentSongGridLayout(groups, columnCount, rowHeight), [columnCount, groups, rowHeight])
   const listHeight = layout.height
+  const scrollContentHeight = listHeight + (multiSelect ? MULTI_SELECT_COMMAND_BAR_SCROLL_SPACER : RECENT_GRID_BOTTOM_PADDING)
   const effectiveScrollTop = Math.min(scrollTop, Math.max(0, listHeight - viewportHeight))
   const overscanHeight = rowHeight * RECENT_GRID_OVERSCAN_ROWS
   const renderedRows = layout.rows.filter((row) =>
@@ -1558,7 +1560,7 @@ function RecentSongGrid({
     gridScrollFrameRef,
     gridRef,
     gridScrollbarTrackRef,
-    listHeight,
+    scrollContentHeight,
   )
 
   useEffect(() => {
@@ -1601,7 +1603,7 @@ function RecentSongGrid({
           setScrollTop(event.currentTarget.scrollTop)
         }}
       >
-        <div className="recent-grid-virtual" style={{ height: listHeight + RECENT_GRID_BOTTOM_PADDING }}>
+        <div className="recent-grid-virtual" style={{ height: scrollContentHeight }}>
           {renderedRows.map((row) => row.kind === 'header' ? (
             <h3
               className="recent-time-group-header recent-song-time-group-header"

@@ -41,6 +41,8 @@ export interface SettingsRow {
   DesktopLyricsFontFamily: string
   DesktopLyricsOpacity: number
   DesktopLyricsBounds: string
+  MainWindowBounds: string
+  MainWindowMaximized: number
   UseFilenameNotMusicName: number
   SmartMultiArtistRecognition: number
   MusicLibraryCriterion: number
@@ -74,6 +76,7 @@ export class SettingsService {
   private readonly updateAppSettingsStatement
   private readonly updateViewStateStatement
   private readonly updatePlaybackSettingsStatement
+  private readonly updateMainWindowStateStatement
 
   constructor(db: DatabaseSync) {
     this.db = db
@@ -104,6 +107,8 @@ export class SettingsService {
         DesktopLyricsFontFamily,
         DesktopLyricsOpacity,
         DesktopLyricsBounds,
+        MainWindowBounds,
+        MainWindowMaximized,
         UseFilenameNotMusicName,
         SmartMultiArtistRecognition,
         MusicLibraryCriterion,
@@ -198,6 +203,13 @@ export class SettingsService {
         IsMuted = ?,
         Mode = ?,
         MusicProgress = ?
+      WHERE Id = ?
+    `)
+    this.updateMainWindowStateStatement = this.db.prepare(`
+      UPDATE Settings
+      SET
+        MainWindowBounds = ?,
+        MainWindowMaximized = ?
       WHERE Id = ?
     `)
   }
@@ -322,6 +334,15 @@ export class SettingsService {
       settings.Id,
     )
   }
+
+  saveMainWindowState(update: { bounds: string; maximized: boolean }) {
+    const settings = this.getSettings()
+    this.updateMainWindowStateStatement.run(
+      update.bounds,
+      Number(update.maximized),
+      settings.Id,
+    )
+  }
 }
 
 export function toSettingsSnapshot(settings: SettingsRow): SettingsSnapshot {
@@ -351,6 +372,8 @@ export function toSettingsSnapshot(settings: SettingsRow): SettingsSnapshot {
     desktopLyricsFontFamily: settings.DesktopLyricsFontFamily,
     desktopLyricsOpacity: settings.DesktopLyricsOpacity,
     desktopLyricsBounds: settings.DesktopLyricsBounds,
+    mainWindowBounds: settings.MainWindowBounds,
+    mainWindowMaximized: Boolean(settings.MainWindowMaximized),
     preferredLanguage: mapPreferredLanguage(settings.VoiceAssistantPreferredLanguage),
     musicLibrarySort: mapMusicLibrarySort(settings.MusicLibraryCriterion),
     albumsSort: mapAlbumSort(settings.AlbumsCriterion),

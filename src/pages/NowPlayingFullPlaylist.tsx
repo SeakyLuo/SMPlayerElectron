@@ -7,9 +7,10 @@ import { Icon } from '../components/icons'
 import { LoadingState } from '../components/LoadingState'
 import { MenuFlyout } from '../components/MenuFlyout'
 import { getAddToPlaylistMenuFlyoutItem, getMusicMenuFlyoutItems } from '../components/MenuFlyoutHelper'
-import { MultiSelectCommandBar } from '../components/MultiSelectCommandBar'
+import { MultiSelectCommandBar, MULTI_SELECT_COMMAND_BAR_SCROLL_SPACER } from '../components/MultiSelectCommandBar'
 import { PlaylistControlItem } from '../components/PlaylistControlItem'
 import type { LibraryPlaylist, LibrarySong, PreferenceItemSnapshot } from '../shared/contracts'
+import { formatPlaylistSongCount, formatSongsAddedTo, formatSongsRemovedFrom } from '../shared/i18nCounts'
 import type { Translator } from '../shared/i18n'
 import { insertQueueEntries, insertQueueSongs, removeQueueRange } from '../shared/queueUndo'
 import { useLibraryStore } from '../state/useLibraryStore'
@@ -156,7 +157,7 @@ export function NowPlayingFullPlaylist({
                   title: songs.find((song) => song.id === nextFavoriteSongIds[0])!.title,
                   target: t('common.myFavorites'),
                 })
-              : t('notification.songsAddedTo', { count: nextFavoriteSongIds.length, target: t('common.myFavorites') }),
+              : formatSongsAddedTo(t, nextFavoriteSongIds.length, t('common.myFavorites')),
             () => removeSongsFromPlaylist(favoritePlaylistId, nextFavoriteSongIds),
           )
           if (hideMultiSelectCommandBarAfterOperation) {
@@ -180,7 +181,7 @@ export function NowPlayingFullPlaylist({
                   title: songs.find((song) => song.id === addToMenu.songIds[0])!.title,
                   target: targetPlaylist.name,
                 })
-              : t('notification.songsAddedTo', { count: addToMenu.songIds.length, target: targetPlaylist.name }),
+              : formatSongsAddedTo(t, addToMenu.songIds.length, targetPlaylist.name),
             () => removeSongsFromPlaylist(playlistId, addToMenu.songIds),
           )
           if (hideMultiSelectCommandBarAfterOperation) {
@@ -306,7 +307,7 @@ export function NowPlayingFullPlaylist({
       <header className="now-playing-full-playlist-title">
         <div>
           <strong>{t('common.nowPlaying')}</strong>
-          <span>{t('playlists.songCount', { count: songs.length })}</span>
+          <span>{formatPlaylistSongCount(t, songs.length)}</span>
         </div>
         <button
           type="button"
@@ -317,7 +318,11 @@ export function NowPlayingFullPlaylist({
           <Icon name="close" />
         </button>
       </header>
-      <section className="now-playing-full-list-shell" ref={listShellRef}>
+      <section
+        className="now-playing-full-list-shell"
+        ref={listShellRef}
+        style={multiSelect ? { paddingBottom: MULTI_SELECT_COMMAND_BAR_SCROLL_SPACER } : undefined}
+      >
         <div className="now-playing-playlist-control now-playing-full-queue-list playlist-control-compact">
           {songs.map((song, queueIndex) => {
             const current = selectedQueueIndex !== null
@@ -438,8 +443,11 @@ export function NowPlayingFullPlaylist({
         onRemove={() => {
           const removedSongIds = selectedQueueIndexList.map((queueIndex) => queueSongIds[queueIndex]!)
           const insertIndex = selectedQueueIndexList[0]!
+          const removeMessage = selectedEntries.length === 1
+            ? t('notification.removedFrom', { title: selectedEntries[0]!.song.title, target: t('common.nowPlaying') })
+            : formatSongsRemovedFrom(t, selectedSongIds.length, t('common.nowPlaying'))
           onReplaceQueue(queueSongIds.filter((_, index) => !selectedQueueIndexList.includes(index)))
-          showUndo(t('notification.songsRemovedFrom', { count: selectedSongIds.length, target: t('common.nowPlaying') }), () =>
+          showUndo(removeMessage, () =>
             onReplaceQueue(insertQueueSongs(useLibraryStore.getState().snapshot.nowPlaying.songIds, insertIndex, removedSongIds)),
           )
           clearSelection()

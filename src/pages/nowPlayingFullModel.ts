@@ -74,8 +74,6 @@ export function getNowPlayingFullMoreItems({
   preferenceItem,
   t,
   onQuickPlay,
-  desktopLyricsEnabled,
-  onToggleDesktopLyrics,
   onPlaySongs,
   onSavePlaylist,
   onClearQueue,
@@ -108,8 +106,6 @@ export function getNowPlayingFullMoreItems({
   preferenceItem: PreferenceItemSnapshot | null
   t: Translator
   onQuickPlay: () => void | Promise<void>
-  desktopLyricsEnabled: boolean
-  onToggleDesktopLyrics: () => void
   onPlaySongs: (songIds: number[]) => void
   onSavePlaylist: () => void
   onClearQueue: () => void
@@ -157,12 +153,6 @@ export function getNowPlayingFullMoreItems({
 
   const items: MenuFlyoutItem[] = [
     { key: 'quick-play', text: t('nowPlaying.quickPlay'), icon: 'play', onClick: onQuickPlay },
-    {
-      key: 'desktop-lyrics',
-      text: desktopLyricsEnabled ? t('player.hideDesktopLyrics') : t('player.showDesktopLyrics'),
-      icon: 'lyrics',
-      onClick: onToggleDesktopLyrics,
-    },
     {
       key: 'random-play',
       text: t('nowPlaying.randomPlay'),

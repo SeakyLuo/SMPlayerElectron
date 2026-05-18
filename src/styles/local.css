@@ -52,6 +52,10 @@
   -webkit-app-region: no-drag;
 }
 
+.local-title-grid.is-placeholder {
+  pointer-events: none;
+}
+
 .current-path-grid {
   display: flex;
   align-items: center;
@@ -463,6 +467,10 @@
   scrollbar-gutter: stable;
 }
 
+.local-page.is-selection-mode .local-scroll-shell {
+  padding-bottom: 108px;
+}
+
 .local-scroll-frame {
   position: relative;
   display: flex;
@@ -532,7 +540,7 @@
   display: none;
 }
 
-.local-table-shell .music-table tbody tr:not(.local-table-section-row, .local-table-quick-jump-row) {
+.local-table-shell .music-table tbody tr:not(.local-table-section-row, .local-table-quick-jump-row, .local-table-spacer-row) {
   height: 44px;
 }
 
@@ -706,10 +714,11 @@
     background-color 120ms ease;
 }
 
-.local-folder-card {
+.local-folder-card:not(.local-folder-card-list) {
   box-sizing: border-box;
   width: 180px;
-  gap: 12px;
+  min-height: 232px;
+  gap: 0;
   padding: 10px;
   border-radius: 12px;
   background: transparent;
@@ -734,11 +743,11 @@
 .grid-artwork-card-actions {
   position: absolute;
   left: 50%;
-  top: 90px;
+  top: 50%;
   z-index: 4;
   display: grid;
-  grid-template-columns: repeat(2, 44px);
-  gap: 8px;
+  grid-template-columns: repeat(2, 48px);
+  gap: 10px;
   margin-top: 0;
   padding-right: 0;
   opacity: 0;
@@ -748,15 +757,15 @@
 }
 
 .grid-artwork-card-actions:has(> button:only-child) {
-  grid-template-columns: 44px;
+  grid-template-columns: 48px;
 }
 
 .grid-artwork-card-actions button {
   position: relative;
   display: inline-grid;
   place-items: center;
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   border: 0;
   border-radius: 50%;
   background: rgba(30, 34, 40, 0.72);
@@ -785,16 +794,16 @@
 }
 
 .grid-artwork-card-actions svg {
-  width: 19px;
-  height: 19px;
+  width: 20px;
+  height: 20px;
 }
 
-.local-folder-card:hover,
-.local-folder-card:focus-visible,
-.local-folder-card:focus-within,
-.local-folder-card.is-selected {
-  background: transparent;
-  box-shadow: none;
+.local-folder-card:not(.local-folder-card-list):hover,
+.local-folder-card:not(.local-folder-card-list):focus-visible,
+.local-folder-card:not(.local-folder-card-list):focus-within,
+.local-folder-card:not(.local-folder-card-list).is-selected {
+  background: var(--surface-card-hover);
+  box-shadow: var(--card-hover-shadow);
 }
 
 .local-folder-card.is-drop-target .grid-artwork-card-cover,
@@ -851,7 +860,7 @@
   border-radius: 8px;
   overflow: hidden;
   background: var(--surface-artwork);
-  box-shadow: 10px 10px 20px rgba(32, 45, 63, 0);
+  box-shadow: var(--artwork-shadow);
   transition: box-shadow 120ms ease;
 }
 
@@ -938,12 +947,16 @@
   box-sizing: border-box;
   width: 180px;
   max-width: 180px;
+  min-height: 232px;
   gap: 0;
   padding: 10px;
-  border-radius: 0;
+  border-radius: 12px;
   background: transparent;
   box-shadow: none;
   overflow: visible;
+  transition:
+    background-color 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .local-grid-song-cover-wrap {
@@ -961,7 +974,7 @@
   border-radius: 8px;
   object-fit: cover;
   background: var(--surface-artwork);
-  box-shadow: 10px 10px 20px rgba(32, 45, 63, 0);
+  box-shadow: var(--artwork-shadow);
   transition: box-shadow 120ms ease;
 }
 
@@ -980,10 +993,9 @@
   left: 50%;
   top: 50%;
   z-index: 4;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: repeat(2, 48px);
+  gap: 10px;
   opacity: 0;
   pointer-events: none;
   transform: translate(-50%, -50%);
@@ -998,29 +1010,36 @@
 }
 
 .local-grid-song-actions button {
-  display: inline-grid;
+  position: relative;
+  display: grid;
   place-items: center;
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   border: 0;
   border-radius: 50%;
   background: rgba(30, 34, 40, 0.72);
   color: #fff;
   box-shadow: 0 12px 28px rgba(14, 22, 32, 0.28);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  line-height: 1;
   cursor: pointer;
   transition:
-    background-color 120ms ease,
-    transform 120ms ease;
+    background-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
 }
 
 .local-grid-song-actions button:hover {
   background: rgba(20, 24, 30, 0.82);
-  transform: scale(1.08);
+  color: #fff;
+  box-shadow: 0 14px 32px rgba(14, 22, 32, 0.28);
+  transform: scale(1.1);
 }
 
 .local-grid-song-actions svg {
-  width: 19px;
-  height: 19px;
+  width: 20px;
+  height: 20px;
 }
 
 .local-grid-song-title-row {
@@ -1043,6 +1062,14 @@
 
 .local-grid-song-card.is-current .local-grid-song-title-row strong {
   color: var(--accent-strong);
+}
+
+.local-grid-song-card:hover,
+.local-grid-song-card:focus-visible,
+.local-grid-song-card:focus-within,
+.local-grid-song-card.is-selected {
+  background: var(--surface-card-hover);
+  box-shadow: var(--card-hover-shadow);
 }
 
 .local-grid-song-playing-wave {

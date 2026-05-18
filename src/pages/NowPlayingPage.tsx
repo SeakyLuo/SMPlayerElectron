@@ -8,11 +8,12 @@ import { requestConfirmDialog } from '../components/dialogService'
 import { LoadingState } from '../components/LoadingState'
 import { MenuFlyout } from '../components/MenuFlyout'
 import { getAddToPlaylistMenuFlyoutItem, getMusicMenuFlyoutItems, getShuffleMenuItems, type MenuFlyoutItem, type MenuFlyoutPosition } from '../components/MenuFlyoutHelper'
-import { MultiSelectCommandBar } from '../components/MultiSelectCommandBar'
+import { MultiSelectCommandBar, MULTI_SELECT_COMMAND_BAR_SCROLL_SPACER } from '../components/MultiSelectCommandBar'
 import { MusicDialog } from '../components/MusicDialog'
 import { PlaylistControlItem } from '../components/PlaylistControlItem'
 import type { LibraryPlaylist, LibrarySong, PreferenceItemSnapshot, PreferenceSettingsSnapshot } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
+import { formatSongsAddedTo, formatSongsRemovedFrom } from '../shared/i18nCounts'
 import { insertQueueEntries, insertQueueSongs, removeQueueRange } from '../shared/queueUndo'
 import { quickPlay } from '../shared/QuickPlayHelper'
 import { useLibraryStore } from '../state/useLibraryStore'
@@ -223,7 +224,8 @@ export function NowPlayingPage({
   )
   const renderedEntries = visibleEntries.slice(startIndex, endIndex)
   const topSpacerHeight = startIndex * rowHeight
-  const bottomSpacerHeight = (visibleEntries.length - endIndex) * rowHeight
+  const bottomSpacerHeight = (visibleEntries.length - endIndex) * rowHeight +
+    (multiSelect ? MULTI_SELECT_COMMAND_BAR_SCROLL_SPACER : 0)
   const randomActions = useMemo(
     () => {
       if (!randomMenuPosition) {
@@ -264,7 +266,7 @@ export function NowPlayingPage({
                   title: songs.find((song) => song.id === nextFavoriteSongIds[0])!.title,
                   target: t('common.myFavorites'),
                 })
-              : t('notification.songsAddedTo', { count: nextFavoriteSongIds.length, target: t('common.myFavorites') }),
+              : formatSongsAddedTo(t, nextFavoriteSongIds.length, t('common.myFavorites')),
             () => removeSongsFromPlaylist(favoritePlaylistId, nextFavoriteSongIds),
           )
           if (hideMultiSelectCommandBarAfterOperation) {
@@ -288,7 +290,7 @@ export function NowPlayingPage({
                   title: songs.find((song) => song.id === addToMenu.songIds[0])!.title,
                   target: targetPlaylist.name,
                 })
-              : t('notification.songsAddedTo', { count: addToMenu.songIds.length, target: targetPlaylist.name }),
+              : formatSongsAddedTo(t, addToMenu.songIds.length, targetPlaylist.name),
             () => removeSongsFromPlaylist(playlistId, addToMenu.songIds),
           )
           if (hideMultiSelectCommandBarAfterOperation) {
@@ -425,7 +427,7 @@ export function NowPlayingPage({
             title: songs.find((song) => song.id === nextFavoriteSongIds[0])!.title,
             target: t('common.myFavorites'),
           })
-        : t('notification.songsAddedTo', { count: nextFavoriteSongIds.length, target: t('common.myFavorites') }),
+        : formatSongsAddedTo(t, nextFavoriteSongIds.length, t('common.myFavorites')),
       () => removeSongsFromPlaylist(favoritePlaylistId, nextFavoriteSongIds),
     )
   }
@@ -443,7 +445,7 @@ export function NowPlayingPage({
             title: songs.find((song) => song.id === queueSongIds[0])!.title,
             target: targetPlaylist.name,
           })
-        : t('notification.songsAddedTo', { count: queueSongIds.length, target: targetPlaylist.name }),
+        : formatSongsAddedTo(t, queueSongIds.length, targetPlaylist.name),
       () => removeSongsFromPlaylist(playlistId, queueSongIds),
     )
   }
@@ -507,6 +509,7 @@ export function NowPlayingPage({
       <CommandBarButton
         icon="play"
         label={t('nowPlaying.quickPlay')}
+        canOverflow={variant === 'page'}
         disabled={!canUseLibraryCommands}
         onClick={() => {
           void playQuick()
@@ -515,6 +518,7 @@ export function NowPlayingPage({
       <CommandBarButton
         icon="shuffle"
         label={t('nowPlaying.randomPlay')}
+        canOverflow={variant === 'page'}
         disabled={!canUseLibraryCommands}
         ariaHasPopup="menu"
         ariaExpanded={randomMenuPosition != null}
@@ -774,8 +778,11 @@ export function NowPlayingPage({
         onRemove={() => {
           const removedSongIds = selectedVisibleQueueIndexes.map((queueIndex) => queueSongIds[queueIndex]!)
           const insertIndex = selectedVisibleQueueIndexes[0]!
+          const removeMessage = selectedVisibleEntries.length === 1
+            ? t('notification.removedFrom', { title: selectedVisibleEntries[0]!.song.title, target: t('common.nowPlaying') })
+            : formatSongsRemovedFrom(t, selectedVisibleSongIds.length, t('common.nowPlaying'))
           onReplaceQueue(queueSongIds.filter((_, index) => !selectedVisibleQueueIndexes.includes(index)))
-          showUndo(t('notification.songsRemovedFrom', { count: selectedVisibleSongIds.length, target: t('common.nowPlaying') }), () =>
+          showUndo(removeMessage, () =>
             onReplaceQueue(insertQueueSongs(useLibraryStore.getState().snapshot.nowPlaying.songIds, insertIndex, removedSongIds)),
           )
           clearSelection()

@@ -76,11 +76,18 @@ body.night-mode .app-shell.nav-minimal .workspace.is-immersive-route {
 }
 
 .workspace-content {
+  --workspace-content-bottom-padding: calc(var(--player-top-radius) + 2px);
   flex: 1 1 auto;
   min-height: 0;
+  box-sizing: border-box;
   overflow: auto;
-  padding: 0;
+  padding: 0 0 var(--workspace-content-bottom-padding);
   scrollbar-gutter: stable;
+}
+
+.workspace.is-immersive-route .workspace-content,
+.workspace.is-headerless-route .workspace-content {
+  --workspace-content-bottom-padding: 0px;
 }
 
 .app-shell.nav-minimal .workspace-content {

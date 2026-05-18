@@ -151,7 +151,7 @@ export function GridViewMusicItemControl({
         <span className="local-grid-song-title-row">
           <strong title={song.title}>{song.title}</strong>
         </span>
-        <span className="local-grid-song-subtitle" title={artistLabel}>{artistLabel}</span>
+        <span className="local-grid-song-subtitle" title={detailLabel ?? artistLabel}>{detailLabel ?? artistLabel}</span>
       </div>
     )
   }

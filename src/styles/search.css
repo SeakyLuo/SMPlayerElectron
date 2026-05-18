@@ -13,11 +13,23 @@
   padding: 2px 0 22px;
 }
 
+.search-page.is-selection-mode .search-result-stack {
+  padding-bottom: 108px;
+}
+
 .search-result-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
+  padding: 0 0 8px;
+  background:
+    linear-gradient(180deg, rgba(250, 252, 255, 0.96), rgba(250, 252, 255, 0.88) 78%, rgba(250, 252, 255, 0));
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
 }
 
 .search-result-tabs {
@@ -273,6 +285,12 @@
   color: #fff;
 }
 
+.artist-view-holder:hover .search-artist-hover-play,
+.artist-view-holder:focus-visible .search-artist-hover-play,
+.search-card-artwork-shell:focus-within .search-artist-hover-play {
+  color: #fff;
+}
+
 .search-result-section:has(.artist-view-holder) .search-card-row {
   gap: 2px 12px;
 }
@@ -300,6 +318,13 @@
   background: var(--selection-mark-bg);
   color: #fff;
   box-shadow: 0 8px 18px rgba(72, 88, 112, 0.12);
+}
+
+.search-result-card:hover .search-result-card-check,
+.search-result-card:hover .search-result-card-check svg,
+.search-result-card:focus-visible .search-result-card-check,
+.search-result-card:focus-visible .search-result-card-check svg {
+  color: #fff;
 }
 
 .search-result-card-check.is-selected {
@@ -469,6 +494,11 @@ body.night-mode .app-shell .workspace:has(.search-page) {
 
 body.night-mode .app-shell .search-page {
   color: var(--night-text);
+}
+
+body.night-mode .app-shell .search-result-toolbar {
+  background:
+    linear-gradient(180deg, rgba(16, 20, 25, 0.96), rgba(16, 20, 25, 0.88) 78%, rgba(16, 20, 25, 0));
 }
 
 body.night-mode .app-shell .search-loading-state,

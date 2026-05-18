@@ -19,6 +19,16 @@
   overflow: visible;
 }
 
+.workspace.is-local-route .workspace-header .local-title-grid {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.workspace.is-local-route .workspace-header .appbar-spacer,
+.workspace.is-local-route .workspace-header .status-pills {
+  display: none;
+}
+
 .workspace-header * {
   -webkit-app-region: no-drag;
 }
@@ -32,6 +42,16 @@
 
 .appbar-title-drag-region {
   min-width: 0;
+  -webkit-app-region: drag;
+  app-region: drag;
+  user-select: none;
+}
+
+.appbar-title-placeholder {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 40px;
   -webkit-app-region: drag;
   app-region: drag;
   user-select: none;
@@ -258,7 +278,19 @@
 }
 
 .app-shell.nav-minimal .workspace.is-local-route .workspace-header {
-  padding: 0 15px 0 8px;
+  padding: 0 12px 0 8px;
+}
+
+.app-shell.nav-minimal .workspace.is-local-route .appbar-title-group {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 10px;
+  flex: 1 1 100%;
+  width: 100%;
+}
+
+.app-shell.nav-minimal .workspace.is-local-route .appbar-spacer {
+  display: none;
 }
 
 .app-shell.nav-minimal .workspace.is-local-route .appbar-actions:has(.appbar-page-actions:empty) {
@@ -267,8 +299,8 @@
 
 .app-shell.nav-minimal .workspace-header .local-title-grid {
   flex: 1 1 auto;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
   height: 36px;
   min-height: 36px;
   min-width: 0;

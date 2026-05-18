@@ -89,6 +89,8 @@ function createRemoteSettings(musicLibrarySort: MusicLibrarySortCriterion) {
     desktopLyricsFontFamily: 'system' as const,
     desktopLyricsOpacity: 88,
     desktopLyricsBounds: '',
+    mainWindowBounds: '',
+    mainWindowMaximized: false,
     preferredLanguage: 'system' as const,
     musicLibrarySort,
     albumsSort: 'default' as const,

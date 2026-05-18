@@ -1,6 +1,7 @@
 import { getSongArtists } from '../shared/artists'
 import type { LibrarySong, LocalFolderSortCriterion, ScanLibraryProgress, ScanLibraryResult } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
+import { formatRefreshSongsAdded, formatRefreshSongsMoved, formatRefreshSongsRemoved } from '../shared/i18nCounts'
 import { getLocalTextQuickJumpBucket } from '../shared/textCompare'
 import { normalizePath } from './localFolderModel'
 
@@ -31,7 +32,7 @@ function getFileTitle(filePath: string) {
 function getRefreshChangeMessage(
   paths: string[],
   singleKey: string,
-  multipleKey: string,
+  formatMultiple: (t: Translator, count: number) => string,
   t: Translator,
 ) {
   if (paths.length === 0) {
@@ -40,17 +41,17 @@ function getRefreshChangeMessage(
 
   return paths.length === 1
     ? t(singleKey, { name: getFileTitle(paths[0]!) })
-    : t(multipleKey, { count: paths.length })
+    : formatMultiple(t, paths.length)
 }
 
 export function getRefreshResultMessage(result: ScanLibraryResult, t: Translator) {
   const messages = [
-    getRefreshChangeMessage(result.filesAdded, 'local.refreshAddedOne', 'local.refreshAddedMultiple', t),
-    getRefreshChangeMessage(result.filesRemoved, 'local.refreshRemovedOne', 'local.refreshRemovedMultiple', t),
-    getRefreshChangeMessage(result.filesMoved, 'local.refreshMovedOne', 'local.refreshMovedMultiple', t),
-    result.artistSplitsApplied.length > 0 ? t('local.refreshArtistSplitsAppliedMultiple', { count: result.artistSplitsApplied.length }) : '',
-    result.artistSplitSuggestions.length > 0 ? t('local.refreshArtistSplitSuggestionsMultiple', { count: result.artistSplitSuggestions.length }) : '',
-    result.artistMergeSuggestions.length > 0 ? t('local.refreshArtistMergeSuggestionsMultiple', { count: result.artistMergeSuggestions.length }) : '',
+    getRefreshChangeMessage(result.filesAdded, 'local.refreshAddedOne', formatRefreshSongsAdded, t),
+    getRefreshChangeMessage(result.filesRemoved, 'local.refreshRemovedOne', formatRefreshSongsRemoved, t),
+    getRefreshChangeMessage(result.filesMoved, 'local.refreshMovedOne', formatRefreshSongsMoved, t),
+    result.artistSplitsApplied.length > 0 ? t('local.refreshArtistSplitsAppliedGroup', { count: result.artistSplitsApplied.length }) : '',
+    result.artistSplitSuggestions.length > 0 ? t('local.refreshArtistSplitSuggestionsGroup', { count: result.artistSplitSuggestions.length }) : '',
+    result.artistMergeSuggestions.length > 0 ? t('local.refreshArtistMergeSuggestionsGroup', { count: result.artistMergeSuggestions.length }) : '',
   ].filter(Boolean)
 
   return messages.length > 0 ? messages.join(t('common.comma')) : t('local.refreshNoChange')

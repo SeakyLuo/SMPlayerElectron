@@ -2,31 +2,32 @@ import type { LibrarySong, PlaybackMode, RecentLibrarySong } from './contracts'
 import { formatDuration } from './formatters'
 import { getDisplayArtists, getSongArtists } from './artists'
 import type { Translator } from './i18n'
+import { formatAlbumCount, formatArtistCount, formatPlayedTimes, formatSongCount, formatTrackCount, formatUnitCount } from './i18nCounts'
 
 const CARD_LIMIT = 18
 
 function formatCount(value: number, singular: string, plural = `${singular}s`, t?: Translator) {
   if (!t) {
-    return `${value} ${value === 1 ? singular : plural}`
+    return formatUnitCount(value, singular, plural)
   }
 
   if (singular === 'song') {
-    return t('cards.songCount', { count: value })
+    return formatSongCount(t, value)
   }
 
   if (singular === 'track') {
-    return t('cards.trackCount', { count: value })
+    return formatTrackCount(t, value)
   }
 
   if (singular === 'album') {
-    return t('cards.albumCount', { count: value })
+    return formatAlbumCount(t, value)
   }
 
   if (singular === 'artist') {
-    return t('cards.artistCount', { count: value })
+    return formatArtistCount(t, value)
   }
 
-  return `${value} ${value === 1 ? singular : plural}`
+  return formatUnitCount(value, singular, plural)
 }
 
 function getArtworkUrl(songs: LibrarySong[]) {
@@ -270,10 +271,7 @@ export function buildFavoriteCards(songs: LibrarySong[], t?: Translator) {
       subtitle: `${getDisplayArtists(song, t?.('common.artistUnknown'))} - ${formatDuration(song.duration)}`,
       artworkUrl: song.artworkUrl,
       detail: t
-        ? t('cards.playedTimes', {
-            album: song.album || t('common.albumUnknown'),
-            count: song.playCount,
-          })
+        ? formatPlayedTimes(t, song.album || t('common.albumUnknown'), song.playCount)
         : `${song.album || 'Unknown album'} - Played ${song.playCount} times`,
     }))
 }

@@ -124,6 +124,12 @@ async function createWindow() {
     hideWindow: () => hideMainWindow(),
     showWindow: () => showMainWindow(),
     updateTrayMenu: () => trayController.updateMenu(),
+    saveWindowState: (state) => {
+      libraryService!.settingsService.saveMainWindowState({
+        bounds: JSON.stringify(state.bounds),
+        maximized: state.maximized,
+      })
+    },
   })
 }
 

@@ -70,6 +70,76 @@
   object-fit: contain;
 }
 
+.local-table-spacer-row,
+.local-table-spacer-row td {
+  border: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.app-shell.nav-minimal .local-table-spacer-row,
+.app-shell.nav-minimal .local-table-spacer-row td {
+  display: block !important;
+}
+
+.local-table-tree-cell {
+  padding-left: calc(10px + var(--local-tree-depth, 0) * 22px) !important;
+}
+
+.local-table-tree-toggle {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 6px;
+  padding: 0;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+button.local-table-tree-toggle {
+  cursor: pointer;
+}
+
+button.local-table-tree-toggle:hover {
+  background: rgba(var(--accent-rgb), 0.1);
+  color: var(--accent-strong);
+}
+
+button.local-table-tree-toggle:disabled {
+  cursor: default;
+  opacity: 0.38;
+}
+
+.local-table-tree-toggle svg {
+  width: 16px;
+  height: 16px;
+}
+
+.local-table-tree-row .local-table-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.local-table-tree-row .local-table-secondary-text {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.local-table-tree-row .local-table-tree-album-separator {
+  color: var(--text-muted);
+}
+
 .local-table-primary-text {
   min-width: 0;
   overflow: hidden;
@@ -143,10 +213,10 @@
   height: 0;
 }
 
-.app-shell.nav-minimal .local-scrollbar {
+.app-shell.nav-minimal .local-scroll-frame > .custom-scrollbar {
   position: absolute;
   top: 4px;
-  right: -5px;
+  right: -2px;
   bottom: 4px;
   z-index: 2;
   display: block;
@@ -156,25 +226,26 @@
   transition: opacity 140ms ease;
 }
 
-.app-shell.nav-minimal .local-scroll-frame.has-scrollbar:hover .local-scrollbar,
-.app-shell.nav-minimal .local-scroll-frame.has-scrollbar:focus-within .local-scrollbar,
-.app-shell.nav-minimal .local-scroll-frame.has-scrollbar .local-scrollbar:hover {
+.app-shell.nav-minimal .local-scroll-frame.has-custom-scrollbar:hover > .custom-scrollbar,
+.app-shell.nav-minimal .local-scroll-frame.has-custom-scrollbar:focus-within > .custom-scrollbar,
+.app-shell.nav-minimal .local-scroll-frame.has-custom-scrollbar.is-custom-scrollbar-dragging > .custom-scrollbar,
+.app-shell.nav-minimal .local-scroll-frame.has-custom-scrollbar > .custom-scrollbar:hover {
   opacity: 1;
   pointer-events: auto;
 }
 
-.app-shell.nav-minimal .local-scrollbar-thumb {
+.app-shell.nav-minimal .local-scroll-frame > .custom-scrollbar .custom-scrollbar-thumb {
   position: absolute;
   left: 2px;
   right: 2px;
-  top: var(--local-scrollbar-thumb-top, 0);
-  height: var(--local-scrollbar-thumb-height, 40px);
+  top: var(--custom-scrollbar-thumb-top, 0);
+  height: var(--custom-scrollbar-thumb-height, 40px);
   border-radius: 999px;
   background: rgba(91, 105, 122, 0.5);
   cursor: default;
 }
 
-.app-shell.nav-minimal .local-scrollbar-thumb:hover {
+.app-shell.nav-minimal .local-scroll-frame > .custom-scrollbar .custom-scrollbar-thumb:hover {
   left: 1px;
   right: 1px;
   background: rgba(67, 80, 96, 0.68);
@@ -195,7 +266,6 @@
   display: flex;
   flex-direction: column;
   gap: 0;
-  margin-right: 0;
   border: 1px solid var(--border-subtle);
   border-radius: 10px;
   background: var(--panel);
@@ -1092,6 +1162,85 @@
   border-bottom: 1px solid var(--border-subtle);
 }
 
+.app-shell.nav-minimal .local-compact-tree-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow:
+    0 1px 2px rgba(27, 39, 54, 0.08),
+    0 12px 22px -18px rgba(27, 39, 54, 0.28);
+  overflow: hidden;
+}
+
+.app-shell.nav-minimal .local-compact-tree-row:not(:last-child) {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.app-shell.nav-minimal .local-compact-tree-row .local-folder-card-list,
+.app-shell.nav-minimal .local-compact-tree-row .local-folder-card-list:hover,
+.app-shell.nav-minimal .local-compact-tree-row .local-folder-card-list:focus-visible,
+.app-shell.nav-minimal .local-compact-tree-row .local-folder-card-list:focus-within,
+.app-shell.nav-minimal .local-compact-tree-row .local-folder-card-list.is-selected {
+  border-bottom: 0;
+}
+
+.app-shell.nav-minimal .local-folder-card-list:has(.local-folder-list-tree-toggle) {
+  grid-template-columns: 24px 30px minmax(0, 1fr) minmax(72px, auto);
+  padding-left: calc(8px + var(--local-tree-depth, 0) * 22px);
+}
+
+.app-shell.nav-minimal .local-folder-card-list:has(.local-folder-list-tree-toggle) .local-folder-list-tree-toggle {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.app-shell.nav-minimal .local-folder-card-list:has(.local-folder-list-tree-toggle) .local-folder-list-icon {
+  grid-column: 2;
+}
+
+.app-shell.nav-minimal .local-folder-card-list:has(.local-folder-list-tree-toggle) .local-folder-list-content {
+  grid-column: 3;
+}
+
+.app-shell.nav-minimal .local-folder-card-list:has(.local-folder-list-tree-toggle) .local-folder-list-trailing {
+  grid-column: 4;
+}
+
+.app-shell.nav-minimal .local-folder-list-tree-toggle {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 6px;
+  padding: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.app-shell.nav-minimal .local-folder-list-tree-toggle:hover {
+  background: rgba(var(--accent-rgb), 0.1);
+  color: var(--accent-strong);
+}
+
+.app-shell.nav-minimal .local-folder-list-tree-toggle:disabled {
+  cursor: default;
+  opacity: 0.38;
+}
+
+.app-shell.nav-minimal .local-folder-list-tree-toggle svg {
+  width: 16px;
+  height: 16px;
+}
+
+.app-shell.nav-minimal .local-compact-tree-song-row {
+  padding-left: calc(var(--local-tree-depth, 0) * 22px);
+}
+
 .app-shell.nav-minimal .local-folder-card-list.is-selected {
   background: rgba(var(--accent-rgb), 0.11);
 }
@@ -1147,23 +1296,33 @@
   height: 100%;
 }
 
-.app-shell.nav-minimal .local-folder-list-trailing > svg {
-  width: 15px;
-  height: 15px;
+.app-shell.nav-minimal .local-folder-list-info {
+  min-width: 0;
+  overflow: hidden;
   color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 520;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: opacity 120ms ease;
 }
 
 .app-shell.nav-minimal .local-folder-list-actions {
   position: absolute;
-  right: 24px;
+  right: 0;
   display: inline-flex;
   align-items: center;
   flex: 0 0 auto;
   gap: 2px;
-  margin-right: 6px;
   opacity: 0;
   pointer-events: none;
   transition: opacity 120ms ease;
+}
+
+.app-shell.nav-minimal .local-folder-card-list:hover .local-folder-list-info,
+.app-shell.nav-minimal .local-folder-card-list:focus-within .local-folder-list-info {
+  opacity: 0;
 }
 
 .app-shell.nav-minimal .local-folder-card-list:hover .local-folder-list-actions,
@@ -1240,7 +1399,9 @@
   border: 1px solid var(--border-subtle);
   border-radius: 10px;
   background: var(--panel);
-  box-shadow: var(--card-shadow);
+  box-shadow:
+    0 1px 2px rgba(27, 39, 54, 0.08),
+    0 12px 22px -18px rgba(27, 39, 54, 0.28);
   overflow: hidden;
 }
 
@@ -1323,7 +1484,7 @@
   display: block;
 }
 
-.app-shell.nav-minimal .local-table-shell .music-table tbody tr:not(.local-table-section-row, .local-table-quick-jump-row) {
+.app-shell.nav-minimal .local-table-shell .music-table tbody tr:not(.local-table-section-row, .local-table-quick-jump-row, .local-table-spacer-row) {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: 24px 18px 18px;
@@ -1374,7 +1535,7 @@
     inset 0 0 0 2px var(--accent);
 }
 
-.app-shell.nav-minimal .local-table-shell .music-table tbody tr:not(.local-table-section-row, .local-table-quick-jump-row):hover {
+.app-shell.nav-minimal .local-table-shell .music-table tbody tr:not(.local-table-section-row, .local-table-quick-jump-row, .local-table-spacer-row):hover {
   background: rgba(var(--accent-rgb), 0.055);
 }
 
@@ -1388,7 +1549,7 @@
   color: var(--accent-strong);
 }
 
-.app-shell.nav-minimal .local-table-shell .music-table tbody tr:not(.local-table-section-row, .local-table-quick-jump-row) td {
+.app-shell.nav-minimal .local-table-shell .music-table tbody tr:not(.local-table-section-row, .local-table-quick-jump-row, .local-table-spacer-row) td {
   display: flex;
   align-items: center;
   min-width: 0;
@@ -1401,8 +1562,8 @@
   line-height: 1.2;
 }
 
-.app-shell.nav-minimal .local-table-shell .music-table tbody tr:not(.local-table-section-row, .local-table-quick-jump-row) td:first-child,
-.app-shell.nav-minimal .local-table-shell .music-table tbody tr:not(.local-table-section-row, .local-table-quick-jump-row) td:last-child {
+.app-shell.nav-minimal .local-table-shell .music-table tbody tr:not(.local-table-section-row, .local-table-quick-jump-row, .local-table-spacer-row) td:first-child,
+.app-shell.nav-minimal .local-table-shell .music-table tbody tr:not(.local-table-section-row, .local-table-quick-jump-row, .local-table-spacer-row) td:last-child {
   border-radius: 0;
 }
 
@@ -1508,6 +1669,10 @@
 
 .app-shell.nav-minimal .local-table-quick-jump-row .local-song-quick-jump {
   overflow-x: auto;
+}
+
+.app-shell.nav-minimal .local-table-tree-cell {
+  padding-left: calc(var(--local-tree-depth, 0) * 22px) !important;
 }
 
 .hidden-folders-page {

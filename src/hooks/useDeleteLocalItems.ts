@@ -1,4 +1,5 @@
 import type { Translator } from '../shared/i18n'
+import { formatDeletedLocalItems } from '../shared/i18nCounts'
 import { useLibraryStore } from '../state/useLibraryStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
 
@@ -15,7 +16,7 @@ export function useDeleteLocalItems(t: Translator) {
     }
 
     showUndoableNotification(
-      t('notification.deletedLocalItems', { count: songIds.length + folderPaths.length }),
+      formatDeletedLocalItems(t, songIds.length + folderPaths.length),
       t('common.undo'),
       () => undoDeleteSongFromDisk(pendingDelete.id),
       5000,

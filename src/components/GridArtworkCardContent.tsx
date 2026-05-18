@@ -40,7 +40,7 @@ export function GridArtworkCardContent({
 
   return (
     <>
-      <span className={`grid-artwork-card-cover artwork-count-${artworkUrls.length <= 2 ? 1 : artworkUrls.length}`} aria-hidden="true">
+      <span className={`grid-artwork-card-cover artwork-count-${artworkUrls.length <= 2 ? 1 : artworkUrls.length}`}>
         {artworkUrls.length === 0 ? (
           <span className="grid-artwork-card-cover-fallback">
             {renderFallbackArtwork()}
@@ -79,30 +79,30 @@ export function GridArtworkCardContent({
           </>
         )}
         {badge}
+        {actions.length > 0 ? (
+          <span className="grid-artwork-card-actions">
+            {actions.map((action) => (
+              <button
+                disabled={action.disabled}
+                key={action.key}
+                title={action.title}
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  void action.onClick(event)
+                }}
+              >
+                <Icon name={action.icon} />
+              </button>
+            ))}
+          </span>
+        ) : null}
       </span>
       {selectedMark}
       <span className="grid-artwork-card-copy">
         <strong className="grid-artwork-card-title">{title}</strong>
         <span className="grid-artwork-card-subtitle">{subtitle}</span>
       </span>
-      {actions.length > 0 ? (
-        <span className="grid-artwork-card-actions">
-          {actions.map((action) => (
-            <button
-              disabled={action.disabled}
-              key={action.key}
-              title={action.title}
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation()
-                void action.onClick(event)
-              }}
-            >
-              <Icon name={action.icon} />
-            </button>
-          ))}
-        </span>
-      ) : null}
     </>
   )
 }

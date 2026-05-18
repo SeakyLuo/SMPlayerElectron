@@ -36,6 +36,8 @@ export const emptySnapshot: MusicData = {
     desktopLyricsFontFamily: 'system',
     desktopLyricsOpacity: 88,
     desktopLyricsBounds: '',
+    mainWindowBounds: '',
+    mainWindowMaximized: false,
     preferredLanguage: 'system',
     musicLibrarySort: 'title',
     albumsSort: 'default',

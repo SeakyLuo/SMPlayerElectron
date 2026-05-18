@@ -324,6 +324,13 @@ export interface DesktopLyricsBounds {
   height: number
 }
 
+export interface MainWindowBounds {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
 export interface DesktopLyricsDisplayState {
   visible: boolean
   loading: boolean
@@ -409,6 +416,8 @@ export interface SettingsSnapshot {
   desktopLyricsFontFamily: DesktopLyricsFontFamily
   desktopLyricsOpacity: number
   desktopLyricsBounds: string
+  mainWindowBounds: string
+  mainWindowMaximized: boolean
   preferredLanguage: PreferredLanguage
   musicLibrarySort: MusicLibrarySortCriterion
   albumsSort: AlbumSortCriterion

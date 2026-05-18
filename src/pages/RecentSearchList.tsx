@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 
 import { Icon, type IconName } from '../components/icons'
 import { LoadingState } from '../components/LoadingState'
+import { MULTI_SELECT_COMMAND_BAR_SCROLL_SPACER } from '../components/MultiSelectCommandBar'
 import { useRecentScrollbar } from '../hooks/useRecentScrollbar'
 import type { PreferredLanguage, SearchHistoryEntry, SearchHistoryType } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
@@ -39,6 +40,7 @@ export function RecentSearchList({
   const [scrollTop, setScrollTop] = useState(0)
   const [viewportHeight, setViewportHeight] = useState(640)
   const listHeight = entries.length * RECENT_SEARCH_ROW_HEIGHT
+  const scrollContentHeight = listHeight + (multiSelect ? MULTI_SELECT_COMMAND_BAR_SCROLL_SPACER : RECENT_SEARCH_BOTTOM_PADDING)
   const effectiveScrollTop = Math.min(scrollTop, Math.max(0, listHeight - viewportHeight))
   const startIndex = Math.max(
     0,
@@ -50,12 +52,13 @@ export function RecentSearchList({
   )
   const renderedEntries = entries.slice(startIndex, endIndex)
   const topSpacerHeight = startIndex * RECENT_SEARCH_ROW_HEIGHT
-  const bottomSpacerHeight = (entries.length - endIndex) * RECENT_SEARCH_ROW_HEIGHT + RECENT_SEARCH_BOTTOM_PADDING
+  const bottomSpacerHeight = (entries.length - endIndex) * RECENT_SEARCH_ROW_HEIGHT +
+    (multiSelect ? MULTI_SELECT_COMMAND_BAR_SCROLL_SPACER : RECENT_SEARCH_BOTTOM_PADDING)
   const onListScrollbarPointerDown = useRecentScrollbar(
     listScrollFrameRef,
     listRef,
     listScrollbarTrackRef,
-    listHeight,
+    scrollContentHeight,
   )
 
   useEffect(() => {

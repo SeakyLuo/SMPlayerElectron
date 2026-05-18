@@ -172,7 +172,7 @@ function getRecentAlbumArtistLabel(songs: LibrarySong[], t: Translator) {
   const artists = [...new Set(songs.flatMap((song) => getSongArtists(song, t('common.artistUnknown'))))]
 
   if (artists.length >= 3) {
-    return t('albums.artistsAndMore', { first: artists[0]!, second: artists[1]!, count: artists.length })
+    return t('albums.artistsAndMore', { first: artists[0]!, second: artists[1]!, count: artists.length - 2 })
   }
 
   return joinArtists(artists)

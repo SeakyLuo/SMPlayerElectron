@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch
 import { extractArtworkColorRgb, getDefaultArtworkColorRgb } from '../shared/artworkColor'
 import type { LibraryPlaylist, LibrarySong, PlaylistSortCriterion, PreferenceEntityType, PreferenceItemSnapshot, PreferenceLevel, PreferenceSettingsSnapshot } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
+import { formatSongsAddedTo, formatSongsRemovedFrom } from '../shared/i18nCounts'
 import { removeQueueRange } from '../shared/queueUndo'
 import { COLORFUL_BACKGROUND_URL } from '../shared/staticAssets'
 import { useLibraryStore } from '../state/useLibraryStore'
@@ -17,7 +18,7 @@ import { DefaultAlbumArtwork } from './DefaultAlbumArtwork'
 import { requestConfirmDialog, requestTextDialog } from './dialogService'
 import { MenuFlyout } from './MenuFlyout'
 import { getAddToPlaylistMenuFlyoutItems, getMusicMenuFlyoutItems, getPreferenceMenuFlyoutItem, type MenuFlyoutItem, type MenuFlyoutPosition } from './MenuFlyoutHelper'
-import { MultiSelectCommandBar } from './MultiSelectCommandBar'
+import { MultiSelectCommandBar, MULTI_SELECT_COMMAND_BAR_SCROLL_SPACER } from './MultiSelectCommandBar'
 import { PlaylistControlItem } from './PlaylistControlItem'
 import { MusicDialog } from './MusicDialog'
 import { getPlaylistArtworkDisplayUrls, usePlaylistArtwork } from './playlistArtwork'
@@ -362,7 +363,7 @@ export function HeaderedPlaylistControl({
             title: songs.find((song) => song.id === songIds[0])!.title,
             target,
           })
-        : translateCaption('notification.songsRemovedFrom', { count: songIds.length, target }),
+        : formatSongsRemovedFrom(translateCaption, songIds.length, target),
       async () => {
         const playlistId = type === 'favorites' ? favoritePlaylistId : currentSavedPlaylist!.id
         await (type === 'favorites' ? setSongsFavorite(songIds, true) : addSongsToPlaylist(playlistId, songIds))
@@ -807,7 +808,11 @@ export function HeaderedPlaylistControl({
           ) : null}
         </div>
       </section>
-      <div className="headered-playlist-bottom-spacer" aria-hidden="true" />
+      <div
+        className="headered-playlist-bottom-spacer"
+        style={selectionMode ? { minHeight: MULTI_SELECT_COMMAND_BAR_SCROLL_SPACER, flexBasis: MULTI_SELECT_COMMAND_BAR_SCROLL_SPACER } : undefined}
+        aria-hidden="true"
+      />
 
       <MultiSelectCommandBar
         visible={selectionMode}
@@ -861,7 +866,7 @@ export function HeaderedPlaylistControl({
                       title: songs.find((song) => song.id === addToMenu.songIds[0])!.title,
                       target: translateCaption('common.nowPlaying'),
                     })
-                  : translateCaption('notification.songsAddedTo', { count: addToMenu.songIds.length, target: translateCaption('common.nowPlaying') }),
+                  : formatSongsAddedTo(translateCaption, addToMenu.songIds.length, translateCaption('common.nowPlaying')),
                 () => replaceNowPlaying(removeQueueRange(useLibraryStore.getState().snapshot.nowPlaying.songIds, insertedIndex, addToMenu.songIds.length)),
               )
               hideSelectionAfterOperation()
@@ -874,7 +879,7 @@ export function HeaderedPlaylistControl({
                       title: songs.find((song) => song.id === addToMenu.songIds[0])!.title,
                       target: translateCaption('common.myFavorites'),
                     })
-                  : translateCaption('notification.songsAddedTo', { count: addToMenu.songIds.length, target: translateCaption('common.myFavorites') }),
+                  : formatSongsAddedTo(translateCaption, addToMenu.songIds.length, translateCaption('common.myFavorites')),
                 () => removeSongsFromPlaylist(favoritePlaylistId, addToMenu.songIds),
               )
               hideSelectionAfterOperation()
@@ -896,7 +901,7 @@ export function HeaderedPlaylistControl({
                       title: songs.find((song) => song.id === addToMenu.songIds[0])!.title,
                       target: targetPlaylist.name,
                     })
-                  : translateCaption('notification.songsAddedTo', { count: addToMenu.songIds.length, target: targetPlaylist.name }),
+                  : formatSongsAddedTo(translateCaption, addToMenu.songIds.length, targetPlaylist.name),
                 () => removeSongsFromPlaylist(playlistId, addToMenu.songIds),
               )
               hideSelectionAfterOperation()

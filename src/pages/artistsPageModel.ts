@@ -1,6 +1,7 @@
 import { getSongArtists } from '../shared/artists'
 import type { LibrarySong } from '../shared/contracts'
 import type { Translator } from '../shared/i18n'
+import { formatSongsAddedTo } from '../shared/i18nCounts'
 
 export interface ArtistGroup {
   name: string
@@ -72,7 +73,7 @@ export function shuffleSongIds(songIds: number[]) {
 export function getSongsAddedMessage(songs: LibrarySong[], target: string, t: Translator) {
   return songs.length === 1
     ? t('notification.songAddedTo', { title: songs[0]!.title, target })
-    : t('notification.songsAddedTo', { count: songs.length, target })
+    : formatSongsAddedTo(t, songs.length, target)
 }
 
 export function getSongsByIds(songs: LibrarySong[], songIds: number[]) {

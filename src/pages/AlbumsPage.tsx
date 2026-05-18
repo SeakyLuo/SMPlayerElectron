@@ -11,7 +11,7 @@ import { Icon } from '../components/icons'
 import { LoadingState } from '../components/LoadingState'
 import { MenuFlyout } from '../components/MenuFlyout'
 import { getAddToPlaylistMenuFlyoutItem, getAddToPlaylistMenuFlyoutItems, getPreferenceMenuFlyoutItem, type MenuFlyoutItem, type MenuFlyoutPosition } from '../components/MenuFlyoutHelper'
-import { MultiSelectCommandBar } from '../components/MultiSelectCommandBar'
+import { MultiSelectCommandBar, MULTI_SELECT_COMMAND_BAR_SCROLL_SPACER } from '../components/MultiSelectCommandBar'
 import { PageSearchHistoryPanel } from '../components/PageSearchHistoryPanel'
 import { getSongArtists } from '../shared/artists'
 import type { AlbumSortCriterion, AppSettingsUpdate, LibraryPlaylist, LibrarySong, PreferenceItemSnapshot, PreferenceSettingsSnapshot, SearchHistoryEntry } from '../shared/contracts'
@@ -141,7 +141,8 @@ export function AlbumsPage({
   const albumColumns = Math.max(1, Math.floor((albumGridWidth + ALBUM_COLUMN_GAP) / (ALBUM_TILE_TRACK_WIDTH + ALBUM_COLUMN_GAP)))
   const albumRowHeight = isCompactAlbumLayout ? ALBUM_COMPACT_ROW_HEIGHT : ALBUM_ROW_HEIGHT
   const albumRowCount = Math.ceil(visibleAlbums.length / albumColumns)
-  const albumListHeight = albumRowCount * albumRowHeight
+  const albumContentHeight = albumRowCount * albumRowHeight
+  const albumListHeight = albumContentHeight + (multiSelect ? MULTI_SELECT_COMMAND_BAR_SCROLL_SPACER : 0)
   const effectiveAlbumScrollTop = Math.min(
     albumScrollTop,
     Math.max(0, albumListHeight - albumViewportHeight),
