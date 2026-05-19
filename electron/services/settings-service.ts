@@ -58,6 +58,7 @@ export interface SettingsRow {
   Mode: number
   MusicProgress: number
   AutoPlay: number
+  ShuffleAfterOneRound: number
   SaveMusicProgress: number
   ShowCount: number
   HideMultiSelectCommandBarAfterOperation: number
@@ -124,6 +125,7 @@ export class SettingsService {
         Mode,
         MusicProgress,
         AutoPlay,
+        ShuffleAfterOneRound,
         SaveMusicProgress,
         ShowCount,
         HideMultiSelectCommandBarAfterOperation,
@@ -180,6 +182,7 @@ export class SettingsService {
         SearchPlaylistsCriterion = ?,
         SearchFoldersCriterion = ?,
         AutoPlay = ?,
+        ShuffleAfterOneRound = ?,
         SaveMusicProgress = ?,
         HideMultiSelectCommandBarAfterOperation = ?,
         QuitOnClose = ?,
@@ -299,6 +302,7 @@ export class SettingsService {
       toSearchSortValue(update.searchPlaylistsCriterion ?? mapSearchSort(settings.SearchPlaylistsCriterion)),
       toSearchSortValue(update.searchFoldersCriterion ?? mapSearchSort(settings.SearchFoldersCriterion)),
       Number(update.autoPlay ?? Boolean(settings.AutoPlay)),
+      Number(update.shuffleAfterOneRound ?? Boolean(settings.ShuffleAfterOneRound)),
       Number(nextSaveMusicProgress),
       Number(
         update.hideMultiSelectCommandBarAfterOperation ??
@@ -388,6 +392,7 @@ export function toSettingsSnapshot(settings: SettingsRow): SettingsSnapshot {
     mode: mapMode(settings.Mode),
     musicProgress: settings.MusicProgress,
     autoPlay: Boolean(settings.AutoPlay),
+    shuffleAfterOneRound: Boolean(settings.ShuffleAfterOneRound),
     saveMusicProgress: Boolean(settings.SaveMusicProgress),
     hideMultiSelectCommandBarAfterOperation: Boolean(settings.HideMultiSelectCommandBarAfterOperation),
     localViewMode: mapLocalViewMode(settings.LocalViewMode),

@@ -57,6 +57,7 @@ export function initializeSchema(db: DatabaseSync) {
       MiniModeWithDropdown INTEGER DEFAULT 0,
       IsMuted INTEGER DEFAULT 0,
       AutoPlay INTEGER DEFAULT 0,
+      ShuffleAfterOneRound INTEGER DEFAULT 1,
       AutoLyrics INTEGER DEFAULT 1,
       SaveMusicProgress INTEGER DEFAULT 1,
       MusicProgress REAL DEFAULT 0,
@@ -339,6 +340,7 @@ export function initializeSchema(db: DatabaseSync) {
     ['SearchSongsCriterion', `SearchSongsCriterion INTEGER DEFAULT -1`],
     ['SearchPlaylistsCriterion', `SearchPlaylistsCriterion INTEGER DEFAULT -1`],
     ['SearchFoldersCriterion', `SearchFoldersCriterion INTEGER DEFAULT -1`],
+    ['ShuffleAfterOneRound', `ShuffleAfterOneRound INTEGER DEFAULT 1`],
   ]) {
     addColumnIfMissing(db, 'Settings', columnName, columnDefinition)
   }

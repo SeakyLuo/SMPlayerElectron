@@ -18,7 +18,8 @@
     "pack": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder",
     "dist:win": "npm run build && electron-builder --win",
-    "dist:win:store": "npm run build && electron-builder --win appx",
+    "dist:win:store": "npm run build && node scripts/check-win-appx-runtimes.mjs x64 ia32 arm64 && electron-builder --win appx --x64 --ia32 --arm64",
+    "dist:win:store:bundle": "npm run dist:win:store && node scripts/create-appx-bundle.mjs",
     "dist:mac": "npm run build && electron-builder --mac",
     "dist:linux": "npm run build && electron-builder --linux"
   },
@@ -119,7 +120,7 @@
       "icon": "public/app-icon.ico",
       "extraResources": [
         {
-          "from": "vendor/mpv",
+          "from": "vendor/mpv/${arch}",
           "to": "mpv"
         }
       ],
@@ -169,13 +170,13 @@
         "runFullTrust",
         "musicLibrary",
         "removableStorage",
-        "backgroundMediaPlayback",
         "internetClient",
         "internetClientServer",
         "privateNetworkClientServer",
         "microphone"
       ]
     },
+    "appxManifestCreated": "scripts/fix-appx-manifest.mjs",
     "nsis": {
       "oneClick": false,
       "installerIcon": "public/app-icon.ico",

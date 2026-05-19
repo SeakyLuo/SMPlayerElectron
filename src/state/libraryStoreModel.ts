@@ -52,6 +52,7 @@ export const emptySnapshot: MusicData = {
     mode: 'once',
     musicProgress: 0,
     autoPlay: false,
+    shuffleAfterOneRound: true,
     saveMusicProgress: true,
     hideMultiSelectCommandBarAfterOperation: true,
     localViewMode: 'grid',

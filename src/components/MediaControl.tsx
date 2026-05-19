@@ -3,6 +3,7 @@ import type { CSSProperties, MouseEvent, PointerEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import type { LibraryPlaylist, LibrarySong, LyricsSnapshot, PlaybackMode, PreferenceItemSnapshot, PreferenceSettingsSnapshot } from '../shared/contracts'
+import { getSongArtists } from '../shared/artists'
 import { extractArtworkColorRgb, getDefaultArtworkColorRgb } from '../shared/artworkColor'
 import type { Translator } from '../shared/i18n'
 import { getCurrentLyricsLine } from '../shared/lyrics'
@@ -1155,7 +1156,7 @@ function getPlayerMoreMenuItems({
   }
 
   const viewItems: MenuFlyoutItem[] = [
-    { key: 'see-artist', text: t('context.seeArtist'), icon: 'users', onClick: () => onSeeArtist(song.artist) },
+    { key: 'see-artist', text: t('context.seeArtist'), icon: 'users', onClick: () => onSeeArtist(getSongArtists(song, t('common.artistUnknown'))[0]!) },
     { key: 'see-album', text: t('context.seeAlbum'), icon: 'albums', onClick: onSeeAlbum },
     { key: 'see-music-info', text: t('context.seeMusicInfo'), icon: 'info', keepOpen: true, onClick: onSeeMusicInfo },
     { key: 'see-lyrics', text: t('context.seeLyrics'), icon: 'lyrics', keepOpen: true, onClick: onSeeLyrics },

@@ -30,6 +30,7 @@ interface MainWindowOptions {
   windowController: WindowController
   getSettings: () => SettingsSnapshot
   getAppIconPath: () => string
+  windowsAppUserModelId: string
   isQuitting: () => boolean
   onCreated: (window: BrowserWindow) => void
   hideWindow: () => void
@@ -79,6 +80,15 @@ export async function createMainWindow(options: MainWindowOptions) {
     },
   })
   window.setIcon(appIcon)
+  if (process.platform === 'win32') {
+    window.setAppDetails({
+      appId: options.windowsAppUserModelId,
+      appIconPath: options.getAppIconPath(),
+      appIconIndex: 0,
+      relaunchCommand: getRelaunchCommand(),
+      relaunchDisplayName: t('app.shell'),
+    })
+  }
   if (settings.mainWindowMaximized) {
     window.maximize()
   }
@@ -231,6 +241,16 @@ function parseMainWindowBounds(rawBounds: string): MainWindowBounds | null {
 function resolveStartupRoute(lastPage: string) {
   const route = lastPage.trim()
   return restorableRoutes.has(route) ? route : '/songs'
+}
+
+function getRelaunchCommand() {
+  return app.isPackaged
+    ? quoteWindowsCommandPart(process.execPath)
+    : `${quoteWindowsCommandPart(process.execPath)} ${quoteWindowsCommandPart(app.getAppPath())}`
+}
+
+function quoteWindowsCommandPart(value: string) {
+  return `"${value.replaceAll('"', '\\"')}"`
 }
 
 function settingsTimeToMinute(value: string) {

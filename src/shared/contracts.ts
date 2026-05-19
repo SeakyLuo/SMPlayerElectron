@@ -434,6 +434,7 @@ export interface SettingsSnapshot {
   mode: PlaybackMode
   musicProgress: number
   autoPlay: boolean
+  shuffleAfterOneRound: boolean
   saveMusicProgress: boolean
   hideMultiSelectCommandBarAfterOperation: boolean
   localViewMode: LocalViewMode
@@ -609,6 +610,7 @@ export interface AppSettingsUpdate {
   searchPlaylistsCriterion?: SearchSortCriterion
   searchFoldersCriterion?: SearchSortCriterion
   autoPlay?: boolean
+  shuffleAfterOneRound?: boolean
   saveMusicProgress?: boolean
   hideMultiSelectCommandBarAfterOperation?: boolean
   localViewMode?: LocalViewMode

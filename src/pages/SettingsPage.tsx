@@ -863,6 +863,13 @@ export function SettingsPage({
               }}
             />
             <ToggleSettingRow
+              label={t('settings.shuffleAfterOneRound')}
+              checked={snapshot.settings.shuffleAfterOneRound}
+              onChange={(checked) => {
+                onUpdateSettings({ shuffleAfterOneRound: checked })
+              }}
+            />
+            <ToggleSettingRow
               label={t('settings.saveProgress')}
               checked={snapshot.settings.saveMusicProgress}
               onChange={(checked) => {

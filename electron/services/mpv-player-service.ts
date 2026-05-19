@@ -200,7 +200,7 @@ export class MpvPlayerService {
 
   private getMpvPath() {
     const packagedPath = join(process.resourcesPath, 'mpv', 'mpv.exe')
-    const developmentPath = join(process.cwd(), 'vendor', 'mpv', 'mpv.exe')
+    const developmentPath = join(process.cwd(), 'vendor', 'mpv', process.arch, 'mpv.exe')
     const configuredPath = process.env.SMPLAYER_MPV_PATH
 
     if (configuredPath) {

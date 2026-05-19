@@ -11,7 +11,7 @@ import type {
 import { createTranslator } from '../src/shared/i18n'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const defaultBounds = { width: 760, height: 118 }
+const defaultBounds = { width: 760, height: 148 }
 
 interface DesktopLyricsWindowControllerOptions {
   getSettings: () => SettingsSnapshot
@@ -24,12 +24,18 @@ export class DesktopLyricsWindowController {
   private readonly options: DesktopLyricsWindowControllerOptions
   private window: BrowserWindow | null = null
   private state: DesktopLyricsDisplayState | null = null
+  private destroyed = false
+  private appliedLocked: boolean | null = null
 
   constructor(options: DesktopLyricsWindowControllerOptions) {
     this.options = options
   }
 
   async updateState(state: DesktopLyricsDisplayState) {
+    if (this.destroyed) {
+      return
+    }
+
     this.state = state
     if (!this.options.getSettings().desktopLyricsEnabled || !state.visible) {
       this.hide()
@@ -37,6 +43,10 @@ export class DesktopLyricsWindowController {
     }
 
     await this.ensureWindow()
+    if (this.destroyed || !this.window) {
+      return
+    }
+
     this.applyLockedState(state.locked)
     this.window!.webContents.send('desktop-lyrics:state', state)
     if (!this.window!.isVisible()) {
@@ -45,6 +55,10 @@ export class DesktopLyricsWindowController {
   }
 
   requestCommand(command: DesktopLyricsCommand) {
+    if (this.destroyed) {
+      return
+    }
+
     this.options.sendCommand(command)
   }
 
@@ -55,16 +69,20 @@ export class DesktopLyricsWindowController {
   close() {
     this.window?.close()
     this.window = null
+    this.appliedLocked = null
   }
 
   destroy() {
+    this.destroyed = true
+    this.state = null
     this.saveCurrentBounds()
     this.window?.destroy()
     this.window = null
+    this.appliedLocked = null
   }
 
   private async ensureWindow() {
-    if (this.window) {
+    if (this.destroyed || this.window) {
       return
     }
 
@@ -77,7 +95,7 @@ export class DesktopLyricsWindowController {
       show: false,
       frame: false,
       transparent: true,
-      resizable: true,
+      resizable: false,
       movable: true,
       skipTaskbar: true,
       alwaysOnTop: true,
@@ -100,9 +118,9 @@ export class DesktopLyricsWindowController {
     this.window = window
 
     window.on('moved', () => this.saveCurrentBounds())
-    window.on('resized', () => this.saveCurrentBounds())
     window.on('closed', () => {
       this.window = null
+      this.appliedLocked = null
     })
     window.webContents.once('did-finish-load', () => {
       if (this.state) {
@@ -123,10 +141,14 @@ export class DesktopLyricsWindowController {
   }
 
   private applyLockedState(locked: boolean) {
+    if (this.appliedLocked === locked) {
+      return
+    }
+
     const window = this.window!
-    window.setResizable(!locked)
     window.setMovable(!locked)
     window.setIgnoreMouseEvents(false)
+    this.appliedLocked = locked
   }
 
   private saveCurrentBounds() {
@@ -143,7 +165,11 @@ function resolveInitialBounds(rawBounds: string): Rectangle {
   const display = screen.getPrimaryDisplay().workArea
   const parsedBounds = parseBounds(rawBounds)
   if (parsedBounds) {
-    return parsedBounds
+    return {
+      ...parsedBounds,
+      width: defaultBounds.width,
+      height: defaultBounds.height,
+    }
   }
 
   return {
