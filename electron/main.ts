@@ -84,6 +84,7 @@ app.commandLine.appendSwitch(
   'disable-features',
   'OverlayScrollbar,FluentOverlayScrollbar,FluentOverlayScrollbarMinimalMode,WindowsScrollingPersonality',
 )
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 
 registerMediaProtocolSchemes()
 

@@ -9,7 +9,6 @@ import {
   samePlaylist,
   shuffleOthers,
 } from '../shared/mediaHelper'
-import { getNextRecoverableTrackId } from '../shared/playbackRecovery'
 import { createTranslator } from '../shared/i18n'
 import { setPlaybackProgress } from '../state/playbackProgressStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
@@ -412,17 +411,6 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
 
       setIsPlaying(false)
 
-      if (activeTrackId != null) {
-        failedTrackIdsRef.current.add(activeTrackId)
-      }
-
-      if (modeRef.current === 'repeat-one') {
-        transitionStatus({ type: 'paused' })
-        loadingTrackIdRef.current = null
-        await persistPlaybackSettings({ musicProgress: audio?.currentTime ?? progressSecondsRef.current })
-        return
-      }
-
       const playbackSongIds = getPlaybackSongIds()
       if (playbackSongIds.length === 0) {
         transitionStatus({ type: 'idle' })
@@ -430,23 +418,9 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
         return
       }
 
-      const nextTrackId = getNextRecoverableTrackId({
-        playbackSongIds,
-        activeTrackId,
-        activeQueueIndex: currentQueueIndexRef.current ?? -1,
-        mode: modeRef.current,
-        failedTrackIds: failedTrackIdsRef.current,
-      })
-
-      if (nextTrackId == null) {
-        transitionStatus({ type: 'paused' })
-        loadingTrackIdRef.current = null
-        await persistPlaybackSettings({ musicProgress: 0 })
-        return
-      }
-
-      const nextIndex = currentIndex(playbackSongIds, nextTrackId)
-      await loadTrackRef.current(nextTrackId, { autoplay: true, queueIndex: nextIndex, startAt: 0 })
+      transitionStatus({ type: 'paused' })
+      loadingTrackIdRef.current = null
+      await persistPlaybackSettings({ musicProgress: activeTrackId == null ? 0 : audio?.currentTime ?? progressSecondsRef.current })
     },
     [clearStalledTimer, getPlaybackSongIds, persistPlaybackSettings, transitionStatus],
   )
