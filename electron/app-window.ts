@@ -70,6 +70,7 @@ export async function createMainWindow(options: MainWindowOptions) {
     icon: appIcon,
     webPreferences: {
       contextIsolation: true,
+      backgroundThrottling: false,
       preload: join(__dirname, 'preload.mjs'),
       additionalArguments: [
         `--smplayer-startup-night-mode=${startupNightModeActive ? '1' : '0'}`,

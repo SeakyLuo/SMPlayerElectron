@@ -60,6 +60,7 @@ interface LoadTrackOptions {
 
 const PLAYBACK_STALL_TIMEOUT_MS = 8_000
 const PLAYBACK_PROGRESS_EPSILON_SECONDS = 0.05
+const PREVIOUS_TRACK_RESTART_THRESHOLD_SECONDS = 5
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
@@ -689,13 +690,23 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
       return
     }
 
+    if (audio.currentTime > PREVIOUS_TRACK_RESTART_THRESHOLD_SECONDS || playbackSongIds.length === 1) {
+      audio.currentTime = 0
+      setProgressFromPlayback(0)
+      await persistPlaybackSettings({ musicProgress: 0 })
+      if (audio.paused) {
+        transitionStatus({ type: 'ready' })
+      }
+      return
+    }
+
     const activeIndex = currentIndex(playbackSongIds, currentTrackIdRef.current, currentQueueIndexRef.current ?? -1)
     const previousTrackId = movePrev(playbackSongIds, currentTrackIdRef.current, modeRef.current, currentQueueIndexRef.current ?? -1)
     if (previousTrackId != null) {
       const previousIndex = activeIndex - 1 >= 0 ? activeIndex - 1 : playbackSongIds.length - 1
       await loadTrackRef.current(previousTrackId, { autoplay: true, queueIndex: previousIndex, startAt: 0 })
     }
-  }, [getPlaybackSongIds])
+  }, [getPlaybackSongIds, persistPlaybackSettings, setProgressFromPlayback, transitionStatus])
 
   const seekToRatio = useCallback(
     (ratio: number) => {
