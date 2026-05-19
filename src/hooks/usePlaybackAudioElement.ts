@@ -72,10 +72,58 @@ export function usePlaybackAudioElement({
 }: PlaybackAudioElementOptions) {
   useEffect(() => {
     const audio = new Audio()
+    let pendingSeekAutoplayTimer: number | null = null
     audio.preload = 'auto'
     audio.volume = clamp(volumeRef.current / 100, 0, 1)
     audio.muted = isMutedRef.current
     audioRef.current = audio
+
+    const clearPendingSeekAutoplayTimer = () => {
+      if (pendingSeekAutoplayTimer != null) {
+        window.clearTimeout(pendingSeekAutoplayTimer)
+        pendingSeekAutoplayTimer = null
+      }
+    }
+
+    const handlePlayRequestFailure = async (error: unknown, trackId: number | null) => {
+      if (currentTrackIdRef.current !== trackId) {
+        return
+      }
+
+      if (audio.error) {
+        await recoverFromPlaybackFailure()
+        return
+      }
+
+      pendingAutoplayRef.current = false
+      setIsPlaying(false)
+      stopProgressSync()
+      clearStalledTimer()
+      transitionStatus({ type: 'ready' })
+      console.error('[playback] audio.play() rejected', {
+        trackId,
+        error: error instanceof Error ? error.message : String(error),
+        name: error instanceof Error ? error.name : '',
+        readyState: audio.readyState,
+        networkState: audio.networkState,
+        currentTime: audio.currentTime,
+        duration: Number.isFinite(audio.duration) ? audio.duration : 0,
+      })
+    }
+
+    const playPendingAutoplay = async (trackId: number | null) => {
+      clearPendingSeekAutoplayTimer()
+      if (!pendingAutoplayRef.current || currentTrackIdRef.current !== trackId) {
+        return
+      }
+
+      pendingAutoplayRef.current = false
+      try {
+        await audio.play()
+      } catch (error) {
+        await handlePlayRequestFailure(error, trackId)
+      }
+    }
 
     const handleLoadStart = () => {
       if (pendingAutoplayRef.current) {
@@ -84,8 +132,9 @@ export function usePlaybackAudioElement({
     }
 
     const handleLoadedMetadata = async () => {
+      const activeTrackId = currentTrackIdRef.current
       const activeTrack =
-        snapshotRef.current.songs.find((song) => song.id === currentTrackIdRef.current) ?? null
+        snapshotRef.current.songs.find((song) => song.id === activeTrackId) ?? null
       const nextDuration =
         Number.isFinite(audio.duration) && audio.duration > 0
           ? audio.duration
@@ -113,6 +162,12 @@ export function usePlaybackAudioElement({
 
       const shouldAutoplay = pendingAutoplayRef.current
       if (seekBeforeReady) {
+        if (shouldAutoplay) {
+          clearPendingSeekAutoplayTimer()
+          pendingSeekAutoplayTimer = window.setTimeout(() => {
+            void playPendingAutoplay(activeTrackId)
+          }, 600)
+        }
         return
       }
 
@@ -121,8 +176,8 @@ export function usePlaybackAudioElement({
       if (shouldAutoplay) {
         try {
           await audio.play()
-        } catch {
-          await recoverFromPlaybackFailure()
+        } catch (error) {
+          await handlePlayRequestFailure(error, activeTrackId)
         }
       } else {
         transitionStatus({ type: 'ready' })
@@ -205,15 +260,11 @@ export function usePlaybackAudioElement({
 
     const handleSeeked = async () => {
       clearStalledTimer()
+      clearPendingSeekAutoplayTimer()
       pendingSeekSecondsRef.current = null
       updateProgressFromAudio()
       if (pendingAutoplayRef.current) {
-        pendingAutoplayRef.current = false
-        try {
-          await audio.play()
-        } catch {
-          await recoverFromPlaybackFailure()
-        }
+        await playPendingAutoplay(currentTrackIdRef.current)
         return
       }
 
@@ -258,6 +309,7 @@ export function usePlaybackAudioElement({
 
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload)
+      clearPendingSeekAutoplayTimer()
       clearStalledTimer()
       stopProgressSync()
       audio.pause()

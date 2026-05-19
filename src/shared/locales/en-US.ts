@@ -508,7 +508,7 @@ export const enUS = {
     'voiceAssistant.noticeCommandLanguage': 'Voice commands follow the current interface language. When the interface language is not Chinese, English commands are also available.',
     'voiceAssistant.noticeCommandIntro': 'In the command set, the punctuation "|" means "or", {} means "require any"，[] means a variable，() means optional.',
     'voiceAssistant.noticeExample': 'Some example commands: Play artist Michael Jackson, Turn up the volume by 10%.',
-    'voiceAssistant.noticeSmartness': 'This voice assistant is not driven by AI. Please follow the instructions above and keep commands simple.',
+    'voiceAssistant.noticeSmartness': 'The voice assistant only recognizes simple commands from the list above. Keep commands short and clear.',
     'voiceAssistant.state.capturing': 'Capturing',
     'voiceAssistant.state.idle': 'Idle',
     'voiceAssistant.state.processing': 'Processing',

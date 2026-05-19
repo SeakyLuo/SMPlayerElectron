@@ -191,6 +191,24 @@ function checkContextualTerms(locale, key, value) {
     add('P1', locale, key, value, 'Folder-tree wording uses directory/catalog where user-facing folder/subfolder is expected.')
   }
 
+  if (key === 'voiceAssistant.noticeSmartness' && hasAny(value, [
+    'AI', 'IA', 'ИИ', 'ШІ',
+  ])) {
+    add('P2', locale, key, value, 'Voice-assistant guidance exposes implementation details instead of matching the user-facing copy.')
+  }
+
+  if (key === 'voiceAssistant.state.idle' && hasAny(lower, [
+    'gratis', 'grátis', 'gratuit', 'gratuito', 'kostenlos', 'бесплатно', 'безкоштовно',
+  ])) {
+    add('P0', locale, key, value, 'Voice-assistant idle state is translated as free/no-cost.')
+  }
+
+  if (key === 'settings.viaEmail' && !lower.includes('електрон') && hasAny(lower, [
+    'per post', 'per posta', 'por correio', 'par courrier', 'poštou', 'melalui surat', 'поштою',
+  ])) {
+    add('P1', locale, key, value, 'Email contact label is translated as postal mail.')
+  }
+
   if ([
     'local.backToRoot',
     'local.libraryRoot',
@@ -980,6 +998,24 @@ function checkHighFrequencyLabels(locale, key, value) {
 
   if (key === 'notification.songsRemovedFrom' && lower.includes('lagu {count}')) {
     add('P2', locale, key, value, 'Songs-removed notification has machine-translation count order.')
+  }
+
+  if (key === 'notification.movedLocalItems' && hasAny(lower, [
+    'položky {count}', 'elementos {count}', 'éléments {count}', 'item {count}', 'elementi {count}', 'itens {count}', 'элементы {count}', 'елементи {count}',
+  ])) {
+    add('P2', locale, key, value, 'Moved-items notification has machine-translation count order.')
+  }
+
+  if (locale === 'pt-BR' && hasAny(lower, [
+    'verificação', 'verificando', 'verificar a biblioteca', 'verifique sua pasta', 'verificadas',
+  ]) && (
+    key.includes('scan')
+    || key.includes('Scan')
+    || key === 'settings.smartMultiArtistFixMessage'
+    || key === 'hiddenFolders.introduction'
+    || key === 'artists.emptyCopy'
+  )) {
+    add('P2', locale, key, value, 'Portuguese scan/indexing copy is translated as verify/check.')
   }
 
   if (key.startsWith('local.updateFolderProgressProcessed') || key === 'local.updateFolderProgressChecked') {
