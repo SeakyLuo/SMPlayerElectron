@@ -121,6 +121,7 @@ async function createWindow() {
     windowController,
     getSettings: () => libraryService!.settingsService.getSettingsSnapshot(),
     getAppIconPath,
+    windowsAppUserModelId,
     isQuitting: () => isQuitting,
     onCreated: (window) => {
       mainWindow = window

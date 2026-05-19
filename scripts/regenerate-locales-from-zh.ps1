@@ -1,17 +1,10 @@
 ﻿$ErrorActionPreference = 'Stop'
 
-$sourcePath = 'src/shared/locales/zh-CN.ts'
-$source = Get-Content -Raw -Path $sourcePath
-$matches = [regex]::Matches($source, "(?m)^\s+'([^']+)':\s+'((?:\\.|[^'])*)',")
+$sourcePath = 'src/shared/locales/zh-CN.json'
+$source = Get-Content -Raw -Path $sourcePath | ConvertFrom-Json
 $entries = @()
-function Decode-TsString([string]$value) {
-  $jsonBody = $value.Replace("\'", "'").Replace('"', '\"')
-  return ConvertFrom-Json -InputObject "`"$jsonBody`""
-}
-foreach ($match in $matches) {
-  $key = $match.Groups[1].Value
-  $value = Decode-TsString $match.Groups[2].Value
-  $entries += [pscustomobject]@{ Key = $key; Value = $value }
+foreach ($prop in $source.PSObject.Properties) {
+  $entries += [pscustomobject]@{ Key = $prop.Name; Value = [string]$prop.Value }
 }
 
 $targets = @(
@@ -67,10 +60,6 @@ function Restore-Text([string]$value, $tokens) {
   $text = $text -replace '\{\s+', '{'
   $text = $text -replace '\s+\}', '}'
   return $text.Trim()
-}
-
-function Escape-Ts([string]$value) {
-  return $value.Replace('\', '\\').Replace("'", "\'").Replace("`r", '').Replace("`n", '\n')
 }
 
 function Get-Translation([string]$query, [string]$tl) {
@@ -147,20 +136,10 @@ foreach ($target in $targets) {
   if ($locale -eq 'ja' -or $locale -eq 'zh-Hant') { $translated['common.artistSeparator'] = [string][char]0x3001 }
   if ($locale -eq 'zh-Hant') { $translated['common.comma'] = [string][char]0xFF0C }
 
-  $lines = @()
-  if ($locale -ne 'en-US') {
-    $lines += "import type { enUS } from './en-US'"
-    $lines += ''
-  }
-  $lines += "export const $($target.Export) = {"
+  $output = [ordered]@{}
   foreach ($entry in $entries) {
-    $lines += "    '$($entry.Key)': '$(Escape-Ts $translated[$entry.Key])',"
+    $output[$entry.Key] = $translated[$entry.Key]
   }
-  if ($locale -eq 'en-US') {
-    $lines += "} satisfies Record<string, string>"
-  } else {
-    $lines += "} satisfies Partial<Record<keyof typeof enUS, string>>"
-  }
-  Set-Content -Path "src/shared/locales/$locale.ts" -Value ($lines -join "`n") -Encoding UTF8
+  $output | ConvertTo-Json -Depth 3 | Set-Content -Path "src/shared/locales/$locale.json" -Encoding UTF8
   Save-Cache
 }

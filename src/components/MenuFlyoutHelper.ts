@@ -1,4 +1,5 @@
 import type { LibraryFolder, LibraryPlaylist, LibrarySong, PreferenceEntityType, PreferenceItemSnapshot, PreferenceLevel, PreferenceSettingsSnapshot } from '../shared/contracts'
+import { getSongArtists } from '../shared/artists'
 import type { Translator } from '../shared/i18n'
 import { usePreferenceStore } from '../state/usePreferenceStore'
 import { requestTextDialog } from './dialogService'
@@ -402,7 +403,7 @@ export function getMusicMenuFlyoutItems({
   const viewItems: MenuFlyoutItem[] = []
   if (normalizedOption.showMusicProperties) {
     if (normalizedOption.showSeeArtistsAndSeeAlbum) {
-      viewItems.push({ key: 'see-artist', text: t('context.seeArtist'), icon: 'users', onClick: () => onSeeArtist(song.artist) })
+      viewItems.push({ key: 'see-artist', text: t('context.seeArtist'), icon: 'users', onClick: () => onSeeArtist(getSongArtists(song, t('common.artistUnknown'))[0]!) })
       viewItems.push({ key: 'see-album', text: t('context.seeAlbum'), icon: 'albums', onClick: onSeeAlbum })
     }
     viewItems.push({ key: 'see-music-info', text: t('context.seeMusicInfo'), icon: 'info', keepOpen: true, onClick: onSeeMusicInfo })

@@ -26,8 +26,8 @@ tmp-install-test/
 *.local
 
 # Local packaged runtime binaries
-vendor/mpv/*.exe
-vendor/mpv/*.dll
+vendor/mpv/*
+!vendor/mpv/README.txt
 
 # Editor directories and files
 .vscode/*

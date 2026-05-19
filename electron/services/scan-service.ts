@@ -1424,10 +1424,14 @@ export class ScanService {
         continue
       }
 
-      if (AUDIO_EXTENSIONS.has(extname(entry.name).toLowerCase()) && !hiddenFilePaths.has(fullPath)) {
+      if (this.isScannableAudioFile(entry.name) && !hiddenFilePaths.has(fullPath)) {
         audioFiles.push(fullPath)
       }
     }
+  }
+
+  private isScannableAudioFile(fileName: string) {
+    return !fileName.startsWith('._') && AUDIO_EXTENSIONS.has(extname(fileName).toLowerCase())
   }
 
   private async readSongs(

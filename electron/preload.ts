@@ -3,6 +3,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type { SmplayerApi } from '../src/shared/contracts'
 
 const startupNightModeActive = process.argv.includes('--smplayer-startup-night-mode=1')
+const isDesktopLyricsWindow = process.argv.includes('--smplayer-desktop-lyrics=1')
 const reportedRendererIssueKeys = new Set<string>()
 const MAX_REPORTED_RENDERER_ISSUE_KEYS = 100
 
@@ -75,7 +76,7 @@ function applyStartupNightMode() {
   rendererDocument?.getElementById?.('root')?.style?.setProperty?.('background-color', '#101419')
 }
 
-if (startupNightModeActive) {
+if (startupNightModeActive && !isDesktopLyricsWindow) {
   try {
     applyStartupNightMode()
     ;(globalThis as unknown as { document?: StartupDocument }).document?.addEventListener?.('DOMContentLoaded', applyStartupNightMode, { once: true })

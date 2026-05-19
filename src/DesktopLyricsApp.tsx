@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 
 import type { DesktopLyricsCommand, DesktopLyricsDisplayState } from './shared/contracts'
 import { Icon } from './components/icons'
@@ -39,14 +39,18 @@ function requestDesktopLyricsCommand(command: DesktopLyricsCommand) {
 
 export function DesktopLyricsApp() {
   const [state, setState] = useState(initialState)
+  const lyricBoxRef = useRef<HTMLDivElement>(null)
+  const lyricContentRef = useRef<HTMLSpanElement>(null)
+  const [lyricScrollDistance, setLyricScrollDistance] = useState(0)
   const offsetSeconds = Math.round(state.offsetMs / 100) / 10
   const lyricText = state.loading
     ? '...'
     : state.lyricText || state.fallbackText
+  const lyricScrollDuration = `${Math.min(12, Math.max(5, Math.round(lyricScrollDistance / 28) + 4))}s`
 
   useEffect(() => window.smplayer?.onDesktopLyricsState(setState), [])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     document.documentElement.classList.add('desktop-lyrics-host')
     document.body.classList.add('desktop-lyrics-host')
     document.body.classList.toggle('night-mode', state.nightMode)
@@ -57,6 +61,19 @@ export function DesktopLyricsApp() {
     }
   }, [state.nightMode])
 
+  useLayoutEffect(() => {
+    const lyricBox = lyricBoxRef.current!
+    const lyricContent = lyricContentRef.current!
+    const updateLyricScrollDistance = () => {
+      setLyricScrollDistance(Math.max(0, Math.ceil(lyricContent.scrollWidth - lyricBox.clientWidth)))
+    }
+
+    updateLyricScrollDistance()
+    const resizeObserver = new ResizeObserver(updateLyricScrollDistance)
+    resizeObserver.observe(lyricBox)
+    return () => resizeObserver.disconnect()
+  }, [lyricText, state.fontFamily, state.fontSize])
+
   return (
     <main
       className={`desktop-lyrics-window${state.nightMode ? ' is-night' : ' is-day'}${state.locked ? ' is-locked' : ''}`}
@@ -66,16 +83,23 @@ export function DesktopLyricsApp() {
         '--desktop-lyrics-font-family': state.fontFamily,
         '--desktop-lyrics-color': state.textColor,
         '--desktop-lyrics-stroke-color': state.strokeColor || 'transparent',
+        '--desktop-lyrics-scroll-distance': `${lyricScrollDistance}px`,
+        '--desktop-lyrics-scroll-duration': lyricScrollDuration,
       } as CSSProperties}
     >
       <section className="desktop-lyrics-card">
         <div className="desktop-lyrics-drag-region" aria-hidden="true" />
-        <div className="desktop-lyrics-text" title={lyricText}>
-          {lyricText}
-        </div>
         <div className="desktop-lyrics-meta">
           <span>{state.songTitle}</span>
           {state.artist ? <span>{state.artist}</span> : null}
+        </div>
+        <div
+          className="desktop-lyrics-text"
+          title={lyricText}
+          ref={lyricBoxRef}
+          data-overflow={lyricScrollDistance > 0 ? 'true' : undefined}
+        >
+          <span key={lyricText} ref={lyricContentRef}>{lyricText}</span>
         </div>
         <div className="desktop-lyrics-toolbar">
           <button

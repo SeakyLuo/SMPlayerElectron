@@ -8,6 +8,7 @@ import {
   normalizeQueueSongIds,
   samePlaylist,
   shuffleOthers,
+  shufflePlaylist,
 } from '../shared/mediaHelper'
 import { createTranslator } from '../shared/i18n'
 import { setPlaybackProgress } from '../state/playbackProgressStore'
@@ -65,6 +66,14 @@ const PREVIOUS_TRACK_RESTART_THRESHOLD_SECONDS = 5
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
+}
+
+function shuffleNextRound(songIds: number[], activeTrackId: number | null) {
+  const shuffledSongIds = shufflePlaylist(songIds)
+  if (shuffledSongIds.length > 1 && shuffledSongIds[0] === activeTrackId) {
+    shuffledSongIds.push(shuffledSongIds.shift()!)
+  }
+  return shuffledSongIds
 }
 
 export function usePlaybackController(snapshot: MusicData, ready: boolean): PlaybackController {
@@ -374,6 +383,17 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
           return
         }
 
+        if (modeRef.current === 'shuffle' && snapshotRef.current.settings.shuffleAfterOneRound) {
+          const shuffledSongIds = shuffleNextRound(playbackSongIds, activeTrackId)
+          queueOverrideRef.current = shuffledSongIds
+          queueSongIdsRef.current = shuffledSongIds
+          currentQueueIndexRef.current = 0
+          setCurrentQueueIndex(0)
+          await replaceNowPlaying(shuffledSongIds)
+          await loadTrackRef.current(shuffledSongIds[0]!, { autoplay: true, queueIndex: 0, startAt: 0 })
+          return
+        }
+
         if (modeRef.current === 'repeat' || modeRef.current === 'shuffle') {
           await loadTrackRef.current(playbackSongIds[0], { autoplay: true, queueIndex: 0, startAt: 0 })
           return
@@ -394,6 +414,7 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
       getPlaybackSongIds,
       markSongPlayed,
       persistPlaybackSettings,
+      replaceNowPlaying,
       setProgressFromPlayback,
       transitionStatus,
       stopProgressSync,

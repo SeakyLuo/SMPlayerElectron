@@ -111,7 +111,9 @@ interface LocalSongAddMenuState extends MenuFlyoutPosition {
 type LocalSelectionAddMenuState = MenuFlyoutPosition
 type LocalSelectionMoveMenuState = MenuFlyoutPosition
 
-type LocalToolbarMenuState = MenuFlyoutPosition
+interface LocalToolbarMenuState extends MenuFlyoutPosition {
+  items: MenuFlyoutItem[]
+}
 
 interface FolderUpdateResultDialogState {
   folder: FolderNode
@@ -266,7 +268,6 @@ export function LocalPage({
   const [selectedSongIds, setSelectedSongIds] = useStoredNumberSet('local', 'selectedSongIds')
   const [selectedListItemKey, setSelectedListItemKey] = useState('')
   const [createdFolderPaths, setCreatedFolderPaths] = useState<Set<string>>(new Set())
-  const [, setLocalNotification] = useState('')
   const [folderUpdateResultDialog, setFolderUpdateResultDialog] = useState<FolderUpdateResultDialogState | null>(null)
   const [folderUpdateResultSongMenu, setFolderUpdateResultSongMenu] = useState<FolderUpdateResultSongMenuState | null>(null)
   const [dragOverFolderPath, setDragOverFolderPath] = useState('')
@@ -412,6 +413,12 @@ export function LocalPage({
   )
   const showSongQuickJump = currentSongs.length >= 50 && songQuickJumpMap.size >= 4
   const songQuickJumpBasisName = getLocalSongQuickJumpBasisName(sortMode, currentSortMode, t)
+  const currentNodeSubtreeSongIds = currentNode?.subtreeSongIds ?? []
+  const currentNodeDirectSongIdSet = useMemo(
+    () => new Set(currentNode?.directSongIds ?? []),
+    [currentNode],
+  )
+  const hasSubfolderSongs = currentNodeSubtreeSongIds.some((songId) => !currentNodeDirectSongIdSet.has(songId))
   const childFolderPathSet = useMemo(
     () => new Set(childFolders.map((folder) => folder.relativePath)),
     [childFolders],
@@ -469,7 +476,7 @@ export function LocalPage({
       return false
     }
 
-    setLocalNotification(t('local.pleaseExitMultiSelectMode'))
+    showNotification(t('local.pleaseExitMultiSelectMode'), 2000)
     return true
   }
 
@@ -479,7 +486,6 @@ export function LocalPage({
       previousRelativePathRef.current = currentRelativePath
     }
     setSelectedListItemKey('')
-    setLocalNotification('')
   }, [currentRelativePath])
 
   useLayoutEffect(() => {
@@ -555,20 +561,48 @@ export function LocalPage({
     setSortMode(currentSortMode)
   }, [currentSortMode, currentRelativePath])
 
-  const playShuffled = () => {
-    if (queueSongIds.length === 0) {
-      setLocalNotification(t('local.noMusicUnderCurrentFolder'))
+  const playShuffledSongIds = (songIds: number[]) => {
+    if (songIds.length === 0) {
+      showNotification(t('local.noMusicUnderCurrentFolder'), 2000)
       return
     }
 
-    const shuffledSongIds = shuffleSongIds(queueSongIds)
+    const shuffledSongIds = shuffleSongIds(songIds)
     onPlayTrack(shuffledSongIds[0]!, shuffledSongIds)
+  }
+
+  const playCurrentFolderShuffled = () => {
+    playShuffledSongIds(queueSongIds)
+  }
+
+  const playCurrentSubtreeShuffled = () => {
+    playShuffledSongIds(currentNodeSubtreeSongIds)
+  }
+
+  const playShuffled = (event: MouseEvent<HTMLElement>) => {
+    if (queueSongIds.length > 0 && hasSubfolderSongs) {
+      const rect = event.currentTarget.getBoundingClientRect()
+      setToolbarMenu({
+        x: rect.left,
+        y: rect.bottom + 6,
+        anchor: event.currentTarget,
+        items: shuffleToolbarItems,
+      })
+      setFolderMenu(null)
+      setSongMenu(null)
+      setFolderAddMenu(null)
+      setSongAddMenu(null)
+      setSelectionAddMenu(null)
+      return
+    }
+
+    playShuffledSongIds(queueSongIds.length > 0 ? queueSongIds : currentNodeSubtreeSongIds)
   }
 
   const shuffleFolder = (folder: FolderNode) => {
     const shuffledSongIds = shuffleSongIds(folder.subtreeSongIds)
     if (shuffledSongIds.length === 0) {
-      setLocalNotification(t('local.noMusicUnderCurrentFolder'))
+      showNotification(t('local.noMusicUnderCurrentFolder'), 2000)
       return
     }
 
@@ -816,6 +850,7 @@ export function LocalPage({
       x: rect.left,
       y: rect.bottom + 6,
       anchor: event.currentTarget,
+      items: toolbarSortItems,
     })
     setFolderMenu(null)
     setSongMenu(null)
@@ -831,7 +866,6 @@ export function LocalPage({
 
     refreshFolderRunningRef.current = true
     try {
-      setLocalNotification('')
       setFolderMenu(null)
       setFolderUpdateResultDialog(null)
       setFolderUpdateResultSongMenu(null)
@@ -1042,7 +1076,6 @@ export function LocalPage({
       return
     }
     setMultiSelect(true)
-    setLocalNotification('')
   }
 
   const requestDeleteSelectedItems = () => {
@@ -1184,6 +1217,20 @@ export function LocalPage({
     { key: 'toolbar-sort-title', text: t('local.sortByTitle'), icon: sortMode === 'title' ? 'check' : undefined, onClick: () => updateSortMode('title') },
     { key: 'toolbar-sort-artist', text: t('local.sortByArtist'), icon: sortMode === 'artist' ? 'check' : undefined, onClick: () => updateSortMode('artist') },
     { key: 'toolbar-sort-album', text: t('local.sortByAlbum'), icon: sortMode === 'album' ? 'check' : undefined, onClick: () => updateSortMode('album') },
+  ]
+  const shuffleToolbarItems: MenuFlyoutItem[] = [
+    {
+      key: 'toolbar-shuffle-current',
+      text: t('local.scopeCurrent'),
+      icon: 'shuffle',
+      onClick: playCurrentFolderShuffled,
+    },
+    {
+      key: 'toolbar-shuffle-subtree',
+      text: t('local.scopeSubtree'),
+      icon: 'folder',
+      onClick: playCurrentSubtreeShuffled,
+    },
   ]
   return (
     <section className={`page-panel local-page${multiSelect ? ' is-selection-mode' : ''}`}>
@@ -1558,7 +1605,7 @@ export function LocalPage({
           onClose={() => {
             setToolbarMenu(null)
           }}
-          items={toolbarSortItems}
+          items={toolbarMenu.items}
         />
       ) : null}
       {folderAddMenu && nodes.has(folderAddMenu.folder.relativePath) ? (

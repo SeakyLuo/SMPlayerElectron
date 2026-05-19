@@ -105,6 +105,7 @@ function createRemoteSettings(musicLibrarySort: MusicLibrarySortCriterion) {
     mode: 'once' as const,
     musicProgress: 0,
     autoPlay: false,
+    shuffleAfterOneRound: true,
     saveMusicProgress: true,
     hideMultiSelectCommandBarAfterOperation: true,
     localViewMode: 'grid' as const,
@@ -214,46 +215,16 @@ export function createLocalMusicDataSource(snapshot: MusicData, updateSettings: 
 
 export function createRemoteMusicDataSource(hostId: number): MusicDataSource {
   let cachedRemoteData: RemoteMusicData | null = null
-  let cachedMusicData: MusicData | null = null
   let loadingData: Promise<MusicData> | null = null
   let musicLibrarySort: MusicLibrarySortCriterion = 'title'
 
   const loadRemoteData = async () => {
     const nextData = await window.smplayer!.getRemoteHostLibrary(hostId)
-    const songIdMap = new Map<number, number>()
-    for (const [index, song] of nextData.songs.entries()) {
-      songIdMap.set(song.id, -(index + 1))
-    }
-    const mapSongIds = (songIds: number[]) => songIds.map((songId) => songIdMap.get(songId)!)
-    cachedRemoteData = {
-      ...nextData,
-      songs: nextData.songs.map((song, index) => ({
-        ...song,
-        id: -(index + 1),
-      })),
-      playlists: nextData.playlists.map((playlist) => ({
-        ...playlist,
-        songIds: mapSongIds(playlist.songIds),
-        songCount: playlist.songIds.length,
-      })),
-      favorites: {
-        ...nextData.favorites,
-        songIds: mapSongIds(nextData.favorites.songIds),
-      },
-      nowPlaying: {
-        ...nextData.nowPlaying,
-        songIds: mapSongIds(nextData.nowPlaying.songIds),
-      },
-    }
-    cachedMusicData = createDataFromRemote(cachedRemoteData, musicLibrarySort)
-    return cachedMusicData
+    cachedRemoteData = nextData
+    return createDataFromRemote(nextData, musicLibrarySort)
   }
 
   const loadData = async () => {
-    if (cachedMusicData) {
-      return cachedMusicData
-    }
-
     loadingData ??= loadRemoteData().finally(() => {
       loadingData = null
     })
@@ -283,9 +254,6 @@ export function createRemoteMusicDataSource(hostId: number): MusicDataSource {
     async updateSettings(update) {
       if (update.musicLibrarySort) {
         musicLibrarySort = update.musicLibrarySort
-        if (cachedRemoteData) {
-          cachedMusicData = createDataFromRemote(cachedRemoteData, musicLibrarySort)
-        }
       }
     },
     getStreamUrl(song) {

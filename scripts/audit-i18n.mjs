@@ -1,21 +1,21 @@
 import { writeFileSync, readFileSync } from 'node:fs'
 
 const localeFiles = [
-  'src/shared/locales/en-US.ts',
-  'src/shared/locales/zh-CN.ts',
-  'src/shared/locales/fr.ts',
-  'src/shared/locales/ru.ts',
-  'src/shared/locales/ja.ts',
-  'src/shared/locales/de.ts',
-  'src/shared/locales/pt-BR.ts',
-  'src/shared/locales/es.ts',
-  'src/shared/locales/it.ts',
-  'src/shared/locales/zh-Hant.ts',
-  'src/shared/locales/nl.ts',
-  'src/shared/locales/cs.ts',
-  'src/shared/locales/uk.ts',
-  'src/shared/locales/sv.ts',
-  'src/shared/locales/id.ts',
+  'src/shared/locales/en-US.json',
+  'src/shared/locales/zh-CN.json',
+  'src/shared/locales/fr.json',
+  'src/shared/locales/ru.json',
+  'src/shared/locales/ja.json',
+  'src/shared/locales/de.json',
+  'src/shared/locales/pt-BR.json',
+  'src/shared/locales/es.json',
+  'src/shared/locales/it.json',
+  'src/shared/locales/zh-Hant.json',
+  'src/shared/locales/nl.json',
+  'src/shared/locales/cs.json',
+  'src/shared/locales/uk.json',
+  'src/shared/locales/sv.json',
+  'src/shared/locales/id.json',
 ]
 
 const dictionaries = new Map(localeFiles.map((file) => [localeName(file), readDictionary(file)]))
@@ -1150,20 +1150,11 @@ function shouldIgnoreFinding(level, locale, key, value, reason) {
 }
 
 function readDictionary(file) {
-  const source = readFileSync(file, 'utf8')
-  const entries = {}
-  for (const match of source.matchAll(/^\s+'([^']+)':\s+'((?:\\.|[^'])*)',/gm)) {
-    entries[match[1]] = unescapeTsString(match[2])
-  }
-  return entries
-}
-
-function unescapeTsString(value) {
-  return Function(`return '${value}'`)()
+  return JSON.parse(readFileSync(file, 'utf8'))
 }
 
 function localeName(file) {
-  return file.match(/([^/\\]+)\.ts$/)[1]
+  return file.match(/([^/\\]+)\.json$/)[1]
 }
 
 function countByLevel(items) {

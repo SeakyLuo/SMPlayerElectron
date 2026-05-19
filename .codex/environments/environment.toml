@@ -26,4 +26,9 @@ command = "npm.cmd run dist:win"
 [[actions]]
 name = "打包winstore"
 icon = "tool"
-command = "npm.cmd run dist:win:store"
+command = "npm.cmd run dist:win:store:bundle"
+
+[[actions]]
+name = "自己用"
+icon = "tool"
+command = "npm run pack"
