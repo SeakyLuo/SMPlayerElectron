@@ -391,7 +391,7 @@ export function NowPlayingPage({
     })
   }
 
-  const locateCurrent = () => {
+  const locateCurrent = (behavior: ScrollBehavior = 'smooth') => {
     const currentVisibleIndex = visibleEntries.findIndex((entry) =>
       selectedQueueIndex == null
         ? entry.song.id === selectedTrackId
@@ -403,9 +403,10 @@ export function NowPlayingPage({
 
     const nextScrollTop = Math.max(
       0,
-      currentVisibleIndex * rowHeight - (listShellRef.current?.clientHeight ?? viewportHeight) / 2,
+      currentVisibleIndex * rowHeight - (listShellRef.current?.clientHeight ?? viewportHeight) / 2 + rowHeight / 2,
     )
-    listShellRef.current?.scrollTo({ top: nextScrollTop, behavior: 'smooth' })
+    setScrollTop(nextScrollTop)
+    listShellRef.current?.scrollTo({ top: nextScrollTop, behavior })
   }
 
   const openAddToMenu = (x: number, y: number, anchor?: HTMLElement) => {
@@ -535,7 +536,9 @@ export function NowPlayingPage({
           icon="songs"
           label={t('nowPlaying.locateCurrent')}
           disabled={!currentSong}
-          onClick={locateCurrent}
+          onClick={() => {
+            locateCurrent()
+          }}
         />
       ) : null}
       {variant === 'page' && canUseQueueCommands ? (
@@ -592,9 +595,11 @@ export function NowPlayingPage({
 
   useEffect(() => {
     if (songs.length > 0) {
-      window.requestAnimationFrame(locateCurrent)
+      window.requestAnimationFrame(() => {
+        locateCurrent('auto')
+      })
     }
-  }, [selectedQueueIndex, selectedTrackId, searchQuery, songs.length])
+  }, [isCompactQueueLayout, selectedQueueIndex, selectedTrackId, searchQuery, songs.length, viewportHeight])
   const onListScrollbarPointerDown = useCustomScrollbar({
     frameRef: listScrollFrameRef,
     scrollContainerRef: listShellRef,

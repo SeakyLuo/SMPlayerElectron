@@ -436,7 +436,7 @@ export function MediaControlButtons({
           <button
             type="button"
             disabled={disabled || trackId == null}
-            className={`favorite-toggle${favorite ? ' is-active' : ''}`}
+            className={`favorite-toggle${favorite ? ' is-active' : ''}${trackId == null ? ' is-hidden' : ''}`}
             onClick={onToggleFavorite}
             aria-label={t('common.favorite')}
             title={favorite ? t('player.unlike') : t('player.like')}
@@ -516,7 +516,6 @@ export function MediaControlButtons({
           {voiceAssistantAvailable ? (
             <button
               type="button"
-              disabled={disabled}
               className={voiceAssistantActive ? 'is-active' : ''}
               aria-label={t('player.voiceAssistant')}
               title={t('player.voiceAssistant')}
@@ -525,7 +524,7 @@ export function MediaControlButtons({
               <Icon name="voice" />
             </button>
           ) : null}
-          <button type="button" disabled={disabled} aria-label={t('player.more')} title={t('player.more')} onClick={onMoreClick}>
+          <button type="button" aria-label={t('player.more')} title={t('player.more')} onClick={onMoreClick}>
             <Icon name="moreHorizontal" />
           </button>
         </div>

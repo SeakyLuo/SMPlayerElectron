@@ -46,11 +46,6 @@ body.night-mode .app-shell .player-bar {
   opacity: 1;
 }
 
-.player-bar.disabled .player-utility {
-  visibility: hidden;
-  pointer-events: none;
-}
-
 .player-track {
   appearance: none;
   border: 1px solid transparent;
@@ -348,6 +343,10 @@ body.night-mode .app-shell .player-utility button.is-active {
 .player-utility .favorite-toggle.is-active {
   color: var(--favorite-accent);
   background: transparent;
+}
+
+.player-utility .favorite-toggle.is-hidden {
+  display: none;
 }
 
 body.night-mode .app-shell .player-utility .favorite-toggle.is-active {
