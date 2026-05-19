@@ -488,7 +488,7 @@
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
-  gap: 0;
+  gap: 6px;
 }
 
 .headered-playlist-list.has-album {
@@ -507,8 +507,8 @@
 }
 
 .headered-playlist-bottom-spacer {
-  flex: 0 0 34px;
-  min-height: 34px;
+  flex: 0 0 56px;
+  min-height: 56px;
 }
 
 .playlist-detail-panel-headered {

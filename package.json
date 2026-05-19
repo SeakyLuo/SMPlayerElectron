@@ -6,7 +6,7 @@
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
-    "dev": "vite",
+    "dev": "node scripts/dev-electron.mjs",
     "start": "electron .",
     "typecheck": "tsc -b",
     "build": "tsc -b && vite build",
@@ -117,6 +117,12 @@
     },
     "win": {
       "icon": "public/app-icon.ico",
+      "extraResources": [
+        {
+          "from": "vendor/mpv",
+          "to": "mpv"
+        }
+      ],
       "target": [
         {
           "target": "nsis",

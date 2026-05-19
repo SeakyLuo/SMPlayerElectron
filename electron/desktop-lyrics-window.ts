@@ -57,6 +57,12 @@ export class DesktopLyricsWindowController {
     this.window = null
   }
 
+  destroy() {
+    this.saveCurrentBounds()
+    this.window?.destroy()
+    this.window = null
+  }
+
   private async ensureWindow() {
     if (this.window) {
       return

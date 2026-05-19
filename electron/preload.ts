@@ -413,6 +413,25 @@ const api: SmplayerApi = {
   markSongPlayed: (songId) => ipcRenderer.invoke('playback:mark-song-played', songId),
   updateSongDuration: (songId, duration) =>
     ipcRenderer.invoke('library:update-song-duration', songId, duration),
+  loadMpvPlaybackSong: (request) => ipcRenderer.invoke('playback:mpv-load-song', request),
+  playMpvPlayback: () => ipcRenderer.invoke('playback:mpv-play'),
+  pauseMpvPlayback: () => ipcRenderer.invoke('playback:mpv-pause'),
+  seekMpvPlayback: (seconds) => ipcRenderer.invoke('playback:mpv-seek', seconds),
+  setMpvPlaybackVolume: (volume) => ipcRenderer.invoke('playback:mpv-set-volume', volume),
+  setMpvPlaybackMuted: (muted) => ipcRenderer.invoke('playback:mpv-set-muted', muted),
+  stopMpvPlayback: () => ipcRenderer.invoke('playback:mpv-stop'),
+  getMpvPlaybackState: () => ipcRenderer.invoke('playback:mpv-state'),
+  onMpvPlaybackEvent: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, event: Parameters<typeof callback>[0]) => {
+      callback(event)
+    }
+
+    ipcRenderer.on('playback:mpv-event', listener)
+
+    return () => {
+      ipcRenderer.removeListener('playback:mpv-event', listener)
+    }
+  },
   onGlobalMediaCommand: (callback) => {
     const listener = (_event: Electron.IpcRendererEvent, command: Parameters<typeof callback>[0]) => {
       callback(command)

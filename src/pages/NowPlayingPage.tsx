@@ -23,8 +23,8 @@ import { useUndoableNotificationStore } from '../state/useUndoableNotificationSt
 import { useCustomScrollbar } from '../hooks/useCustomScrollbar'
 
 const QUICK_PLAY_LIMIT = 100
-const NOW_PLAYING_ROW_HEIGHT = 82
-const NOW_PLAYING_COMPACT_ROW_HEIGHT = 78
+const NOW_PLAYING_ROW_HEIGHT = 88
+const NOW_PLAYING_COMPACT_ROW_HEIGHT = 84
 const NOW_PLAYING_OVERSCAN_ROWS = 12
 const NOW_PLAYING_COMPACT_QUERY = '(max-width: 720px)'
 

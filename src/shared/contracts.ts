@@ -1,3 +1,5 @@
+import type { MpvPlaybackEvent, MpvPlaybackLoadRequest, MpvPlaybackState } from './mpvPlayback'
+
 export interface AppInfo {
   platform: string
   version: string
@@ -754,6 +756,15 @@ export interface SmplayerApi {
   savePlaybackSettingsImmediate: (update: PlaybackSettingsUpdate) => void
   markSongPlayed: (songId: number) => Promise<void>
   updateSongDuration: (songId: number, duration: number) => Promise<void>
+  loadMpvPlaybackSong: (request: MpvPlaybackLoadRequest) => Promise<void>
+  playMpvPlayback: () => Promise<void>
+  pauseMpvPlayback: () => Promise<void>
+  seekMpvPlayback: (seconds: number) => Promise<void>
+  setMpvPlaybackVolume: (volume: number) => Promise<void>
+  setMpvPlaybackMuted: (muted: boolean) => Promise<void>
+  stopMpvPlayback: () => Promise<void>
+  getMpvPlaybackState: () => Promise<MpvPlaybackState>
+  onMpvPlaybackEvent: (callback: (event: MpvPlaybackEvent) => void) => () => void
   onGlobalMediaCommand: (callback: (command: GlobalMediaCommand) => void) => () => void
   onTrayCommand: (callback: (command: TrayCommand) => void) => () => void
   onExternalCommand: (callback: (command: ExternalAppCommand) => void) => () => void
