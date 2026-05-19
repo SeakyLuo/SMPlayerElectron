@@ -20,6 +20,7 @@ import { extractExternalCommandUrls, parseExternalCommandUrl } from './services/
 import { createMoveConflictResolver, trashPathIfExists } from './services/local-file-actions'
 import { ExternalAudioFileOpener } from './services/open-file-coordinator'
 import { registerMediaProtocols, registerMediaProtocolSchemes } from './services/media-protocols'
+import { MpvPlayerService } from './services/mpv-player-service'
 import { RemotePlayServer } from './services/remote-play-server'
 import { resolveUserDataPath } from './services/user-data-path'
 import {
@@ -32,6 +33,7 @@ import { DesktopLyricsWindowController } from './desktop-lyrics-window'
 import { registerAppIpc } from './ipc/app-ipc'
 import { registerDataIpc } from './ipc/data-ipc'
 import { registerLibraryIpc } from './ipc/library-ipc'
+import { registerPlaybackIpc } from './ipc/playback-ipc'
 import { registerRemoteIpc } from './ipc/remote-ipc'
 import { registerShellIpc } from './ipc/shell-ipc'
 import { registerWindowIpc } from './ipc/window-ipc'
@@ -41,6 +43,7 @@ import { WindowController } from './window-controller'
 let mainWindow: BrowserWindow | null = null
 let libraryService: DataService | null = null
 let remotePlayServer: RemotePlayServer | null = null
+let mpvPlayerService: MpvPlayerService | null = null
 let isQuitting = false
 let committingPendingDeletesBeforeQuit = false
 let externalCommandRendererReady = false
@@ -131,6 +134,10 @@ async function createWindow() {
         maximized: state.maximized,
       })
     },
+    requestQuit: () => {
+      isQuitting = true
+      app.quit()
+    },
   })
 }
 
@@ -219,6 +226,10 @@ app.whenReady().then(async () => {
     libraryService.musicQueryService,
     libraryService.songService,
   )
+  mpvPlayerService = new MpvPlayerService({
+    getSongService: () => libraryService!.songService,
+    getWindow: () => mainWindow,
+  })
   if (libraryService.remoteStore.getRemoteShareSettings().shareEnabled) {
     await remotePlayServer.start()
   }
@@ -245,6 +256,9 @@ app.whenReady().then(async () => {
   registerRemoteIpc({
     getLibraryService: () => libraryService!,
     getRemotePlayServer: () => remotePlayServer!,
+  })
+  registerPlaybackIpc({
+    getMpvPlayerService: () => mpvPlayerService!,
   })
   registerShellIpc({
     getWindow: () => mainWindow,
@@ -306,12 +320,13 @@ app.on('before-quit', (event) => {
     return
   }
   isQuitting = true
+  desktopLyricsWindowController.destroy()
   libraryService?.flush()
   void remotePlayServer?.stop()
+  mpvPlayerService?.close()
 })
 
 app.on('will-quit', () => {
-  desktopLyricsWindowController.close()
   trayController.unregisterGlobalMediaShortcuts()
 })
 

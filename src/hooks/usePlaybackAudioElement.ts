@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 
 import type { MusicData, PlaybackMode } from '../shared/contracts'
+import { createMpvPlaybackElement, type PlaybackMediaElement } from './mpvPlaybackElement'
 import type { PlaybackTransition } from './playbackStateMachine'
 
 interface MutableRef<T> {
@@ -8,7 +9,7 @@ interface MutableRef<T> {
 }
 
 interface PlaybackAudioElementOptions {
-  audioRef: MutableRef<HTMLAudioElement | null>
+  audioRef: MutableRef<PlaybackMediaElement | null>
   snapshotRef: MutableRef<MusicData>
   currentTrackIdRef: MutableRef<number | null>
   pendingStartSecondsRef: MutableRef<number>
@@ -71,7 +72,7 @@ export function usePlaybackAudioElement({
   clamp,
 }: PlaybackAudioElementOptions) {
   useEffect(() => {
-    const audio = new Audio()
+    const audio = createMpvPlaybackElement()
     audio.preload = 'auto'
     audio.volume = clamp(volumeRef.current / 100, 0, 1)
     audio.muted = isMutedRef.current
@@ -156,8 +157,8 @@ export function usePlaybackAudioElement({
     }
 
     const handlePlay = () => {
-      setIsPlaying(true)
-      transitionStatus({ type: 'playing' })
+      transitionStatus({ type: 'play-requested' })
+      armStalledTimer()
     }
 
     const handlePlaying = () => {
@@ -268,7 +269,8 @@ export function usePlaybackAudioElement({
       clearStalledTimer()
       stopProgressSync()
       audio.pause()
-      audio.src = ''
+      audio.removeAttribute('src')
+      audio.dispose()
       audio.removeEventListener('loadstart', handleLoadStart)
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata)
       audio.removeEventListener('timeupdate', handleTimeUpdate)

@@ -14,6 +14,7 @@ import { setPlaybackProgress } from '../state/playbackProgressStore'
 import { useUndoableNotificationStore } from '../state/useUndoableNotificationStore'
 import { useLibraryStore } from '../state/useLibraryStore'
 import { transitionPlaybackStatus, type PlaybackStatus, type PlaybackTransition } from './playbackStateMachine'
+import type { PlaybackMediaElement } from './mpvPlaybackElement'
 import { usePlaybackAudioElement } from './usePlaybackAudioElement'
 import { updateMediaSessionPosition, useMediaSession } from './useMediaSession'
 import { usePlaybackPersistence } from './usePlaybackPersistence'
@@ -67,7 +68,7 @@ function clamp(value: number, min: number, max: number) {
 }
 
 export function usePlaybackController(snapshot: MusicData, ready: boolean): PlaybackController {
-  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const audioRef = useRef<PlaybackMediaElement | null>(null)
   const loadedTrackIdRef = useRef<number | null>(null)
   const pendingStartSecondsRef = useRef(0)
   const pendingAutoplayRef = useRef(false)
@@ -113,6 +114,7 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
   const isMutedRef = useRef(isMuted)
   const modeRef = useRef(mode)
   const replaceNowPlaying = useLibraryStore((state) => state.replaceNowPlaying)
+  const loadSongs = useLibraryStore((state) => state.loadSongs)
   const showPlaybackMessage = useUndoableNotificationStore((state) => state.showMessage)
 
   const snapshotQueueSongIds = useMemo(
@@ -463,9 +465,6 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
         loadedTrackIdRef.current = trackId
         audio.src = track.mediaUrl
         audio.load()
-        if (!options.autoplay) {
-          audio.pause()
-        }
       } else {
         audio.currentTime = options.startAt
         if (options.autoplay) {
@@ -536,6 +535,13 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
 
     const playbackSongIds = snapshotQueueSongIds
 
+    if (snapshot.songs.length === 0 && snapshot.nowPlaying.songIds.length > 0) {
+      if (snapshot.settings.autoPlay) {
+        void loadSongs()
+      }
+      return
+    }
+
     if (snapshot.songs.length === 0 || playbackSongIds.length === 0) {
       audio.pause()
       audio.removeAttribute('src')
@@ -587,7 +593,7 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
           ? snapshot.settings.musicProgress
           : 0,
     })
-  }, [ready, snapshot, snapshotQueueSongIds, transitionStatus, setDurationFromPlayback, setProgressFromPlayback, applyPlaybackRuntimeSettings])
+  }, [ready, snapshot, snapshotQueueSongIds, transitionStatus, setDurationFromPlayback, setProgressFromPlayback, applyPlaybackRuntimeSettings, loadSongs])
 
   const playTrack = useCallback(async (trackId: number, queueSongIds?: number[], queueIndex = -1) => {
     if (queueSongIds) {
@@ -659,8 +665,7 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
   }, [persistPlaybackSettings])
 
   const togglePlayPause = useCallback(async () => {
-    const audio = audioRef.current
-    if (!audio || audio.paused) {
+    if (!isPlayingRef.current) {
       await playCurrent()
       return
     }

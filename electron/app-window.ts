@@ -36,6 +36,7 @@ interface MainWindowOptions {
   showWindow: () => void
   updateTrayMenu: () => void
   saveWindowState: (state: { bounds: MainWindowBounds; maximized: boolean }) => void
+  requestQuit: () => void
 }
 
 let hasShownTrayHint = false
@@ -100,6 +101,7 @@ export async function createMainWindow(options: MainWindowOptions) {
     }
 
     if (options.getSettings().quitOnClose) {
+      options.requestQuit()
       return
     }
 
