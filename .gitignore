@@ -7,13 +7,27 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-electron
-dist-ssr
-.dev-electron
+node_modules/
+.deps/
+
+# Build output
+dist/
+dist-electron/
+dist-ssr/
+release/
+out/
+build/
+.dev-electron/
+.vite/
+*.tsbuildinfo
+
+# Temporary build/test output
+tmp-install-test/
 *.local
-release
+
+# Local packaged runtime binaries
+vendor/mpv/*.exe
+vendor/mpv/*.dll
 
 # Editor directories and files
 .vscode/*
