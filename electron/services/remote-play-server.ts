@@ -24,6 +24,12 @@ function getContentType(filePath: string) {
   switch (extname(filePath).toLowerCase()) {
     case '.aac':
       return 'audio/aac'
+    case '.aiff':
+      return 'audio/aiff'
+    case '.alac':
+      return 'audio/mp4'
+    case '.ape':
+      return 'audio/ape'
     case '.flac':
       return 'audio/flac'
     case '.m4a':
@@ -31,9 +37,12 @@ function getContentType(filePath: string) {
       return 'audio/mp4'
     case '.ogg':
     case '.oga':
+    case '.opus':
       return 'audio/ogg'
     case '.wav':
       return 'audio/wav'
+    case '.wma':
+      return 'audio/x-ms-wma'
     case '.mp3':
     default:
       return 'audio/mpeg'

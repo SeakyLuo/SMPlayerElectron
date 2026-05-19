@@ -58,7 +58,6 @@ export class MusicQueryService {
   private readonly getSongArtistsStatement
   private readonly getRecentSongsStatement
   private readonly getCountsStatement
-  private readonly getActiveSongPathRowsStatement
 
   constructor(
     db: DatabaseSync,
@@ -158,11 +157,6 @@ export class MusicQueryService {
         ) AS artists,
         (SELECT COUNT(*) FROM Album WHERE State = ?) AS albums,
         (SELECT COUNT(*) FROM Folder WHERE State = ?) AS folders
-    `)
-    this.getActiveSongPathRowsStatement = this.db.prepare(`
-      SELECT Id AS id, Path AS path
-      FROM Music
-      WHERE State = ?
     `)
   }
 
@@ -274,14 +268,10 @@ export class MusicQueryService {
 
   getNowPlaying(): NowPlayingSnapshot {
     const settings = this.settingsService.getSettings()
-    const songs = this.getActiveSongPathRowsStatement.all(ACTIVE_STATE.active) as unknown as Array<{
-      id: number
-      path: string
-    }>
 
     return {
       playlistId: settings.NowPlaying,
-      songIds: this.nowPlayingService.readSongIds(songs, settings.NowPlaying),
+      songIds: this.nowPlayingService.readSongIds(settings.NowPlaying),
     }
   }
 

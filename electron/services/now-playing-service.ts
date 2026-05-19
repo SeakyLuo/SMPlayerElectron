@@ -23,15 +23,11 @@ export class NowPlayingService {
     `)
   }
 
-  readSongIds(songs: Array<{ id: number; path: string }>, fallbackPlaylistId: number) {
+  readSongIds(fallbackPlaylistId: number) {
     const pathRows = this.readPaths()
 
     if (pathRows.length > 0) {
-      const songIdsByPath = new Map(songs.map((song) => [song.path, song.id]))
-      return pathRows.flatMap((songPath) => {
-        const songId = songIdsByPath.get(songPath)
-        return songId == null ? [] : [songId]
-      })
+      return this.readSongIdsFromPaths(pathRows)
     }
 
     if (fallbackPlaylistId <= 0) {
@@ -54,6 +50,10 @@ export class NowPlayingService {
       return []
     }
 
+    return this.readSongIdsFromPaths(pathRows)
+  }
+
+  private readSongIdsFromPaths(pathRows: string[]) {
     const placeholders = pathRows.map(() => '?').join(', ')
     const rows = this.db.prepare(`
       SELECT Id AS id, Path AS path
