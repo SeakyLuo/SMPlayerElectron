@@ -15,11 +15,13 @@ You may fork, modify, and redistribute this project for non-commercial purposes,
 # TO DO
 Album properties.
 
-Search multiple lyrics choose one. Lyrics priority in notification. Search in lryics.
+Search multiple lyrics choose one. Lyrics priority in notification. Search in lyrics.
 
 Batch edit music info.
 
 Remote play (Including Mac).
+
+FIX PlaylistControlItem hover effect in HeaderedPlaylistControl.
 
 # MIGHT DO
 

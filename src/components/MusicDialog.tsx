@@ -114,6 +114,8 @@ export function MusicDialog({
   const [saving, setSaving] = useState(false)
   const showNotificationButtons = useUndoableNotificationStore((state) => state.showButtons)
   const showNotification = useUndoableNotificationStore((state) => state.showMessage)
+  const translatorRef = useRef(t)
+  const showNotificationRef = useRef(showNotification)
   const librarySongs = useLibraryStore((state) => state.snapshot.songs)
   const dialogRef = useRef<HTMLElement | null>(null)
   const dialogScrollbarTrackRef = useRef<HTMLDivElement | null>(null)
@@ -209,6 +211,14 @@ export function MusicDialog({
   }, [mode])
 
   useEffect(() => {
+    translatorRef.current = t
+  }, [t])
+
+  useEffect(() => {
+    showNotificationRef.current = showNotification
+  }, [showNotification])
+
+  useEffect(() => {
     showPendingSwitchLyricsNotificationRef.current = showPendingSwitchLyricsNotification
   }, [showPendingSwitchLyricsNotification])
 
@@ -228,7 +238,7 @@ export function MusicDialog({
     return () => {
       canceled = true
     }
-  }, [song.id, t])
+  }, [song.id])
 
   useEffect(() => {
     const previous = latestLyricsRef.current
@@ -266,7 +276,7 @@ export function MusicDialog({
       .catch(() => {
         if (!canceled) {
           setLyricsLoading(false)
-          showNotification(t('song.getLyricsFailed'))
+          showNotificationRef.current(translatorRef.current('song.getLyricsFailed'))
         }
       })
 
@@ -297,7 +307,7 @@ export function MusicDialog({
     return () => {
       canceled = true
     }
-  }, [showNotification, song.id, t])
+  }, [song.id])
 
   useEffect(() => {
     if (!artworkMissing) {

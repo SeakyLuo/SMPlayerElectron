@@ -17,7 +17,6 @@ import { Icon } from './icons'
 import { formatDuration } from '../shared/formatters'
 import { MenuFlyout } from './MenuFlyout'
 import { getAddToPlaylistMenuFlyoutItem, getPreferenceMenuFlyoutItem, type MenuFlyoutItem, type MenuFlyoutPosition } from './MenuFlyoutHelper'
-import { MusicDialog } from './MusicDialog'
 import { usePreferenceStore } from '../state/usePreferenceStore'
 import { VoiceAssistantFlyout, type VoiceAssistantFlyoutHandle, type VoiceAssistantResponse } from './VoiceAssistantFlyout'
 import { VolumeSlider } from './VolumeSlider'
@@ -41,7 +40,6 @@ interface MediaControlProps {
   track: MediaControlTrack
   currentSong: LibrarySong | null
   playlists: LibraryPlaylist[]
-  queueSongIds: number[]
   disabled?: boolean
   isPlaying: boolean
   volume: number
@@ -61,7 +59,7 @@ interface MediaControlProps {
   onToggleRepeatOne: () => void
   onToggleFavorite: () => void
   onQuickPlay: () => void | Promise<void>
-  onPlayTrack: (trackId: number, queueSongIds: number[]) => void
+  onOpenMusicDialog: (mode: 'properties' | 'lyrics' | 'album-art') => void
   onVoiceCommand: (text: string) => Promise<VoiceAssistantResponse>
   getVoiceHint: () => string
   voiceLanguage: string
@@ -70,7 +68,6 @@ interface MediaControlProps {
   onToggleWindowFullScreen: () => void
   onEnterMiniMode: () => void
   onArtworkResolved: (trackId: number, artworkUrl: string) => void
-  onSaved: () => void | Promise<void>
 }
 
 interface MediaControlButtonsProps {
@@ -682,7 +679,6 @@ export function MediaControl({
   track,
   currentSong,
   playlists,
-  queueSongIds,
   disabled = false,
   isPlaying,
   volume,
@@ -702,7 +698,7 @@ export function MediaControl({
   onToggleRepeatOne,
   onToggleFavorite,
   onQuickPlay,
-  onPlayTrack,
+  onOpenMusicDialog,
   onVoiceCommand,
   getVoiceHint,
   voiceLanguage,
@@ -711,7 +707,6 @@ export function MediaControl({
   onToggleWindowFullScreen,
   onEnterMiniMode,
   onArtworkResolved,
-  onSaved,
 }: MediaControlProps) {
   const navigate = useNavigate()
   const createPlaylist = useLibraryStore((state) => state.createPlaylist)
@@ -730,7 +725,6 @@ export function MediaControl({
   const [coverColorRgb, setCoverColorRgb] = useState(getDefaultArtworkColorRgb)
   const [failedArtworkUrl, setFailedArtworkUrl] = useState('')
   const [moreMenu, setMoreMenu] = useState<MenuFlyoutPosition | null>(null)
-  const [dialogMode, setDialogMode] = useState<'properties' | 'lyrics' | 'album-art' | null>(null)
   const [preferenceItem, setPreferenceItem] = useState<PreferenceItemSnapshot | null>(null)
   const [lyrics, setLyrics] = useState<LyricsSnapshot | null>(null)
   const [isCompactPlayerMenu, setIsCompactPlayerMenu] = useState(() => window.innerWidth <= PLAYER_COMPACT_BREAKPOINT)
@@ -803,15 +797,6 @@ export function MediaControl({
       isDisposed = true
     }
   }, [currentSong?.id, playerLyricsSource])
-
-  const refreshCurrentSong = async () => {
-    if (currentSong) {
-      const snapshot = await window.smplayer!.getLyrics(currentSong.id, playerLyricsSource)
-      setLyrics(snapshot)
-      refreshArtwork()
-    }
-    await onSaved()
-  }
 
   useEffect(() => {
     const handleLyricsUpdated = (event: Event) => {
@@ -976,15 +961,15 @@ export function MediaControl({
             },
             onSeeMusicInfo: () => {
               setMoreMenu(null)
-              setDialogMode('properties')
+              onOpenMusicDialog('properties')
             },
             onSeeLyrics: () => {
               setMoreMenu(null)
-              setDialogMode('lyrics')
+              onOpenMusicDialog('lyrics')
             },
             onSeeAlbumArt: () => {
               setMoreMenu(null)
-              setDialogMode('album-art')
+              onOpenMusicDialog('album-art')
             },
             onSeeLocal: () => {
               if (currentSong) {
@@ -995,25 +980,6 @@ export function MediaControl({
             onToggleWindowFullScreen,
             onEnterMiniMode,
           })}
-        />
-      ) : null}
-      {currentSong && dialogMode ? (
-        <MusicDialog
-          song={currentSong}
-          mode={dialogMode}
-          t={t}
-          currentTrackId={currentSong.id}
-          isPlaying={isPlaying}
-          queueSongIds={queueSongIds}
-          onClose={() => {
-            setDialogMode(null)
-            setMoreMenu(null)
-          }}
-          onPlayTrack={onPlayTrack}
-          onTogglePlayPause={onTogglePlayPause}
-          onSaved={() => {
-            void refreshCurrentSong()
-          }}
         />
       ) : null}
     </footer>

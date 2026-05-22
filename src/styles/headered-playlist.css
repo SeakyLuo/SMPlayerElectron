@@ -472,7 +472,7 @@
   column-gap: 14px;
   align-items: center;
   min-height: 42px;
-  padding: 0 22px 0 18px;
+  padding: 0 14px;
   color: var(--text-muted);
   font-size: 14px;
   font-weight: 750;
@@ -488,7 +488,7 @@
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
-  gap: 6px;
+  gap: 0;
 }
 
 .headered-playlist-list.has-album {

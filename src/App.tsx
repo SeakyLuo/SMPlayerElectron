@@ -5,6 +5,7 @@ import { AppBar, APPBAR_PAGE_ACTIONS_ID } from './components/AppBar'
 import { CustomScrollbar } from './components/CustomScrollbar'
 import { DialogHost } from './components/DialogHost'
 import { MediaControl } from './components/MediaControl'
+import { MusicDialog } from './components/MusicDialog'
 import { RenameDialog } from './components/RenameDialog'
 import { ReleaseNotesDialog } from './components/ReleaseNotesDialog'
 import { RemoveDialog } from './components/RemoveDialog'
@@ -144,6 +145,10 @@ function App() {
   const [startupArtistSplitResult, setStartupArtistSplitResult] = useState<ScanLibraryResult | null>(null)
   const [smartArtistFixPromptOpen, setSmartArtistFixPromptOpen] = useState(false)
   const [smartArtistFixPromptLoading, setSmartArtistFixPromptLoading] = useState(false)
+  const [mediaControlDialogState, setMediaControlDialogState] = useState<{
+    songId: number
+    mode: 'properties' | 'lyrics' | 'album-art'
+  } | null>(null)
 
   useEffect(() => subscribePopupDialogStackChange(setPopupDialogDepth), [])
   const startupArtistSplitCheckedRef = useRef(false)
@@ -453,6 +458,9 @@ function App() {
     () => new Map(snapshot.songs.map((song) => [song.id, song])),
     [snapshot.songs],
   )
+  const mediaControlDialogSong = mediaControlDialogState
+    ? songsById.get(mediaControlDialogState.songId) ?? null
+    : null
   const currentPlaybackSong = playback.currentTrack
     ? songsById.get(playback.currentTrack.id) ?? playback.currentTrack
     : null
@@ -1214,7 +1222,6 @@ function App() {
           track={playerTrack}
           currentSong={currentPlaybackSong}
           playlists={snapshot.playlists}
-          queueSongIds={snapshot.nowPlaying.songIds}
           disabled={snapshot.nowPlaying.songIds.length === 0}
           t={t}
           {...playerControlBindings}
@@ -1226,8 +1233,11 @@ function App() {
           onQuickPlay={() => {
             void playQuick()
           }}
-          onPlayTrack={(trackId, queueSongIds) => {
-            void playbackCommands.playTrackInQueue(trackId, queueSongIds)
+          onOpenMusicDialog={(mode) => {
+            if (!currentPlaybackSong) {
+              return
+            }
+            setMediaControlDialogState({ songId: currentPlaybackSong.id, mode })
           }}
           onOpenNowPlaying={() => {
             if (currentPlaybackSong) {
@@ -1238,11 +1248,30 @@ function App() {
           onToggleWindowFullScreen={appWindow.toggleWindowFullScreen}
           onEnterMiniMode={appWindow.enterMiniMode}
           onArtworkResolved={updateResolvedArtwork}
+        />
+      </div>
+      {mediaControlDialogSong && mediaControlDialogState ? (
+        <MusicDialog
+          song={mediaControlDialogSong}
+          mode={mediaControlDialogState.mode}
+          t={t}
+          currentTrackId={playback.currentTrackId}
+          isPlaying={playback.isPlaying}
+          queueSongIds={snapshot.nowPlaying.songIds}
+          onClose={() => {
+            setMediaControlDialogState(null)
+          }}
+          onPlayTrack={(trackId, queueSongIds) => {
+            void playbackCommands.playTrackInQueue(trackId, queueSongIds)
+          }}
+          onTogglePlayPause={() => {
+            void playback.togglePlayPause()
+          }}
           onSaved={() => {
             void refresh()
           }}
         />
-      </div>
+      ) : null}
       {isCreatePlaylistDialogOpen ? (
         <RenameDialog
           t={t}
