@@ -641,7 +641,7 @@
     right: auto;
     left: auto;
     z-index: 0;
-    height: 0;
+    height: var(--header-hero-height);
     margin: 0;
     padding: 0;
     overflow: hidden;
@@ -782,8 +782,8 @@
   }
 
   .headered-playlist-bottom-spacer {
-    flex-basis: 0;
-    min-height: 0;
+    flex-basis: calc(var(--player-height) + 14px);
+    min-height: calc(var(--player-height) + 14px);
   }
 }
 

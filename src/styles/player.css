@@ -567,6 +567,10 @@ body.night-mode .app-shell .volume-slider-wrap {
   opacity: 0;
 }
 
+.volume-slider-wrap input:disabled {
+  opacity: 0;
+}
+
 .volume-slider-tooltip {
   position: absolute;
   bottom: calc(100% + 8px);

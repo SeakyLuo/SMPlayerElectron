@@ -140,6 +140,11 @@ const RECENT_GRID_COMPACT_ROW_HEIGHT = 104
 const RECENT_GROUP_HEADER_HEIGHT = 36
 const RECENT_GRID_BOTTOM_PADDING = 92
 const RECENT_GRID_OVERSCAN_ROWS = 3
+
+function getInitialRecentGridWidth() {
+  return Math.max(1, window.innerWidth - 16)
+}
+
 export function RecentPage({
   songs,
   recentSongs,
@@ -1537,8 +1542,8 @@ function RecentSongGrid({
   const gridScrollFrameRef = useRef<HTMLDivElement | null>(null)
   const gridScrollbarTrackRef = useRef<HTMLDivElement | null>(null)
   const [scrollTop, setScrollTop] = useState(0)
-  const [viewportHeight, setViewportHeight] = useState(640)
-  const [gridWidth, setGridWidth] = useState(960)
+  const [viewportHeight, setViewportHeight] = useState(() => Math.max(1, window.innerHeight))
+  const [gridWidth, setGridWidth] = useState(getInitialRecentGridWidth)
   const groups = useMemo(() => groupRecentItems(songs, getTimelineDate, t), [getTimelineDate, songs, t])
   const columnCount = Math.max(
     1,

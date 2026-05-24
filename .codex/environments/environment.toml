@@ -12,6 +12,7 @@ command = '''
 npm.cmd install
 npm.cmd run dev
 '''
+platform = "win32"
 
 [[actions]]
 name = "构建"
@@ -22,11 +23,13 @@ command = "npm.cmd run build"
 name = "打包"
 icon = "tool"
 command = "npm.cmd run dist:win"
+platform = "win32"
 
 [[actions]]
 name = "打包winstore"
 icon = "tool"
 command = "npm.cmd run dist:win:store:bundle"
+platform = "win32"
 
 [[actions]]
 name = "自己用"

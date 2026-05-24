@@ -1,5 +1,11 @@
 import type { LyricsSnapshot } from './contracts'
 
+interface CurrentLyricsLineInfo {
+  text: string
+  startMs: number | null
+  endMs: number | null
+}
+
 const lyricsTimestampRegex = /\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\]/g
 const lyricsMetadataRegex = /^\[(ti|ar|al|by|offset):.*\]$/i
 const lyricsLineBreakRegex = /\r\n|[\n\r\u2028\u2029]/g
@@ -29,30 +35,55 @@ export function getCurrentLyricsLine(
   progressSeconds: number,
   progressRatio: number,
 ) {
+  return getCurrentLyricsLineInfo(lyrics, progressSeconds, progressRatio).text
+}
+
+export function getCurrentLyricsLineInfo(
+  lyrics: LyricsSnapshot | null,
+  progressSeconds: number,
+  progressRatio: number,
+  durationSeconds = 0,
+): CurrentLyricsLineInfo {
   if (!lyrics || lyrics.lines.length === 0) {
-    return ''
+    return { text: '', startMs: null, endMs: null }
   }
 
   const timedLines = lyrics.lines.filter((line) => line.timestampMs != null)
   if (timedLines.length > 0) {
     const progressMs = Math.max(0, Math.floor(progressSeconds * 1000))
-    let currentText = ''
+    let currentLineIndex = -1
 
-    for (const line of timedLines) {
+    for (let index = 0; index < timedLines.length; index += 1) {
+      const line = timedLines[index]!
       if (line.timestampMs! > progressMs) {
         break
       }
-      currentText = line.text
+      currentLineIndex = index
     }
 
-    return toSingleDisplayLyricLine(currentText)
+    if (currentLineIndex < 0) {
+      return { text: '', startMs: null, endMs: null }
+    }
+
+    const currentLine = timedLines[currentLineIndex]!
+    const nextLine = timedLines[currentLineIndex + 1]
+    return {
+      text: toSingleDisplayLyricLine(currentLine.text),
+      startMs: currentLine.timestampMs!,
+      endMs: nextLine?.timestampMs ?? (durationSeconds > 0 ? Math.floor(durationSeconds * 1000) : null),
+    }
   }
 
   const lyricIndex = Math.min(
     lyrics.lines.length - 1,
     Math.floor(lyrics.lines.length * Math.min(Math.max(progressRatio, 0), 1)),
   )
-  return toSingleDisplayLyricLine(lyrics.lines[lyricIndex]?.text ?? '')
+  const lyricDurationMs = durationSeconds > 0 ? Math.floor(durationSeconds * 1000) : 0
+  return {
+    text: toSingleDisplayLyricLine(lyrics.lines[lyricIndex]?.text ?? ''),
+    startMs: lyricDurationMs > 0 ? Math.floor(lyricDurationMs * (lyricIndex / lyrics.lines.length)) : null,
+    endMs: lyricDurationMs > 0 ? Math.floor(lyricDurationMs * ((lyricIndex + 1) / lyrics.lines.length)) : null,
+  }
 }
 
 export function hasLyricsTimestamps(rawText: string) {

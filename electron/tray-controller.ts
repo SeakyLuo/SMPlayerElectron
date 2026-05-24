@@ -6,8 +6,9 @@ import {
   nativeImage,
   type BrowserWindow,
   type JumpListCategory,
+  type ThumbarButton,
 } from 'electron'
-import { basename } from 'node:path'
+import { basename, join } from 'node:path'
 
 import type { GlobalMediaCommand, PreferredLanguage, TrayCommand } from '../src/shared/contracts'
 import { createTranslator } from '../src/shared/i18n'
@@ -124,6 +125,45 @@ export class TrayController {
 
     this.isPlaying = isPlaying
     this.updateMenu()
+    this.updateWindowsThumbarButtons()
+  }
+
+  updateWindowsThumbarButtons() {
+    if (process.platform !== 'win32') {
+      return
+    }
+
+    const window = this.options.getWindow()
+    if (!window || window.isDestroyed()) {
+      return
+    }
+
+    const t = createTranslator(this.options.getPreferredLanguage(), app.getLocale())
+    const buttons: ThumbarButton[] = [
+      {
+        tooltip: t('player.previous'),
+        icon: createThumbarIcon('previous'),
+        click: () => {
+          this.sendGlobalMediaCommand('previous')
+        },
+      },
+      {
+        tooltip: this.isPlaying ? t('player.pause') : t('player.play'),
+        icon: createThumbarIcon(this.isPlaying ? 'pause' : 'play'),
+        click: () => {
+          this.sendGlobalMediaCommand('play-pause')
+        },
+      },
+      {
+        tooltip: t('player.next'),
+        icon: createThumbarIcon('next'),
+        click: () => {
+          this.sendGlobalMediaCommand('next')
+        },
+      },
+    ]
+
+    window.setThumbarButtons(buttons)
   }
 
   updateWindowsJumpList() {
@@ -207,4 +247,12 @@ export class TrayController {
 
 function quoteWindowsArgument(value: string) {
   return `"${value}"`
+}
+
+function createThumbarIcon(name: 'previous' | 'play' | 'pause' | 'next') {
+  const iconPath = app.isPackaged
+    ? join(process.resourcesPath, 'assets', 'thumbar', `${name}.png`)
+    : join(app.getAppPath(), 'public', 'thumbar', `${name}.png`)
+
+  return nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 })
 }

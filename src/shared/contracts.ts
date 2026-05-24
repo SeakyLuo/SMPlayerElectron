@@ -349,6 +349,8 @@ export interface DesktopLyricsDisplayState {
   songTitle: string
   artist: string
   progressSeconds: number
+  lyricLineStartMs: number | null
+  lyricLineEndMs: number | null
   offsetMs: number
   labels: {
     close: string

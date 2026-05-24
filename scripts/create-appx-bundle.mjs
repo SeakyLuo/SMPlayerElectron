@@ -9,7 +9,7 @@ const inputDir = resolve(releaseDir, 'appxbundle-input')
 const packageJson = (await import('../package.json', { with: { type: 'json' } })).default
 
 const appxFiles = (await readdir(releaseDir))
-  .filter((name) => name.endsWith('.appx'))
+  .filter((name) => name.endsWith('.appx') && name.includes(`-${packageJson.version}-`))
   .sort()
 
 if (appxFiles.length === 0) {

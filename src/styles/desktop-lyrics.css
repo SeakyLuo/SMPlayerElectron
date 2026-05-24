@@ -122,11 +122,12 @@ html:has(.desktop-lyrics-window) #root {
   justify-content: center;
   min-width: 0;
   align-self: center;
-  min-height: calc(var(--desktop-lyrics-font-size) * 1.2);
+  min-height: calc(var(--desktop-lyrics-font-size) * 1.42);
+  padding-block: calc(var(--desktop-lyrics-font-size) * 0.08);
   color: var(--desktop-lyrics-color);
   font-size: var(--desktop-lyrics-font-size);
   font-weight: 800;
-  line-height: 1.16;
+  line-height: 1.24;
   letter-spacing: 0;
   text-align: center;
   white-space: nowrap;
@@ -139,6 +140,7 @@ html:has(.desktop-lyrics-window) #root {
 
 .desktop-lyrics-text span {
   display: inline-block;
+  padding-inline: calc(var(--desktop-lyrics-font-size) * 0.14);
   white-space: nowrap;
 }
 
@@ -146,7 +148,7 @@ html:has(.desktop-lyrics-window) #root {
   justify-content: flex-start;
 }
 
-.desktop-lyrics-text[data-overflow='true'] span {
+.desktop-lyrics-text[data-overflow='true']:not([data-timed='true']) span {
   animation: desktop-lyrics-scroll var(--desktop-lyrics-scroll-duration) ease-in-out infinite alternate;
 }
 

@@ -345,7 +345,7 @@ export class MpvPlayerService {
   }
 
   private async handleFileLoaded() {
-    const duration = await this.command(['get_property', 'duration']) as number | undefined
+    const duration = await this.getDuration()
     this.state.duration = typeof duration === 'number' ? duration : 0
     this.state.currentTime = 0
     this.state.ended = false
@@ -357,6 +357,18 @@ export class MpvPlayerService {
     if (this.autoplayAfterLoad) {
       this.autoplayAfterLoad = false
       await this.command(['set_property', 'pause', false])
+    }
+  }
+
+  private async getDuration() {
+    try {
+      return await this.command(['get_property', 'duration']) as number | undefined
+    } catch (error) {
+      if (error instanceof Error && error.message === 'property unavailable') {
+        return undefined
+      }
+
+      throw error
     }
   }
 

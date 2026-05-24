@@ -4,7 +4,7 @@ import { getDisplayArtists } from '../shared/artists'
 import type { AppSettingsUpdate, LibrarySong, LyricsSnapshot, SettingsSnapshot } from '../shared/contracts'
 import { getDesktopLyricsFontCss } from '../shared/desktopLyricsFonts'
 import { createTranslator } from '../shared/i18n'
-import { getCurrentLyricsLine } from '../shared/lyrics'
+import { getCurrentLyricsLineInfo } from '../shared/lyrics'
 import { useLibraryStore } from '../state/useLibraryStore'
 import { usePlaybackProgress } from '../state/playbackProgressStore'
 
@@ -55,9 +55,9 @@ export function useDesktopLyricsBridge({
     () => createTranslator(settings.preferredLanguage),
     [settings.preferredLanguage],
   )
-  const lyricText = useMemo(
-    () => getCurrentLyricsLine(currentLyrics, adjustedProgressSeconds, progressRatio),
-    [adjustedProgressSeconds, currentLyrics, progressRatio],
+  const lyricLine = useMemo(
+    () => getCurrentLyricsLineInfo(currentLyrics, adjustedProgressSeconds, progressRatio, effectiveDuration),
+    [adjustedProgressSeconds, currentLyrics, effectiveDuration, progressRatio],
   )
 
   useEffect(() => {
@@ -126,11 +126,13 @@ export function useDesktopLyricsBridge({
       fontFamily: getDesktopLyricsFontCss(settings.desktopLyricsFontFamily),
       textColor: settings.desktopLyricsColor,
       strokeColor: settings.desktopLyricsStrokeColor,
-      lyricText,
+      lyricText: lyricLine.text,
       fallbackText: currentSong ? `${currentSong.title}${artist ? ` - ${artist}` : ''}` : '',
       songTitle: currentSong?.title ?? '',
       artist,
       progressSeconds: adjustedProgressSeconds,
+      lyricLineStartMs: lyricLine.startMs,
+      lyricLineEndMs: lyricLine.endMs,
       offsetMs: lyricsOffsetMs,
       labels: {
         close: t('common.close'),
@@ -148,7 +150,7 @@ export function useDesktopLyricsBridge({
     artist,
     currentSong,
     isPlaying,
-    lyricText,
+    lyricLine,
     lyricsLoading,
     nightModeActive,
     settings.desktopLyricsEnabled,
