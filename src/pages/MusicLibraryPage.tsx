@@ -92,7 +92,6 @@ export function MusicLibraryPage({
   searchQuery,
   onPlayTrack,
   onAddNextAndPlay,
-  onMoveToMusicOrPlay,
   onTogglePlayPause,
   onPlayNext,
   onToggleFavorite,
@@ -633,7 +632,7 @@ export function MusicLibraryPage({
             setContextMenu(null)
           }}
           onPlayTrack={onPlayTrack}
-          onMoveToMusicOrPlay={onMoveToMusicOrPlay}
+          onMoveToMusicOrPlay={onAddNextAndPlay}
           onTogglePlayPause={onTogglePlayPause}
           onPlayNext={onPlayNext}
           onRevealSong={onRevealSong}
