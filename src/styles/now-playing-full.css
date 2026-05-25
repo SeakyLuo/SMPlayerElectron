@@ -390,6 +390,7 @@
 }
 
 .now-playing-full-page .now-playing-full-player-bar.player-bar {
+  z-index: 260;
   border-color: rgba(255, 255, 255, 0.14);
   background:
     linear-gradient(135deg, rgba(119, 91, 32, 0.36), rgba(20, 18, 14, 0.22) 42%, transparent 72%),

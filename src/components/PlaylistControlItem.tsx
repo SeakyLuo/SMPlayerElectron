@@ -25,6 +25,7 @@ interface PlaylistControlItemProps {
   selectionMode: boolean
   dropPosition: 'before' | 'after' | null
   queueSongIds: number[]
+  openQueueSongIds?: number[]
   containerRef?: Ref<HTMLDivElement>
   draggable?: boolean
   showAlbum?: boolean
@@ -61,6 +62,7 @@ export function PlaylistControlItem({
   selectionMode,
   dropPosition,
   queueSongIds,
+  openQueueSongIds,
   containerRef,
   draggable = true,
   showAlbum = true,
@@ -100,7 +102,7 @@ export function PlaylistControlItem({
     if (selectionMode) {
       onToggleSelection()
     } else {
-      onPlayTrack(song.id, queueSongIds)
+      onPlayTrack(song.id, openQueueSongIds ?? queueSongIds)
     }
   }
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {

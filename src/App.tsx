@@ -473,6 +473,7 @@ function App() {
       void playback.playNext()
     },
     onOpenSettings: () => {
+      setShowNowPlayingFullPage(false)
       navigate('/settings#desktop-lyrics')
     },
     onPrevious: () => {

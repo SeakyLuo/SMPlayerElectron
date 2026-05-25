@@ -100,8 +100,16 @@ export async function createMainWindow(options: MainWindowOptions) {
     }
 
     const rawBounds = window.isMaximized() ? window.getNormalBounds() : window.getBounds()
-    const bounds = clampMainWindowBounds(rawBounds, defaultWindowMinimumSize)
+    const bounds = clampMainWindowBounds(rawBounds, options.windowController.getDefaultMinimumSize(rawBounds))
     options.saveWindowState({ bounds, maximized: window.isMaximized() })
+  }
+
+  const updateMainWindowMinimumSize = () => {
+    if (window.isDestroyed() || options.windowController.getMiniMode()) {
+      return
+    }
+
+    options.windowController.applyDefaultMinimumSize(window)
   }
 
   window.on('close', (event) => {
@@ -129,8 +137,12 @@ export async function createMainWindow(options: MainWindowOptions) {
   })
   window.on('closed', () => {
     options.windowController.stopDrag()
+    screen.off('display-metrics-changed', updateMainWindowMinimumSize)
   })
-  window.on('moved', saveMainWindowState)
+  window.on('moved', () => {
+    updateMainWindowMinimumSize()
+    saveMainWindowState()
+  })
   window.on('resized', saveMainWindowState)
   window.on('maximize', saveMainWindowState)
   window.on('unmaximize', saveMainWindowState)
@@ -143,11 +155,13 @@ export async function createMainWindow(options: MainWindowOptions) {
     options.updateTrayMenu()
   })
   window.once('ready-to-show', () => {
+    updateMainWindowMinimumSize()
     if (!settings.mainWindowMaximized) {
       window.setBounds(initialBounds, false)
     }
     options.showWindow()
   })
+  screen.on('display-metrics-changed', updateMainWindowMinimumSize)
 
   window.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url)

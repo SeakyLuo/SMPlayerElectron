@@ -255,7 +255,7 @@ export class LyricsService {
       return []
     }
 
-    const metadataRegex = /^\[(ti|ar|al|by|offset):/i
+    const metadataRegex = /^\[(ti|ar|al|au|by|offset|re|ve|length):/i
     const offsetRegex = /^\[offset:([+-]?\d+)\]$/i
     const timestampRegex = /\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\]/g
     let offsetMs = 0
@@ -421,7 +421,7 @@ export class LyricsService {
 
   private isNoLyricsPlaceholder(rawLyrics: string) {
     const normalized = rawLyrics
-      .replace(/\[(ti|ar|al|by|offset):[^\]]*\]/gi, ' ')
+      .replace(/\[(ti|ar|al|au|by|offset|re|ve|length):[^\]]*\]/gi, ' ')
       .replace(/\[\d{1,2}:\d{2}(?:[.:]\d{1,3})?\]/g, ' ')
       .replace(/[^\p{L}\p{N}]+/gu, '')
       .toLocaleLowerCase()

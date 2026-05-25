@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
-import { readFile, mkdir, readdir, unlink, writeFile } from 'node:fs/promises'
-import { basename, dirname, extname, join } from 'node:path'
+import { mkdir, readdir, unlink, writeFile } from 'node:fs/promises'
+import { basename, extname, join } from 'node:path'
 
 import { nativeImage } from 'electron'
 
@@ -137,52 +137,8 @@ export async function writeArtworkCache(
 }
 
 // UWP MusicView thumbnails ultimately fall back to "folder artwork" — Windows
-// scans the song's directory for cover.jpg / folder.jpg / AlbumArt*.jpg /
-// front.jpg etc. Electron's nativeImage.createThumbnailFromPath uses
-// IShellItemImageFactory which is supposed to do the same, but in practice it
-// can return an empty image for MP3s without an embedded picture even when
-// the directory contains a usable folder image (most often when the cover
-// file's name does not match the well-known set Windows looks at). To match
-// UWP behaviour we run a manual sibling scan as a last resort.
-const FOLDER_ARTWORK_BASENAMES = [
-  'cover',
-  'folder',
-  'front',
-  'album',
-  'albumart',
-  'albumart_{00000000-0000-0000-0000-000000000000}_large',
-  'albumart_{00000000-0000-0000-0000-000000000000}_small',
-  'albumartlarge',
-  'albumartsmall',
-]
-const FOLDER_ARTWORK_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif']
-
-async function findSiblingFolderArtwork(filePath: string) {
-  const dir = dirname(filePath)
-  let entries: string[]
-  try {
-    const dirEntries = await readdir(dir, { withFileTypes: true })
-    entries = dirEntries.filter((entry) => entry.isFile()).map((entry) => entry.name)
-  } catch {
-    return ''
-  }
-
-  const lookup = new Map<string, string>()
-  for (const name of entries) {
-    lookup.set(name.toLowerCase(), name)
-  }
-
-  for (const base of FOLDER_ARTWORK_BASENAMES) {
-    for (const ext of FOLDER_ARTWORK_EXTENSIONS) {
-      const candidate = lookup.get(`${base}${ext}`)
-      if (candidate) {
-        return join(dir, candidate)
-      }
-    }
-  }
-  return ''
-}
-
+// Keep parity with the Windows shell thumbnail pipeline without doing our own
+// sibling cover-file scan.
 export async function writeShellThumbnailCache(thumbnailCachePath: string, filePath: string) {
   try {
     const thumbnail = await nativeImage.createThumbnailFromPath(filePath, {
@@ -199,25 +155,7 @@ export async function writeShellThumbnailCache(thumbnailCachePath: string, fileP
       return thumbnailPath
     }
   } catch {
-    // fall through to the sibling folder-art scan below
-  }
-
-  const siblingArtwork = await findSiblingFolderArtwork(filePath)
-  if (siblingArtwork) {
-    try {
-      const data = await readFile(siblingArtwork)
-      if (!isLikelyImage(data)) {
-        return ''
-      }
-      const thumbnailPath = getShellThumbnailCachePath(thumbnailCachePath, filePath)
-
-      await mkdir(thumbnailCachePath, { recursive: true })
-      await writeFile(thumbnailPath, data)
-
-      return thumbnailPath
-    } catch {
-      return ''
-    }
+    return ''
   }
 
   return ''

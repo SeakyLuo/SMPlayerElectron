@@ -47,6 +47,7 @@ export function LocalGridContent({
   songQuickJumpMap,
   compactTreeRows,
   compactQueueSongIds,
+  folderQueueSongIds,
   sortMode,
   currentSortMode,
   queueSongIds,
@@ -97,6 +98,7 @@ export function LocalGridContent({
   songQuickJumpMap: Map<string, number>
   compactTreeRows?: LocalCompactTreeRow[]
   compactQueueSongIds?: number[]
+  folderQueueSongIds: number[]
   sortMode: LocalSortMode
   currentSortMode: LocalSortMode
   queueSongIds: number[]
@@ -227,6 +229,7 @@ export function LocalGridContent({
               sortMode={sortMode}
               currentSortMode={currentSortMode}
               queueSongIds={queueSongIds}
+              folderQueueSongIds={folderQueueSongIds}
               t={t}
               localSongItemRefs={localSongItemRefs}
               onPlayTrack={onPlayTrack}
@@ -255,6 +258,7 @@ export function LocalGridContent({
             sortMode={sortMode}
             currentSortMode={currentSortMode}
             queueSongIds={queueSongIds}
+            folderQueueSongIds={folderQueueSongIds}
             t={t}
             localSongItemRefs={localSongItemRefs}
             onPlayTrack={onPlayTrack}
@@ -366,6 +370,7 @@ function LocalSongGrid({
   sortMode,
   currentSortMode,
   queueSongIds,
+  folderQueueSongIds,
   t,
   localSongItemRefs,
   onPlayTrack,
@@ -391,6 +396,7 @@ function LocalSongGrid({
   sortMode: LocalSortMode
   currentSortMode: LocalSortMode
   queueSongIds: number[]
+  folderQueueSongIds: number[]
   t: Translator
   localSongItemRefs: RefObject<Array<HTMLElement | null>>
   onPlayTrack: (trackId: number, queueSongIds: number[]) => void
@@ -435,6 +441,7 @@ function LocalSongGrid({
                 selectionMode={multiSelect}
                 dropPosition={null}
                 queueSongIds={queueSongIds}
+                openQueueSongIds={folderQueueSongIds}
                 t={t}
                 showAlbum
                 onPlayTrack={onPlayTrack}
@@ -463,6 +470,7 @@ function LocalSongGrid({
                 playing={song.id === selectedTrackId && isPlaying}
                 multiSelect={multiSelect}
                 queueSongIds={queueSongIds}
+                openQueueSongIds={folderQueueSongIds}
                 t={t}
                 variant="local"
                 detailLabel={detailLabel}

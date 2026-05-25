@@ -7,7 +7,7 @@ interface CurrentLyricsLineInfo {
 }
 
 const lyricsTimestampRegex = /\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\]/g
-const lyricsMetadataRegex = /^\[(ti|ar|al|by|offset):.*\]$/i
+const lyricsMetadataRegex = /^\[(ti|ar|al|au|by|offset|re|ve|length):.*\]$/i
 const lyricsLineBreakRegex = /\r\n|[\n\r\u2028\u2029]/g
 const escapedLineBreakRegex = /\\r\\n|\\n|\\r/g
 

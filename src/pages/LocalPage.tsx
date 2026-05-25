@@ -380,6 +380,16 @@ export function LocalPage({
   const visibleSongIds = useMemo(() => currentSongs.map((song) => song.id), [currentSongs])
   const visibleSongIdSet = useMemo(() => new Set(visibleSongIds), [visibleSongIds])
   const queueSongIds = visibleSongIds
+  const folderQueueSongIds = useMemo(() => {
+    if (!currentNode) {
+      return []
+    }
+
+    return currentNode.directSongIds
+      .map((songId) => songsById.get(songId)!)
+      .filter((song) => matchesSongSearch(song, searchQuery))
+      .map((song) => song.id)
+  }, [currentNode, searchQuery, songsById])
   const localCompactFolderTreeRows = useMemo(
     () => buildLocalCompactFolderTreeRows({
       childFolders,
@@ -1359,6 +1369,7 @@ export function LocalPage({
               sortMode={sortMode}
               currentSortMode={currentSortMode}
               queueSongIds={queueSongIds}
+              folderQueueSongIds={folderQueueSongIds}
               t={t}
               localSongItemRefs={localSongItemRefs}
               onToggleFoldersExpanded={toggleFoldersExpanded}

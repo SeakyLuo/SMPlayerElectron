@@ -1,6 +1,6 @@
 import { screen, type BrowserWindow, type Rectangle } from 'electron'
 
-const defaultWindowMinimumSize = { width: 506, height: 840 }
+const defaultWindowMinimumSize = { width: 506, height: 720 }
 const miniModeWindowSize = { width: 360, height: 360 }
 
 export class WindowController {
@@ -9,8 +9,18 @@ export class WindowController {
   private boundsBeforeMiniMode: Rectangle | null = null
   private wasMaximizedBeforeMiniMode = false
 
-  getDefaultMinimumSize() {
-    return defaultWindowMinimumSize
+  getDefaultMinimumSize(bounds?: Rectangle) {
+    const workArea = bounds ? screen.getDisplayMatching(bounds).workArea : screen.getPrimaryDisplay().workArea
+    return {
+      width: Math.min(defaultWindowMinimumSize.width, workArea.width),
+      height: Math.min(defaultWindowMinimumSize.height, workArea.height),
+    }
+  }
+
+  applyDefaultMinimumSize(window: BrowserWindow) {
+    const minimumSize = this.getDefaultMinimumSize(window.getBounds())
+    window.setMinimumSize(minimumSize.width, minimumSize.height)
+    return minimumSize
   }
 
   startDrag(window: BrowserWindow) {
@@ -102,7 +112,7 @@ export class WindowController {
     window.setAlwaysOnTop(false)
     window.setResizable(true)
     window.setMaximizable(true)
-    window.setMinimumSize(defaultWindowMinimumSize.width, defaultWindowMinimumSize.height)
+    this.applyDefaultMinimumSize(window)
 
     if (this.boundsBeforeMiniMode) {
       window.setBounds(this.boundsBeforeMiniMode, true)

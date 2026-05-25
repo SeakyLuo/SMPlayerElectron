@@ -11,6 +11,7 @@ import type { Translator } from '../shared/i18n'
 interface GridViewMusicItemControlProps {
   song: LibrarySong
   queueSongIds: number[]
+  openQueueSongIds?: number[]
   selected: boolean
   current: boolean
   playing: boolean
@@ -34,6 +35,7 @@ interface GridViewMusicItemControlProps {
 export function GridViewMusicItemControl({
   song,
   queueSongIds,
+  openQueueSongIds,
   selected,
   current,
   playing,
@@ -58,7 +60,7 @@ export function GridViewMusicItemControl({
     if (multiSelect) {
       onToggleSelection(song.id)
     } else {
-      onPlayTrack(song.id, queueSongIds)
+      onPlayTrack(song.id, openQueueSongIds ?? queueSongIds)
     }
   }
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
