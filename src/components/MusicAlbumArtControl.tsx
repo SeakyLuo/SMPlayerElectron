@@ -60,7 +60,6 @@ export function MusicAlbumArtControl({
       artworkUrl={artworkUrl}
       recommendation={recommendation}
       songId={song.id}
-      fallbackArtwork
       showDeleteConfirm={showDeleteConfirm}
       onApplyRecommendation={onApplyRecommendation}
       onChangeArtwork={onChangeArtwork}

@@ -153,6 +153,7 @@ function showMainWindow() {
   }
   mainWindow.show()
   mainWindow.focus()
+  trayController.updateWindowsThumbarButtons()
   mainWindow.webContents.send('app:tray-command', 'show-window')
 }
 
@@ -296,7 +297,6 @@ app.whenReady().then(async () => {
   })
 
   await createWindow()
-  trayController.updateWindowsThumbarButtons()
   dispatchExternalCommandUrls(process.argv)
   await externalAudioFileOpener.openPendingFromArgv(process.argv)
   trayController.createTray()
@@ -305,7 +305,6 @@ app.whenReady().then(async () => {
   app.on('activate', async () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       await createWindow()
-      trayController.updateWindowsThumbarButtons()
       trayController.createTray()
       return
     }

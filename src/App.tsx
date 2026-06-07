@@ -102,6 +102,10 @@ function App() {
     })
   }, [])
   const [isNavigationCollapsed, setIsNavigationCollapsed] = useState(() => {
+    if (window.innerWidth < NAVIGATION_OVERLAY_BREAKPOINT) {
+      return true
+    }
+
     try {
       return window.localStorage.getItem('smplayer:navigation-collapsed') === 'true'
     } catch {

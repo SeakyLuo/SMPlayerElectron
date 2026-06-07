@@ -120,7 +120,7 @@ export function MusicInfoControl({
             </PropertyRow>
             <PropertyRow label={t('common.playCount')} labelClassName="PlayCountTextBlock">
               <span className="song-dialog-inline-field music-property-inline-field">
-                <input className="play-count-text-block PlayCountTextBlock" value={properties.playCount || ''} disabled title={properties.playCount === 0 ? t('song.notPlayedYet', { title: song.title }) : formatSongPlayCountTitle(t, song.title, properties.playCount)} />
+                <input className="play-count-text-block PlayCountTextBlock" value={properties.playCount.toString()} disabled title={properties.playCount === 0 ? t('song.notPlayedYet', { title: song.title }) : formatSongPlayCountTitle(t, song.title, properties.playCount)} />
                 {properties.playCount > 0 ? <button type="button" className="clear-play-count-button ClearPlayCountButton" onClick={onClearPlayCount}>{t('song.clearPlayCount')}</button> : null}
               </span>
             </PropertyRow>

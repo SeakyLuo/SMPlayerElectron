@@ -6,6 +6,7 @@ const startupNightModeActive = process.argv.includes('--smplayer-startup-night-m
 const isDesktopLyricsWindow = process.argv.includes('--smplayer-desktop-lyrics=1')
 const reportedRendererIssueKeys = new Set<string>()
 const MAX_REPORTED_RENDERER_ISSUE_KEYS = 100
+let reportedRendererIssueCount = 0
 
 type StartupDocument = {
   documentElement?: {
@@ -18,6 +19,7 @@ type StartupDocument = {
   }
   readyState?: string
   getElementById?: (id: string) => RendererElement | null
+  querySelectorAll?: (selector: string) => ArrayLike<RendererElement>
   addEventListener?: (type: string, listener: () => void, options: { once: boolean }) => void
 }
 
@@ -123,6 +125,7 @@ function reportRendererIssue(payload: ReturnType<typeof getRendererErrorPayload>
     return
   }
   reportedRendererIssueKeys.add(issueKey)
+  reportedRendererIssueCount += 1
   ipcRenderer.send('app-center:renderer-issue', payload)
 }
 
@@ -143,6 +146,10 @@ function reportRendererIssue(payload: ReturnType<typeof getRendererErrorPayload>
 
 function scheduleBlankScreenCheck(delayMs: number) {
   setTimeout(() => {
+    if (reportedRendererIssueCount > 0) {
+      return
+    }
+
     const rendererDocument = (globalThis as unknown as { document?: StartupDocument }).document
     const root = rendererDocument?.getElementById?.('root')
     if (!root || hasVisibleRootContent(root)) {
@@ -151,13 +158,29 @@ function scheduleBlankScreenCheck(delayMs: number) {
 
     reportRendererIssue({
       type: 'RendererBlankScreen',
-      message: `rootContentMissing delayMs=${delayMs} readyState=${rendererDocument?.readyState ?? ''}`,
+      message: getBlankScreenMessage(rendererDocument, root, delayMs),
       stackTrace: '',
       source: 'renderer',
       line: 0,
       column: 0,
     })
   }, delayMs)
+}
+
+function getBlankScreenMessage(rendererDocument: StartupDocument | undefined, root: RendererElement, delayMs: number) {
+  const scripts = rendererDocument?.querySelectorAll?.('script') ?? []
+  const stylesheets = rendererDocument?.querySelectorAll?.('link[rel="stylesheet"]') ?? []
+  const rootTextLength = root.textContent?.trim().length ?? 0
+
+  return [
+    'rootContentMissing',
+    `delayMs=${delayMs}`,
+    `readyState=${rendererDocument?.readyState ?? ''}`,
+    `rootChildren=${root.childElementCount ?? 0}`,
+    `rootTextLength=${rootTextLength}`,
+    `scripts=${scripts.length}`,
+    `stylesheets=${stylesheets.length}`,
+  ].join(' ')
 }
 
 function hasVisibleRootContent(root: RendererElement) {

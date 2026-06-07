@@ -109,7 +109,7 @@ body.night-mode .app-shell {
   top: 0;
   left: 0;
   bottom: var(--player-height);
-  z-index: 95;
+  z-index: 260;
   width: 320px;
   height: auto;
   max-height: none;

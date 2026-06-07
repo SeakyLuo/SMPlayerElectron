@@ -65,6 +65,17 @@
   left: 320px;
 }
 
+.app-shell.nav-overlay-open .headered-playlist-hero,
+.app-shell.nav-overlay-open .headered-playlist-hero-drag-layer,
+.app-shell.nav-overlay-open .headered-playlist-hero-inner,
+.app-shell.nav-overlay-open .headered-playlist-cover,
+.app-shell.nav-overlay-open .headered-playlist-copy,
+.app-shell.nav-overlay-open .headered-playlist-copy h2,
+.app-shell.nav-overlay-open .headered-playlist-copy p {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
 .headered-playlist-control {
   --header-collapse-progress: 0;
   --header-cover-rgb: 91, 135, 182;
@@ -232,7 +243,7 @@
 
 .app-shell.nav-overlay-open .headered-playlist-control.is-header-collapsed .headered-playlist-hero {
   right: var(--header-fixed-right, 0px);
-  left: var(--header-fixed-left, var(--sidebar-width));
+  left: 320px;
 }
 
 .app-shell.nav-minimal.nav-minimal-open .headered-playlist-drag-region,
