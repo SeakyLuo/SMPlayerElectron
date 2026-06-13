@@ -181,7 +181,12 @@
 }
 
 .music-table thead th.is-sorted {
+  background: #e8f1f8;
   color: var(--text-strong);
+}
+
+.music-table thead th.is-sorted:hover {
+  background: #e1ebf4;
 }
 
 .table-sort-button {
@@ -202,6 +207,14 @@
 
 .table-sort-button:hover {
   background: transparent;
+}
+
+.music-table thead th.is-sorted .table-sort-button {
+  background: #e8f1f8;
+}
+
+.music-table thead th.is-sorted:hover .table-sort-button {
+  background: #e1ebf4;
 }
 
 .table-sort-indicator {
@@ -777,9 +790,13 @@
   cursor: pointer;
 }
 
-.library-compact-sort-button:hover,
-.library-compact-sort-button.is-sorted {
+.library-compact-sort-button:hover {
   background: rgba(var(--accent-rgb), 0.1);
+  color: var(--accent-strong);
+}
+
+.library-compact-sort-button.is-sorted {
+  background: #e8f1f8;
   color: var(--accent-strong);
 }
 
@@ -984,6 +1001,19 @@ body.night-mode .app-shell .music-table thead th:hover,
 body.night-mode .app-shell .music-table thead th.is-sorted {
   background: rgba(var(--accent-rgb), 0.16);
   color: #fff;
+}
+
+body.night-mode .app-shell .library-compact-sort-button.is-sorted,
+body.night-mode .app-shell .music-table thead th.is-sorted,
+body.night-mode .app-shell .music-table thead th.is-sorted .table-sort-button {
+  background: var(--library-night-panel-strong);
+  color: #fff;
+}
+
+body.night-mode .app-shell .library-compact-sort-button.is-sorted:hover,
+body.night-mode .app-shell .music-table thead th.is-sorted:hover,
+body.night-mode .app-shell .music-table thead th.is-sorted:hover .table-sort-button {
+  background: #242c36;
 }
 
 body.night-mode .app-shell .library-quick-jump button:disabled,

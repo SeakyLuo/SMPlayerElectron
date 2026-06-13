@@ -32,11 +32,6 @@ async function resolveOriginalFolderThumbnailUrls(candidateGroups: LibrarySong[]
       return artworkUrls
     }
     for (const snapshot of snapshots) {
-      // UWP parity: StorageFile.GetThumbnailAsync(MusicView) returns either the
-      // ID3 embedded picture or the Windows shell thumbnail (cover.jpg /
-      // folder.jpg / AlbumArtSmall.jpg etc). Only 'none' should be skipped here
-      // so that folders containing only files with shell-derived artwork still
-      // render a thumbnail instead of falling back to the placeholder icon.
       if (snapshot && snapshot.artworkUrl && snapshot.source !== 'none') {
         artworkUrls.push(snapshot.artworkUrl)
         break

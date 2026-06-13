@@ -5,9 +5,8 @@ import { parseFile } from 'music-metadata'
 
 import { normalizeArtists } from '../../src/shared/artists.ts'
 import {
-  selectBestPicture,
+  selectEmbeddedCoverPicture,
   writeArtworkCache,
-  writeShellThumbnailCache,
 } from './artwork-cache.ts'
 import { normalizeArtistTagValues, normalizeTagText } from './tag-text.ts'
 
@@ -43,8 +42,7 @@ export async function readAudioMetadata(
       duration: true,
       skipCovers: false,
     })
-    const embeddedThumbnailPath = await writeArtworkCache(thumbnailCachePath, filePath, selectBestPicture(metadata.common.picture))
-    const thumbnailPath = embeddedThumbnailPath || await writeShellThumbnailCache(thumbnailCachePath, filePath)
+    const thumbnailPath = await writeArtworkCache(thumbnailCachePath, filePath, selectEmbeddedCoverPicture(metadata.common.picture))
     const artists = normalizeArtists(normalizeArtistTagValues(metadata.common.artists ?? [], metadata.common.artist))
     const title = normalizeTagText(metadata.common.title)
     const album = normalizeTagText(metadata.common.album)
@@ -60,10 +58,9 @@ export async function readAudioMetadata(
       dateAdded,
     }
   } catch {
-    const thumbnailPath = await writeShellThumbnailCache(thumbnailCachePath, filePath)
     return {
       path: filePath,
-      thumbnailPath,
+      thumbnailPath: '',
       title: filename,
       artist: '',
       artists: [],

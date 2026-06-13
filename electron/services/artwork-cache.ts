@@ -2,8 +2,6 @@ import { createHash } from 'node:crypto'
 import { mkdir, readdir, unlink, writeFile } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 
-import { nativeImage } from 'electron'
-
 const SHELL_THUMBNAIL_SIZE = 1024
 const SHELL_THUMBNAIL_CACHE_VERSION = `shell-thumbnail-${SHELL_THUMBNAIL_SIZE}`
 
@@ -77,15 +75,9 @@ function detectImageMimeFromBytes(data: Uint8Array): string | undefined {
   return undefined
 }
 
-// ID3v2 APIC pictures can include non-cover artwork (artist/conductor/leaflet
-// photos) and even external link frames (mime "-->" with the data being a URL
-// string). Naively taking metadata.common.picture[0] sometimes yields one of
-// those non-renderable frames, so the resulting cache file is invalid and the
-// thumbnail tile shows the empty fallback. UWP relies on the Windows shell
-// thumbnail pipeline which always prefers the front cover; we mirror that by
-// scoring picture entries with a small priority list AND require the bytes
-// to actually look like an image (magic-byte sniff).
-export function selectBestPicture(pictures?: readonly IPictureLike[] | null) {
+// Pick one embedded cover image from metadata.common.picture. This does not
+// inspect sibling files, album folders, or OS thumbnails.
+export function selectEmbeddedCoverPicture(pictures?: readonly IPictureLike[] | null) {
   if (!pictures || pictures.length === 0) {
     return undefined
   }
@@ -134,31 +126,6 @@ export async function writeArtworkCache(
   await writeFile(thumbnailPath, picture.data)
 
   return thumbnailPath
-}
-
-// UWP MusicView thumbnails ultimately fall back to "folder artwork" — Windows
-// Keep parity with the Windows shell thumbnail pipeline without doing our own
-// sibling cover-file scan.
-export async function writeShellThumbnailCache(thumbnailCachePath: string, filePath: string) {
-  try {
-    const thumbnail = await nativeImage.createThumbnailFromPath(filePath, {
-      width: SHELL_THUMBNAIL_SIZE,
-      height: SHELL_THUMBNAIL_SIZE,
-    })
-
-    if (!thumbnail.isEmpty()) {
-      const thumbnailPath = getShellThumbnailCachePath(thumbnailCachePath, filePath)
-
-      await mkdir(thumbnailCachePath, { recursive: true })
-      await writeFile(thumbnailPath, thumbnail.toPNG())
-
-      return thumbnailPath
-    }
-  } catch {
-    return ''
-  }
-
-  return ''
 }
 
 export function shouldRebuildShellThumbnail(thumbnailCachePath: string, filePath: string, thumbnailPath: string) {

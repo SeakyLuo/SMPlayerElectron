@@ -11,10 +11,9 @@ import {
   getArtworkFormat,
   getShellThumbnailCachePath,
   isLikelyImage,
-  selectBestPicture,
+  selectEmbeddedCoverPicture,
   shouldRebuildShellThumbnail,
   writeArtworkCache,
-  writeShellThumbnailCache,
 } from './artwork-cache.ts'
 
 interface SongArtworkRow {
@@ -162,7 +161,7 @@ export class ArtworkService {
         duration: false,
         skipCovers: false,
       })
-      const thumbnailPath = await writeArtworkCache(this.thumbnailCachePath, `${sourcePath}:selected-artwork`, selectBestPicture(metadata.common.picture))
+      const thumbnailPath = await writeArtworkCache(this.thumbnailCachePath, `${sourcePath}:selected-artwork`, selectEmbeddedCoverPicture(metadata.common.picture))
       if (!thumbnailPath) {
         throw new Error('No album art found in the selected music file.')
       }
@@ -263,7 +262,8 @@ export class ArtworkService {
     if (song.thumbnailPath) {
       try {
         await stat(song.thumbnailPath)
-        if (!shouldRebuildShellThumbnail(this.thumbnailCachePath, song.path, song.thumbnailPath)) {
+        const shellThumbnail = this.isSongShellThumbnail(song)
+        if (!shellThumbnail) {
           // Verify the cached thumbnail is actually an image. Older library
           // entries may point at non-image data (e.g. an ID3v2 link-frame
           // whose URL string was treated as picture.data, or a stray APIC
@@ -275,8 +275,7 @@ export class ArtworkService {
           // many malformed payloads — so we sniff magic bytes directly.
           const head = await readFile(song.thumbnailPath, { flag: 'r' }).then((buf) => buf.subarray(0, 16)).catch(() => undefined)
           if (head && isLikelyImage(head)) {
-            const isShell = basename(song.thumbnailPath) === basename(getShellThumbnailCachePath(this.thumbnailCachePath, song.path))
-            return { fileUrl: pathToFileURL(song.thumbnailPath).href, source: isShell ? 'shell' : 'cached', cacheKey: song.thumbnailPath }
+            return { fileUrl: pathToFileURL(song.thumbnailPath).href, source: 'cached', cacheKey: song.thumbnailPath }
           }
         }
       } catch {
@@ -289,7 +288,7 @@ export class ArtworkService {
         duration: false,
         skipCovers: false,
       })
-      const thumbnailPath = await writeArtworkCache(this.thumbnailCachePath, song.path, selectBestPicture(metadata.common.picture))
+      const thumbnailPath = await writeArtworkCache(this.thumbnailCachePath, song.path, selectEmbeddedCoverPicture(metadata.common.picture))
 
       if (thumbnailPath) {
         this.db.prepare(`
@@ -302,31 +301,30 @@ export class ArtworkService {
         return { fileUrl: pathToFileURL(thumbnailPath).href, source: 'embedded', cacheKey: thumbnailPath }
       }
     } catch {
-      // Fall back to a shell thumbnail below.
-    }
-
-    try {
-      const thumbnailPath = await writeShellThumbnailCache(this.thumbnailCachePath, song.path)
-
-      if (!thumbnailPath) {
-        return { fileUrl: '', source: 'none', cacheKey: '' }
-      }
-
-      this.db.prepare(`
-        UPDATE Music
-        SET ThumbnailPath = ?
-        WHERE Id = ?
-          AND State = ?
-      `).run(thumbnailPath, song.id, ACTIVE_STATE.active)
-
-      return { fileUrl: pathToFileURL(thumbnailPath).href, source: 'shell', cacheKey: thumbnailPath }
-    } catch {
+      this.clearSongThumbnail(song.id)
       return { fileUrl: '', source: 'none', cacheKey: '' }
     }
+
+    this.clearSongThumbnail(song.id)
+    return { fileUrl: '', source: 'none', cacheKey: '' }
   }
 
   private getSongArtworkUrl(songId: number) {
     return `smplayer-artwork://song/${songId}`
+  }
+
+  private isSongShellThumbnail(song: SongArtworkRow) {
+    return basename(song.thumbnailPath) === basename(getShellThumbnailCachePath(this.thumbnailCachePath, song.path)) ||
+      shouldRebuildShellThumbnail(this.thumbnailCachePath, song.path, song.thumbnailPath)
+  }
+
+  private clearSongThumbnail(songId: number) {
+    this.db.prepare(`
+      UPDATE Music
+      SET ThumbnailPath = ''
+      WHERE Id = ?
+        AND State = ?
+    `).run(songId, ACTIVE_STATE.active)
   }
 }
 
