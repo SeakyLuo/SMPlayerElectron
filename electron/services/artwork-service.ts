@@ -157,11 +157,17 @@ export class ArtworkService {
 
   async prepareArtworkSource(sourcePath: string) {
     if (AUDIO_EXTENSIONS.has(extname(sourcePath).toLocaleLowerCase())) {
-      const metadata = await parseFile(sourcePath, {
-        duration: false,
-        skipCovers: false,
-      })
-      const thumbnailPath = await writeArtworkCache(this.thumbnailCachePath, `${sourcePath}:selected-artwork`, selectEmbeddedCoverPicture(metadata.common.picture))
+      let thumbnailPath = ''
+      try {
+        const metadata = await parseFile(sourcePath, {
+          duration: false,
+          skipCovers: false,
+        })
+        thumbnailPath = await writeArtworkCache(this.thumbnailCachePath, `${sourcePath}:selected-artwork`, selectEmbeddedCoverPicture(metadata.common.picture))
+      } catch {
+        throw new Error('No album art found in the selected music file.')
+      }
+
       if (!thumbnailPath) {
         throw new Error('No album art found in the selected music file.')
       }

@@ -130,11 +130,16 @@ function reportRendererIssue(payload: ReturnType<typeof getRendererErrorPayload>
 }
 
 ;(globalThis as RendererGlobal).addEventListener('error', (event) => {
+  const source = event.filename || getResourceSource(event.target)
+  if (!(event.error instanceof Error) && source.startsWith('smplayer-artwork://')) {
+    return
+  }
+
   const payload = getRendererErrorPayload(event.error, event.message || 'Resource load failed')
   reportRendererIssue({
     ...payload,
     type: event.error instanceof Error ? payload.type : 'RendererResourceLoadFailure',
-    source: event.filename || getResourceSource(event.target),
+    source,
     line: event.lineno,
     column: event.colno,
   })

@@ -60,6 +60,10 @@ export function registerAppCenterCrashReporting() {
   })
 
   app.on('render-process-gone', (_event, webContents, details) => {
+    if (details.reason === 'clean-exit' || details.reason === 'killed') {
+      return
+    }
+
     void reportAppCenterError({
       fatal: details.reason === 'crashed' || details.reason === 'oom',
       processName: getRendererProcessName(webContents),
@@ -72,7 +76,7 @@ export function registerAppCenterCrashReporting() {
   })
 
   app.on('child-process-gone', (_event, details) => {
-    if (details.reason === 'clean-exit') {
+    if (details.reason === 'clean-exit' || details.reason === 'killed') {
       return
     }
 

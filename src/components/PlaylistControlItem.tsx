@@ -415,7 +415,7 @@ export function PlaylistControlItem({
         {onRemoveFromListClick ? (
           <button
             type="button"
-            className="now-playing-queue-action is-hover-action"
+            className="now-playing-queue-action is-hover-action is-remove-action"
             aria-label={t('nowPlaying.remove')}
             title={t('nowPlaying.remove')}
             onClick={(event) => {

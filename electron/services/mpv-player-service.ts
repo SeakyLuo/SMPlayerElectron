@@ -1,5 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { existsSync } from 'node:fs'
+import { stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createConnection, type Socket } from 'node:net'
@@ -71,9 +72,29 @@ export class MpvPlayerService {
     }
 
     await this.command(['set_property', 'pause', true])
+    try {
+      await stat(filePath)
+    } catch (error) {
+      this.autoplayAfterLoad = false
+      this.sendEvent({
+        type: 'error',
+        songId: request.songId,
+        message: error instanceof Error ? error.message : String(error),
+      })
+      return
+    }
+
     await this.command(['set_property', 'volume', Math.min(100, Math.max(0, request.volume))])
     await this.command(['set_property', 'mute', request.muted])
-    await this.command(['loadfile', filePath, 'replace'])
+    try {
+      await this.command(['loadfile', filePath, 'replace'])
+    } catch (error) {
+      this.sendEvent({
+        type: 'error',
+        songId: request.songId,
+        message: error instanceof Error ? error.message : String(error),
+      })
+    }
   }
 
   async play() {

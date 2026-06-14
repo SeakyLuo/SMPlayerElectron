@@ -480,7 +480,7 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
       pendingAutoplayRef.current = options.autoplay
       audio.autoplay = options.autoplay
 
-      if (loadedTrackIdRef.current !== trackId) {
+      if (loadedTrackIdRef.current !== trackId || audio.ended) {
         clearStalledTimer()
         loadingTrackIdRef.current = trackId
         loadedTrackIdRef.current = trackId
@@ -623,7 +623,7 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
     }
 
     const audio = audioRef.current
-    if (audio && loadedTrackIdRef.current === trackId && currentTrackIdRef.current === trackId) {
+    if (audio && loadedTrackIdRef.current === trackId && currentTrackIdRef.current === trackId && !audio.ended) {
       const nextQueueIndex = currentIndex(getPlaybackSongIds(), trackId, queueIndex)
       currentQueueIndexRef.current = nextQueueIndex > -1 ? nextQueueIndex : null
       setCurrentQueueIndex(nextQueueIndex > -1 ? nextQueueIndex : null)
@@ -660,6 +660,15 @@ export function usePlaybackController(snapshot: MusicData, ready: boolean): Play
     if (!audio.paused) {
       transitionStatus({ type: 'playing' })
       startProgressSync()
+      return
+    }
+
+    if (audio.ended) {
+      await loadTrackRef.current(currentTrackIdRef.current, {
+        autoplay: true,
+        queueIndex: currentQueueIndexRef.current ?? -1,
+        startAt: 0,
+      })
       return
     }
 

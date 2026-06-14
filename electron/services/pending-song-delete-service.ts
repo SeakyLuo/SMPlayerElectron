@@ -129,12 +129,18 @@ export class PendingSongDeleteService {
         ? !this.localItemService.hasActiveDeletedLocalItems(record.deletedState)
         : !this.localItemService.isSongActive(record.songId),
     )
+    const committedRecordIds = new Set<string>()
 
     for (const record of inactiveRecords) {
-      await this.trashRecord(record)
+      try {
+        await this.trashRecord(record)
+        committedRecordIds.add(record.id)
+      } catch {
+        // Keep failed records so a later launch can retry the recycle-bin move.
+      }
     }
 
-    this.records = []
+    this.records = records.filter((record) => !committedRecordIds.has(record.id))
     await this.save()
   }
 

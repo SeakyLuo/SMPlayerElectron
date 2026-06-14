@@ -323,9 +323,10 @@ app.on('before-quit', (event) => {
   }
   isQuitting = true
   desktopLyricsWindowController.destroy()
-  libraryService?.flush()
   void remotePlayServer?.stop()
   mpvPlayerService?.close()
+  libraryService?.close()
+  libraryService = null
 })
 
 app.on('will-quit', () => {

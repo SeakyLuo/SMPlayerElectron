@@ -767,6 +767,10 @@
     display: grid;
   }
 
+  .app-shell.nav-minimal .now-playing-queue-actions .now-playing-queue-action.is-remove-action {
+    display: grid;
+  }
+
   .app-shell.nav-minimal .headered-playlist-list.is-album .now-playing-queue-actions .now-playing-queue-action:not(:last-child) {
     display: grid;
   }
@@ -820,7 +824,7 @@
 .playlist-control-compact .now-playing-queue-item,
 .playlist-control-compact .now-playing-queue-item:not(.has-album-column),
 .playlist-control-compact .now-playing-queue-item.has-album-column {
-  grid-template-columns: 58px minmax(0, 1fr) 76px 50px;
+  grid-template-columns: 58px minmax(0, 1fr) 110px 50px;
   gap: 12px;
   flex-basis: 78px;
   height: 78px;
@@ -869,6 +873,10 @@
 }
 
 .playlist-control-compact .now-playing-queue-actions .now-playing-queue-action.is-play-next-action {
+  display: grid;
+}
+
+.playlist-control-compact .now-playing-queue-actions .now-playing-queue-action.is-remove-action {
   display: grid;
 }
 

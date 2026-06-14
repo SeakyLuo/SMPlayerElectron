@@ -21,6 +21,7 @@ import { ExternalAudioService } from './external-audio-service.ts'
 import { PendingSongDeleteService } from './pending-song-delete-service.ts'
 
 const NOW_PLAYING_JSON_FILENAME = 'NowPlaying.json'
+const SQLITE_BUSY_TIMEOUT_MS = 5000
 
 function tableExists(db: DatabaseSync, tableName: string) {
   return Boolean(db.prepare(`
@@ -62,7 +63,7 @@ export class DataService {
   private readonly updateLastPlaylistStatement
 
   constructor(userDataPath: string) {
-    this.db = new DatabaseSync(join(userDataPath, SMPLAYER_DB_NAME))
+    this.db = new DatabaseSync(join(userDataPath, SMPLAYER_DB_NAME), { timeout: SQLITE_BUSY_TIMEOUT_MS })
     const musicTableExistedOnStartup = tableExists(this.db, 'Music')
     this.shouldCheckStartupArtistSplits =
       musicTableExistedOnStartup &&

@@ -56,6 +56,7 @@ function getTimedScrollKeyframes(scrollDistance: number, durationMs: number): Ke
 
 export function DesktopLyricsApp() {
   const [state, setState] = useState(initialState)
+  const [panelVisible, setPanelVisible] = useState(false)
   const lyricBoxRef = useRef<HTMLDivElement>(null)
   const lyricContentRef = useRef<HTMLSpanElement>(null)
   const lyricScrollAnimationRef = useRef<Animation | null>(null)
@@ -163,7 +164,10 @@ export function DesktopLyricsApp() {
         '--desktop-lyrics-scroll-duration': lyricScrollDuration,
       } as CSSProperties}
     >
-      <section className="desktop-lyrics-card">
+      <section
+        className={`desktop-lyrics-card${panelVisible ? ' is-panel-visible' : ''}`}
+        onPointerLeave={() => setPanelVisible(false)}
+      >
         <div className="desktop-lyrics-drag-region" aria-hidden="true" />
         <div className="desktop-lyrics-meta">
           <span>{state.songTitle}</span>
@@ -176,7 +180,7 @@ export function DesktopLyricsApp() {
           data-overflow={lyricScrollDistance > 0 ? 'true' : undefined}
           data-timed={lyricLineDurationSeconds != null ? 'true' : undefined}
         >
-          <span key={lyricText} ref={lyricContentRef}>{lyricText}</span>
+          <span key={lyricText} ref={lyricContentRef} onPointerEnter={() => setPanelVisible(true)}>{lyricText}</span>
         </div>
         <div className="desktop-lyrics-toolbar">
           <button

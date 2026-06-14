@@ -70,6 +70,29 @@ export function useAppWindowController({
     void window.smplayer?.setWindowFullScreen(nextFullScreen)
   }, [isWindowFullScreen])
 
+  useEffect(() => {
+    if (!isWindowFullScreen) {
+      return
+    }
+
+    const exitFullScreenOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') {
+        return
+      }
+
+      event.preventDefault()
+      event.stopPropagation()
+      setIsWindowFullScreen(false)
+      void window.smplayer?.setWindowFullScreen(false)
+    }
+
+    window.addEventListener('keydown', exitFullScreenOnEscape, true)
+
+    return () => {
+      window.removeEventListener('keydown', exitFullScreenOnEscape, true)
+    }
+  }, [isWindowFullScreen])
+
   return {
     isWindowFullScreen,
     isMiniMode,

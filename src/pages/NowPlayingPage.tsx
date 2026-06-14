@@ -105,6 +105,7 @@ export function NowPlayingPage({
   const listShellRef = useRef<HTMLElement | null>(null)
   const listScrollbarTrackRef = useRef<HTMLDivElement | null>(null)
   const currentRowRef = useRef<HTMLDivElement | null>(null)
+  const initialLocateCurrentRef = useRef(false)
   const createPlaylist = useLibraryStore((state) => state.createPlaylist)
   const folders = useLibraryStore((state) => state.snapshot.folders)
   const moveSongToFolder = useLibraryStore((state) => state.moveSongToFolder)
@@ -594,12 +595,15 @@ export function NowPlayingPage({
   }, [])
 
   useEffect(() => {
-    if (songs.length > 0) {
-      window.requestAnimationFrame(() => {
-        locateCurrent('auto')
-      })
+    if (initialLocateCurrentRef.current || songs.length === 0) {
+      return
     }
-  }, [isCompactQueueLayout, selectedQueueIndex, selectedTrackId, searchQuery, songs.length, viewportHeight])
+
+    initialLocateCurrentRef.current = true
+    window.requestAnimationFrame(() => {
+      locateCurrent('auto')
+    })
+  }, [songs.length])
   const onListScrollbarPointerDown = useCustomScrollbar({
     frameRef: listScrollFrameRef,
     scrollContainerRef: listShellRef,

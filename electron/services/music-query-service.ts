@@ -328,7 +328,7 @@ export class MusicQueryService {
       id: song.id,
       path: song.path,
       mediaUrl: this.getSongMediaUrl(song.id),
-      artworkUrl: this.getSongArtworkUrl(song.id),
+      artworkUrl: song.thumbnailPath ? this.getSongArtworkUrl(song.id) : '',
       title,
       artist,
       artists,

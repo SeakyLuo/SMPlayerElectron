@@ -8,6 +8,7 @@ import { app } from 'electron'
 import { ACTIVE_STATE, SMPLAYER_DB_NAME } from './constants'
 
 const legacyUwpPackageIdentityName = '23778SeakyTheLoner.SMPlayer'
+const SQLITE_BUSY_TIMEOUT_MS = 5000
 
 export async function resolveUserDataPath() {
   const defaultUserDataPath = app.getPath('userData')
@@ -93,7 +94,7 @@ async function findUwpPackageLocalStatePath() {
 function readLibraryDatabaseScore(databasePath: string) {
   let db: DatabaseSync | null = null
   try {
-    db = new DatabaseSync(databasePath, { readOnly: true })
+    db = new DatabaseSync(databasePath, { readOnly: true, timeout: SQLITE_BUSY_TIMEOUT_MS })
     if (!sqliteTableExists(db, 'Music')) {
       return { existingSampleCount: 0 }
     }
